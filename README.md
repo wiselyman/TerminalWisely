@@ -23,7 +23,7 @@ TerminalWisely 在普通终端之上，重点提供这些能力：
 
 ## 下载与自行构建
 
-预编译安装包发布见 [Releases](https://github.com/your-org/TerminalWisely/releases)（开源后替换为实际地址）。
+预编译安装包发布见 [Releases](https://github.com/wiselyman/TerminalWisely/releases)。
 
 需要自行编译请参考 [BUILD.md](./BUILD.md)。
 

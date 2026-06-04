@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS — Apple Silicon
+          - platform: macos-latest
+            target: macos-aarch64
+            args: --target aarch64-apple-darwin --bundles app,dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # macOS — Intel
+          - platform: macos-latest
+            target: macos-x86_64
+            args: --target x86_64-apple-darwin --bundles app,dmg
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # Linux — x86_64
+          - platform: ubuntu-22.04
+            target: linux-x86_64
+            args: --bundles deb,rpm,appimage
+            rust_targets: ""
+          # Linux — ARM64 (native runner; public repos only)
+          - platform: ubuntu-22.04-arm
+            target: linux-aarch64
+            args: --bundles deb,rpm,appimage
+            rust_targets: ""
+          # Windows — x86_64
+          - platform: windows-latest
+            target: windows-x86_64
+            args: --target x86_64-pc-windows-msvc --bundles msi,nsis
+            rust_targets: x86_64-pc-windows-msvc
+          # Windows — ARM64 (MSI does not support ARM64; NSIS only)
+          - platform: windows-latest
+            target: windows-aarch64
+            args: --target aarch64-pc-windows-msvc --bundles nsis
+            rust_targets: aarch64-pc-windows-msvc
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install Linux dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            rpm \
+            libssl-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and upload release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: TerminalWisely v__VERSION__
+          releaseBody: |
+            跨平台桌面终端：本地 Shell + SSH/SFTP。
+
+            ## 安装包说明
+
+            | 平台 | 格式 |
+            |------|------|
+            | macOS (Apple Silicon) | `.dmg` |
+            | macOS (Intel) | `.dmg` |
+            | Linux x86_64 | `.deb` `.rpm` `.AppImage` |
+            | Linux ARM64 | `.deb` `.rpm` `.AppImage` |
+            | Windows x86_64 | `.msi` `.exe` (NSIS) |
+            | Windows ARM64 | `.exe` (NSIS) |
+
+            构建目标：`${{ matrix.target }}`
+          releaseDraft: true
+          prerelease: false
+          uploadWorkflowArtifacts: true
+          args: ${{ matrix.args }}
