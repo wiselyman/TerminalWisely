@@ -112,6 +112,6 @@ jobs:
             | Windows ARM64 | `.exe` (NSIS) |
 
             构建目标：`${{ matrix.target }}`
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
