@@ -31,10 +31,10 @@ jobs:
             args: --bundles deb,rpm,appimage
             rust_targets: ""
             linux_env: true
-          # Linux — ARM64 (native runner; public repos only)
+          # Linux — ARM64 (deb/rpm; AppImage on aarch64 is unreliable with linuxdeploy)
           - platform: ubuntu-22.04-arm
             target: linux-aarch64
-            args: --bundles deb,rpm,appimage
+            args: --bundles deb,rpm
             rust_targets: ""
             linux_env: true
           # Windows — x86_64
@@ -107,7 +107,7 @@ jobs:
             | macOS (Apple Silicon) | `.dmg` |
             | macOS (Intel) | `.dmg` |
             | Linux x86_64 | `.deb` `.rpm` `.AppImage` |
-            | Linux ARM64 | `.deb` `.rpm` `.AppImage` |
+            | Linux ARM64 | `.deb` `.rpm` |
             | Windows x86_64 | `.msi` `.exe` (NSIS) |
             | Windows ARM64 | `.exe` (NSIS) |
 

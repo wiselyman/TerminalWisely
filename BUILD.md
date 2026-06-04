@@ -46,12 +46,12 @@ Release 工作流会构建以下产物：
 | macOS | Apple Silicon (aarch64) | `.app` `.dmg` |
 | macOS | Intel (x86_64) | `.app` `.dmg` |
 | Linux | x86_64 | `.deb` `.rpm` `.AppImage` |
-| Linux | ARM64 | `.deb` `.rpm` `.AppImage` |
+| Linux | ARM64 | `.deb` `.rpm` |
 | Windows | x86_64 | `.msi` NSIS `.exe` |
 | Windows | ARM64 | NSIS `.exe` |
 
 > Windows ARM64 不支持 MSI，仅生成 NSIS 安装包（Tauri 限制）。
-> Linux AppImage 在 CI 中需设置 `NO_STRIP=true`（已写入 workflow），避免 linuxdeploy 与新版 ELF 不兼容。
+> Linux ARM64 暂不提供 `.AppImage`（linuxdeploy-aarch64 在 CI 中不稳定）；请使用 `.deb` 或 `.rpm`。
 
 ### 触发方式
 
