@@ -30,11 +30,13 @@ jobs:
             target: linux-x86_64
             args: --bundles deb,rpm,appimage
             rust_targets: ""
+            linux_env: true
           # Linux — ARM64 (native runner; public repos only)
           - platform: ubuntu-22.04-arm
             target: linux-aarch64
             args: --bundles deb,rpm,appimage
             rust_targets: ""
+            linux_env: true
           # Windows — x86_64
           - platform: windows-latest
             target: windows-x86_64
@@ -72,12 +74,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            build-essential \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             rpm \
-            libssl-dev
+            libssl-dev \
+            libfuse2 \
+            file \
+            fakeroot
 
       - name: Install frontend dependencies
         run: npm ci
@@ -86,6 +92,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
+          APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.linux_env && '1' || '' }}
         with:
           tagName: v__VERSION__
           releaseName: TerminalWisely v__VERSION__
@@ -106,5 +114,4 @@ jobs:
             构建目标：`${{ matrix.target }}`
           releaseDraft: true
           prerelease: false
-          uploadWorkflowArtifacts: true
           args: ${{ matrix.args }}

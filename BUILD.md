@@ -51,6 +51,7 @@ Release 工作流会构建以下产物：
 | Windows | ARM64 | NSIS `.exe` |
 
 > Windows ARM64 不支持 MSI，仅生成 NSIS 安装包（Tauri 限制）。
+> Linux AppImage 在 CI 中需设置 `NO_STRIP=true`（已写入 workflow），避免 linuxdeploy 与新版 ELF 不兼容。
 
 ### 触发方式
 
