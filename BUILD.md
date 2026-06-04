@@ -66,6 +66,28 @@ Release 工作流会构建以下产物：
 
 Release 默认为 **Draft**，可在 [Releases](https://github.com/wiselyman/TerminalWisely/releases) 页面检查产物后点击 Publish。
 
+### 发布验收清单
+
+CI 全绿只代表「能编出来」，以下需在**真实机器**上各测一遍（约 5 分钟/平台）：
+
+- [ ] 应用能启动，欢迎页/侧栏正常
+- [ ] 本地终端能输入命令并看到输出
+- [ ] SSH 能连接，执行 `ls`、`docker ps` 正常
+- [ ] 拖拽文件到 SSH 窗口能上传
+- [ ] Ctrl/Cmd + 点击文件路径能下载
+- [ ] 关闭再打开应用无崩溃
+
+| 平台 | 建议测试机 |
+|------|-----------|
+| Windows x64 | 日常 PC |
+| Windows ARM | Surface / Snapdragon 设备 |
+| macOS Apple Silicon | M 系列 Mac |
+| macOS Intel | Intel Mac 或 Rosetta 环境 |
+| Linux x64 | Ubuntu 22.04+ / Fedora |
+| Linux ARM64 | ARM 服务器或树莓派 64 位 |
+
+未签名安装包在 macOS / Windows 首次打开会有安全提示，属正常现象。
+
 ### 仓库权限
 
 若出现 `Resource not accessible by integration`，到仓库 **Settings → Actions → General → Workflow permissions**，勾选 **Read and write permissions**。
