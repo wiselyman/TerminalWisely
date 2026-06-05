@@ -8,22 +8,30 @@ import type {
   SessionKind,
   TerminalOutputPayload,
   TransferCompletePayload,
-  TransferProgressPayload,
-  UploadFileResult,
 } from "../types";
 import {
   buildLineColumnMap,
   extractDroppedPaths,
   findRemotePathMatches,
   isModifierClick,
+  isShiftClick,
   rangeToColumns,
 } from "../lib/terminalLinks";
+import {
+  findRemotePathAtCell,
+  getTerminalMouseCell,
+  isRemoteDragModifier,
+} from "../lib/terminalMouse";
+import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
 import { getLinePlainText, resolvePathFromListing } from "../lib/terminalContext";
 import {
   clearUploadHighlights,
   scheduleUploadHighlight,
 } from "../lib/terminalHighlight";
 import { useSessionStore } from "../stores/sessionStore";
+import { isTabReordering } from "../lib/tabPointerReorder";
+import { uploadLocalPathsToSession } from "../lib/sessionUpload";
+import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "../stores/toastStore";
 import "@xterm/xterm/css/xterm.css";
 
@@ -51,8 +59,11 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingFilenamesRef = useRef<string[]>([]);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const setTransferProgress = useSessionStore((s) => s.setTransferProgress);
+  const upsertTransfer = useSessionStore((s) => s.upsertTransfer);
+  const removeTransfer = useSessionStore((s) => s.removeTransfer);
   const setStatusMessage = useSessionStore((s) => s.setStatusMessage);
+  const openSendTo = useSessionStore((s) => s.openSendTo);
+  const startRemoteTransfer = useSessionStore((s) => s.startRemoteTransfer);
   const pushToast = useToastStore((s) => s.pushToast);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
@@ -141,7 +152,95 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     fitAddonRef.current = fitAddon;
     terminalRef.current = terminal;
 
+    let cleanupRemoteDrag: (() => void) | undefined;
+
     if (kind === "ssh" || kind === "local") {
+      let suppressModifierActivate = false;
+      const screenElement =
+        host.querySelector<HTMLElement>(".xterm-screen") ?? host;
+
+      if (kind === "ssh") {
+        const handleRemoteMouseDown = (event: MouseEvent) => {
+          if (!isRemoteDragModifier(event)) return;
+          if (event.button !== 0) return;
+
+          const cell = getTerminalMouseCell(terminal, screenElement, event);
+          if (!cell) return;
+
+          const remotePath = findRemotePathAtCell(terminal, cell);
+          if (!remotePath) return;
+
+          const startX = event.clientX;
+          const startY = event.clientY;
+          let dragStarted = false;
+          let disposed = false;
+
+          const cleanupPending = () => {
+            if (disposed) return;
+            disposed = true;
+            document.removeEventListener("mousemove", onPendingMove, true);
+            document.removeEventListener("mouseup", onPendingUp, true);
+          };
+
+          const setSourceDragVisual = (active: boolean) => {
+            containerRef.current?.classList.toggle(
+              "remote-drag-source-active",
+              active,
+            );
+            host.classList.toggle("remote-drag-source-active", active);
+          };
+
+          const onPendingMove = (moveEvent: MouseEvent) => {
+            if (disposed || dragStarted) return;
+
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+            if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+
+            dragStarted = true;
+            suppressModifierActivate = true;
+            terminal.clearSelection();
+            cleanupPending();
+            setSourceDragVisual(true);
+
+            startRemotePointerDrag({
+              fromSessionId: sessionId,
+              remotePath,
+              startX,
+              startY,
+              onDragStart: () => {
+                suppressModifierActivate = true;
+              },
+              onDragEnd: () => {
+                setSourceDragVisual(false);
+              },
+              onDrop: (toSessionId) => {
+                void startRemoteTransfer(sessionId, remotePath, toSessionId).catch(
+                  (err) => {
+                    pushToast(String(err), false);
+                  },
+                );
+              },
+              onCancel: () => {
+                pushToast("请拖到其他 SSH 标签上再松开", false);
+              },
+            });
+          };
+
+          const onPendingUp = () => {
+            cleanupPending();
+          };
+
+          document.addEventListener("mousemove", onPendingMove, true);
+          document.addEventListener("mouseup", onPendingUp, true);
+        };
+
+        host.addEventListener("mousedown", handleRemoteMouseDown, true);
+        cleanupRemoteDrag = () => {
+          host.removeEventListener("mousedown", handleRemoteMouseDown, true);
+        };
+      }
+
       terminal.registerLinkProvider({
         provideLinks: (bufferLineNumber, callback) => {
           const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
@@ -187,16 +286,63 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
               activate: (event: MouseEvent, _uri: string) => {
                 const targetPath = resolveClickedPath();
                 if (isModifierClick(event)) {
+                  if (suppressModifierActivate) {
+                    suppressModifierActivate = false;
+                    return;
+                  }
+                }
+                if (isShiftClick(event)) {
                   if (kind !== "ssh") {
                     return;
                   }
+                  void (async () => {
+                    try {
+                      const probe = await invoke<string>("probe_remote_path", {
+                        request: {
+                          session_id: sessionId,
+                          path: targetPath,
+                        },
+                      });
+                      if (probe === "file") {
+                        openSendTo({
+                          fromSessionId: sessionId,
+                          remotePath: targetPath,
+                        });
+                      } else {
+                        pushToast("这是目录，请选择文件路径", false);
+                      }
+                    } catch (err) {
+                      pushToast(String(err), false);
+                    }
+                  })();
+                  return;
+                }
+                if (isModifierClick(event)) {
+                  if (kind !== "ssh") {
+                    return;
+                  }
+                  const transferId = createTransferId();
+                  const downloadName =
+                    targetPath.split("/").pop() ||
+                    targetPath.split("\\").pop() ||
+                    targetPath;
+                  upsertTransfer({
+                    transfer_id: transferId,
+                    session_id: sessionId,
+                    filename: downloadName,
+                    transferred: 0,
+                    total: 0,
+                    direction: "download",
+                  });
                   void invoke("download_file", {
                     request: {
                       session_id: sessionId,
                       remote_path: targetPath,
                       local_path: null,
+                      transfer_id: transferId,
                     },
                   }).catch((err) => {
+                    removeTransfer(transferId);
                     pushToast(String(err), false);
                   });
                   return;
@@ -211,7 +357,10 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
                   const message = String(err);
                   if (message.includes("不是目录")) {
                     if (kind === "ssh") {
-                      pushToast("这是文件，Ctrl/Cmd + 点击可下载", false);
+                      pushToast(
+                        "这是文件：Ctrl/Cmd + 点击下载；按住 Ctrl/Cmd 在文件名上拖到上方 SSH 标签发送",
+                        false,
+                      );
                     }
                     return;
                   }
@@ -243,6 +392,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     void syncSize();
 
     return () => {
+      cleanupRemoteDrag?.();
       if (resizeTimerRef.current !== null) {
         clearTimeout(resizeTimerRef.current);
       }
@@ -257,7 +407,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       lastContainerSizeRef.current = { width: 0, height: 0 };
       lastSizeRef.current = { cols: 0, rows: 0 };
     };
-  }, [kind, sessionId, pushToast, syncSize]);
+  }, [kind, sessionId, openSendTo, pushToast, startRemoteTransfer, syncSize, upsertTransfer, removeTransfer]);
 
   useEffect(() => {
     if (!active) return;
@@ -294,7 +444,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     let unlisteners: UnlistenFn[] = [];
 
     void (async () => {
-      const [output, progress, complete] = await Promise.all([
+      const [output, complete] = await Promise.all([
         listenSafely<TerminalOutputPayload>("terminal-output", (payload) => {
           if (payload.session_id !== sessionId) return;
           const terminal = terminalRef.current;
@@ -310,14 +460,8 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
             scheduleHighlight([...pendingFilenamesRef.current]);
           }, 200);
         }),
-        listenSafely<TransferProgressPayload>("transfer-progress", (payload) => {
-          if (payload.session_id !== sessionId) return;
-          setTransferProgress(payload);
-        }),
         listenSafely<TransferCompletePayload>("transfer-complete", (payload) => {
           if (payload.session_id !== sessionId) return;
-          setTransferProgress(null);
-          pushToast(payload.message, payload.success);
           if (payload.direction === "upload" && payload.filenames.length > 0) {
             scheduleHighlight(payload.filenames);
           }
@@ -326,19 +470,18 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
 
       if (disposed) {
         output();
-        progress();
         complete();
         return;
       }
 
-      unlisteners = [output, progress, complete];
+      unlisteners = [output, complete];
     })();
 
     return () => {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [sessionId, pushToast, scheduleHighlight, setTransferProgress]);
+  }, [sessionId, scheduleHighlight]);
 
   useEffect(() => {
     if (!active) return;
@@ -351,6 +494,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       Array.from(event.dataTransfer?.types ?? []).includes("Files");
 
     const handleDragEnter = (event: DragEvent) => {
+      if (isTabReordering()) return;
       if (!hasFiles(event)) return;
       event.preventDefault();
       dragDepthRef.current += 1;
@@ -358,6 +502,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     };
 
     const handleDragLeave = (event: DragEvent) => {
+      if (isTabReordering()) return;
       if (!hasFiles(event)) return;
       event.preventDefault();
       dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
@@ -376,13 +521,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
 
       if (kind === "ssh") {
         try {
-          const results = await invoke<UploadFileResult[]>("upload_files", {
-            request: {
-              session_id: sessionId,
-              local_paths: paths,
-              remote_dir: null,
-            },
-          });
+          const results = await uploadLocalPathsToSession(sessionId, paths);
           pendingFilenamesRef.current = results.map((item) => item.filename);
           scheduleHighlight(pendingFilenamesRef.current);
         } catch (err) {
@@ -403,6 +542,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     };
 
     const preventDefaults = (event: DragEvent) => {
+      if (isTabReordering()) return;
       if (!hasFiles(event)) return;
       event.preventDefault();
       if (event.dataTransfer) {
@@ -422,6 +562,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     const appWindow = getCurrentWindow();
     void appWindow.onDragDropEvent(async (event) => {
       if (!activeRef.current) return;
+      if (isTabReordering()) return;
 
       if (event.payload.type === "enter" || event.payload.type === "over") {
         setIsDragOver(true);
@@ -440,13 +581,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
 
       if (kind === "ssh") {
         try {
-          const results = await invoke<UploadFileResult[]>("upload_files", {
-            request: {
-              session_id: sessionId,
-              local_paths: paths,
-              remote_dir: null,
-            },
-          });
+          const results = await uploadLocalPathsToSession(sessionId, paths);
           pendingFilenamesRef.current = results.map((item) => item.filename);
           scheduleHighlight(pendingFilenamesRef.current);
         } catch (err) {

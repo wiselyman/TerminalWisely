@@ -4,6 +4,7 @@ mod pty;
 mod session;
 mod shell;
 mod ssh;
+mod transfer;
 mod types;
 
 use session::SessionManager;
@@ -45,10 +46,14 @@ pub fn run() {
             commands::list_sessions,
             commands::upload_files,
             commands::download_file,
+            commands::cancel_transfer,
+            commands::probe_remote_path,
+            commands::transfer_remote_file,
             commands::enter_directory,
             commands::insert_local_paths_command,
             commands::get_saved_connections,
             commands::save_connection,
+            commands::update_saved_connection,
             commands::delete_saved_connection,
             commands::connect_saved,
             commands::get_device_history,

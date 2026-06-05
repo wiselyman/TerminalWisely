@@ -1,3 +1,7 @@
+pub fn shell_quote_remote_path(value: &str) -> String {
+    shell_single_quote(value)
+}
+
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }

@@ -1,9 +1,23 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, useMemo, type CSSProperties, type MouseEvent } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
+import { SendToDialog } from "./components/SendToDialog";
+import { TransferPanel } from "./components/TransferPanel";
 import { TerminalView } from "./components/TerminalView";
 import { ToastContainer } from "./components/ToastContainer";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { extractDroppedPaths } from "./lib/terminalLinks";
+import {
+  hasLocalFileDrop,
+  hasRemoteDrag,
+  parseRemoteDrag,
+} from "./lib/remoteDrag";
+import { dropEffectForKind } from "./lib/dragVisual";
+import { uploadLocalPathsToSession } from "./lib/sessionUpload";
+import { startTabPointerReorder } from "./lib/tabPointerReorder";
 import { useSessionStore } from "./stores/sessionStore";
+import { useToastStore } from "./stores/toastStore";
+import type { TransferCompletePayload, TransferProgressPayload } from "./types";
 import { productIntro } from "./content/productIntro";
 import "./App.css";
 
@@ -12,8 +26,71 @@ const SIDEBAR_COLLAPSED_WIDTH = 56;
 const SIDEBAR_STORAGE_KEY = "terminal-wisely.sidebar-collapsed";
 
 function App() {
-  const { tabs, activeTabId, closeTab, setActiveTab, transferProgress } =
-    useSessionStore();
+  const {
+    tabs,
+    activeTabId,
+    closeTab,
+    setActiveTab,
+    reorderTabs,
+    activeTransfers,
+    upsertTransfer,
+    removeTransfer,
+    cancelTransfer,
+    startRemoteTransfer,
+  } = useSessionStore();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const transferList = useMemo(
+    () => Object.values(activeTransfers),
+    [activeTransfers],
+  );
+  const sessionTitles = useMemo(
+    () =>
+      Object.fromEntries(tabs.map((tab) => [tab.id, tab.title])) as Record<
+        string,
+        string
+      >,
+    [tabs],
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    const unlisteners: Array<() => void> = [];
+
+    void (async () => {
+      const [progressUnlisten, completeUnlisten] = await Promise.all([
+        listen<TransferProgressPayload>("transfer-progress", (event) => {
+          upsertTransfer(event.payload);
+        }),
+        listen<TransferCompletePayload>("transfer-complete", (event) => {
+          removeTransfer(event.payload.transfer_id);
+          pushToast(event.payload.message, event.payload.success);
+        }),
+      ]);
+
+      if (disposed) {
+        progressUnlisten();
+        completeUnlisten();
+        return;
+      }
+
+      unlisteners.push(progressUnlisten, completeUnlisten);
+    })();
+
+    return () => {
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, [pushToast, removeTransfer, upsertTransfer]);
+  const [tabDropTargetId, setTabDropTargetId] = useState<string | null>(null);
+  const [tabDropKind, setTabDropKind] = useState<"local" | "remote" | null>(
+    null,
+  );
+  const [tabReorderDragId, setTabReorderDragId] = useState<string | null>(null);
+  const [tabReorderTarget, setTabReorderTarget] = useState<{
+    id: string;
+    position: "before" | "after";
+  } | null>(null);
+  const tabReorderCleanupRef = useRef<(() => void) | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1",
   );
@@ -43,6 +120,41 @@ function App() {
     return () => window.removeEventListener("resize", updateSize);
   }, [sidebarWidth]);
 
+  const clearTabReorderState = () => {
+    setTabReorderDragId(null);
+    setTabReorderTarget(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      tabReorderCleanupRef.current?.();
+      tabReorderCleanupRef.current = null;
+    };
+  }, []);
+
+  const startTabReorder = (tabId: string, event: MouseEvent) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest(".tab-close")) return;
+
+    tabReorderCleanupRef.current?.();
+    tabReorderCleanupRef.current = startTabPointerReorder({
+      tabId,
+      startX: event.clientX,
+      startY: event.clientY,
+      onPreview: (target) => {
+        setTabReorderDragId(tabId);
+        setTabReorderTarget(target);
+      },
+      onReorder: (dragId, targetId, position) => {
+        reorderTabs(dragId, targetId, position);
+      },
+      onEnd: () => {
+        tabReorderCleanupRef.current = null;
+        clearTabReorderState();
+      },
+    });
+  };
+
   useEffect(() => {
     const activeTab = tabBarRef.current?.querySelector(".tab.active");
     activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -66,7 +178,7 @@ function App() {
 
       <main className="workspace">
         <div
-          className="tab-bar"
+          className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
           ref={tabBarRef}
           onWheel={(event) => {
             if (!tabBarRef.current) return;
@@ -82,8 +194,88 @@ function App() {
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`tab ${tab.active ? "active" : ""}`}
+              className={`tab ${tab.active ? "active" : ""} ${
+                tabDropTargetId === tab.id ? "tab-drop-target" : ""
+              } ${tabDropTargetId === tab.id && tabDropKind === "remote" ? "tab-drop-target-remote" : ""} ${
+                tabReorderTarget?.id === tab.id
+                  ? `tab-reorder-${tabReorderTarget.position}`
+                  : ""
+              } ${tabReorderDragId === tab.id ? "tab-reorder-dragging" : ""}`}
+              data-session-id={tab.id}
+              data-tab-kind={tab.kind}
+              data-drop-kind={
+                tabDropTargetId === tab.id ? tabDropKind ?? undefined : undefined
+              }
               onClick={() => setActiveTab(tab.id)}
+              onMouseDown={(event) => startTabReorder(tab.id, event)}
+              onDragOver={(event) => {
+                if (tabReorderDragId) return;
+
+                const dataTransfer = event.dataTransfer;
+                if (!dataTransfer) return;
+                if (tab.kind !== "ssh") return;
+
+                const remote = hasRemoteDrag(dataTransfer);
+                const local = hasLocalFileDrop(dataTransfer);
+                if (!remote && !local) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                const kind = remote ? "remote" : "local";
+                dataTransfer.dropEffect = dropEffectForKind(kind);
+                setTabDropTargetId(tab.id);
+                setTabDropKind(kind);
+              }}
+              onDragLeave={() => {
+                setTabDropTargetId((current) => {
+                  if (current === tab.id) {
+                    setTabDropKind(null);
+                    return null;
+                  }
+                  return current;
+                });
+              }}
+              onDrop={(event) => {
+                if (tabReorderDragId) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                setTabDropTargetId(null);
+                setTabDropKind(null);
+                if (tab.kind !== "ssh") return;
+
+                const dataTransfer = event.dataTransfer;
+                if (!dataTransfer) return;
+
+                const remotePayload = parseRemoteDrag(dataTransfer);
+                if (remotePayload) {
+                  if (remotePayload.fromSessionId === tab.id) {
+                    pushToast("不能发送到同一个 SSH 会话", false);
+                    return;
+                  }
+                  setActiveTab(tab.id);
+                  void startRemoteTransfer(
+                    remotePayload.fromSessionId,
+                    remotePayload.remotePath,
+                    tab.id,
+                  ).catch((err) => {
+                    pushToast(String(err), false);
+                  });
+                  return;
+                }
+
+                const paths = extractDroppedPaths(event);
+                if (paths.length === 0) return;
+                setActiveTab(tab.id);
+                void uploadLocalPathsToSession(tab.id, paths)
+                  .then((results) => {
+                    const names = results.map((item) => item.filename).join(", ");
+                    pushToast(`已上传到 ${tab.title}: ${names}`, true);
+                  })
+                  .catch((err) => {
+                    pushToast(String(err), false);
+                  });
+              }}
             >
               <span className={`tab-kind ${tab.kind}`}>
                 {tab.kind === "ssh" ? "SSH" : "本地"}
@@ -92,6 +284,7 @@ function App() {
               <button
                 type="button"
                 className="tab-close"
+                onMouseDown={(event) => event.stopPropagation()}
                 aria-label={`关闭 ${tab.title}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -119,13 +312,13 @@ function App() {
           )}
         </div>
 
-        {transferProgress && (
-          <div className="transfer-bar">
-            {transferProgress.direction}: {transferProgress.filename} (
-            {transferProgress.transferred}/{transferProgress.total || "?"})
-          </div>
-        )}
+        <TransferPanel
+          transfers={transferList}
+          sessionTitles={sessionTitles}
+          onCancel={(transferId) => void cancelTransfer(transferId)}
+        />
       </main>
+      <SendToDialog />
       <ToastContainer />
     </div>
   );

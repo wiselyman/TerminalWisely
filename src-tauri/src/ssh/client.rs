@@ -13,7 +13,7 @@ use tokio::time::{sleep, Duration};
 
 use crate::error::{AppError, AppResult};
 use crate::session::{expand_path, SessionManager};
-use crate::ssh::sftp;
+use crate::ssh::{probe, sftp};
 use crate::types::{
     DownloadFileRequest, SessionInfo, SessionKind, SshConnectRequest, TerminalOutputPayload,
     TransferCompletePayload, TransferProgressPayload, UploadFileResult, UploadFilesRequest,
@@ -36,11 +36,117 @@ impl client::Handler for ClientHandler {
 
 pub struct SshSession {
     info: SessionInfo,
+    connect_request: SshConnectRequest,
     handle: Arc<Mutex<client::Handle<ClientHandler>>>,
     remote_cwd: Arc<Mutex<String>>,
     input_tx: mpsc::UnboundedSender<Vec<u8>>,
     resize_tx: mpsc::UnboundedSender<(u16, u16)>,
     shutdown_tx: watch::Sender<bool>,
+}
+
+/// Short-lived SSH connection used only for file transfer (not shared with the shell).
+pub struct TransferConnection {
+    handle: Arc<Mutex<client::Handle<ClientHandler>>>,
+}
+
+impl TransferConnection {
+    pub fn handle(&self) -> Arc<Mutex<client::Handle<ClientHandler>>> {
+        self.handle.clone()
+    }
+}
+
+#[derive(Clone)]
+pub struct SshSessionSnapshot {
+    handle: Arc<Mutex<client::Handle<ClientHandler>>>,
+    remote_cwd: Arc<Mutex<String>>,
+    info: SessionInfo,
+    connect_request: SshConnectRequest,
+}
+
+fn ssh_client_config() -> Arc<client::Config> {
+    Arc::new(client::Config {
+        inactivity_timeout: Some(Duration::from_secs(3600)),
+        window_size: 16 * 1024 * 1024,
+        maximum_packet_size: 64 * 1024,
+        ..Default::default()
+    })
+}
+
+async fn authenticate_handle(
+    handle: &mut client::Handle<ClientHandler>,
+    request: &SshConnectRequest,
+) -> AppResult<()> {
+    let auth_ok = match request.auth_method {
+        AuthMethod::Password => {
+            let password = request
+                .password
+                .as_ref()
+                .filter(|p| !p.is_empty())
+                .ok_or_else(|| AppError::msg("请输入密码"))?;
+            handle
+                .authenticate_password(&request.username, password)
+                .await?
+        }
+        AuthMethod::PrivateKey => {
+            let key_path = request
+                .private_key_path
+                .as_ref()
+                .ok_or_else(|| AppError::msg("Private key path is required"))?;
+            let expanded = expand_path(key_path)?;
+            let key_pair = load_secret_key(&expanded, request.passphrase.as_deref())?;
+            handle
+                .authenticate_publickey(&request.username, Arc::new(key_pair))
+                .await?
+        }
+    };
+
+    if !auth_ok {
+        return Err(AppError::msg("密码错误或认证失败"));
+    }
+    Ok(())
+}
+
+pub async fn open_transfer_connection(
+    request: &SshConnectRequest,
+    cancel: Option<&std::sync::atomic::AtomicBool>,
+) -> AppResult<TransferConnection> {
+    use crate::transfer::{check_cancel, CANCELLED_MSG, CANCEL_POLL_MS};
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    check_cancel(cancel)?;
+
+    let connect = async {
+        let config = ssh_client_config();
+        let mut handle =
+            client::connect(config, (request.host.as_str(), request.port), ClientHandler)
+                .await
+                .map_err(AppError::from)?;
+        authenticate_handle(&mut handle, request).await?;
+        Ok::<_, AppError>(Arc::new(Mutex::new(handle)))
+    };
+
+    let handle = if let Some(flag) = cancel {
+        async fn wait_for_cancel_flag(flag: &std::sync::atomic::AtomicBool) {
+            loop {
+                if flag.load(Ordering::SeqCst) {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(CANCEL_POLL_MS)).await;
+            }
+        }
+
+        tokio::select! {
+            result = connect => result?,
+            () = wait_for_cancel_flag(flag) => {
+                return Err(AppError::msg(CANCELLED_MSG));
+            }
+        }
+    } else {
+        connect.await?
+    };
+
+    Ok(TransferConnection { handle })
 }
 
 impl SshSession {
@@ -50,42 +156,15 @@ impl SshSession {
         request: SshConnectRequest,
         cols: u16,
         rows: u16,
-    ) -> AppResult<Self> {
-        let config = Arc::new(client::Config {
-            inactivity_timeout: Some(std::time::Duration::from_secs(3600)),
-            ..Default::default()
-        });
+    ) -> AppResult<(Self, Option<probe::ServerOsProfile>)> {
+        let config = ssh_client_config();
 
         let mut handle = client::connect(config, (request.host.as_str(), request.port), ClientHandler)
             .await?;
 
-        let auth_ok = match request.auth_method {
-            AuthMethod::Password => {
-                let password = request
-                    .password
-                    .filter(|p| !p.is_empty())
-                    .ok_or_else(|| AppError::msg("请输入密码"))?;
-                handle
-                    .authenticate_password(&request.username, &password)
-                    .await?
-            }
-            AuthMethod::PrivateKey => {
-                let key_path = request
-                    .private_key_path
-                    .as_ref()
-                    .ok_or_else(|| AppError::msg("Private key path is required"))?;
-                let expanded = expand_path(key_path)?;
-                let key_pair = load_secret_key(&expanded, request.passphrase.as_deref())?;
-                handle
-                    .authenticate_publickey(&request.username, Arc::new(key_pair))
-                    .await?
-            }
-        };
+        authenticate_handle(&mut handle, &request).await?;
 
-    if !auth_ok {
-            return Err(AppError::msg("密码错误或认证失败"));
-        }
-
+        let os_profile = probe::probe_remote_os(&handle).await.ok();
         let remote_home = sftp::resolve_remote_home(&handle).await?;
         let remote_cwd = Arc::new(Mutex::new(remote_home.clone()));
         let handle = Arc::new(Mutex::new(handle));
@@ -133,27 +212,57 @@ impl SshSession {
             remote_home: Some(remote_home.clone()),
         };
 
-        Ok(Self {
-            info,
-            handle,
-            remote_cwd,
-            input_tx,
-            resize_tx,
-            shutdown_tx,
-        })
+        Ok((
+            Self {
+                info,
+                connect_request: request,
+                handle,
+                remote_cwd,
+                input_tx,
+                resize_tx,
+                shutdown_tx,
+            },
+            os_profile,
+        ))
     }
 
     pub fn info(&self) -> SessionInfo {
         self.info.clone()
     }
 
-    pub fn write_input(&mut self, data: &str) -> AppResult<()> {
+    pub fn handle(&self) -> Arc<Mutex<client::Handle<ClientHandler>>> {
+        self.handle.clone()
+    }
+
+    pub async fn current_remote_cwd(&self) -> String {
+        self.remote_cwd.lock().await.clone()
+    }
+
+    pub async fn probe_path_kind(&self, path: &str) -> AppResult<&'static str> {
+        let resolved = self.resolve_remote_path(path).await?;
+        if sftp::is_remote_directory(&self.handle, &resolved).await? {
+            Ok("directory")
+        } else {
+            Ok("file")
+        }
+    }
+
+    pub fn snapshot(&self) -> SshSessionSnapshot {
+        SshSessionSnapshot {
+            handle: self.handle.clone(),
+            remote_cwd: self.remote_cwd.clone(),
+            info: self.info.clone(),
+            connect_request: self.connect_request.clone(),
+        }
+    }
+
+    pub fn write_input(&self, data: &str) -> AppResult<()> {
         self.input_tx
             .send(data.as_bytes().to_vec())
             .map_err(|_| AppError::msg("终端连接已断开，请关闭此标签页后重新连接"))
     }
 
-    pub fn resize(&mut self, cols: u16, rows: u16) -> AppResult<()> {
+    pub fn resize(&self, cols: u16, rows: u16) -> AppResult<()> {
         self.resize_tx
             .send((cols, rows))
             .map_err(|e| AppError::msg(e.to_string()))
@@ -168,13 +277,78 @@ impl SshSession {
         &self,
         app: AppHandle,
         request: UploadFilesRequest,
+        transfer_id: &str,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    ) -> AppResult<Vec<UploadFileResult>> {
+        self.snapshot()
+            .upload_files(app, request, transfer_id, cancel)
+            .await
+    }
+
+    pub async fn resolve_remote_path(&self, remote_path: &str) -> AppResult<String> {
+        self.snapshot().resolve_remote_path(remote_path).await
+    }
+
+    pub async fn enter_remote_directory(&mut self, remote_path: &str) -> AppResult<()> {
+        let cd_target = remote_path.trim().trim_end_matches('/');
+        if cd_target.is_empty() || cd_target == "." {
+            self.write_input("ls -F\r")?;
+            return Ok(());
+        }
+
+        let cmd = format!("cd {} && ls -F\r", crate::shell::shell_cd_argument(cd_target));
+        self.write_input(&cmd)?;
+
+        let resolved = self.resolve_remote_path(cd_target).await?;
+        *self.remote_cwd.lock().await = resolved;
+        Ok(())
+    }
+
+    pub async fn download_file(
+        &self,
+        app: AppHandle,
+        request: DownloadFileRequest,
+        transfer_id: &str,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    ) -> AppResult<String> {
+        self.snapshot()
+            .download_file(app, request, transfer_id, cancel)
+            .await
+    }
+}
+
+impl SshSessionSnapshot {
+    pub fn handle(&self) -> Arc<Mutex<client::Handle<ClientHandler>>> {
+        self.handle.clone()
+    }
+
+    pub async fn current_remote_cwd(&self) -> String {
+        self.remote_cwd.lock().await.clone()
+    }
+
+    pub fn session_id(&self) -> String {
+        self.info.id.clone()
+    }
+
+    pub fn connect_request(&self) -> &SshConnectRequest {
+        &self.connect_request
+    }
+
+    pub async fn upload_files(
+        &self,
+        app: AppHandle,
+        request: UploadFilesRequest,
+        transfer_id: &str,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     ) -> AppResult<Vec<UploadFileResult>> {
         let remote_dir = match request.remote_dir.filter(|d| !d.is_empty()) {
             Some(dir) => dir,
             None => self.remote_cwd.lock().await.clone(),
         };
 
-        let handle = self.handle.clone();
+        let transfer =
+            open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
+        let handle = transfer.handle();
         let session_id = self.info.id.clone();
         let mut results = Vec::new();
 
@@ -193,16 +367,19 @@ impl SshSession {
             let total = std::fs::metadata(&local)?.len();
             let app_progress = app.clone();
             let sid = session_id.clone();
+            let tid = transfer_id.to_string();
             let fname = file_name.to_string();
 
-            sftp::upload_file(
+            match sftp::upload_file(
                 &handle,
                 &local,
                 &remote_path,
+                cancel.clone(),
                 move |transferred| {
                     let _ = app_progress.emit(
                         "transfer-progress",
                         TransferProgressPayload {
+                            transfer_id: tid.clone(),
                             session_id: sid.clone(),
                             filename: fname.clone(),
                             transferred,
@@ -212,7 +389,15 @@ impl SshSession {
                     );
                 },
             )
-            .await?;
+            .await
+            {
+                Ok(()) => {}
+                Err(err) if err.is_cancelled() => {
+                    let _ = sftp::remove_remote_file(&handle, &remote_path).await;
+                    return Err(err);
+                }
+                Err(err) => return Err(err),
+            }
 
             results.push(UploadFileResult {
                 filename: file_name.to_string(),
@@ -224,7 +409,7 @@ impl SshSession {
         Ok(results)
     }
 
-    async fn resolve_remote_path(&self, remote_path: &str) -> AppResult<String> {
+    pub async fn resolve_remote_path(&self, remote_path: &str) -> AppResult<String> {
         let path = remote_path.trim().trim_end_matches('/').to_string();
         if path.is_empty() {
             return Err(AppError::msg("Path is empty"));
@@ -265,25 +450,12 @@ impl SshSession {
         Ok(format!("{}/{}", cwd.trim_end_matches('/'), path))
     }
 
-    pub async fn enter_remote_directory(&mut self, remote_path: &str) -> AppResult<()> {
-        let cd_target = remote_path.trim().trim_end_matches('/');
-        if cd_target.is_empty() || cd_target == "." {
-            self.write_input("ls -F\r")?;
-            return Ok(());
-        }
-
-        let cmd = format!("cd {} && ls -F\r", crate::shell::shell_cd_argument(cd_target));
-        self.write_input(&cmd)?;
-
-        let resolved = self.resolve_remote_path(cd_target).await?;
-        *self.remote_cwd.lock().await = resolved;
-        Ok(())
-    }
-
     pub async fn download_file(
         &self,
         app: AppHandle,
         request: DownloadFileRequest,
+        transfer_id: &str,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     ) -> AppResult<String> {
         let remote_path = self.resolve_remote_path(&request.remote_path).await?;
 
@@ -305,18 +477,23 @@ impl SshSession {
             std::fs::create_dir_all(parent)?;
         }
 
-        let handle = self.handle.clone();
+        let transfer =
+            open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
+        let handle = transfer.handle();
         let session_id = self.info.id.clone();
         let fname = file_name.to_string();
+        let tid = transfer_id.to_string();
 
-        sftp::download_file(
+        match sftp::download_file(
             &handle,
             &remote_path,
             &local,
+            cancel,
             move |transferred, total| {
                 let _ = app.emit(
                     "transfer-progress",
                     TransferProgressPayload {
+                        transfer_id: tid.clone(),
                         session_id: session_id.clone(),
                         filename: fname.clone(),
                         transferred,
@@ -326,9 +503,15 @@ impl SshSession {
                 );
             },
         )
-        .await?;
-
-        Ok(local_path)
+        .await
+        {
+            Ok(()) => Ok(local_path),
+            Err(err) if err.is_cancelled() => {
+                let _ = tokio::fs::remove_file(&local).await;
+                Err(err)
+            }
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -596,8 +779,31 @@ pub async fn insert_local_paths(
     Ok(payload)
 }
 
+pub fn emit_transfer_progress(
+    app: &AppHandle,
+    transfer_id: &str,
+    session_id: &str,
+    filename: &str,
+    transferred: u64,
+    total: u64,
+    direction: &str,
+) {
+    let _ = app.emit(
+        "transfer-progress",
+        TransferProgressPayload {
+            transfer_id: transfer_id.to_string(),
+            session_id: session_id.to_string(),
+            filename: filename.to_string(),
+            transferred,
+            total,
+            direction: direction.to_string(),
+        },
+    );
+}
+
 pub fn emit_transfer_complete(
     app: &AppHandle,
+    transfer_id: &str,
     session_id: &str,
     direction: &str,
     message: &str,
@@ -608,6 +814,7 @@ pub fn emit_transfer_complete(
     let _ = app.emit(
         "transfer-complete",
         TransferCompletePayload {
+            transfer_id: transfer_id.to_string(),
             session_id: session_id.to_string(),
             message: message.to_string(),
             success,

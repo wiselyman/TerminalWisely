@@ -35,6 +35,10 @@ impl AppError {
     pub fn msg(message: impl Into<String>) -> Self {
         Self::Message(message.into())
     }
+
+    pub fn is_cancelled(&self) -> bool {
+        crate::transfer::is_cancelled(self)
+    }
 }
 
 impl From<String> for AppError {

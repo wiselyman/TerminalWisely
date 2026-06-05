@@ -3,14 +3,35 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::session::{
     load_connections, record_device_history, request_from_device, request_from_saved,
-    saved_connection_from_request, store_connections, SessionManager,
+    saved_connection_from_request, store_connections, update_matching_saved_connections_os,
+    SessionManager,
 };
 use crate::ssh::client::{emit_transfer_complete, insert_local_paths};
+use crate::transfer::CANCELLED_MSG;
+use crate::transfer::TransferRegistry;
 use crate::types::{
     AuthMethod, DeviceRecord, DownloadFileRequest, EnterDirectoryRequest,
-    InsertLocalPathsRequest, SavedConnectionView,
-    SessionInfo, SshConnectRequest, UploadFileResult, UploadFilesRequest,
+    InsertLocalPathsRequest, ProbeRemotePathRequest, SavedConnectionView, SessionInfo,
+    SshConnectRequest, SshConnectResult, TransferRemoteRequest, UploadFileResult,
+    UploadFilesRequest,
 };
+
+fn ssh_connect_result(
+    app: &AppHandle,
+    request: &SshConnectRequest,
+    info: SessionInfo,
+    os_profile: Option<crate::ssh::probe::ServerOsProfile>,
+) -> Result<SshConnectResult, String> {
+    if let Some(ref os) = os_profile {
+        update_matching_saved_connections_os(app, request, os).map_err(|e| e.to_string())?;
+    }
+    record_device_history(app, request).map_err(|e| e.to_string())?;
+    Ok(SshConnectResult {
+        session: info,
+        os_id: os_profile.as_ref().map(|os| os.os_id.clone()),
+        os_name: os_profile.and_then(|os| os.os_name),
+    })
+}
 
 #[tauri::command]
 pub async fn create_local_session(
@@ -32,13 +53,12 @@ pub async fn create_ssh_session(
     cols: u16,
     rows: u16,
     sessions: State<'_, SessionManager>,
-) -> Result<SessionInfo, String> {
-    let info = sessions
+) -> Result<SshConnectResult, String> {
+    let (info, os_profile) = sessions
         .create_ssh(app.clone(), request.clone(), cols, rows)
         .await
         .map_err(|e| e.to_string())?;
-    record_device_history(&app, &request).map_err(|e| e.to_string())?;
-    Ok(info)
+    ssh_connect_result(&app, &request, info, os_profile)
 }
 
 #[tauri::command]
@@ -86,10 +106,24 @@ pub async fn upload_files(
     sessions: State<'_, SessionManager>,
 ) -> Result<Vec<UploadFileResult>, String> {
     let session_id = request.session_id.clone();
-    let results = sessions
-        .upload_files(app.clone(), request)
-        .await
-        .map_err(|e| e.to_string())?;
+    let transfer_id = TransferRegistry::resolve_transfer_id(request.transfer_id.clone());
+    let results = match sessions.upload_files(app.clone(), request).await {
+        Ok(results) => results,
+        Err(err) if err.is_cancelled() => {
+            emit_transfer_complete(
+                &app,
+                &transfer_id,
+                &session_id,
+                "upload",
+                CANCELLED_MSG,
+                false,
+                vec![],
+                None,
+            );
+            return Err(CANCELLED_MSG.to_string());
+        }
+        Err(err) => return Err(err.to_string()),
+    };
 
     let filenames: Vec<String> = results.iter().map(|r| r.filename.clone()).collect();
     let message = if results.len() == 1 {
@@ -100,6 +134,7 @@ pub async fn upload_files(
 
     emit_transfer_complete(
         &app,
+        &transfer_id,
         &session_id,
         "upload",
         &message,
@@ -125,10 +160,24 @@ pub async fn download_file(
     sessions: State<'_, SessionManager>,
 ) -> Result<String, String> {
     let session_id = request.session_id.clone();
-    let local_path = sessions
-        .download_file(app.clone(), request)
-        .await
-        .map_err(|e| e.to_string())?;
+    let transfer_id = TransferRegistry::resolve_transfer_id(request.transfer_id.clone());
+    let local_path = match sessions.download_file(app.clone(), request).await {
+        Ok(path) => path,
+        Err(err) if err.is_cancelled() => {
+            emit_transfer_complete(
+                &app,
+                &transfer_id,
+                &session_id,
+                "download",
+                CANCELLED_MSG,
+                false,
+                vec![],
+                None,
+            );
+            return Err(CANCELLED_MSG.to_string());
+        }
+        Err(err) => return Err(err.to_string()),
+    };
 
     if let Err(err) = app.opener().reveal_item_in_dir(&local_path) {
         log::warn!("Failed to reveal download folder: {err}");
@@ -141,6 +190,7 @@ pub async fn download_file(
 
     emit_transfer_complete(
         &app,
+        &transfer_id,
         &session_id,
         "download",
         &format!("已下载: {file_name}"),
@@ -150,6 +200,38 @@ pub async fn download_file(
     );
 
     Ok(local_path)
+}
+
+#[tauri::command]
+pub async fn cancel_transfer(
+    #[allow(non_snake_case)]
+    transferId: String,
+    sessions: State<'_, SessionManager>,
+) -> Result<bool, String> {
+    Ok(sessions.cancel_transfer(&transferId).await)
+}
+
+#[tauri::command]
+pub async fn probe_remote_path(
+    request: ProbeRemotePathRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<String, String> {
+    sessions
+        .probe_remote_path(request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn transfer_remote_file(
+    app: AppHandle,
+    request: TransferRemoteRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions
+        .transfer_remote_file(app, request)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -186,15 +268,75 @@ pub async fn save_connection(
     name: String,
     request: SshConnectRequest,
     remember_password: bool,
+    os_id: Option<String>,
+    os_name: Option<String>,
 ) -> Result<SavedConnectionView, String> {
     let mut connections = load_connections(&app).map_err(|e| e.to_string())?;
     let mut saved = saved_connection_from_request(&name, &request);
+    saved.os_id = os_id;
+    saved.os_name = os_name;
     if remember_password && request.auth_method == AuthMethod::Password {
         saved.password = request.password.clone();
     }
     connections.push(saved.clone());
     store_connections(&app, &connections).map_err(|e| e.to_string())?;
     Ok(SavedConnectionView::from(&saved))
+}
+
+#[tauri::command]
+pub async fn update_saved_connection(
+    app: AppHandle,
+    id: String,
+    name: String,
+    request: SshConnectRequest,
+    remember_password: bool,
+) -> Result<SavedConnectionView, String> {
+    let mut connections = load_connections(&app).map_err(|e| e.to_string())?;
+    let index = connections
+        .iter()
+        .position(|connection| connection.id == id)
+        .ok_or_else(|| "Bookmark not found".to_string())?;
+
+    let previous = connections[index].clone();
+    let identity_changed = previous.host != request.host
+        || previous.port != request.port
+        || previous.username != request.username;
+
+    let saved = &mut connections[index];
+    saved.name = name;
+    saved.host = request.host.clone();
+    saved.port = request.port;
+    saved.username = request.username.clone();
+    saved.auth_method = request.auth_method.clone();
+    saved.private_key_path = request.private_key_path.clone();
+
+    if identity_changed {
+        saved.os_id = None;
+        saved.os_name = None;
+    }
+
+    match request.auth_method {
+        AuthMethod::Password => {
+            if remember_password {
+                let new_password = request
+                    .password
+                    .as_ref()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty());
+                if let Some(password) = new_password {
+                    saved.password = Some(password.to_string());
+                }
+            } else {
+                saved.password = None;
+            }
+        }
+        AuthMethod::PrivateKey => {
+            saved.password = None;
+        }
+    }
+
+    store_connections(&app, &connections).map_err(|e| e.to_string())?;
+    Ok(SavedConnectionView::from(&connections[index]))
 }
 
 #[tauri::command]
@@ -214,7 +356,7 @@ pub async fn connect_saved(
     cols: u16,
     rows: u16,
     sessions: State<'_, SessionManager>,
-) -> Result<SessionInfo, String> {
+) -> Result<SshConnectResult, String> {
     let mut connections = load_connections(&app).map_err(|e| e.to_string())?;
     let index = connections
         .iter()
@@ -222,7 +364,7 @@ pub async fn connect_saved(
         .ok_or_else(|| "Bookmark not found".to_string())?;
 
     let request = request_from_saved(&connections[index], password.clone());
-    let info = sessions
+    let (info, os_profile) = sessions
         .create_ssh(app.clone(), request.clone(), cols, rows)
         .await
         .map_err(|e| e.to_string())?;
@@ -234,8 +376,7 @@ pub async fn connect_saved(
         }
     }
 
-    record_device_history(&app, &request).map_err(|e| e.to_string())?;
-    Ok(info)
+    ssh_connect_result(&app, &request, info, os_profile)
 }
 
 #[tauri::command]
@@ -258,14 +399,13 @@ pub async fn connect_device(
     cols: u16,
     rows: u16,
     sessions: State<'_, SessionManager>,
-) -> Result<SessionInfo, String> {
+) -> Result<SshConnectResult, String> {
     let request = request_from_device(&device, password);
-    let info = sessions
+    let (info, os_profile) = sessions
         .create_ssh(app.clone(), request.clone(), cols, rows)
         .await
         .map_err(|e| e.to_string())?;
-    record_device_history(&app, &request).map_err(|e| e.to_string())?;
-    Ok(info)
+    ssh_connect_result(&app, &request, info, os_profile)
 }
 
 #[tauri::command]

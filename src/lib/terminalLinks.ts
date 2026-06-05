@@ -310,11 +310,17 @@ export function isModifierClick(event: MouseEvent): boolean {
   return event.ctrlKey || event.metaKey;
 }
 
+export function isShiftClick(event: MouseEvent): boolean {
+  return event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
 export function quotePath(path: string): string {
   return `"${path.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-export function extractDroppedPaths(event: DragEvent): string[] {
+export function extractDroppedPaths(
+  event: Pick<DragEvent, "dataTransfer">,
+): string[] {
   const paths: string[] = [];
   if (event.dataTransfer?.files?.length) {
     for (const file of Array.from(event.dataTransfer.files)) {

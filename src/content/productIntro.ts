@@ -16,6 +16,11 @@ export const productIntro = {
       title: "快捷下载",
       description: "Ctrl / Cmd + 点击终端里的文件路径，下载到本机 Downloads 文件夹。",
     },
+    {
+      title: "跨服发送",
+      description:
+        "在 A 的 ls 输出里：按住 Ctrl/Cmd，在文件名上按下鼠标拖到顶部 B 的 SSH 标签再松开。",
+    },
   ],
   steps: [
     {

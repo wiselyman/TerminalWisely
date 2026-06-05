@@ -82,7 +82,7 @@ impl LocalSession {
         self.info.clone()
     }
 
-    pub fn write_input(&mut self, data: &str) -> AppResult<()> {
+    pub fn write_input(&self, data: &str) -> AppResult<()> {
         self.writer
             .lock()
             .unwrap()
@@ -107,7 +107,7 @@ impl LocalSession {
         self.write_input(&cmd)
     }
 
-    pub fn resize(&mut self, cols: u16, rows: u16) -> AppResult<()> {
+    pub fn resize(&self, cols: u16, rows: u16) -> AppResult<()> {
         self.master
             .lock()
             .unwrap()

@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { formatConnectError } from "../lib/connectError";
+import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
 import type {
   DeviceRecord,
   SavedConnection,
+  SendToRequest,
   SessionInfo,
   SshConnectRequest,
+  SshConnectResult,
   TabSession,
   TransferProgressPayload,
 } from "../types";
@@ -16,14 +19,36 @@ interface SessionState {
   activeTabId: string | null;
   savedConnections: SavedConnection[];
   deviceHistory: DeviceRecord[];
-  transferProgress: TransferProgressPayload | null;
+  activeTransfers: Record<string, TransferProgressPayload>;
   statusMessage: string | null;
+  sendTo: SendToRequest | null;
+  openSendTo: (request: SendToRequest) => void;
+  closeSendTo: () => void;
+  transferRemote: (toSessionId: string) => Promise<void>;
+  startRemoteTransfer: (
+    fromSessionId: string,
+    remotePath: string,
+    toSessionId: string,
+  ) => Promise<void>;
   addTab: (info: SessionInfo) => void;
   closeTab: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
+  reorderTabs: (
+    dragId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => void;
   loadSavedConnections: () => Promise<void>;
   loadDeviceHistory: () => Promise<void>;
   saveConnection: (
+    name: string,
+    request: SshConnectRequest,
+    rememberPassword: boolean,
+    osId?: string | null,
+    osName?: string | null,
+  ) => Promise<void>;
+  updateSavedConnection: (
+    id: string,
     name: string,
     request: SshConnectRequest,
     rememberPassword: boolean,
@@ -35,7 +60,7 @@ interface SessionState {
     request: SshConnectRequest,
     cols: number,
     rows: number,
-  ) => Promise<void>;
+  ) => Promise<SshConnectResult>;
   connectSaved: (
     savedId: string,
     password: string | null,
@@ -49,7 +74,9 @@ interface SessionState {
     cols: number,
     rows: number,
   ) => Promise<void>;
-  setTransferProgress: (progress: TransferProgressPayload | null) => void;
+  upsertTransfer: (progress: TransferProgressPayload) => void;
+  removeTransfer: (transferId: string) => void;
+  cancelTransfer: (transferId: string) => Promise<void>;
   setStatusMessage: (message: string | null) => void;
 }
 
@@ -63,8 +90,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   activeTabId: null,
   savedConnections: [],
   deviceHistory: [],
-  transferProgress: null,
+  activeTransfers: {},
   statusMessage: null,
+  sendTo: null,
 
   addTab: (info) => {
     set((state) => ({
@@ -100,6 +128,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }));
   },
 
+  reorderTabs: (dragId, targetId, position) => {
+    set((state) => {
+      const tabs = [...state.tabs];
+      const fromIndex = tabs.findIndex((tab) => tab.id === dragId);
+      const targetIndex = tabs.findIndex((tab) => tab.id === targetId);
+      if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) {
+        return state;
+      }
+
+      const [moved] = tabs.splice(fromIndex, 1);
+      let insertIndex = targetIndex;
+      if (fromIndex < targetIndex) {
+        insertIndex -= 1;
+      }
+      if (position === "after") {
+        insertIndex += 1;
+      }
+      tabs.splice(insertIndex, 0, moved);
+      return { tabs };
+    });
+  },
+
   loadSavedConnections: async () => {
     const saved = await invoke<SavedConnection[]>("get_saved_connections");
     set({ savedConnections: saved });
@@ -110,8 +160,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ deviceHistory: devices });
   },
 
-  saveConnection: async (name, request, rememberPassword) => {
-    await invoke("save_connection", { name, request, rememberPassword });
+  saveConnection: async (name, request, rememberPassword, osId, osName) => {
+    await invoke("save_connection", {
+      name,
+      request,
+      rememberPassword,
+      osId: osId ?? null,
+      osName: osName ?? null,
+    });
+    await get().loadSavedConnections();
+  },
+
+  updateSavedConnection: async (id, name, request, rememberPassword) => {
+    await invoke("update_saved_connection", {
+      id,
+      name,
+      request,
+      rememberPassword,
+    });
     await get().loadSavedConnections();
   },
 
@@ -132,13 +198,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   createSshSession: async (request, cols, rows) => {
     try {
-      const info = await invoke<SessionInfo>("create_ssh_session", {
+      const result = await invoke<SshConnectResult>("create_ssh_session", {
         request,
         cols,
         rows,
       });
-      get().addTab(info);
+      get().addTab(result.session);
       await get().loadDeviceHistory();
+      return result;
     } catch (err) {
       notifyConnectError(err);
     }
@@ -146,14 +213,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   connectSaved: async (savedId, password, rememberPassword, cols, rows) => {
     try {
-      const info = await invoke<SessionInfo>("connect_saved", {
+      const result = await invoke<SshConnectResult>("connect_saved", {
         savedId,
         password,
         rememberPassword,
         cols,
         rows,
       });
-      get().addTab(info);
+      get().addTab(result.session);
       await get().loadSavedConnections();
       await get().loadDeviceHistory();
     } catch (err) {
@@ -162,16 +229,108 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   connectDevice: async (device, password, cols, rows) => {
-    const info = await invoke<SessionInfo>("connect_device", {
+    const result = await invoke<SshConnectResult>("connect_device", {
       device,
       password,
       cols,
       rows,
     });
-    get().addTab(info);
+    get().addTab(result.session);
     await get().loadDeviceHistory();
   },
 
-  setTransferProgress: (progress) => set({ transferProgress: progress }),
+  upsertTransfer: (progress) =>
+    set((state) => ({
+      activeTransfers: {
+        ...state.activeTransfers,
+        [progress.transfer_id]: progress,
+      },
+    })),
+
+  removeTransfer: (transferId) =>
+    set((state) => {
+      if (!(transferId in state.activeTransfers)) return state;
+      const next = { ...state.activeTransfers };
+      delete next[transferId];
+      return { activeTransfers: next };
+    }),
+
+  cancelTransfer: async (transferId) => {
+    try {
+      const cancelled = await invoke<boolean>("cancel_transfer", {
+        transferId,
+      });
+      if (!cancelled) {
+        useToastStore
+          .getState()
+          .pushToast("当前没有可取消的传输任务", false);
+        return;
+      }
+      get().removeTransfer(transferId);
+    } catch (err) {
+      useToastStore.getState().pushToast(String(err), false);
+    }
+  },
+
   setStatusMessage: (message) => set({ statusMessage: message }),
+
+  openSendTo: (request) => set({ sendTo: request }),
+  closeSendTo: () => set({ sendTo: null }),
+
+  transferRemote: async (toSessionId) => {
+    const sendTo = get().sendTo;
+    if (!sendTo) return;
+    const payload = {
+      fromSessionId: sendTo.fromSessionId,
+      remotePath: sendTo.remotePath,
+    };
+    set({ sendTo: null });
+    await get().startRemoteTransfer(
+      payload.fromSessionId,
+      payload.remotePath,
+      toSessionId,
+    );
+  },
+
+  startRemoteTransfer: async (fromSessionId, remotePath, toSessionId) => {
+    if (fromSessionId === toSessionId) {
+      useToastStore.getState().pushToast("不能发送到同一个 SSH 会话", false);
+      return;
+    }
+
+    const targetTab = get().tabs.find((tab) => tab.id === toSessionId);
+    useToastStore
+      .getState()
+      .pushToast(
+        targetTab ? `正在发送到 ${targetTab.title}…` : "正在发送…",
+        true,
+      );
+
+    const transferId = createTransferId();
+    const downloadName =
+      remotePath.split("/").pop() || remotePath.split("\\").pop() || remotePath;
+    get().upsertTransfer({
+      transfer_id: transferId,
+      session_id: toSessionId,
+      filename: downloadName,
+      transferred: 0,
+      total: 0,
+      direction: "send",
+    });
+
+    try {
+      await invoke("transfer_remote_file", {
+        request: {
+          from_session_id: fromSessionId,
+          remote_path: remotePath,
+          to_session_id: toSessionId,
+          remote_dir: null,
+          transfer_id: transferId,
+        },
+      });
+    } catch (err) {
+      get().removeTransfer(transferId);
+      throw err;
+    }
+  },
 }));

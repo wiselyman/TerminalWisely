@@ -23,6 +23,7 @@ pub struct TerminalOutputPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferProgressPayload {
+    pub transfer_id: String,
     pub session_id: String,
     pub filename: String,
     pub transferred: u64,
@@ -32,6 +33,7 @@ pub struct TransferProgressPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferCompletePayload {
+    pub transfer_id: String,
     pub session_id: String,
     pub message: String,
     pub success: bool,
@@ -78,6 +80,10 @@ pub struct SavedConnection {
     pub private_key_path: Option<String>,
     #[serde(default)]
     pub password: Option<String>,
+    #[serde(default)]
+    pub os_id: Option<String>,
+    #[serde(default)]
+    pub os_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +96,17 @@ pub struct SavedConnectionView {
     pub auth_method: AuthMethod,
     pub private_key_path: Option<String>,
     pub has_password: bool,
+    #[serde(default)]
+    pub os_id: Option<String>,
+    #[serde(default)]
+    pub os_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshConnectResult {
+    pub session: SessionInfo,
+    pub os_id: Option<String>,
+    pub os_name: Option<String>,
 }
 
 impl From<&SavedConnection> for SavedConnectionView {
@@ -103,6 +120,8 @@ impl From<&SavedConnection> for SavedConnectionView {
             auth_method: saved.auth_method.clone(),
             private_key_path: saved.private_key_path.clone(),
             has_password: saved.password.is_some(),
+            os_id: saved.os_id.clone(),
+            os_name: saved.os_name.clone(),
         }
     }
 }
@@ -124,6 +143,8 @@ pub struct UploadFilesRequest {
     pub session_id: String,
     pub local_paths: Vec<String>,
     pub remote_dir: Option<String>,
+    #[serde(default)]
+    pub transfer_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,6 +152,8 @@ pub struct DownloadFileRequest {
     pub session_id: String,
     pub remote_path: String,
     pub local_path: Option<String>,
+    #[serde(default)]
+    pub transfer_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,4 +166,20 @@ pub struct EnterDirectoryRequest {
 pub struct InsertLocalPathsRequest {
     pub session_id: String,
     pub local_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeRemotePathRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferRemoteRequest {
+    pub from_session_id: String,
+    pub remote_path: String,
+    pub to_session_id: String,
+    pub remote_dir: Option<String>,
+    #[serde(default)]
+    pub transfer_id: Option<String>,
 }

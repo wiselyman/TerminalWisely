@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Modal } from "./Modal";
-import { LocalTerminalIcon, SshConnectIcon } from "./SidebarIcons";
+import { SidebarAddMenu } from "./SidebarAddMenu";
+import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
+import { useToastStore } from "../stores/toastStore";
 
 interface ConnectionPanelProps {
   cols: number;
@@ -20,6 +22,10 @@ const defaultRequest: SshConnectRequest = {
   private_key_path: "~/.ssh/id_ed25519",
   passphrase: "",
 };
+
+type SshFormMode =
+  | { kind: "create" }
+  | { kind: "edit"; saved: SavedConnection };
 
 function SidebarChevronIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -55,7 +61,7 @@ export function ConnectionPanel({
   collapsed,
   onToggleCollapse,
 }: ConnectionPanelProps) {
-  const [showForm, setShowForm] = useState(false);
+  const [sshFormMode, setSshFormMode] = useState<SshFormMode | null>(null);
   const [form, setForm] = useState<SshConnectRequest>(defaultRequest);
   const [connectionName, setConnectionName] = useState("");
   const [savedPasswordPrompt, setSavedPasswordPrompt] =
@@ -68,6 +74,7 @@ export function ConnectionPanel({
     savedConnections,
     loadSavedConnections,
     saveConnection,
+    updateSavedConnection,
     deleteSavedConnection,
     createLocalSession,
     createSshSession,
@@ -79,8 +86,30 @@ export function ConnectionPanel({
     void loadSavedConnections();
   }, [loadSavedConnections]);
 
+  const openCreateForm = () => {
+    setSshFormMode({ kind: "create" });
+    setForm(defaultRequest);
+    setConnectionName("");
+    setRememberPassword(false);
+  };
+
+  const openEditForm = (saved: SavedConnection) => {
+    setSshFormMode({ kind: "edit", saved });
+    setConnectionName(saved.name);
+    setForm({
+      host: saved.host,
+      port: saved.port,
+      username: saved.username,
+      auth_method: saved.auth_method,
+      password: "",
+      private_key_path: saved.private_key_path ?? "~/.ssh/id_ed25519",
+      passphrase: "",
+    });
+    setRememberPassword(saved.has_password);
+  };
+
   const closeSshForm = () => {
-    setShowForm(false);
+    setSshFormMode(null);
     setForm(defaultRequest);
     setConnectionName("");
     setRememberPassword(false);
@@ -101,8 +130,27 @@ export function ConnectionPanel({
 
   const handleConnect = async (event: FormEvent) => {
     event.preventDefault();
+    if (!sshFormMode) return;
+
+    if (sshFormMode.kind === "edit") {
+      if (!connectionName.trim()) return;
+      try {
+        await updateSavedConnection(
+          sshFormMode.saved.id,
+          connectionName.trim(),
+          form,
+          rememberPassword,
+        );
+        useToastStore.getState().pushToast("书签已更新", true);
+        closeSshForm();
+      } catch (err) {
+        useToastStore.getState().pushToast(String(err), false);
+      }
+      return;
+    }
+
     try {
-      await createSshSession(
+      const result = await createSshSession(
         {
           ...form,
           session_title: connectionName.trim() || null,
@@ -110,8 +158,14 @@ export function ConnectionPanel({
         cols,
         rows,
       );
-      if (connectionName.trim()) {
-        await saveConnection(connectionName.trim(), form, rememberPassword);
+      if (connectionName.trim() && result) {
+        await saveConnection(
+          connectionName.trim(),
+          form,
+          rememberPassword,
+          result.os_id,
+          result.os_name,
+        );
       }
       closeSshForm();
     } catch {
@@ -151,12 +205,20 @@ export function ConnectionPanel({
     }
   };
 
-  const sshFormModal = showForm ? (
-    <Modal title="SSH 连接" onClose={closeSshForm}>
+  const isEditing = sshFormMode?.kind === "edit";
+  const editingSaved =
+    sshFormMode?.kind === "edit" ? sshFormMode.saved : null;
+
+  const sshFormModal = sshFormMode ? (
+    <Modal
+      title={isEditing ? "编辑书签" : "SSH 连接"}
+      onClose={closeSshForm}
+    >
       <form className="connection-form" onSubmit={(e) => void handleConnect(e)}>
         <label>
-          名称（可选）
+          {isEditing ? "名称" : "名称（可选）"}
           <input
+            required={isEditing}
             value={connectionName}
             onChange={(e) => setConnectionName(e.target.value)}
             placeholder="生产服务器"
@@ -209,9 +271,14 @@ export function ConnectionPanel({
                 type="password"
                 value={form.password ?? ""}
                 onChange={(e) => updateField("password", e.target.value)}
+                placeholder={
+                  editingSaved?.has_password
+                    ? "已保存，留空表示不修改"
+                    : undefined
+                }
               />
             </label>
-            {connectionName.trim() && (
+            {(isEditing || connectionName.trim()) && (
               <label className="checkbox-row">
                 <input
                   type="checkbox"
@@ -244,7 +311,7 @@ export function ConnectionPanel({
           </>
         )}
         <div className="form-row">
-          <button type="submit">连接</button>
+          <button type="submit">{isEditing ? "保存" : "连接"}</button>
           <button type="button" onClick={closeSshForm}>
             取消
           </button>
@@ -293,14 +360,36 @@ export function ConnectionPanel({
         className="saved-item-main"
         onClick={() => void handleSavedConnect(saved)}
       >
-        <strong>{saved.name}</strong>
-        <span>
-          {saved.username}@{saved.host}:{saved.port}
+        <ServerOsIcon osId={saved.os_id} osName={saved.os_name} />
+        <span className="saved-item-text">
+          <strong>{saved.name}</strong>
+          <span>
+            {saved.username}@{saved.host}:{saved.port}
+          </span>
         </span>
       </button>
       <button
         type="button"
-        className="saved-item-delete"
+        className="saved-item-action"
+        aria-label="编辑"
+        title="编辑"
+        onClick={() => openEditForm(saved)}
+      >
+        <svg
+          viewBox="0 0 16 16"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          aria-hidden="true"
+        >
+          <path d="M11.5 2.5 13.5 4.5 5.5 12.5 3 13l.5-2.5 8-8Z" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="saved-item-action saved-item-delete"
         aria-label="删除"
         title="删除"
         onClick={() => void deleteSavedConnection(saved.id)}
@@ -325,31 +414,36 @@ export function ConnectionPanel({
               className="sidebar-toggle"
               onClick={onToggleCollapse}
               aria-label="展开侧栏"
-            title="展开侧栏"
-          >
-            <SidebarChevronIcon expanded={false} />
-          </button>
+              title="展开侧栏"
+            >
+              <SidebarChevronIcon expanded={false} />
+            </button>
           </div>
 
-          <div className="sidebar-rail-actions">
-            <button
-              type="button"
-              className="sidebar-action-btn local"
-              aria-label="Local 本地终端"
-              title="Local 本地终端"
-              onClick={() => void createLocalSession(cols, rows)}
-            >
-              <LocalTerminalIcon />
-            </button>
-            <button
-              type="button"
-              className="sidebar-action-btn ssh"
-              aria-label="Remote 远程 SSH"
-              title="Remote 远程 SSH"
-              onClick={() => setShowForm(true)}
-            >
-              <SshConnectIcon />
-            </button>
+          <div className="sidebar-rail-sessions">
+            {savedConnections.length === 0 ? (
+              <p className="sidebar-rail-empty" title="暂无书签">
+                —
+              </p>
+            ) : (
+              savedConnections.map((saved) => (
+                <button
+                  key={saved.id}
+                  type="button"
+                  className="rail-session"
+                  aria-label={saved.name}
+                  title={saved.name}
+                  onClick={() => void handleSavedConnect(saved)}
+                >
+                  <ServerOsIcon
+                    osId={saved.os_id}
+                    osName={saved.os_name}
+                    size={18}
+                    showTitle={false}
+                  />
+                </button>
+              ))
+            )}
           </div>
         </aside>
         {sshFormModal}
@@ -362,24 +456,10 @@ export function ConnectionPanel({
     <>
       <aside className="sidebar">
         <div className="sidebar-top-row">
-          <button
-            type="button"
-            className="sidebar-action-btn local"
-            aria-label="Local 本地终端"
-            title="Local 本地终端"
-            onClick={() => void createLocalSession(cols, rows)}
-          >
-            <LocalTerminalIcon />
-          </button>
-          <button
-            type="button"
-            className="sidebar-action-btn ssh"
-            aria-label="Remote 远程 SSH"
-            title="Remote 远程 SSH"
-            onClick={() => setShowForm(true)}
-          >
-            <SshConnectIcon />
-          </button>
+          <SidebarAddMenu
+            onLocal={() => void createLocalSession(cols, rows)}
+            onRemote={openCreateForm}
+          />
           <button
             type="button"
             className="sidebar-toggle"
