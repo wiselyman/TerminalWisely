@@ -58,14 +58,14 @@ Release 工作流会构建以下产物：
 1. **打版本 tag**（推荐）  
    确保 `src-tauri/tauri.conf.json` 里的 `version` 已更新，然后：
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
 
 2. **手动触发**  
    GitHub → Actions → Release → Run workflow
 
-Release 默认为 **Draft**，可在 [Releases](https://github.com/wiselyman/TerminalWisely/releases) 页面检查产物后点击 Publish。
+Release 默认直接发布（非 Draft），可在 [Releases](https://github.com/wiselyman/TerminalWisely/releases) 页面查看产物。
 
 ### 发布验收清单
 
