@@ -1,0 +1,62 @@
+name: Rebuild macOS Intel
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to upload assets to
+        required: true
+        default: v0.3.0
+
+permissions:
+  contents: write
+
+jobs:
+  macos-intel:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+          shared-key: macos-intel-${{ inputs.release_tag }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Resolve release id
+        id: release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          release_id=$(curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${{ inputs.release_tag }}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "id=${release_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and upload macOS Intel
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ steps.release.outputs.id }}
+          args: --target x86_64-apple-darwin --bundles app,dmg
+          retryAttempts: 1
