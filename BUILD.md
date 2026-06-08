@@ -58,7 +58,7 @@ Release 工作流会构建以下产物：
 1. **打版本 tag**（推荐）  
    1. 更新 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 版本号  
    2. **编写 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)**（会出现在 GitHub Release 描述顶部，即更新说明红框位置）  
-   3. 同步更新 [`CHANGELOG.md`](./CHANGELOG.md)  
+   3. 同步更新 [`CHANGELOG.md`](./CHANGELOG.md)，并将该版本正文归档到 `release-notes/vX.Y.Z.md`  
    4. 提交后打 tag 并推送：
    ```bash
    git tag v0.2.0

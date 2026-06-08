@@ -9,7 +9,7 @@ alwaysApply: true
 
 - 该文件内容会写入 GitHub Release **描述区顶部**（Release 页红框位置），用户第一眼看到更新说明。
 - 第一行保留产品一句话简介；下方用 `## 更新内容（vX.Y.Z）` 列出本次变更（新增 / 改进 / 修复）。
-- 同步更新 [`CHANGELOG.md`](../CHANGELOG.md) 对应版本条目。
+- 同步更新 [`CHANGELOG.md`](../CHANGELOG.md) 对应版本条目，并归档到 `release-notes/vX.Y.Z.md`。
 
 发布步骤：
 
