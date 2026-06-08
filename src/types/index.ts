@@ -1,5 +1,16 @@
 export type SessionKind = "local" | "ssh";
 
+/** `all` = 全部服务器；`server` = 当前服务器 */
+export type DirectoryShortcutScope = "all" | "server";
+
+export interface DirectoryShortcut {
+  id: string;
+  path: string;
+  scope: DirectoryShortcutScope;
+  /** Set when scope is `server`; `user@host:port` or `local`. */
+  server_id?: string | null;
+}
+
 export type AuthMethod = "password" | "privatekey";
 
 export interface SessionInfo {
@@ -7,6 +18,9 @@ export interface SessionInfo {
   title: string;
   kind: SessionKind;
   remote_home?: string | null;
+  server_id?: string | null;
+  os_id?: string | null;
+  os_name?: string | null;
 }
 
 export interface SshConnectRequest {
@@ -101,4 +115,18 @@ export interface ToastItem {
   id: string;
   message: string;
   success: boolean;
+}
+
+export interface PreviewOpenResult {
+  handle_id: string;
+  kind: string;
+  session_id: string;
+  resolved_path: string;
+  filename: string;
+  extension: string;
+  total_size: number;
+  truncated: boolean;
+  editable: boolean;
+  text_content?: string | null;
+  local_cache_path?: string | null;
 }

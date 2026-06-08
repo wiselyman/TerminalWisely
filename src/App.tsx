@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, useMemo, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useRef, useState, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { SendToDialog } from "./components/SendToDialog";
+import { PreviewPanel } from "./components/PreviewPanel";
 import { TransferPanel } from "./components/TransferPanel";
 import { TerminalView } from "./components/TerminalView";
 import { ToastContainer } from "./components/ToastContainer";
@@ -16,8 +18,12 @@ import { dropEffectForKind } from "./lib/dragVisual";
 import { uploadLocalPathsToSession } from "./lib/sessionUpload";
 import { startTabPointerReorder } from "./lib/tabPointerReorder";
 import { useSessionStore } from "./stores/sessionStore";
+import { usePreviewStore } from "./stores/previewStore";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload } from "./types";
+import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
+import { ServerOsIcon } from "./components/ServerOsIcon";
+import { TabHomeIcon } from "./components/SidebarIcons";
 import { productIntro } from "./content/productIntro";
 import "./App.css";
 
@@ -39,6 +45,14 @@ function App() {
     startRemoteTransfer,
   } = useSessionStore();
   const pushToast = useToastStore((s) => s.pushToast);
+
+  const goToHomeDirectory = (sessionId: string) => {
+    void invoke("enter_directory", {
+      request: { session_id: sessionId, path: "~" },
+    }).catch((err) => {
+      pushToast(String(err), false);
+    });
+  };
   const transferList = useMemo(
     () => Object.values(activeTransfers),
     [activeTransfers],
@@ -96,6 +110,12 @@ function App() {
   );
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const previewOpen = usePreviewStore((s) => s.open);
+  const previewWidth = usePreviewStore((s) => s.width);
+  const setPreviewWidth = usePreviewStore((s) => s.setWidth);
+  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(
+    null,
+  );
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -132,9 +152,15 @@ function App() {
     };
   }, []);
 
-  const startTabReorder = (tabId: string, event: MouseEvent) => {
+  const startTabReorder = (tabId: string, event: ReactMouseEvent) => {
     if (event.button !== 0) return;
-    if ((event.target as HTMLElement).closest(".tab-close")) return;
+    if (
+      (event.target as HTMLElement).closest(
+        ".tab-close, .tab-home, .tab-shortcut-folder, .tab-shortcut-add, .tab-shortcut-wrap, .tab-shortcut-icons",
+      )
+    ) {
+      return;
+    }
 
     tabReorderCleanupRef.current?.();
     tabReorderCleanupRef.current = startTabPointerReorder({
@@ -159,6 +185,39 @@ function App() {
     const activeTab = tabBarRef.current?.querySelector(".tab.active");
     activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [activeTabId, tabs.length]);
+
+  useEffect(() => {
+    const onMouseMove = (event: MouseEvent) => {
+      const state = resizeStateRef.current;
+      if (!state) return;
+      const delta = state.startX - event.clientX;
+      setPreviewWidth(state.startWidth + delta);
+    };
+
+    const onMouseUp = () => {
+      resizeStateRef.current = null;
+      document.body.classList.remove("workspace-resizing");
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [setPreviewWidth]);
+
+  const startPreviewResize = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    resizeStateRef.current = {
+      startX: event.clientX,
+      startWidth: previewWidth,
+    };
+    document.body.classList.add("workspace-resizing");
+  };
+
+  const activeSessionTitle =
+    activeTabId != null ? sessionTitles[activeTabId] : undefined;
 
   return (
     <div
@@ -277,10 +336,55 @@ function App() {
                   });
               }}
             >
-              <span className={`tab-kind ${tab.kind}`}>
-                {tab.kind === "ssh" ? "SSH" : "本地"}
+              <span
+                className={`tab-kind ${tab.kind}`}
+                title={
+                  tab.kind === "ssh"
+                    ? tab.os_name ?? tab.os_id ?? "SSH"
+                    : "本地终端"
+                }
+              >
+                {tab.kind === "ssh" ? (
+                  <ServerOsIcon
+                    osId={tab.os_id}
+                    osName={tab.os_name}
+                    size={14}
+                    showTitle={false}
+                  />
+                ) : (
+                  "本地"
+                )}
               </span>
-              <span className="tab-title">{tab.title}</span>
+              <span className="tab-title" title={tab.title}>
+                {tab.title}
+              </span>
+              {tab.active ? (
+                <span className="tab-actions">
+                  <button
+                    type="button"
+                    className="tab-home"
+                    title="回到用户目录 ~"
+                    aria-label={`回到用户目录 ${tab.title}`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setActiveTab(tab.id);
+                      goToHomeDirectory(tab.id);
+                    }}
+                  >
+                    <TabHomeIcon />
+                  </button>
+                  <TabDirectoryShortcuts
+                    sessionId={tab.id}
+                    tabKind={tab.kind}
+                    serverId={
+                      tab.server_id ??
+                      (tab.kind === "local" ? "local" : tab.title)
+                    }
+                    onActivateTab={() => setActiveTab(tab.id)}
+                  />
+                </span>
+              ) : null}
               <button
                 type="button"
                 className="tab-close"
@@ -297,19 +401,43 @@ function App() {
           ))}
         </div>
 
-        <div className="terminal-stack">
-          {tabs.length === 0 ? (
-            <WorkspaceWelcome />
-          ) : (
-            tabs.map((tab) => (
-              <TerminalView
-                key={tab.id}
-                sessionId={tab.id}
-                kind={tab.kind}
-                active={tab.id === activeTabId}
+        <div
+          className={`workspace-split${previewOpen ? " workspace-split-preview-open" : ""}`}
+          style={
+            previewOpen
+              ? ({
+                  "--preview-width": `${previewWidth}px`,
+                } as CSSProperties)
+              : undefined
+          }
+        >
+          <div className="terminal-stack">
+            {tabs.length === 0 ? (
+              <WorkspaceWelcome />
+            ) : (
+              tabs.map((tab) => (
+                <TerminalView
+                  key={tab.id}
+                  sessionId={tab.id}
+                  kind={tab.kind}
+                  active={tab.id === activeTabId}
+                />
+              ))
+            )}
+          </div>
+
+          {previewOpen ? (
+            <>
+              <div
+                className="workspace-resizer"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="调整预览面板宽度"
+                onMouseDown={startPreviewResize}
               />
-            ))
-          )}
+              <PreviewPanel sessionTitle={activeSessionTitle} />
+            </>
+          ) : null}
         </div>
 
         <TransferPanel

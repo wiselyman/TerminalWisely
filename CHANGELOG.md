@@ -4,6 +4,27 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.3.0] - 2026-06-08
+
+### Added
+- 单击终端文件路径打开应用内预览面板（Local + SSH）
+- 文本 / Markdown / CSV 全文搜索与高亮跳转
+- 图片、PDF、CSV 预览与「系统打开」
+- 预览 API（`preview_open` / `preview_close` / `probe_path`）与 SFTP 缓存
+- 预览面板可拖拽宽度并持久化
+- 页签快捷目录（`~`、彩色文件夹、`+` 添加、右键编辑）
+- SSH 页签远程系统图标
+
+### Changed
+- 工作区分栏布局（终端 | 预览）
+- 页签宽度按内容自适应
+- 产品引导、README 与 MIT 许可证更新
+
+### Fixed
+- 带引号 shell 路径点击预览/下载报错
+
+> 归档说明见 [`release-notes/v0.3.0.md`](./release-notes/v0.3.0.md)
+
 ## [0.2.0] - 2026-06-08
 
 ### Added

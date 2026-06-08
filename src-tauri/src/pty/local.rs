@@ -68,6 +68,9 @@ impl LocalSession {
             title: format!("Local ({shell})"),
             kind: SessionKind::Local,
             remote_home: None,
+            server_id: Some("local".to_string()),
+            os_id: None,
+            os_name: None,
         };
 
         Ok(Self {
@@ -99,6 +102,13 @@ impl LocalSession {
             return self.write_input("ls -F\r");
         }
 
+        #[cfg(windows)]
+        let quoted = if target == "~" {
+            "%USERPROFILE%".to_string()
+        } else {
+            crate::shell::shell_cd_argument(target)
+        };
+        #[cfg(not(windows))]
         let quoted = crate::shell::shell_cd_argument(target);
         #[cfg(windows)]
         let cmd = format!("cd {quoted}; dir\r");

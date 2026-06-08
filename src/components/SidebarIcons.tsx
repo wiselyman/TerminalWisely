@@ -1,3 +1,39 @@
+export function TabFolderIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 4.25h4.25L7.75 6h6v7.25H2.5V4.25z" />
+    </svg>
+  );
+}
+
+export function TabHomeIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 3 3.75 6.25V12.5H6.5V9.25h3V12.5h2.75V6.25L8 3z" />
+    </svg>
+  );
+}
+
 export function LocalTerminalIcon() {
   return (
     <svg

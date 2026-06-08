@@ -13,6 +13,13 @@ pub struct SessionInfo {
     pub title: String,
     pub kind: SessionKind,
     pub remote_home: Option<String>,
+    /// Stable server identity for shortcuts: `user@host:port` for SSH, `local` for local.
+    #[serde(default)]
+    pub server_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,6 +177,51 @@ pub struct InsertLocalPathsRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProbeRemotePathRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewOpenRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewCloseRequest {
+    pub handle_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenPreviewHandleRequest {
+    pub handle_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewSaveRequest {
+    pub handle_id: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewOpenResult {
+    pub handle_id: String,
+    pub kind: String,
+    pub session_id: String,
+    pub resolved_path: String,
+    pub filename: String,
+    pub extension: String,
+    pub total_size: u64,
+    pub truncated: bool,
+    pub editable: bool,
+    #[serde(default)]
+    pub text_content: Option<String>,
+    #[serde(default)]
+    pub local_cache_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbePathRequest {
     pub session_id: String,
     pub path: String,
 }

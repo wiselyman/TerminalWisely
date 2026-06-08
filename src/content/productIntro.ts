@@ -2,24 +2,37 @@ export const productIntro = {
   name: "TerminalWisely",
   tagline: "为日常运维准备的桌面终端",
   summary:
-    "在同一窗口里管理本地 Shell 与 SSH 会话，用拖拽和点击完成上传、下载与目录浏览，减少在终端与文件管理器之间来回切换。",
+    "在同一窗口里管理本地 Shell 与 SSH 会话。拖拽上传、点击浏览与预览、快捷下载、跨服发送，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
   features: [
     {
       title: "拖拽上传",
-      description: "将文件拖入 SSH 终端窗口，自动通过 SFTP 上传到当前远程目录。",
+      description:
+        "将文件拖入 SSH 终端窗口，或拖到 SSH 标签上，自动通过 SFTP 上传到当前远程目录。",
     },
     {
-      title: "点击进目录",
-      description: "在 ls 输出中点击目录名，自动执行 cd 并列出内容。",
+      title: "点击浏览与预览",
+      description:
+        "单击 ls 中的目录进入；单击文件在右侧预览面板打开（文本、Markdown、CSV、图片、PDF 等），文本类支持全文搜索。",
     },
     {
       title: "快捷下载",
-      description: "Ctrl / Cmd + 点击终端里的文件路径，下载到本机 Downloads 文件夹。",
+      description:
+        "Ctrl / Cmd + 单击终端里的文件路径，下载到本机 Downloads/TerminalWisely 文件夹。",
     },
     {
       title: "跨服发送",
       description:
-        "在 A 的 ls 输出里：按住 Ctrl/Cmd，在文件名上按下鼠标拖到顶部 B 的 SSH 标签再松开。",
+        "在 A 的 ls 输出里按住 Ctrl/Cmd，将文件名拖到顶部 B 的 SSH 标签再松开；也可用 Shift + 点击选择目标。",
+    },
+    {
+      title: "页签快捷目录",
+      description:
+        "页签上 ~ 回到用户目录；彩色文件夹一键 cd 到常用路径。右键可编辑路径，删除需确认。",
+    },
+    {
+      title: "书签与传输",
+      description:
+        "保存常用 SSH 连接并显示系统图标；多任务传输面板可查看进度并单独取消。",
     },
   ],
   steps: [
@@ -36,7 +49,7 @@ export const productIntro = {
     {
       icon: "bookmark" as const,
       iconLabel: "书签",
-      text: "将常用连接保存为书签，方便下次快速打开。",
+      text: "将常用连接保存为书签；在 SSH 页签用 + 添加快捷目录，单击 ls 中的文件体验预览。",
     },
   ],
 } as const;

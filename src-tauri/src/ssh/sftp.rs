@@ -117,6 +117,46 @@ pub async fn remote_file_size(
     Ok(metadata.size.unwrap_or(0))
 }
 
+pub async fn read_remote_file_bytes(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    remote_path: &str,
+    max_bytes: usize,
+) -> AppResult<(Vec<u8>, u64)> {
+    let sftp = open_sftp_session(handle).await?;
+    let metadata = sftp.metadata(remote_path.to_string()).await?;
+    let total = metadata.size.unwrap_or(0);
+
+    let mut remote_file = sftp
+        .open_with_flags(remote_path.to_string(), OpenFlags::READ)
+        .await?;
+
+    let mut buffer = vec![0u8; max_bytes];
+    let read = read_chunk(&mut remote_file, &mut buffer, None).await?;
+    buffer.truncate(read);
+    Ok((buffer, total))
+}
+
+pub async fn write_remote_bytes(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    remote_path: &str,
+    data: &[u8],
+) -> AppResult<()> {
+    let sftp = open_sftp_session(handle).await?;
+    let mut remote_file = sftp
+        .open_with_flags(
+            remote_path.to_string(),
+            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+        )
+        .await
+        .map_err(AppError::from)?;
+    remote_file
+        .write_all(data)
+        .await
+        .map_err(AppError::from)?;
+    remote_file.shutdown().await.ok();
+    Ok(())
+}
+
 pub async fn remove_remote_file(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     remote_path: &str,

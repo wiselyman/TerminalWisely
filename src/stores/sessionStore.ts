@@ -80,6 +80,17 @@ interface SessionState {
   setStatusMessage: (message: string | null) => void;
 }
 
+function mergeSessionOs(
+  session: SessionInfo,
+  result: Pick<SshConnectResult, "os_id" | "os_name">,
+): SessionInfo {
+  return {
+    ...session,
+    os_id: session.os_id ?? result.os_id ?? null,
+    os_name: session.os_name ?? result.os_name ?? null,
+  };
+}
+
 function notifyConnectError(err: unknown): never {
   useToastStore.getState().pushToast(formatConnectError(err), false);
   throw err;
@@ -203,7 +214,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         cols,
         rows,
       });
-      get().addTab(result.session);
+      get().addTab(mergeSessionOs(result.session, result));
       await get().loadDeviceHistory();
       return result;
     } catch (err) {
@@ -220,7 +231,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         cols,
         rows,
       });
-      get().addTab(result.session);
+      get().addTab(mergeSessionOs(result.session, result));
       await get().loadSavedConnections();
       await get().loadDeviceHistory();
     } catch (err) {
@@ -235,7 +246,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       cols,
       rows,
     });
-    get().addTab(result.session);
+    get().addTab(mergeSessionOs(result.session, result));
     await get().loadDeviceHistory();
   },
 

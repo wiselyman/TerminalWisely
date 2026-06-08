@@ -13,8 +13,8 @@ use crate::ssh::sftp;
 use crate::transfer::TransferRegistry;
 use crate::types::{
     DeviceRecord, DownloadFileRequest, ProbeRemotePathRequest, SavedConnection, SessionInfo,
-    SshConnectRequest, TerminalOutputPayload, TransferProgressPayload, TransferRemoteRequest,
-    UploadFileResult, UploadFilesRequest,
+    SessionKind, SshConnectRequest, TerminalOutputPayload, TransferProgressPayload,
+    TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
 };
 
 pub enum SessionHandle {
@@ -130,6 +130,28 @@ impl SessionManager {
             .values()
             .map(|s| s.info())
             .collect()
+    }
+
+    pub async fn session_kind(&self, session_id: &str) -> AppResult<SessionKind> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        Ok(match session {
+            SessionHandle::Local(_) => SessionKind::Local,
+            SessionHandle::Ssh(_) => SessionKind::Ssh,
+        })
+    }
+
+    pub async fn ssh_snapshot(&self, session_id: &str) -> AppResult<crate::ssh::client::SshSessionSnapshot> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Ssh(s) => Ok(s.snapshot()),
+            _ => Err(AppError::msg("Not an SSH session")),
+        }
     }
 
     pub async fn upload_files(

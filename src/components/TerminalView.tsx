@@ -29,6 +29,7 @@ import {
   scheduleUploadHighlight,
 } from "../lib/terminalHighlight";
 import { useSessionStore } from "../stores/sessionStore";
+import { usePreviewStore } from "../stores/previewStore";
 import { isTabReordering } from "../lib/tabPointerReorder";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { createTransferId } from "../lib/transferId";
@@ -64,7 +65,21 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
   const setStatusMessage = useSessionStore((s) => s.setStatusMessage);
   const openSendTo = useSessionStore((s) => s.openSendTo);
   const startRemoteTransfer = useSessionStore((s) => s.startRemoteTransfer);
+  const openPreview = usePreviewStore((s) => s.openPreview);
   const pushToast = useToastStore((s) => s.pushToast);
+  const openPreviewRef = useRef(openPreview);
+  const openSendToRef = useRef(openSendTo);
+  const pushToastRef = useRef(pushToast);
+  const startRemoteTransferRef = useRef(startRemoteTransfer);
+  const upsertTransferRef = useRef(upsertTransfer);
+  const removeTransferRef = useRef(removeTransfer);
+
+  openPreviewRef.current = openPreview;
+  openSendToRef.current = openSendTo;
+  pushToastRef.current = pushToast;
+  startRemoteTransferRef.current = startRemoteTransfer;
+  upsertTransferRef.current = upsertTransfer;
+  removeTransferRef.current = removeTransfer;
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
 
@@ -98,7 +113,11 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
     }
     lastContainerSizeRef.current = { width, height };
 
-    fitAddon.fit();
+    try {
+      fitAddon.fit();
+    } catch {
+      return;
+    }
 
     const cols = terminal.cols;
     const rows = terminal.rows;
@@ -215,14 +234,14 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
                 setSourceDragVisual(false);
               },
               onDrop: (toSessionId) => {
-                void startRemoteTransfer(sessionId, remotePath, toSessionId).catch(
-                  (err) => {
-                    pushToast(String(err), false);
-                  },
-                );
+                void startRemoteTransferRef
+                  .current(sessionId, remotePath, toSessionId)
+                  .catch((err) => {
+                    pushToastRef.current(String(err), false);
+                  });
               },
               onCancel: () => {
-                pushToast("请拖到其他 SSH 标签上再松开", false);
+                pushToastRef.current("请拖到其他 SSH 标签上再松开", false);
               },
             });
           };
@@ -243,136 +262,146 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
 
       terminal.registerLinkProvider({
         provideLinks: (bufferLineNumber, callback) => {
-          const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
-          if (!line) {
-            callback(undefined);
-            return;
-          }
+          try {
+            const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
+            if (!line) {
+              callback(undefined);
+              return;
+            }
 
-          const map = buildLineColumnMap(line);
-          const matches = findRemotePathMatches(map.plain);
-          if (matches.length === 0) {
-            callback(undefined);
-            return;
-          }
+            const map = buildLineColumnMap(line);
+            const matches = findRemotePathMatches(map.plain);
+            if (matches.length === 0) {
+              callback(undefined);
+              return;
+            }
 
-          const links = matches.map(({ path, start, end }) => {
-            const { startCol, width } = rangeToColumns(map, line, start, end);
-            const resolveClickedPath = () => {
-              if (kind !== "ssh") return path;
-              const getLinePlain = (lineNumber: number) =>
-                getLinePlainText(
-                  (n) => terminal.buffer.active.getLine(n - 1),
-                  lineNumber,
+            const links = matches.map(({ path, start, end }) => {
+              const { startCol, width } = rangeToColumns(map, line, start, end);
+              const resolveClickedPath = () => {
+                if (kind !== "ssh") return path;
+                const getLinePlain = (lineNumber: number) =>
+                  getLinePlainText(
+                    (n) => terminal.buffer.active.getLine(n - 1),
+                    lineNumber,
+                  );
+                return resolvePathFromListing(
+                  getLinePlain,
+                  terminal.buffer.active.length,
+                  bufferLineNumber,
+                  path,
                 );
-              return resolvePathFromListing(
-                getLinePlain,
-                terminal.buffer.active.length,
-                bufferLineNumber,
-                path,
-              );
-            };
+              };
 
-            return {
-              range: {
-                start: { x: startCol + 1, y: bufferLineNumber },
-                end: { x: startCol + width + 1, y: bufferLineNumber },
-              },
-              text: path,
-              decorations: {
-                pointerCursor: true,
-                underline: false,
-              },
-              activate: (event: MouseEvent, _uri: string) => {
-                const targetPath = resolveClickedPath();
-                if (isModifierClick(event)) {
-                  if (suppressModifierActivate) {
-                    suppressModifierActivate = false;
+              return {
+                range: {
+                  start: { x: startCol + 1, y: bufferLineNumber },
+                  end: { x: startCol + width + 1, y: bufferLineNumber },
+                },
+                text: path,
+                decorations: {
+                  pointerCursor: true,
+                  underline: false,
+                },
+                activate: (event: MouseEvent, _uri: string) => {
+                  const targetPath = resolveClickedPath();
+                  if (isModifierClick(event)) {
+                    if (suppressModifierActivate) {
+                      suppressModifierActivate = false;
+                      return;
+                    }
+                  }
+                  if (isShiftClick(event)) {
+                    if (kind !== "ssh") {
+                      return;
+                    }
+                    void (async () => {
+                      try {
+                        const probe = await invoke<string>("probe_remote_path", {
+                          request: {
+                            session_id: sessionId,
+                            path: targetPath,
+                          },
+                        });
+                        if (probe === "file") {
+                          openSendToRef.current({
+                            fromSessionId: sessionId,
+                            remotePath: targetPath,
+                          });
+                        } else {
+                          pushToastRef.current("这是目录，请选择文件路径", false);
+                        }
+                      } catch (err) {
+                        pushToastRef.current(String(err), false);
+                      }
+                    })();
                     return;
                   }
-                }
-                if (isShiftClick(event)) {
-                  if (kind !== "ssh") {
+                  if (isModifierClick(event)) {
+                    if (kind !== "ssh") {
+                      return;
+                    }
+                    const transferId = createTransferId();
+                    const downloadName =
+                      targetPath.split("/").pop() ||
+                      targetPath.split("\\").pop() ||
+                      targetPath;
+                    upsertTransferRef.current({
+                      transfer_id: transferId,
+                      session_id: sessionId,
+                      filename: downloadName,
+                      transferred: 0,
+                      total: 0,
+                      direction: "download",
+                    });
+                    void invoke("download_file", {
+                      request: {
+                        session_id: sessionId,
+                        remote_path: targetPath,
+                        local_path: null,
+                        transfer_id: transferId,
+                      },
+                    }).catch((err) => {
+                      removeTransferRef.current(transferId);
+                      pushToastRef.current(String(err), false);
+                    });
                     return;
                   }
+
                   void (async () => {
                     try {
-                      const probe = await invoke<string>("probe_remote_path", {
+                      const probe = await invoke<string>("probe_path", {
                         request: {
                           session_id: sessionId,
                           path: targetPath,
                         },
                       });
-                      if (probe === "file") {
-                        openSendTo({
-                          fromSessionId: sessionId,
-                          remotePath: targetPath,
+                      if (probe === "directory") {
+                        await invoke("enter_directory", {
+                          request: {
+                            session_id: sessionId,
+                            path: targetPath,
+                          },
                         });
                       } else {
-                        pushToast("这是目录，请选择文件路径", false);
+                        await openPreviewRef.current(sessionId, targetPath);
                       }
                     } catch (err) {
-                      pushToast(String(err), false);
+                      pushToastRef.current(String(err), false);
                     }
                   })();
-                  return;
-                }
-                if (isModifierClick(event)) {
-                  if (kind !== "ssh") {
-                    return;
-                  }
-                  const transferId = createTransferId();
-                  const downloadName =
-                    targetPath.split("/").pop() ||
-                    targetPath.split("\\").pop() ||
-                    targetPath;
-                  upsertTransfer({
-                    transfer_id: transferId,
-                    session_id: sessionId,
-                    filename: downloadName,
-                    transferred: 0,
-                    total: 0,
-                    direction: "download",
-                  });
-                  void invoke("download_file", {
-                    request: {
-                      session_id: sessionId,
-                      remote_path: targetPath,
-                      local_path: null,
-                      transfer_id: transferId,
-                    },
-                  }).catch((err) => {
-                    removeTransfer(transferId);
-                    pushToast(String(err), false);
-                  });
-                  return;
-                }
+                },
+              };
+            });
 
-                void invoke("enter_directory", {
-                  request: {
-                    session_id: sessionId,
-                    path: targetPath,
-                  },
-                }).catch((err) => {
-                  const message = String(err);
-                  if (message.includes("不是目录")) {
-                    if (kind === "ssh") {
-                      pushToast(
-                        "这是文件：Ctrl/Cmd + 点击下载；按住 Ctrl/Cmd 在文件名上拖到上方 SSH 标签发送",
-                        false,
-                      );
-                    }
-                    return;
-                  }
-                  pushToast(message, false);
-                });
-              },
-            };
-          });
-
-          callback(links);
+            callback(links);
+          } catch (err) {
+            console.error("Terminal link provider failed:", err);
+            callback(undefined);
+          }
         },
       });
+
     }
 
     const onData = terminal.onData((data) => {
@@ -407,7 +436,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       lastContainerSizeRef.current = { width: 0, height: 0 };
       lastSizeRef.current = { cols: 0, rows: 0 };
     };
-  }, [kind, sessionId, openSendTo, pushToast, startRemoteTransfer, syncSize, upsertTransfer, removeTransfer]);
+  }, [kind, sessionId, syncSize]);
 
   useEffect(() => {
     if (!active) return;

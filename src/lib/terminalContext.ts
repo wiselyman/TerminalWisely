@@ -38,15 +38,23 @@ export function joinRemotePath(parent: string, name: string): string {
   return `${parent}/${name}`;
 }
 
-function unquoteShellWord(word: string): string {
-  const trimmed = word.trim();
+/** Normalize shell path arguments (quotes, ~/’dir’ segments, etc.). */
+export function unquoteShellWord(word: string): string {
+  let result = word.trim();
   if (
-    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+    (result.startsWith("'") && result.endsWith("'")) ||
+    (result.startsWith('"') && result.endsWith('"'))
   ) {
-    return trimmed.slice(1, -1);
+    return result.slice(1, -1);
   }
-  return trimmed;
+
+  // cd ~/'下载' or /'My Dir' — strip quotes around individual path segments
+  result = result.replace(/\/'([^']*)'/g, "/$1");
+  result = result.replace(/\/"([^"]*)"/g, "/$1");
+  result = result.replace(/^~\/'([^']*)'/, "~/$1");
+  result = result.replace(/^~\/"([^"]*)"/, "~/$1");
+
+  return result;
 }
 
 function extractCommandLine(line: string): string {

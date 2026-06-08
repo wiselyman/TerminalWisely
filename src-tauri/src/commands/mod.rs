@@ -11,7 +11,8 @@ use crate::transfer::CANCELLED_MSG;
 use crate::transfer::TransferRegistry;
 use crate::types::{
     AuthMethod, DeviceRecord, DownloadFileRequest, EnterDirectoryRequest,
-    InsertLocalPathsRequest, ProbeRemotePathRequest, SavedConnectionView, SessionInfo,
+    InsertLocalPathsRequest, PreviewCloseRequest, PreviewOpenRequest, PreviewOpenResult,
+    ProbePathRequest, ProbeRemotePathRequest, SavedConnectionView, SessionInfo,
     SshConnectRequest, SshConnectResult, TransferRemoteRequest, UploadFileResult,
     UploadFilesRequest,
 };
@@ -26,8 +27,13 @@ fn ssh_connect_result(
         update_matching_saved_connections_os(app, request, os).map_err(|e| e.to_string())?;
     }
     record_device_history(app, request).map_err(|e| e.to_string())?;
+    let mut session = info;
+    if let Some(ref os) = os_profile {
+        session.os_id = Some(os.os_id.clone());
+        session.os_name = os.os_name.clone();
+    }
     Ok(SshConnectResult {
-        session: info,
+        session,
         os_id: os_profile.as_ref().map(|os| os.os_id.clone()),
         os_name: os_profile.and_then(|os| os.os_name),
     })
@@ -90,7 +96,9 @@ pub async fn resize_terminal(
 pub async fn close_session(
     session_id: String,
     sessions: State<'_, SessionManager>,
+    previews: State<'_, crate::preview::PreviewManager>,
 ) -> Result<(), String> {
+    previews.close_session(&session_id).await;
     sessions.close(&session_id).await.map_err(|e| e.to_string())
 }
 
@@ -411,4 +419,71 @@ pub async fn connect_device(
 #[tauri::command]
 pub fn get_default_download_dir() -> Result<String, String> {
     crate::session::default_download_dir().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_open(
+    app: AppHandle,
+    request: PreviewOpenRequest,
+    sessions: State<'_, SessionManager>,
+    previews: State<'_, crate::preview::PreviewManager>,
+) -> Result<PreviewOpenResult, String> {
+    previews
+        .open(&app, &sessions, request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_close(
+    request: PreviewCloseRequest,
+    previews: State<'_, crate::preview::PreviewManager>,
+) -> Result<(), String> {
+    previews.close(&request.handle_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn probe_path(
+    request: ProbePathRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<String, String> {
+    crate::preview::probe_path(&sessions, &request.session_id, &request.path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn open_preview_path(
+    app: AppHandle,
+    path: String,
+) -> Result<(), String> {
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_save(
+    request: crate::types::PreviewSaveRequest,
+    sessions: State<'_, SessionManager>,
+    previews: State<'_, crate::preview::PreviewManager>,
+) -> Result<crate::types::PreviewOpenResult, String> {
+    previews
+        .save(&sessions, &request.handle_id, request.content)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn open_preview_handle(
+    app: AppHandle,
+    request: crate::types::OpenPreviewHandleRequest,
+    sessions: State<'_, SessionManager>,
+    previews: State<'_, crate::preview::PreviewManager>,
+) -> Result<(), String> {
+    previews
+        .open_in_system(&app, &sessions, &request.handle_id)
+        .await
+        .map_err(|e| e.to_string())
 }

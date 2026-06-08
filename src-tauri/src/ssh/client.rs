@@ -205,11 +205,18 @@ impl SshSession {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("{}@{}", request.username, request.host));
+        let server_id = format!(
+            "{}@{}:{}",
+            request.username, request.host, request.port
+        );
         let info = SessionInfo {
             id,
             title,
             kind: SessionKind::Ssh,
             remote_home: Some(remote_home.clone()),
+            server_id: Some(server_id),
+            os_id: os_profile.as_ref().map(|os| os.os_id.clone()),
+            os_name: os_profile.as_ref().and_then(|os| os.os_name.clone()),
         };
 
         Ok((
@@ -410,7 +417,10 @@ impl SshSessionSnapshot {
     }
 
     pub async fn resolve_remote_path(&self, remote_path: &str) -> AppResult<String> {
-        let path = remote_path.trim().trim_end_matches('/').to_string();
+        let path = sanitize_shell_path(remote_path)
+            .trim()
+            .trim_end_matches('/')
+            .to_string();
         if path.is_empty() {
             return Err(AppError::msg("Path is empty"));
         }
@@ -799,6 +809,76 @@ pub fn emit_transfer_progress(
             direction: direction.to_string(),
         },
     );
+}
+
+/// Strip shell-style quotes from path segments, e.g. `~/'下载'` → `~/下载`.
+fn sanitize_shell_path(path: &str) -> String {
+    let trimmed = path.trim();
+    if (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        || (trimmed.starts_with('"') && trimmed.ends_with('"'))
+    {
+        return trimmed[1..trimmed.len() - 1].to_string();
+    }
+
+    let mut out = String::with_capacity(trimmed.len());
+    let chars: Vec<char> = trimmed.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '/'
+            && i + 1 < chars.len()
+            && (chars[i + 1] == '\'' || chars[i + 1] == '"')
+        {
+            let quote = chars[i + 1];
+            out.push('/');
+            i += 2;
+            while i < chars.len() && chars[i] != quote {
+                out.push(chars[i]);
+                i += 1;
+            }
+            if i < chars.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        if i == 0 && chars[i] == '~' && i + 1 < chars.len() && chars[i + 1] == '/' {
+            out.push('~');
+            out.push('/');
+            i += 2;
+            if i < chars.len() && (chars[i] == '\'' || chars[i] == '"') {
+                let quote = chars[i];
+                i += 1;
+                while i < chars.len() && chars[i] != quote {
+                    out.push(chars[i]);
+                    i += 1;
+                }
+                if i < chars.len() {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+
+        out.push(chars[i]);
+        i += 1;
+    }
+
+    out
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::sanitize_shell_path;
+
+    #[test]
+    fn quoted_segment_after_tilde() {
+        assert_eq!(sanitize_shell_path("~/'下载'"), "~/下载");
+    }
+
+    #[test]
+    fn quoted_absolute_segment() {
+        assert_eq!(sanitize_shell_path("/'My Dir'/file.txt"), "/My Dir/file.txt");
+    }
 }
 
 pub fn emit_transfer_complete(

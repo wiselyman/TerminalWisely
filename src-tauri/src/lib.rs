@@ -1,5 +1,6 @@
 mod commands;
 mod error;
+mod preview;
 mod pty;
 mod session;
 mod shell;
@@ -33,6 +34,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(SessionManager::new())
+        .manage(preview::PreviewManager::new())
         .setup(|app| {
             apply_window_icon(app)?;
             Ok(())
@@ -60,6 +62,12 @@ pub fn run() {
             commands::remove_device_history,
             commands::connect_device,
             commands::get_default_download_dir,
+            commands::preview_open,
+            commands::preview_close,
+            commands::preview_save,
+            commands::probe_path,
+            commands::open_preview_path,
+            commands::open_preview_handle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
