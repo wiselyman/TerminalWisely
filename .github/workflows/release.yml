@@ -15,15 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS — Apple Silicon
+          # macOS — Apple Silicon + Intel in one job (sequential) to avoid rust-cache races
           - platform: macos-latest
-            target: macos-aarch64
-            args: --target aarch64-apple-darwin --bundles app,dmg
-            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
-          # macOS — Intel
-          - platform: macos-latest
-            target: macos-x86_64
-            args: --target x86_64-apple-darwin --bundles app,dmg
+            target: macos
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
           # Linux — x86_64
           - platform: ubuntu-22.04
@@ -68,6 +62,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ./src-tauri -> target
+          shared-key: ${{ matrix.target }}
 
       - name: Install Linux dependencies
         if: startsWith(matrix.platform, 'ubuntu')
@@ -111,7 +106,32 @@ jobs:
           cat release-body.md >> "$GITHUB_OUTPUT"
           echo "${delimiter}" >> "$GITHUB_OUTPUT"
 
+      - name: Build and upload release (macOS Apple Silicon)
+        if: matrix.target == 'macos'
+        id: tauri_mac_arm
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: TerminalWisely v__VERSION__
+          releaseBody: ${{ steps.release_body.outputs.body }}
+          releaseDraft: false
+          prerelease: false
+          args: --target aarch64-apple-darwin --bundles app,dmg
+
+      - name: Build and upload release (macOS Intel)
+        if: matrix.target == 'macos'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ steps.tauri_mac_arm.outputs.releaseId }}
+          args: --target x86_64-apple-darwin --bundles app,dmg
+          retryAttempts: 1
+
       - name: Build and upload release
+        if: matrix.target != 'macos'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
