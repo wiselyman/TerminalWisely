@@ -1,0 +1,20 @@
+---
+description: 发布新版本时必须编写 GitHub Release 更新说明
+alwaysApply: true
+---
+
+# 版本发布
+
+每次 bump 版本并打 tag 触发 Release 编译前，**必须**更新 [`RELEASE_NOTES.md`](../RELEASE_NOTES.md)：
+
+- 该文件内容会写入 GitHub Release **描述区顶部**（Release 页红框位置），用户第一眼看到更新说明。
+- 第一行保留产品一句话简介；下方用 `## 更新内容（vX.Y.Z）` 列出本次变更（新增 / 改进 / 修复）。
+- 同步更新 [`CHANGELOG.md`](../CHANGELOG.md) 对应版本条目。
+
+发布步骤：
+
+1. 更新 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 版本号
+2. 编写 `RELEASE_NOTES.md` 与 `CHANGELOG.md`
+3. 提交 → `git tag vX.Y.Z` → `push origin main` 与 `push origin vX.Y.Z`
+
+不要只改版本号而不写更新内容。安装包格式表由 `.github/workflows/release.yml` 自动追加，无需写入 `RELEASE_NOTES.md`。

@@ -56,7 +56,10 @@ Release 工作流会构建以下产物：
 ### 触发方式
 
 1. **打版本 tag**（推荐）  
-   确保 `src-tauri/tauri.conf.json` 里的 `version` 已更新，然后：
+   1. 更新 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 版本号  
+   2. **编写 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)**（会出现在 GitHub Release 描述顶部，即更新说明红框位置）  
+   3. 同步更新 [`CHANGELOG.md`](./CHANGELOG.md)  
+   4. 提交后打 tag 并推送：
    ```bash
    git tag v0.2.0
    git push origin v0.2.0

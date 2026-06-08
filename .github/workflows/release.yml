@@ -88,6 +88,29 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Prepare release body
+        id: release_body
+        shell: bash
+        run: |
+          {
+            cat RELEASE_NOTES.md
+            echo ""
+            echo "## 安装包说明"
+            echo ""
+            echo "| 平台 | 格式 |"
+            echo "|------|------|"
+            echo "| macOS (Apple Silicon) | \`.dmg\` |"
+            echo "| macOS (Intel) | \`.dmg\` |"
+            echo "| Linux x86_64 | \`.deb\` \`.rpm\` \`.AppImage\` |"
+            echo "| Linux ARM64 | \`.deb\` \`.rpm\` |"
+            echo "| Windows x86_64 | \`.msi\` \`.exe\` (NSIS) |"
+            echo "| Windows ARM64 | \`.exe\` (NSIS) |"
+          } > release-body.md
+          delimiter="$(openssl rand -hex 16)"
+          echo "body<<${delimiter}" >> "$GITHUB_OUTPUT"
+          cat release-body.md >> "$GITHUB_OUTPUT"
+          echo "${delimiter}" >> "$GITHUB_OUTPUT"
+
       - name: Build and upload release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -97,21 +120,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: TerminalWisely v__VERSION__
-          releaseBody: |
-            跨平台桌面终端：本地 Shell + SSH/SFTP。
-
-            ## 安装包说明
-
-            | 平台 | 格式 |
-            |------|------|
-            | macOS (Apple Silicon) | `.dmg` |
-            | macOS (Intel) | `.dmg` |
-            | Linux x86_64 | `.deb` `.rpm` `.AppImage` |
-            | Linux ARM64 | `.deb` `.rpm` |
-            | Windows x86_64 | `.msi` `.exe` (NSIS) |
-            | Windows ARM64 | `.exe` (NSIS) |
-
-            构建目标：`${{ matrix.target }}`
+          releaseBody: ${{ steps.release_body.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
