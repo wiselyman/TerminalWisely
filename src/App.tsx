@@ -4,6 +4,9 @@ import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
+import { TaskManagerTool } from "./components/TaskManagerTool";
+import { WorkspaceToolRail } from "./components/WorkspaceToolRail";
+import { TaskManagerPanel } from "./components/TaskManagerPanel";
 import { TransferPanel } from "./components/TransferPanel";
 import { TerminalView } from "./components/TerminalView";
 import { ToastContainer } from "./components/ToastContainer";
@@ -19,6 +22,7 @@ import { uploadLocalPathsToSession } from "./lib/sessionUpload";
 import { startTabPointerReorder } from "./lib/tabPointerReorder";
 import { useSessionStore } from "./stores/sessionStore";
 import { usePreviewStore } from "./stores/previewStore";
+import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload } from "./types";
 import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
@@ -113,6 +117,9 @@ function App() {
   const previewOpen = usePreviewStore((s) => s.open);
   const previewWidth = usePreviewStore((s) => s.width);
   const setPreviewWidth = usePreviewStore((s) => s.setWidth);
+  const taskManagerOpen = useTaskManagerStore((s) => s.open);
+  const toggleTaskManager = useTaskManagerStore((s) => s.toggleOpen);
+  const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
@@ -218,6 +225,17 @@ function App() {
 
   const activeSessionTitle =
     activeTabId != null ? sessionTitles[activeTabId] : undefined;
+
+  useEffect(() => {
+    if (!taskManagerOpen || !activeTabId) return;
+
+    void fetchProcesses(activeTabId, { initial: true });
+    const timer = window.setInterval(() => {
+      void fetchProcesses(activeTabId);
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTabId, fetchProcesses, taskManagerOpen]);
 
   return (
     <div
@@ -448,6 +466,19 @@ function App() {
       </main>
       <SendToDialog />
       <ToastContainer />
+      <WorkspaceToolRail>
+        <TaskManagerTool
+          active={taskManagerOpen}
+          disabled={!activeTabId}
+          onClick={toggleTaskManager}
+        />
+      </WorkspaceToolRail>
+      {activeTabId && taskManagerOpen ? (
+        <TaskManagerPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? activeTabId}
+        />
+      ) : null}
     </div>
   );
 }

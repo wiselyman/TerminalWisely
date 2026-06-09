@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod preview;
+mod process;
 mod pty;
 mod session;
 mod shell;
@@ -68,6 +69,8 @@ pub fn run() {
             commands::probe_path,
             commands::open_preview_path,
             commands::open_preview_handle,
+            commands::list_processes,
+            commands::kill_process,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

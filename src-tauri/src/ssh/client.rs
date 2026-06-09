@@ -106,6 +106,58 @@ async fn authenticate_handle(
     Ok(())
 }
 
+pub async fn exec_command(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    command: &str,
+) -> AppResult<String> {
+    let channel = {
+        let handle_guard = handle.lock().await;
+        handle_guard
+            .channel_open_session()
+            .await
+            .map_err(AppError::from)?
+    };
+
+    channel
+        .exec(true, command)
+        .await
+        .map_err(AppError::from)?;
+
+    let mut stdout = String::new();
+    let mut exit_status: Option<u32> = None;
+    let mut channel = channel;
+
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Data { data }) => {
+                stdout.push_str(&String::from_utf8_lossy(data.as_ref()));
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                stdout.push_str(&String::from_utf8_lossy(data.as_ref()));
+            }
+            Some(ChannelMsg::ExitStatus { exit_status: code }) => {
+                exit_status = Some(code);
+            }
+            Some(ChannelMsg::Close | ChannelMsg::Eof) | None => break,
+            _ => {}
+        }
+    }
+
+    match exit_status {
+        Some(0) | None => Ok(stdout),
+        Some(code) => {
+            let detail = stdout.trim();
+            if detail.is_empty() {
+                Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
+            } else {
+                Err(AppError::msg(format!(
+                    "远程命令失败，退出码 {code}: {detail}"
+                )))
+            }
+        }
+    }
+}
+
 pub async fn open_transfer_connection(
     request: &SshConnectRequest,
     cancel: Option<&std::sync::atomic::AtomicBool>,
@@ -321,6 +373,10 @@ impl SshSession {
         self.snapshot()
             .download_file(app, request, transfer_id, cancel)
             .await
+    }
+
+    pub async fn exec_command(&self, command: &str) -> AppResult<String> {
+        exec_command(&self.handle, command).await
     }
 }
 

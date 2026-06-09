@@ -274,6 +274,58 @@ impl SessionManager {
         }
     }
 
+    pub async fn list_processes(
+        &self,
+        session_id: &str,
+    ) -> AppResult<crate::types::ProcessListResult> {
+        let ssh_handle = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(_) => None,
+                SessionHandle::Ssh(s) => Some(s.handle()),
+            }
+        };
+
+        if let Some(handle) = ssh_handle {
+            crate::process::list_remote_processes(handle).await
+        } else {
+            tokio::task::spawn_blocking(crate::process::list_local_processes)
+                .await
+                .map_err(|e| AppError::msg(e.to_string()))?
+        }
+    }
+
+    pub async fn kill_process(
+        &self,
+        session_id: &str,
+        pid: u32,
+        force: bool,
+    ) -> AppResult<()> {
+        let ssh_handle = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(_) => None,
+                SessionHandle::Ssh(s) => Some(s.handle()),
+            }
+        };
+
+        if let Some(handle) = ssh_handle {
+            crate::process::kill_remote_process(handle, pid, force).await
+        } else {
+            tokio::task::spawn_blocking(move || {
+                crate::process::kill_local_process(pid, force)
+            })
+            .await
+            .map_err(|e| AppError::msg(e.to_string()))?
+        }
+    }
+
     pub async fn transfer_remote_file(
         &self,
         app: AppHandle,

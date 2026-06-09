@@ -11,10 +11,10 @@ use crate::transfer::CANCELLED_MSG;
 use crate::transfer::TransferRegistry;
 use crate::types::{
     AuthMethod, DeviceRecord, DownloadFileRequest, EnterDirectoryRequest,
-    InsertLocalPathsRequest, PreviewCloseRequest, PreviewOpenRequest, PreviewOpenResult,
-    ProbePathRequest, ProbeRemotePathRequest, SavedConnectionView, SessionInfo,
-    SshConnectRequest, SshConnectResult, TransferRemoteRequest, UploadFileResult,
-    UploadFilesRequest,
+    InsertLocalPathsRequest, KillProcessRequest, ListProcessesRequest, PreviewCloseRequest,
+    PreviewOpenRequest, PreviewOpenResult, ProbePathRequest, ProbeRemotePathRequest,
+    ProcessListResult, SavedConnectionView, SessionInfo, SshConnectRequest, SshConnectResult,
+    TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
 };
 
 fn ssh_connect_result(
@@ -484,6 +484,28 @@ pub async fn open_preview_handle(
 ) -> Result<(), String> {
     previews
         .open_in_system(&app, &sessions, &request.handle_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_processes(
+    request: ListProcessesRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<ProcessListResult, String> {
+    sessions
+        .list_processes(&request.session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn kill_process(
+    request: KillProcessRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions
+        .kill_process(&request.session_id, request.pid, request.force)
         .await
         .map_err(|e| e.to_string())
 }

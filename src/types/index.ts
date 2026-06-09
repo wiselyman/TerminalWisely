@@ -130,3 +130,15 @@ export interface PreviewOpenResult {
   text_content?: string | null;
   local_cache_path?: string | null;
 }
+
+export interface ProcessEntry {
+  pid: number;
+  name: string;
+  cpu_percent: number;
+  memory_bytes: number;
+  ports: number[];
+}
+
+export interface ProcessListResult {
+  processes: ProcessEntry[];
+}

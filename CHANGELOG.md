@@ -4,6 +4,22 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.4.0] - 2026-06-08
+
+### Added
+- 任务管理器：右侧贴边工具栏图标打开抽屉，展示当前激活页签对应机器（本地或 SSH）的进程列表
+- 进程列：名称、监听端口、内存、CPU；支持搜索、排序与确认后结束进程
+- 侧栏打开时约 2 秒自动刷新，关闭后停止轮询
+- 后端 `list_processes` / `kill_process` Tauri 命令（本地 sysinfo + 端口映射；SSH exec JSON 脚本）
+
+### Known limitations
+- SSH 端口解析依赖 `ss` / `netstat`，部分最小化系统可能无端口列
+- CPU 为采样值，首次打开可能偏低，第二次刷新后趋于准确
+- 结束系统或其他用户进程可能权限不足（SSH 非 root 时常见）
+- 端口展示以监听端口为主，不展示全部 ESTABLISHED 连接
+
+> 归档说明见 [`release-notes/v0.4.0.md`](./release-notes/v0.4.0.md)
+
 ## [0.3.0] - 2026-06-08
 
 ### Added

@@ -90,6 +90,27 @@ export function BookmarkIcon() {
   );
 }
 
+/** Process list + activity bars — task manager metaphor. */
+export function TaskManagerIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2.25" y="2.5" width="11.5" height="11" rx="1.2" />
+      <path d="M4.5 5.25h3.75M4.5 7.5h3M4.5 9.75h2.5" />
+      <path d="M10.25 10.75V9M11.5 10.75V7.25M12.75 10.75V5.5" />
+    </svg>
+  );
+}
+
 interface SidebarActionIconProps {
   kind: "local" | "ssh" | "bookmark";
   label: string;

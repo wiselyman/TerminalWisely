@@ -235,3 +235,30 @@ pub struct TransferRemoteRequest {
     #[serde(default)]
     pub transfer_id: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessEntry {
+    pub pid: u32,
+    pub name: String,
+    pub cpu_percent: f32,
+    pub memory_bytes: u64,
+    pub ports: Vec<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessListResult {
+    pub processes: Vec<ProcessEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListProcessesRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KillProcessRequest {
+    pub session_id: String,
+    pub pid: u32,
+    #[serde(default)]
+    pub force: bool,
+}
