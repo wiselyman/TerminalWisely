@@ -34,12 +34,15 @@ import { isTabReordering } from "../lib/tabPointerReorder";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "../stores/toastStore";
+import { TerminalStatusOverlay } from "./TerminalStatusOverlay";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
   sessionId: string;
   kind: SessionKind;
   active: boolean;
+  connectionStatus?: "connecting" | "ready";
+  title: string;
 }
 
 async function listenSafely<T>(
@@ -49,7 +52,13 @@ async function listenSafely<T>(
   return listen<T>(event, (e) => handler(e.payload));
 }
 
-export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
+export function TerminalView({
+  sessionId,
+  kind,
+  active,
+  connectionStatus = "ready",
+  title,
+}: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -81,7 +90,40 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
   upsertTransferRef.current = upsertTransfer;
   removeTransferRef.current = removeTransfer;
   const [isDragOver, setIsDragOver] = useState(false);
+  const [bootOverlayVisible, setBootOverlayVisible] = useState(true);
+  const [bootOverlayFading, setBootOverlayFading] = useState(false);
   const dragDepthRef = useRef(0);
+  const bootPendingRef = useRef(true);
+  const bootOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingOutputRef = useRef<string[]>([]);
+  const isConnecting = connectionStatus === "connecting";
+
+  const markFirstOutput = useCallback(() => {
+    if (!bootPendingRef.current) return;
+    bootPendingRef.current = false;
+    setBootOverlayFading(true);
+    if (bootOverlayTimerRef.current !== null) {
+      clearTimeout(bootOverlayTimerRef.current);
+    }
+    bootOverlayTimerRef.current = setTimeout(() => {
+      bootOverlayTimerRef.current = null;
+      setBootOverlayVisible(false);
+      setBootOverlayFading(false);
+    }, 220);
+  }, []);
+
+  useEffect(() => {
+    bootPendingRef.current = true;
+    pendingOutputRef.current = [];
+    setBootOverlayVisible(true);
+    setBootOverlayFading(false);
+    return () => {
+      if (bootOverlayTimerRef.current !== null) {
+        clearTimeout(bootOverlayTimerRef.current);
+        bootOverlayTimerRef.current = null;
+      }
+    };
+  }, [sessionId]);
 
   const scheduleHighlight = useCallback(
     (filenames: string[]) => {
@@ -147,7 +189,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
   }, [syncSize]);
 
   useEffect(() => {
-    if (!containerRef.current || !hostRef.current) return;
+    if (isConnecting || !containerRef.current || !hostRef.current) return;
 
     const host = hostRef.current;
 
@@ -420,6 +462,14 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
 
     void syncSize();
 
+    const buffered = pendingOutputRef.current.splice(0);
+    for (const chunk of buffered) {
+      terminal.write(chunk);
+    }
+    if (buffered.some((chunk) => chunk.length > 0)) {
+      markFirstOutput();
+    }
+
     return () => {
       cleanupRemoteDrag?.();
       if (resizeTimerRef.current !== null) {
@@ -436,10 +486,10 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       lastContainerSizeRef.current = { width: 0, height: 0 };
       lastSizeRef.current = { cols: 0, rows: 0 };
     };
-  }, [kind, sessionId, syncSize]);
+  }, [isConnecting, kind, markFirstOutput, sessionId, syncSize]);
 
   useEffect(() => {
-    if (!active) return;
+    if (isConnecting || !active) return;
 
     lastContainerSizeRef.current = { width: 0, height: 0 };
 
@@ -466,9 +516,11 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       window.removeEventListener("resize", onWindowResize);
       unlistenResized?.();
     };
-  }, [active, kind, sessionId, scheduleSyncSize]);
+  }, [active, isConnecting, kind, sessionId, scheduleSyncSize]);
 
   useEffect(() => {
+    if (isConnecting) return;
+
     let disposed = false;
     let unlisteners: UnlistenFn[] = [];
 
@@ -477,8 +529,14 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
         listenSafely<TerminalOutputPayload>("terminal-output", (payload) => {
           if (payload.session_id !== sessionId) return;
           const terminal = terminalRef.current;
-          if (!terminal) return;
+          if (!terminal) {
+            pendingOutputRef.current.push(payload.data);
+            return;
+          }
           terminal.write(payload.data);
+          if (payload.data.length > 0) {
+            markFirstOutput();
+          }
 
           if (pendingFilenamesRef.current.length === 0) return;
           if (highlightTimerRef.current !== null) {
@@ -510,10 +568,10 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [sessionId, scheduleHighlight]);
+  }, [isConnecting, markFirstOutput, sessionId, scheduleHighlight]);
 
   useEffect(() => {
-    if (!active) return;
+    if (isConnecting || !active) return;
 
     const setDragActive = (activeState: boolean) => {
       setIsDragOver(activeState);
@@ -646,7 +704,7 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
       container?.removeEventListener("dragover", preventDefaults);
       container?.removeEventListener("drop", handleDrop);
     };
-  }, [active, kind, sessionId, pushToast, scheduleHighlight, setStatusMessage]);
+  }, [active, isConnecting, kind, sessionId, pushToast, scheduleHighlight, setStatusMessage]);
 
   useEffect(() => {
     if (!active) {
@@ -658,17 +716,35 @@ export function TerminalView({ sessionId, kind, active }: TerminalViewProps) {
   const dropHint =
     kind === "ssh" ? "释放文件以上传到远程服务器" : "释放文件以插入路径";
 
+  const bootMessage =
+    kind === "ssh" ? "正在建立会话…" : "正在启动终端…";
+  const connectingMessage =
+    kind === "ssh" ? "正在连接服务器…" : "正在启动本地终端…";
+
   return (
     <div
-      className={`terminal-view ${active ? "active" : ""} ${isDragOver ? "drag-over" : ""}`}
+      className={`terminal-view ${active ? "active" : ""} ${isDragOver ? "drag-over" : ""}${isConnecting ? " terminal-view-connecting" : ""}`}
     >
       <div
         ref={containerRef}
         className="terminal-view-inner"
         onClick={() => active && terminalRef.current?.focus()}
       >
-        <div ref={hostRef} className="tw-terminal-host" />
+        <div
+          ref={hostRef}
+          className={`tw-terminal-host${isConnecting ? " tw-terminal-host-hidden" : ""}`}
+        />
       </div>
+      {isConnecting && active ? (
+        <TerminalStatusOverlay message={connectingMessage} subtitle={title} />
+      ) : null}
+      {!isConnecting && bootOverlayVisible && active ? (
+        <TerminalStatusOverlay
+          message={bootMessage}
+          subtitle={title}
+          fading={bootOverlayFading}
+        />
+      ) : null}
       {isDragOver && active && (
         <div className="terminal-drop-overlay" aria-hidden="true">
           <div className="terminal-drop-overlay-card">

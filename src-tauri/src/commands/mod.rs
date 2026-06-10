@@ -13,7 +13,9 @@ use crate::types::{
     AuthMethod, DeviceRecord, DownloadFileRequest, EnterDirectoryRequest,
     InsertLocalPathsRequest, KillProcessRequest, ListProcessesRequest, PreviewCloseRequest,
     PreviewOpenRequest, PreviewOpenResult, ProbePathRequest, ProbeRemotePathRequest,
-    ProcessListResult, SavedConnectionView, SessionInfo, SshConnectRequest, SshConnectResult,
+    FindFilesRequest, FindFilesResult,
+    HostStatsRequest, HostStatsSnapshot,
+    ProcessListResult, SavedConnectionView, SessionCwdRequest, SessionInfo, SshConnectRequest, SshConnectResult,
     TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
 };
 
@@ -506,6 +508,39 @@ pub async fn kill_process(
 ) -> Result<(), String> {
     sessions
         .kill_process(&request.session_id, request.pid, request.force)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn find_files(
+    request: FindFilesRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<FindFilesResult, String> {
+    sessions
+        .find_files(request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_session_cwd(
+    request: SessionCwdRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<String, String> {
+    sessions
+        .get_session_cwd(&request.session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_host_stats(
+    request: HostStatsRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<HostStatsSnapshot, String> {
+    sessions
+        .get_host_stats(&request.session_id)
         .await
         .map_err(|e| e.to_string())
 }

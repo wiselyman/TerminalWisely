@@ -111,6 +111,45 @@ export function TaskManagerIcon() {
   );
 }
 
+export function FindIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="7" cy="7" r="4.25" />
+      <path d="M10.5 10.5 13.25 13.25" />
+    </svg>
+  );
+}
+
+export function HostStatsIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2.25" y="2.5" width="11.5" height="11" rx="1.2" />
+      <path d="M4.5 11V8.25L6.25 6.5 8 8.5 10.75 5.5 11.5 6.25V11" />
+      <path d="M4.5 11h7" />
+    </svg>
+  );
+}
+
 interface SidebarActionIconProps {
   kind: "local" | "ssh" | "bookmark";
   label: string;

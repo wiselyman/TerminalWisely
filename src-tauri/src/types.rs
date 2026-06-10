@@ -262,3 +262,119 @@ pub struct KillProcessRequest {
     #[serde(default)]
     pub force: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum FindEntryKind {
+    File,
+    Directory,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FindTypeFilter {
+    #[default]
+    All,
+    File,
+    Directory,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FindFileEntry {
+    pub path: String,
+    pub kind: FindEntryKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FindFilesResult {
+    pub entries: Vec<FindFileEntry>,
+    pub truncated: bool,
+    pub start_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FindFilesRequest {
+    pub session_id: String,
+    pub path: String,
+    #[serde(default = "default_find_name_pattern")]
+    pub name_pattern: String,
+    #[serde(default)]
+    pub type_filter: FindTypeFilter,
+    #[serde(default = "default_find_max_depth")]
+    pub max_depth: u32,
+    #[serde(default)]
+    pub case_insensitive: bool,
+}
+
+fn default_find_name_pattern() -> String {
+    String::new()
+}
+
+fn default_find_max_depth() -> u32 {
+    8
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionCwdRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostStatsRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggedInUser {
+    pub username: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_time: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskUsageEntry {
+    pub mount_point: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filesystem: Option<String>,
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkCounter {
+    pub name: String,
+    pub rx_bytes: u64,
+    pub tx_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostStatsSnapshot {
+    pub hostname: String,
+    pub os_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_version: Option<String>,
+    pub arch: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+    pub cpu_usage_percent: f32,
+    pub cpu_core_count: u32,
+    pub memory_total_bytes: u64,
+    pub memory_used_bytes: u64,
+    pub swap_total_bytes: u64,
+    pub swap_used_bytes: u64,
+    pub load_avg: [f64; 3],
+    pub uptime_secs: u64,
+    pub process_count: u32,
+    pub logged_in_users: Vec<LoggedInUser>,
+    pub disks: Vec<DiskUsageEntry>,
+    pub networks: Vec<NetworkCounter>,
+    pub sampled_at: i64,
+}

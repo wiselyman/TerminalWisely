@@ -107,8 +107,11 @@ export interface TransferRemoteRequest {
   transfer_id?: string | null;
 }
 
+export type ConnectionStatus = "connecting" | "ready";
+
 export interface TabSession extends SessionInfo {
   active: boolean;
+  connectionStatus?: ConnectionStatus;
 }
 
 export interface ToastItem {
@@ -141,4 +144,60 @@ export interface ProcessEntry {
 
 export interface ProcessListResult {
   processes: ProcessEntry[];
+}
+
+export type FindTypeFilter = "all" | "file" | "directory";
+
+export interface FindFileEntry {
+  path: string;
+  kind: "file" | "directory";
+  size_bytes?: number | null;
+}
+
+export interface FindFilesResult {
+  entries: FindFileEntry[];
+  truncated: boolean;
+  start_path: string;
+}
+
+export interface LoggedInUser {
+  username: string;
+  terminal?: string | null;
+  host?: string | null;
+  login_time?: string | null;
+}
+
+export interface DiskUsageEntry {
+  mount_point: string;
+  filesystem?: string | null;
+  total_bytes: number;
+  used_bytes: number;
+}
+
+export interface NetworkCounter {
+  name: string;
+  rx_bytes: number;
+  tx_bytes: number;
+}
+
+export interface HostStatsSnapshot {
+  hostname: string;
+  os_name: string;
+  os_version?: string | null;
+  kernel_version?: string | null;
+  arch: string;
+  timezone?: string | null;
+  cpu_usage_percent: number;
+  cpu_core_count: number;
+  memory_total_bytes: number;
+  memory_used_bytes: number;
+  swap_total_bytes: number;
+  swap_used_bytes: number;
+  load_avg: [number, number, number];
+  uptime_secs: number;
+  process_count: number;
+  logged_in_users: LoggedInUser[];
+  disks: DiskUsageEntry[];
+  networks: NetworkCounter[];
+  sampled_at: number;
 }

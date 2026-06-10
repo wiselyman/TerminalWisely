@@ -14,6 +14,41 @@ import type {
   TransferProgressPayload,
 } from "../types";
 
+const PENDING_PREFIX = "pending:";
+const cancelledConnects = new Set<string>();
+
+function createPendingId(): string {
+  return `${PENDING_PREFIX}${crypto.randomUUID()}`;
+}
+
+function isPendingId(id: string): boolean {
+  return id.startsWith(PENDING_PREFIX);
+}
+
+function tabIsConnecting(tab: TabSession): boolean {
+  return tab.connectionStatus === "connecting" || isPendingId(tab.id);
+}
+
+function sshTabTitle(request: SshConnectRequest): string {
+  const custom = request.session_title?.trim();
+  if (custom) return custom;
+  return `${request.username}@${request.host}`;
+}
+
+async function discardSessionIfCancelled(
+  pendingId: string,
+  sessionId: string,
+): Promise<boolean> {
+  if (!cancelledConnects.has(pendingId)) return false;
+  cancelledConnects.delete(pendingId);
+  try {
+    await invoke("close_session", { sessionId });
+  } catch {
+    // Session may not exist yet; ignore cleanup errors.
+  }
+  return true;
+}
+
 interface SessionState {
   tabs: TabSession[];
   activeTabId: string | null;
@@ -31,6 +66,9 @@ interface SessionState {
     toSessionId: string,
   ) => Promise<void>;
   addTab: (info: SessionInfo) => void;
+  addConnectingTab: (info: SessionInfo) => void;
+  promoteConnectingTab: (pendingId: string, session: SessionInfo) => void;
+  removeConnectingTab: (pendingId: string) => void;
   closeTab: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
   reorderTabs: (
@@ -109,13 +147,68 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({
       tabs: [
         ...state.tabs.map((tab) => ({ ...tab, active: false })),
-        { ...info, active: true },
+        { ...info, active: true, connectionStatus: "ready" as const },
       ],
       activeTabId: info.id,
     }));
   },
 
+  addConnectingTab: (info) => {
+    set((state) => ({
+      tabs: [
+        ...state.tabs.map((tab) => ({ ...tab, active: false })),
+        {
+          ...info,
+          active: true,
+          connectionStatus: "connecting" as const,
+        },
+      ],
+      activeTabId: info.id,
+    }));
+  },
+
+  promoteConnectingTab: (pendingId, session) => {
+    set((state) => {
+      const tabs = state.tabs.map((tab) => {
+        if (tab.id !== pendingId) return tab;
+        return {
+          ...session,
+          active: tab.active,
+          connectionStatus: "ready" as const,
+        };
+      });
+      return {
+        tabs,
+        activeTabId:
+          state.activeTabId === pendingId ? session.id : state.activeTabId,
+      };
+    });
+  },
+
+  removeConnectingTab: (pendingId) => {
+    set((state) => {
+      const tabs = state.tabs.filter((tab) => tab.id !== pendingId);
+      const activeTabId =
+        state.activeTabId === pendingId
+          ? tabs.length > 0
+            ? tabs[tabs.length - 1].id
+            : null
+          : state.activeTabId;
+      return {
+        tabs: tabs.map((tab) => ({ ...tab, active: tab.id === activeTabId })),
+        activeTabId,
+      };
+    });
+  },
+
   closeTab: async (id) => {
+    const tab = get().tabs.find((item) => item.id === id);
+    if (tab && tabIsConnecting(tab)) {
+      cancelledConnects.add(id);
+      get().removeConnectingTab(id);
+      return;
+    }
+
     await invoke("close_session", { sessionId: id });
     set((state) => {
       const tabs = state.tabs.filter((tab) => tab.id !== id);
@@ -203,26 +296,57 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createLocalSession: async (cols, rows) => {
-    const info = await invoke<SessionInfo>("create_local_session", { cols, rows });
-    get().addTab(info);
+    const pendingId = createPendingId();
+    get().addConnectingTab({
+      id: pendingId,
+      title: "本地终端",
+      kind: "local",
+    });
+
+    try {
+      const info = await invoke<SessionInfo>("create_local_session", { cols, rows });
+      if (await discardSessionIfCancelled(pendingId, info.id)) return;
+      get().promoteConnectingTab(pendingId, info);
+    } catch (err) {
+      get().removeConnectingTab(pendingId);
+      notifyConnectError(err);
+    }
   },
 
   createSshSession: async (request, cols, rows) => {
+    const pendingId = createPendingId();
+    get().addConnectingTab({
+      id: pendingId,
+      title: sshTabTitle(request),
+      kind: "ssh",
+    });
+
     try {
       const result = await invoke<SshConnectResult>("create_ssh_session", {
         request,
         cols,
         rows,
       });
-      get().addTab(mergeSessionOs(result.session, result));
+      const session = mergeSessionOs(result.session, result);
+      if (await discardSessionIfCancelled(pendingId, session.id)) return result;
+      get().promoteConnectingTab(pendingId, session);
       await get().loadDeviceHistory();
       return result;
     } catch (err) {
+      get().removeConnectingTab(pendingId);
       notifyConnectError(err);
     }
   },
 
   connectSaved: async (savedId, password, rememberPassword, cols, rows) => {
+    const saved = get().savedConnections.find((item) => item.id === savedId);
+    const pendingId = createPendingId();
+    get().addConnectingTab({
+      id: pendingId,
+      title: saved?.name ?? (saved ? `${saved.username}@${saved.host}` : "SSH"),
+      kind: "ssh",
+    });
+
     try {
       const result = await invoke<SshConnectResult>("connect_saved", {
         savedId,
@@ -231,23 +355,40 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         cols,
         rows,
       });
-      get().addTab(mergeSessionOs(result.session, result));
+      const session = mergeSessionOs(result.session, result);
+      if (await discardSessionIfCancelled(pendingId, session.id)) return;
+      get().promoteConnectingTab(pendingId, session);
       await get().loadSavedConnections();
       await get().loadDeviceHistory();
     } catch (err) {
+      get().removeConnectingTab(pendingId);
       notifyConnectError(err);
     }
   },
 
   connectDevice: async (device, password, cols, rows) => {
-    const result = await invoke<SshConnectResult>("connect_device", {
-      device,
-      password,
-      cols,
-      rows,
+    const pendingId = createPendingId();
+    get().addConnectingTab({
+      id: pendingId,
+      title: `${device.username}@${device.host}`,
+      kind: "ssh",
     });
-    get().addTab(mergeSessionOs(result.session, result));
-    await get().loadDeviceHistory();
+
+    try {
+      const result = await invoke<SshConnectResult>("connect_device", {
+        device,
+        password,
+        cols,
+        rows,
+      });
+      const session = mergeSessionOs(result.session, result);
+      if (await discardSessionIfCancelled(pendingId, session.id)) return;
+      get().promoteConnectingTab(pendingId, session);
+      await get().loadDeviceHistory();
+    } catch (err) {
+      get().removeConnectingTab(pendingId);
+      notifyConnectError(err);
+    }
   },
 
   upsertTransfer: (progress) =>

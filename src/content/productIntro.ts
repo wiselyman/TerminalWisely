@@ -2,7 +2,7 @@ export const productIntro = {
   name: "TerminalWisely",
   tagline: "为日常运维准备的桌面终端",
   summary:
-    "在同一窗口里管理本地 Shell 与 SSH 会话。拖拽上传、点击浏览与预览、任务管理器、快捷下载、跨服发送，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
+    "在同一窗口里管理本地 Shell 与 SSH 会话。拖拽上传、点击浏览与预览、Find 文件搜索、服务器资源监控、任务管理器、快捷下载、跨服发送，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
   features: [
     {
       title: "拖拽上传",
@@ -33,6 +33,16 @@ export const productIntro = {
       title: "书签与传输",
       description:
         "保存常用 SSH 连接并显示系统图标；多任务传输面板可查看进度并单独取消。",
+    },
+    {
+      title: "服务器资源",
+      description:
+        "贴边工具栏打开，查看当前页签机器的 CPU、内存、磁盘、网络与系统信息，图形化展示并自动刷新。",
+    },
+    {
+      title: "Find 文件搜索",
+      description:
+        "右侧贴边工具栏打开，在当前页签对应机器执行 find 查找文件；点击结果进入目录或预览。",
     },
     {
       title: "任务管理器",

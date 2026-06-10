@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { ProcessEntry, ProcessListResult } from "../types";
 import type { ProcessSortKey, SortDirection } from "../components/TaskManagerTable";
+import { useFindStore } from "./findStore";
+import { useHostStatsStore } from "./hostStatsStore";
 import { useToastStore } from "./toastStore";
 
 const TASK_MANAGER_WIDTH_KEY = "terminal-wisely.task-manager-width";
@@ -73,7 +75,16 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
     set({ sortKey: key, sortDirection: next });
   },
 
-  toggleOpen: () => set((state) => ({ open: !state.open })),
+  toggleOpen: () => {
+    set((state) => {
+      const next = !state.open;
+      if (next) {
+        useFindStore.getState().close();
+        useHostStatsStore.getState().close();
+      }
+      return { open: next };
+    });
+  },
 
   close: () =>
     set({

@@ -1,3 +1,5 @@
+mod host_stats;
+mod find;
 mod commands;
 mod error;
 mod preview;
@@ -71,6 +73,9 @@ pub fn run() {
             commands::open_preview_handle,
             commands::list_processes,
             commands::kill_process,
+            commands::find_files,
+            commands::get_session_cwd,
+            commands::get_host_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

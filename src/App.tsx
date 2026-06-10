@@ -4,6 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
+import { FindPanel } from "./components/FindPanel";
+import { FindTool } from "./components/FindTool";
+import { HostStatsPanel } from "./components/hostStats/HostStatsPanel";
+import { HostStatsTool } from "./components/HostStatsTool";
 import { TaskManagerTool } from "./components/TaskManagerTool";
 import { WorkspaceToolRail } from "./components/WorkspaceToolRail";
 import { TaskManagerPanel } from "./components/TaskManagerPanel";
@@ -22,6 +26,8 @@ import { uploadLocalPathsToSession } from "./lib/sessionUpload";
 import { startTabPointerReorder } from "./lib/tabPointerReorder";
 import { useSessionStore } from "./stores/sessionStore";
 import { usePreviewStore } from "./stores/previewStore";
+import { useHostStatsStore } from "./stores/hostStatsStore";
+import { useFindStore } from "./stores/findStore";
 import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload } from "./types";
@@ -120,6 +126,15 @@ function App() {
   const taskManagerOpen = useTaskManagerStore((s) => s.open);
   const toggleTaskManager = useTaskManagerStore((s) => s.toggleOpen);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
+  const findOpen = useFindStore((s) => s.open);
+  const toggleFind = useFindStore((s) => s.toggleOpen);
+  const openFind = useFindStore((s) => s.openFind);
+  const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
+  const resetFindResults = useFindStore((s) => s.resetResults);
+  const hostStatsOpen = useHostStatsStore((s) => s.open);
+  const toggleHostStats = useHostStatsStore((s) => s.toggleOpen);
+  const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
+  const resetHostStats = useHostStatsStore((s) => s.resetForSession);
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
@@ -225,6 +240,12 @@ function App() {
 
   const activeSessionTitle =
     activeTabId != null ? sessionTitles[activeTabId] : undefined;
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId),
+    [activeTabId, tabs],
+  );
+  const activeTabReady =
+    activeTab != null && (activeTab.connectionStatus ?? "ready") === "ready";
 
   useEffect(() => {
     if (!taskManagerOpen || !activeTabId) return;
@@ -236,6 +257,51 @@ function App() {
 
     return () => window.clearInterval(timer);
   }, [activeTabId, fetchProcesses, taskManagerOpen]);
+
+  useEffect(() => {
+    if (!findOpen || !activeTabId) return;
+
+    useFindStore.setState({ activeSessionId: activeTabId });
+    resetFindResults();
+    void loadSessionCwd(activeTabId);
+  }, [activeTabId, findOpen, loadSessionCwd, resetFindResults]);
+
+  useEffect(() => {
+    if (!hostStatsOpen || !activeTabId) return;
+
+    resetHostStats();
+    void fetchHostStats(activeTabId, { initial: true });
+    const timer = window.setInterval(() => {
+      void fetchHostStats(activeTabId);
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTabId, fetchHostStats, hostStatsOpen, resetHostStats]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.closest("input, textarea, select, [contenteditable='true']"))
+      ) {
+        return;
+      }
+
+      if (!activeTabId) return;
+
+      event.preventDefault();
+      openFind(activeTabId);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTabId, openFind]);
 
   return (
     <div
@@ -268,10 +334,14 @@ function App() {
           {tabs.length === 0 && (
             <div className="empty-workspace">{productIntro.name}</div>
           )}
-          {tabs.map((tab) => (
+          {tabs.map((tab) => {
+            const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
+            return (
             <div
               key={tab.id}
               className={`tab ${tab.active ? "active" : ""} ${
+                tabConnecting ? "tab-connecting" : ""
+              } ${
                 tabDropTargetId === tab.id ? "tab-drop-target" : ""
               } ${tabDropTargetId === tab.id && tabDropKind === "remote" ? "tab-drop-target-remote" : ""} ${
                 tabReorderTarget?.id === tab.id
@@ -287,6 +357,7 @@ function App() {
               onMouseDown={(event) => startTabReorder(tab.id, event)}
               onDragOver={(event) => {
                 if (tabReorderDragId) return;
+                if (tabConnecting) return;
 
                 const dataTransfer = event.dataTransfer;
                 if (!dataTransfer) return;
@@ -314,6 +385,7 @@ function App() {
               }}
               onDrop={(event) => {
                 if (tabReorderDragId) return;
+                if (tabConnecting) return;
 
                 event.preventDefault();
                 event.stopPropagation();
@@ -374,9 +446,12 @@ function App() {
                 )}
               </span>
               <span className="tab-title" title={tab.title}>
+                {tabConnecting ? (
+                  <span className="tab-connecting-dot" aria-hidden="true" />
+                ) : null}
                 {tab.title}
               </span>
-              {tab.active ? (
+              {tab.active && !tabConnecting ? (
                 <span className="tab-actions">
                   <button
                     type="button"
@@ -416,7 +491,8 @@ function App() {
                 ×
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div
@@ -439,6 +515,8 @@ function App() {
                   sessionId={tab.id}
                   kind={tab.kind}
                   active={tab.id === activeTabId}
+                  connectionStatus={tab.connectionStatus ?? "ready"}
+                  title={tab.title}
                 />
               ))
             )}
@@ -469,14 +547,40 @@ function App() {
       <WorkspaceToolRail>
         <TaskManagerTool
           active={taskManagerOpen}
-          disabled={!activeTabId}
+          disabled={!activeTabReady}
           onClick={toggleTaskManager}
+        />
+        <FindTool
+          active={findOpen}
+          disabled={!activeTabReady}
+          onClick={() => {
+            if (activeTabId) toggleFind(activeTabId);
+          }}
+        />
+        <HostStatsTool
+          active={hostStatsOpen}
+          disabled={!activeTabReady}
+          onClick={toggleHostStats}
         />
       </WorkspaceToolRail>
       {activeTabId && taskManagerOpen ? (
         <TaskManagerPanel
           sessionId={activeTabId}
           sessionTitle={activeSessionTitle ?? activeTabId}
+        />
+      ) : null}
+      {activeTabId && findOpen ? (
+        <FindPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? activeTabId}
+        />
+      ) : null}
+      {activeTabId && hostStatsOpen ? (
+        <HostStatsPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? activeTabId}
+          osId={activeTab?.os_id}
+          osName={activeTab?.os_name}
         />
       ) : null}
     </div>

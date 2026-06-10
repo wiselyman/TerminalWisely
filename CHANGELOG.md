@@ -4,6 +4,26 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.0] - 2026-06-08
+
+### Added
+- Find 文件搜索：右侧贴边工具栏打开抽屉，在当前激活页签对应机器执行 `find` 命令（从当前目录搜索）
+- 支持文件名模式（-name/-iname）、类型（-type f/d）、最大深度（-maxdepth）；结果可点击进入目录或预览
+- 服务器资源检测：贴边工具栏第三枚图标，展示 CPU/内存/Swap、网络速率、磁盘、系统信息与登录用户
+- 资源面板含 CPU/内存 gauge 与 sparkline；网络展示实时速率与累计流量
+- 连接体验：乐观页签、连接中遮罩、首输出前启动提示，减少黑屏等待
+- 后端 `find_files` / `get_session_cwd` / `get_host_stats` Tauri 命令
+
+### Known limitations
+- 本地 Windows 会话暂不支持 find，请使用 SSH Linux 主机
+- Find 搜索范围为当前工作目录（SSH 跟踪 cwd）
+- Find 单次最多 500 条结果
+- 网络速率为采样差值，首帧显示「采样中…」
+- SSH 资源采集依赖 `/proc`、`df`、`who`；最小化容器可能缺字段
+- 任务管理器 / Find / 服务器资源 三个抽屉互斥
+
+> 归档说明见 [`release-notes/v0.5.0.md`](./release-notes/v0.5.0.md)
+
 ## [0.4.0] - 2026-06-08
 
 ### Added

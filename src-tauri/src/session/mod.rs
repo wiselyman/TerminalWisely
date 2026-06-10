@@ -326,6 +326,76 @@ impl SessionManager {
         }
     }
 
+    pub async fn get_session_cwd(&self, session_id: &str) -> AppResult<String> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Local(_) => Ok("~".to_string()),
+            SessionHandle::Ssh(s) => Ok(s.current_remote_cwd().await),
+        }
+    }
+
+    pub async fn find_files(
+        &self,
+        request: crate::types::FindFilesRequest,
+    ) -> AppResult<crate::types::FindFilesResult> {
+        let normalized = crate::find::normalize_request(&request)?;
+
+        let ssh_snap = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(&normalized.session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(_) => None,
+                SessionHandle::Ssh(s) => Some(s.snapshot()),
+            }
+        };
+
+        if let Some(ssh) = ssh_snap {
+            let start_path = if normalized.path == "." {
+                ssh.current_remote_cwd().await
+            } else {
+                ssh.resolve_remote_path(&normalized.path).await?
+            };
+            return crate::find::find_remote_files(ssh.handle(), &start_path, normalized).await;
+        }
+
+        let start_path = resolve_local_find_start(&normalized.path)?;
+        let normalized_for_blocking = normalized.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::find::find_local_files(&start_path, normalized_for_blocking)
+        })
+        .await
+        .map_err(|e| AppError::msg(e.to_string()))?
+    }
+
+    pub async fn get_host_stats(
+        &self,
+        session_id: &str,
+    ) -> AppResult<crate::types::HostStatsSnapshot> {
+        let ssh_handle = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(_) => None,
+                SessionHandle::Ssh(s) => Some(s.handle()),
+            }
+        };
+
+        if let Some(handle) = ssh_handle {
+            crate::host_stats::collect_remote(handle).await
+        } else {
+            tokio::task::spawn_blocking(crate::host_stats::collect_local)
+                .await
+                .map_err(|e| AppError::msg(e.to_string()))?
+        }
+    }
+
     pub async fn transfer_remote_file(
         &self,
         app: AppHandle,
@@ -679,4 +749,23 @@ pub fn load_device_history(app: &AppHandle) -> AppResult<Vec<DeviceRecord>> {
         Some(value) => Ok(serde_json::from_value(value.clone())?),
         None => Ok(Vec::new()),
     }
+}
+
+fn resolve_local_find_start(path: &str) -> AppResult<String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || trimmed == "." {
+        return Ok(
+            dirs::home_dir()
+                .map(|home| home.to_string_lossy().to_string())
+                .unwrap_or_else(|| ".".to_string()),
+        );
+    }
+    if trimmed == "~" {
+        return Ok(
+            dirs::home_dir()
+                .map(|home| home.to_string_lossy().to_string())
+                .unwrap_or_else(|| ".".to_string()),
+        );
+    }
+    Ok(trimmed.to_string())
 }
