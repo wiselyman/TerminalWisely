@@ -69,6 +69,10 @@ export interface TerminalOutputPayload {
   data: string;
 }
 
+export interface SessionLifecyclePayload {
+  session_id: string;
+}
+
 export interface TransferProgressPayload {
   transfer_id: string;
   session_id: string;

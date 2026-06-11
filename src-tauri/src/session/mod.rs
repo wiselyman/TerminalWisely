@@ -123,6 +123,23 @@ impl SessionManager {
         Ok(())
     }
 
+    pub async fn reconnect_ssh(
+        &self,
+        app: AppHandle,
+        session_id: &str,
+        cols: u16,
+        rows: u16,
+    ) -> AppResult<()> {
+        let mut sessions = self.sessions.lock().await;
+        let session = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Ssh(s) => s.reconnect(app, cols, rows).await,
+            SessionHandle::Local(_) => Err(AppError::msg("本地终端不支持重新连接")),
+        }
+    }
+
     pub async fn list(&self) -> Vec<SessionInfo> {
         self.sessions
             .lock()

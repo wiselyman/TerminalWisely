@@ -95,6 +95,20 @@ pub async fn resize_terminal(
 }
 
 #[tauri::command]
+pub async fn reconnect_ssh_session(
+    app: AppHandle,
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions
+        .reconnect_ssh(app, &session_id, cols, rows)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn close_session(
     session_id: String,
     sessions: State<'_, SessionManager>,

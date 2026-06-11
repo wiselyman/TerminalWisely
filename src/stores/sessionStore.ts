@@ -56,6 +56,7 @@ interface SessionState {
   deviceHistory: DeviceRecord[];
   activeTransfers: Record<string, TransferProgressPayload>;
   statusMessage: string | null;
+  disconnectedSessionIds: Set<string>;
   sendTo: SendToRequest | null;
   openSendTo: (request: SendToRequest) => void;
   closeSendTo: () => void;
@@ -70,6 +71,9 @@ interface SessionState {
   promoteConnectingTab: (pendingId: string, session: SessionInfo) => void;
   removeConnectingTab: (pendingId: string) => void;
   closeTab: (id: string) => Promise<void>;
+  closeOtherTabs: (id: string) => Promise<void>;
+  closeTabsToLeft: (id: string) => Promise<void>;
+  closeTabsToRight: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
   reorderTabs: (
     dragId: string,
@@ -116,6 +120,13 @@ interface SessionState {
   removeTransfer: (transferId: string) => void;
   cancelTransfer: (transferId: string) => Promise<void>;
   setStatusMessage: (message: string | null) => void;
+  setSessionDisconnected: (sessionId: string) => void;
+  clearSessionDisconnected: (sessionId: string) => void;
+  reconnectSession: (
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ) => Promise<void>;
 }
 
 function mergeSessionOs(
@@ -141,6 +152,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   deviceHistory: [],
   activeTransfers: {},
   statusMessage: null,
+  disconnectedSessionIds: new Set<string>(),
   sendTo: null,
 
   addTab: (info) => {
@@ -218,11 +230,43 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             ? tabs[tabs.length - 1].id
             : null
           : state.activeTabId;
+      const disconnectedSessionIds = new Set(state.disconnectedSessionIds);
+      disconnectedSessionIds.delete(id);
       return {
         tabs: tabs.map((tab) => ({ ...tab, active: tab.id === activeTabId })),
         activeTabId,
+        disconnectedSessionIds,
       };
     });
+  },
+
+  closeOtherTabs: async (id) => {
+    const ids = get()
+      .tabs.filter((tab) => tab.id !== id)
+      .map((tab) => tab.id);
+    for (const tabId of ids) {
+      await get().closeTab(tabId);
+    }
+  },
+
+  closeTabsToLeft: async (id) => {
+    const tabs = get().tabs;
+    const index = tabs.findIndex((tab) => tab.id === id);
+    if (index <= 0) return;
+    const ids = tabs.slice(0, index).map((tab) => tab.id);
+    for (const tabId of ids) {
+      await get().closeTab(tabId);
+    }
+  },
+
+  closeTabsToRight: async (id) => {
+    const tabs = get().tabs;
+    const index = tabs.findIndex((tab) => tab.id === id);
+    if (index < 0 || index >= tabs.length - 1) return;
+    const ids = tabs.slice(index + 1).map((tab) => tab.id);
+    for (const tabId of ids) {
+      await get().closeTab(tabId);
+    }
   },
 
   setActiveTab: (id) => {
@@ -425,6 +469,31 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   setStatusMessage: (message) => set({ statusMessage: message }),
+
+  setSessionDisconnected: (sessionId) =>
+    set((state) => {
+      if (state.disconnectedSessionIds.has(sessionId)) return state;
+      const disconnectedSessionIds = new Set(state.disconnectedSessionIds);
+      disconnectedSessionIds.add(sessionId);
+      return { disconnectedSessionIds };
+    }),
+
+  clearSessionDisconnected: (sessionId) =>
+    set((state) => {
+      if (!state.disconnectedSessionIds.has(sessionId)) return state;
+      const disconnectedSessionIds = new Set(state.disconnectedSessionIds);
+      disconnectedSessionIds.delete(sessionId);
+      return { disconnectedSessionIds };
+    }),
+
+  reconnectSession: async (sessionId, cols, rows) => {
+    try {
+      await invoke("reconnect_ssh_session", { sessionId, cols, rows });
+      get().clearSessionDisconnected(sessionId);
+    } catch (err) {
+      useToastStore.getState().pushToast(formatConnectError(err), false);
+    }
+  },
 
   openSendTo: (request) => set({ sendTo: request }),
   closeSendTo: () => set({ sendTo: null }),

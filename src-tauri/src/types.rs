@@ -29,6 +29,11 @@ pub struct TerminalOutputPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionLifecyclePayload {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferProgressPayload {
     pub transfer_id: String,
     pub session_id: String,

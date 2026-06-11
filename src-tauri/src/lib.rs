@@ -47,6 +47,7 @@ pub fn run() {
             commands::create_ssh_session,
             commands::terminal_input,
             commands::resize_terminal,
+            commands::reconnect_ssh_session,
             commands::close_session,
             commands::list_sessions,
             commands::upload_files,

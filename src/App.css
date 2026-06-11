@@ -1035,6 +1035,34 @@ body.tab-reordering .terminal-drop-overlay {
   font-weight: 600;
 }
 
+.tab-context-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+}
+
+.tab-context-menu-item {
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #e6edf3;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-context-menu-item:hover:not(:disabled) {
+  background: #21262d;
+}
+
+.tab-context-menu-item:disabled {
+  color: #484f58;
+  cursor: default;
+}
+
 .tab-shortcut-empty {
   margin: 0 4px 8px;
   color: #8b949e;

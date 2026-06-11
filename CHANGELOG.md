@@ -4,6 +4,18 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.1] - 2026-06-08
+
+### Added
+- SSH 断开后按 Enter 重新连接：提示「按 Enter 重新连接」，无需关闭页签
+- 页签右键菜单：关闭 / 关闭其他 / 关闭左侧 / 关闭右侧
+- 后端 `reconnect_ssh_session` 命令与 `session-disconnected` 事件
+
+### Changed
+- 上传权限失败时给出更明确的 SFTP 写入权限说明
+
+> 归档说明见 [`release-notes/v0.5.1.md`](./release-notes/v0.5.1.md)
+
 ## [0.5.0] - 2026-06-08
 
 ### Added

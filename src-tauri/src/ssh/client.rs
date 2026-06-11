@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use std::io::Cursor;
 
@@ -15,7 +16,8 @@ use crate::error::{AppError, AppResult};
 use crate::session::{expand_path, SessionManager};
 use crate::ssh::{probe, sftp};
 use crate::types::{
-    DownloadFileRequest, SessionInfo, SessionKind, SshConnectRequest, TerminalOutputPayload,
+    DownloadFileRequest, SessionInfo, SessionKind, SessionLifecyclePayload, SshConnectRequest,
+    TerminalOutputPayload,
     TransferCompletePayload, TransferProgressPayload, UploadFileResult, UploadFilesRequest,
 };
 use crate::types::{AuthMethod, InsertLocalPathsRequest};
@@ -38,10 +40,12 @@ pub struct SshSession {
     info: SessionInfo,
     connect_request: SshConnectRequest,
     handle: Arc<Mutex<client::Handle<ClientHandler>>>,
+    remote_home: String,
     remote_cwd: Arc<Mutex<String>>,
     input_tx: mpsc::UnboundedSender<Vec<u8>>,
     resize_tx: mpsc::UnboundedSender<(u16, u16)>,
     shutdown_tx: watch::Sender<bool>,
+    shell_dead: Arc<AtomicBool>,
 }
 
 /// Short-lived SSH connection used only for file transfer (not shared with the shell).
@@ -220,69 +224,131 @@ impl SshSession {
         let remote_home = sftp::resolve_remote_home(&handle).await?;
         let remote_cwd = Arc::new(Mutex::new(remote_home.clone()));
         let handle = Arc::new(Mutex::new(handle));
+        let shell_dead = Arc::new(AtomicBool::new(false));
+
+        let mut session = Self {
+            info: SessionInfo {
+                id: id.clone(),
+                title: request
+                    .session_title
+                    .as_ref()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("{}@{}", request.username, request.host)),
+                kind: SessionKind::Ssh,
+                remote_home: Some(remote_home.clone()),
+                server_id: Some(format!(
+                    "{}@{}:{}",
+                    request.username, request.host, request.port
+                )),
+                os_id: os_profile.as_ref().map(|os| os.os_id.clone()),
+                os_name: os_profile.as_ref().and_then(|os| os.os_name.clone()),
+            },
+            connect_request: request,
+            handle: handle.clone(),
+            remote_home: remote_home.clone(),
+            remote_cwd: remote_cwd.clone(),
+            input_tx: mpsc::unbounded_channel().0, // placeholder, replaced by spawn_shell_loop
+            resize_tx: mpsc::unbounded_channel().0,
+            shutdown_tx: watch::channel(false).0,
+            shell_dead: shell_dead.clone(),
+        };
+
+        session.spawn_shell_loop(app, id, handle, remote_home, remote_cwd, shell_dead, cols, rows);
+
+        Ok((session, os_profile))
+    }
+
+    fn spawn_shell_loop(
+        &mut self,
+        app: AppHandle,
+        session_id: String,
+        handle: Arc<Mutex<client::Handle<ClientHandler>>>,
+        remote_home: String,
+        remote_cwd: Arc<Mutex<String>>,
+        shell_dead: Arc<AtomicBool>,
+        cols: u16,
+        rows: u16,
+    ) {
+        let _ = self.shutdown_tx.send(true);
 
         let (input_tx, input_rx) = mpsc::unbounded_channel();
         let (resize_tx, resize_rx) = mpsc::unbounded_channel();
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
+        self.input_tx = input_tx;
+        self.resize_tx = resize_tx;
+        self.shutdown_tx = shutdown_tx;
+        self.shell_dead.store(false, Ordering::SeqCst);
+
         let app_clone = app.clone();
-        let session_id = id.clone();
-        let handle_clone = handle.clone();
-        let remote_home_for_shell = remote_home.clone();
-        let cwd_clone = remote_cwd.clone();
+        let shutdown_done = shutdown_rx.clone();
 
         tokio::spawn(async move {
-            if let Err(err) = run_shell_loop(
-                app_clone,
-                session_id,
-                handle_clone,
-                remote_home_for_shell,
-                cwd_clone,
+            let result = run_shell_loop(
+                app_clone.clone(),
+                session_id.clone(),
+                handle,
+                remote_home,
+                remote_cwd,
                 input_rx,
                 resize_rx,
                 shutdown_rx,
                 cols,
                 rows,
             )
-            .await
-            {
+            .await;
+
+            if *shutdown_done.borrow() {
+                return;
+            }
+
+            shell_dead.store(true, Ordering::SeqCst);
+            let _ = app_clone.emit(
+                "session-disconnected",
+                SessionLifecyclePayload {
+                    session_id: session_id.clone(),
+                },
+            );
+            if let Err(err) = result {
                 log::error!("SSH shell loop ended: {err}");
             }
         });
+    }
 
-        let title = request
-            .session_title
-            .as_ref()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| format!("{}@{}", request.username, request.host));
-        let server_id = format!(
-            "{}@{}:{}",
-            request.username, request.host, request.port
+    pub async fn reconnect(&mut self, app: AppHandle, cols: u16, rows: u16) -> AppResult<()> {
+        SessionManager::emit_terminal_message(
+            &app,
+            &self.info.id,
+            "正在重新连接…",
         );
-        let info = SessionInfo {
-            id,
-            title,
-            kind: SessionKind::Ssh,
-            remote_home: Some(remote_home.clone()),
-            server_id: Some(server_id),
-            os_id: os_profile.as_ref().map(|os| os.os_id.clone()),
-            os_name: os_profile.as_ref().and_then(|os| os.os_name.clone()),
-        };
 
-        Ok((
-            Self {
-                info,
-                connect_request: request,
-                handle,
-                remote_cwd,
-                input_tx,
-                resize_tx,
-                shutdown_tx,
-            },
-            os_profile,
-        ))
+        let config = ssh_client_config();
+        let mut handle = client::connect(
+            config,
+            (self.connect_request.host.as_str(), self.connect_request.port),
+            ClientHandler,
+        )
+        .await?;
+        authenticate_handle(&mut handle, &self.connect_request).await?;
+        *self.handle.lock().await = handle;
+
+        self.spawn_shell_loop(
+            app,
+            self.info.id.clone(),
+            self.handle.clone(),
+            self.remote_home.clone(),
+            self.remote_cwd.clone(),
+            self.shell_dead.clone(),
+            cols,
+            rows,
+        );
+        Ok(())
+    }
+
+    pub fn is_shell_dead(&self) -> bool {
+        self.shell_dead.load(Ordering::SeqCst)
     }
 
     pub fn info(&self) -> SessionInfo {
@@ -316,9 +382,12 @@ impl SshSession {
     }
 
     pub fn write_input(&self, data: &str) -> AppResult<()> {
+        if self.shell_dead.load(Ordering::SeqCst) {
+            return Err(AppError::msg("SSH 连接已断开。按 Enter 重新连接。"));
+        }
         self.input_tx
             .send(data.as_bytes().to_vec())
-            .map_err(|_| AppError::msg("终端连接已断开，请关闭此标签页后重新连接"))
+            .map_err(|_| AppError::msg("SSH 连接已断开。按 Enter 重新连接。"))
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> AppResult<()> {
@@ -459,7 +528,12 @@ impl SshSessionSnapshot {
                     let _ = sftp::remove_remote_file(&handle, &remote_path).await;
                     return Err(err);
                 }
-                Err(err) => return Err(err),
+            Err(err) => {
+                return Err(AppError::msg(format!(
+                    "无法上传到 {}：{}",
+                    remote_path, err
+                )));
+            }
             }
 
             results.push(UploadFileResult {
@@ -634,7 +708,7 @@ async fn run_shell_loop(
                 crate::session::SessionManager::emit_terminal_message(
                     &app,
                     &session_id,
-                    "SSH 连接已断开，请关闭此标签页后重新连接。",
+                    "SSH 连接已断开。按 Enter 重新连接。",
                 );
                 break;
             }

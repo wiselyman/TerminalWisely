@@ -1,6 +1,11 @@
 # TerminalWisely Roadmap
 
-## v0.5.0（当前）
+## v0.5.1（当前）
+
+- SSH 断开后按 Enter 重新连接，无需关闭页签
+- 页签右键菜单：关闭 / 关闭其他 / 关闭左侧 / 关闭右侧
+
+## v0.5.0
 
 - Find：当前页签工作目录 `find` 文件搜索（SSH / 本地 Unix）
 - 服务器资源：CPU/内存/磁盘/网络/系统信息监控（gauge + sparkline）

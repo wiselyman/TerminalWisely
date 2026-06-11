@@ -32,6 +32,7 @@ import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload } from "./types";
 import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
+import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
 import { TabHomeIcon } from "./components/SidebarIcons";
 import { productIntro } from "./content/productIntro";
@@ -46,6 +47,9 @@ function App() {
     tabs,
     activeTabId,
     closeTab,
+    closeOtherTabs,
+    closeTabsToLeft,
+    closeTabsToRight,
     setActiveTab,
     reorderTabs,
     activeTransfers,
@@ -113,6 +117,11 @@ function App() {
   const [tabReorderTarget, setTabReorderTarget] = useState<{
     id: string;
     position: "before" | "after";
+  } | null>(null);
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    tabId: string;
+    x: number;
+    y: number;
   } | null>(null);
   const tabReorderCleanupRef = useRef<(() => void) | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -354,6 +363,16 @@ function App() {
                 tabDropTargetId === tab.id ? tabDropKind ?? undefined : undefined
               }
               onClick={() => setActiveTab(tab.id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setActiveTab(tab.id);
+                setTabContextMenu({
+                  tabId: tab.id,
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
               onMouseDown={(event) => startTabReorder(tab.id, event)}
               onDragOver={(event) => {
                 if (tabReorderDragId) return;
@@ -494,6 +513,20 @@ function App() {
             );
           })}
         </div>
+
+        {tabContextMenu ? (
+          <TabContextMenu
+            x={tabContextMenu.x}
+            y={tabContextMenu.y}
+            tabIndex={tabs.findIndex((tab) => tab.id === tabContextMenu.tabId)}
+            tabCount={tabs.length}
+            onClose={() => setTabContextMenu(null)}
+            onCloseTab={() => void closeTab(tabContextMenu.tabId)}
+            onCloseOthers={() => void closeOtherTabs(tabContextMenu.tabId)}
+            onCloseLeft={() => void closeTabsToLeft(tabContextMenu.tabId)}
+            onCloseRight={() => void closeTabsToRight(tabContextMenu.tabId)}
+          />
+        ) : null}
 
         <div
           className={`workspace-split${previewOpen ? " workspace-split-preview-open" : ""}`}

@@ -6,6 +6,7 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   SessionKind,
+  SessionLifecyclePayload,
   TerminalOutputPayload,
   TransferCompletePayload,
 } from "../types";
@@ -33,6 +34,7 @@ import { usePreviewStore } from "../stores/previewStore";
 import { isTabReordering } from "../lib/tabPointerReorder";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { createTransferId } from "../lib/transferId";
+import { formatTransferError } from "../lib/transferError";
 import { useToastStore } from "../stores/toastStore";
 import { TerminalStatusOverlay } from "./TerminalStatusOverlay";
 import "@xterm/xterm/css/xterm.css";
@@ -74,6 +76,7 @@ export function TerminalView({
   const setStatusMessage = useSessionStore((s) => s.setStatusMessage);
   const openSendTo = useSessionStore((s) => s.openSendTo);
   const startRemoteTransfer = useSessionStore((s) => s.startRemoteTransfer);
+  const setSessionDisconnected = useSessionStore((s) => s.setSessionDisconnected);
   const openPreview = usePreviewStore((s) => s.openPreview);
   const pushToast = useToastStore((s) => s.pushToast);
   const openPreviewRef = useRef(openPreview);
@@ -448,14 +451,31 @@ export function TerminalView({
 
     const onData = terminal.onData((data) => {
       if (!activeRef.current) return;
+
+      const store = useSessionStore.getState();
+      if (store.disconnectedSessionIds.has(sessionId) && kind === "ssh") {
+        if (data === "\r" || data === "\n") {
+          const { cols, rows } = lastSizeRef.current;
+          void store.reconnectSession(
+            sessionId,
+            cols > 0 ? cols : 80,
+            rows > 0 ? rows : 24,
+          );
+        }
+        return;
+      }
+
       void invoke("terminal_input", { sessionId, data }).catch((err) => {
         const message = String(err);
         if (
+          message.includes("按 Enter 重新连接") ||
           message.includes("终端连接已断开") ||
           message.includes("channel closed") ||
           message.includes("Session not found")
         ) {
-          pushToast("终端连接已断开，请关闭此标签页后重新连接", false);
+          if (kind === "ssh") {
+            setSessionDisconnected(sessionId);
+          }
         }
       });
     });
@@ -486,7 +506,7 @@ export function TerminalView({
       lastContainerSizeRef.current = { width: 0, height: 0 };
       lastSizeRef.current = { cols: 0, rows: 0 };
     };
-  }, [isConnecting, kind, markFirstOutput, sessionId, syncSize]);
+  }, [isConnecting, kind, markFirstOutput, sessionId, setSessionDisconnected, syncSize]);
 
   useEffect(() => {
     if (isConnecting || !active) return;
@@ -525,7 +545,7 @@ export function TerminalView({
     let unlisteners: UnlistenFn[] = [];
 
     void (async () => {
-      const [output, complete] = await Promise.all([
+      const [output, complete, disconnected] = await Promise.all([
         listenSafely<TerminalOutputPayload>("terminal-output", (payload) => {
           if (payload.session_id !== sessionId) return;
           const terminal = terminalRef.current;
@@ -553,22 +573,28 @@ export function TerminalView({
             scheduleHighlight(payload.filenames);
           }
         }),
+        listenSafely<SessionLifecyclePayload>("session-disconnected", (payload) => {
+          if (payload.session_id !== sessionId) return;
+          if (kind !== "ssh") return;
+          setSessionDisconnected(sessionId);
+        }),
       ]);
 
       if (disposed) {
         output();
         complete();
+        disconnected();
         return;
       }
 
-      unlisteners = [output, complete];
+      unlisteners = [output, complete, disconnected];
     })();
 
     return () => {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [isConnecting, markFirstOutput, sessionId, scheduleHighlight]);
+  }, [isConnecting, kind, markFirstOutput, sessionId, scheduleHighlight, setSessionDisconnected]);
 
   useEffect(() => {
     if (isConnecting || !active) return;
@@ -612,7 +638,7 @@ export function TerminalView({
           pendingFilenamesRef.current = results.map((item) => item.filename);
           scheduleHighlight(pendingFilenamesRef.current);
         } catch (err) {
-          pushToast(String(err), false);
+          pushToast(formatTransferError(err), false);
         }
       } else {
         try {
@@ -672,7 +698,7 @@ export function TerminalView({
           pendingFilenamesRef.current = results.map((item) => item.filename);
           scheduleHighlight(pendingFilenamesRef.current);
         } catch (err) {
-          pushToast(String(err), false);
+          pushToast(formatTransferError(err), false);
         }
       } else {
         try {
