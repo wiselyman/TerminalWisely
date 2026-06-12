@@ -141,6 +141,7 @@ export interface PreviewOpenResult {
 export interface ProcessEntry {
   pid: number;
   name: string;
+  command?: string | null;
   cpu_percent: number;
   memory_bytes: number;
   ports: number[];

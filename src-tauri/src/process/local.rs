@@ -24,6 +24,7 @@ pub fn list_processes() -> AppResult<ProcessListResult> {
             ProcessEntry {
                 pid: pid_u32,
                 name: process.name().to_string_lossy().into_owned(),
+                command: None,
                 cpu_percent: process.cpu_usage(),
                 memory_bytes: process.memory(),
                 ports: port_map.get(&pid_u32).cloned().unwrap_or_default(),

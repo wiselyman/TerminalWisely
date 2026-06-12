@@ -4,6 +4,15 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.2] - 2026-06-12
+
+### Fixed
+- SFTP 上传大文件约 9% 卡住：流水线读写、512KB 分块、降低并发写
+- `ll` 输出误将 `root`、日期等列识别为文件路径
+- SSH 任务管理器端口：`ss` 无 pid、IPv6 地址、vLLM 父子进程等场景下的端口显示与过滤
+
+> 归档说明见 [`release-notes/v0.5.2.md`](./release-notes/v0.5.2.md)
+
 ## [0.5.1] - 2026-06-08
 
 ### Added

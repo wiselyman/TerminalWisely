@@ -17,15 +17,15 @@ use crate::ssh::client::ClientHandler;
 use crate::transfer::{check_cancel, CANCELLED_MSG, ThrottledProgress, ThrottledProgressBytes};
 
 use crate::transfer::CANCEL_POLL_MS;
-const SFTP_CHUNK_SIZE: usize = 2 * 1024 * 1024;
+const SFTP_CHUNK_SIZE: usize = 512 * 1024;
 const SFTP_PIPELINE_DEPTH: usize = 4;
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(120);
 
 fn transfer_sftp_config() -> SftpConfig {
     SftpConfig {
-        max_packet_len: 1024 * 1024,
-        max_concurrent_writes: 16,
-        request_timeout_secs: 30,
+        max_packet_len: 256 * 1024,
+        max_concurrent_writes: 4,
+        request_timeout_secs: 60,
     }
 }
 
@@ -192,27 +192,53 @@ where
         .await
         .map_err(AppError::from)?;
 
-    let mut buffer = vec![0u8; SFTP_CHUNK_SIZE];
-    let mut buf_b = vec![0u8; SFTP_CHUNK_SIZE];
-    let mut pending_len = read_chunk(&mut local_file, &mut buffer, cancel.as_deref()).await?;
-    let mut read_into_primary = false;
+    let (chunk_tx, mut chunk_rx) = mpsc::channel::<Vec<u8>>(SFTP_PIPELINE_DEPTH);
+    let read_cancel = cancel.clone();
 
-    while pending_len > 0 {
-        let (write_slice, read_buf) = if read_into_primary {
-            (&buf_b[..pending_len], &mut buffer)
-        } else {
-            (&buffer[..pending_len], &mut buf_b)
-        };
+    let read_task = tokio::spawn(async move {
+        let mut read_result = Ok(());
+        loop {
+            let chunk = match async {
+                check_cancel(read_cancel.as_deref())?;
+                let mut buf = vec![0u8; SFTP_CHUNK_SIZE];
+                let n = read_chunk(&mut local_file, &mut buf, read_cancel.as_deref()).await?;
+                if n == 0 {
+                    return Ok(None);
+                }
+                buf.truncate(n);
+                Ok(Some(buf))
+            }
+            .await
+            {
+                Ok(None) => break,
+                Ok(Some(buf)) => buf,
+                Err(err) => {
+                    read_result = Err(err);
+                    break;
+                }
+            };
 
-        let (next_len, write_res) = tokio::join!(
-            read_chunk(&mut local_file, read_buf, cancel.as_deref()),
-            remote_file.write_all(write_slice)
-        );
-        write_res.map_err(AppError::from)?;
-        transferred += pending_len as u64;
+            if chunk_tx.send(chunk).await.is_err() {
+                break;
+            }
+        }
+        read_result
+    });
+
+    while let Some(chunk) = chunk_rx.recv().await {
+        check_cancel(cancel.as_deref())?;
+        remote_file
+            .write_all(&chunk)
+            .await
+            .map_err(AppError::from)?;
+        transferred += chunk.len() as u64;
         progress.report(transferred.min(total), false);
-        pending_len = next_len?;
-        read_into_primary = !read_into_primary;
+    }
+
+    match read_task.await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => return Err(err),
+        Err(err) => return Err(AppError::msg(err.to_string())),
     }
 
     progress.report(transferred.min(total), true);

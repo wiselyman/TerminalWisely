@@ -245,7 +245,7 @@ export function TaskManagerTable({
         <tbody>
           {sorted.map((process) => (
             <tr key={process.pid}>
-              <td className="task-manager-cell-truncate task-manager-col-name" title={process.name}>
+              <td className="task-manager-cell-truncate task-manager-col-name" title={process.command ?? process.name}>
                 {process.name}
               </td>
               <td

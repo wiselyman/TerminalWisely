@@ -266,14 +266,21 @@ export function findRemotePathMatches(text: string): RemotePathMatch[] {
   if (isNonLinkableLine(plain)) {
     return [];
   }
+
+  const lsLongMatches = parseLsLongLine(plain);
+  if (lsLongMatches.length > 0) {
+    const matches: RemotePathMatch[] = [];
+    const seen = new Set<string>();
+    for (const match of lsLongMatches) {
+      pushMatch(matches, seen, match.path, match.start, match.end);
+    }
+    return matches;
+  }
+
   const matches: RemotePathMatch[] = [];
   const seen = new Set<string>();
   const onPromptLine = isLikelyShellPromptLine(plain);
   const promptEnd = onPromptLine ? getPromptEndIndex(plain) : null;
-
-  for (const match of parseLsLongLine(plain)) {
-    pushMatch(matches, seen, match.path, match.start, match.end);
-  }
 
   for (const token of tokenizeLine(plain)) {
     if (promptEnd !== null && token.start < promptEnd) {

@@ -15,14 +15,17 @@ function matchesFilter(process: ProcessEntry, query: string) {
   if (!trimmed) return true;
 
   const lower = trimmed.toLowerCase();
+  const portQuery = trimmed.replace(/^:/, "");
+  if (/^\d+$/.test(portQuery)) {
+    return process.ports.includes(Number(portQuery));
+  }
+
   if (process.name.toLowerCase().includes(lower)) {
     return true;
   }
 
-  const portQuery = trimmed.replace(/^:/, "");
-  if (/^\d+$/.test(portQuery)) {
-    const port = Number(portQuery);
-    return process.ports.includes(port);
+  if (process.command?.toLowerCase().includes(lower)) {
+    return true;
   }
 
   return false;

@@ -245,6 +245,8 @@ pub struct TransferRemoteRequest {
 pub struct ProcessEntry {
     pub pid: u32,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
     pub cpu_percent: f32,
     pub memory_bytes: u64,
     pub ports: Vec<u16>,
