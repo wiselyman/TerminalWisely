@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
@@ -158,6 +159,17 @@ impl SessionManager {
             SessionHandle::Local(_) => SessionKind::Local,
             SessionHandle::Ssh(_) => SessionKind::Ssh,
         })
+    }
+
+    pub async fn local_path_context(&self, session_id: &str) -> AppResult<(String, String)> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Local(s) => Ok((s.home_dir_path(), s.current_cwd_path())),
+            SessionHandle::Ssh(_) => Err(AppError::msg("Not a local session")),
+        }
     }
 
     pub async fn ssh_snapshot(&self, session_id: &str) -> AppResult<crate::ssh::client::SshSessionSnapshot> {
@@ -350,7 +362,7 @@ impl SessionManager {
             .get(session_id)
             .ok_or_else(|| AppError::msg("Session not found"))?;
         match session {
-            SessionHandle::Local(_) => Ok("~".to_string()),
+            SessionHandle::Local(s) => Ok(s.current_cwd_display()),
             SessionHandle::Ssh(s) => Ok(s.current_remote_cwd().await),
         }
     }
@@ -381,7 +393,25 @@ impl SessionManager {
             return crate::find::find_remote_files(ssh.handle(), &start_path, normalized).await;
         }
 
-        let start_path = resolve_local_find_start(&normalized.path)?;
+        let local_cwd = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(&normalized.session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(s) => s.current_cwd_path(),
+                SessionHandle::Ssh(_) => {
+                    return Err(AppError::msg("Not a local session"));
+                }
+            }
+        };
+
+        let start_path = if normalized.path.trim().is_empty() || normalized.path == "." {
+            local_cwd
+        } else {
+            resolve_local_find_start(&normalized.path)?
+        };
+
         let normalized_for_blocking = normalized.clone();
         tokio::task::spawn_blocking(move || {
             crate::find::find_local_files(&start_path, normalized_for_blocking)
@@ -423,24 +453,65 @@ impl SessionManager {
             return Err(AppError::msg("源和目标不能是同一个会话"));
         }
 
-        let from_snap = {
-            let sessions = self.sessions.lock().await;
-            let from = sessions
-                .get(&request.from_session_id)
-                .ok_or_else(|| AppError::msg("源会话不存在"))?;
-            match from {
-                SessionHandle::Ssh(s) => s.snapshot(),
-                _ => return Err(AppError::msg("跨服务器传输仅支持 SSH 会话")),
+        enum TransferSource {
+            Local {
+                path: PathBuf,
+                size: u64,
+            },
+            Remote {
+                from_request: SshConnectRequest,
+                from_path: String,
+                size: u64,
+            },
+        }
+
+        let source = {
+            let is_local = {
+                let sessions = self.sessions.lock().await;
+                let from = sessions
+                    .get(&request.from_session_id)
+                    .ok_or_else(|| AppError::msg("源会话不存在"))?;
+                matches!(from, SessionHandle::Local(_))
+            };
+
+            if is_local {
+                let (home, cwd) = self.local_path_context(&request.from_session_id).await?;
+                let resolved =
+                    crate::shell::resolve_local_path(&request.remote_path, &home, &cwd)?;
+                let metadata = tokio::fs::metadata(&resolved).await?;
+                if metadata.is_dir() {
+                    return Err(AppError::msg("请选择文件，不能发送目录"));
+                }
+                TransferSource::Local {
+                    path: resolved,
+                    size: metadata.len(),
+                }
+            } else {
+                let from_snap = self.ssh_snapshot(&request.from_session_id).await?;
+                let from_path = from_snap.resolve_remote_path(&request.remote_path).await?;
+                let size = crate::ssh::sftp::remote_file_size(&from_snap.handle(), &from_path)
+                    .await
+                    .unwrap_or(0);
+                TransferSource::Remote {
+                    from_request: from_snap.connect_request().clone(),
+                    from_path,
+                    size,
+                }
             }
         };
 
-        let from_path = from_snap.resolve_remote_path(&request.remote_path).await?;
-        let filename = std::path::Path::new(&from_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| AppError::msg("无效的文件名"))?
-            .to_string();
-        let from_request = from_snap.connect_request().clone();
+        let filename = match &source {
+            TransferSource::Local { path, .. } => path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| AppError::msg("无效的文件名"))?
+                .to_string(),
+            TransferSource::Remote { from_path, .. } => std::path::Path::new(from_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| AppError::msg("无效的文件名"))?
+                .to_string(),
+        };
 
         let to_snap = {
             let sessions = self.sessions.lock().await;
@@ -449,7 +520,7 @@ impl SessionManager {
                 .ok_or_else(|| AppError::msg("目标会话不存在"))?;
             match to {
                 SessionHandle::Ssh(s) => s.snapshot(),
-                _ => return Err(AppError::msg("跨服务器传输仅支持 SSH 会话")),
+                _ => return Err(AppError::msg("目标会话必须是 SSH 连接")),
             }
         };
 
@@ -461,9 +532,9 @@ impl SessionManager {
         let to_request = to_snap.connect_request().clone();
         let to_session_id = to_snap.session_id();
 
-        let file_size = crate::ssh::sftp::remote_file_size(&from_snap.handle(), &from_path)
-            .await
-            .unwrap_or(0);
+        let file_size = match &source {
+            TransferSource::Local { size, .. } | TransferSource::Remote { size, .. } => *size,
+        };
 
         let transfer_id =
             TransferRegistry::resolve_transfer_id(request.transfer_id.clone());
@@ -491,39 +562,70 @@ impl SessionManager {
 
         tokio::spawn(async move {
             let transfer_result = async {
-                let from_conn = crate::ssh::client::open_transfer_connection(
-                    &from_request,
-                    Some(cancel.as_ref()),
-                )
-                .await?;
                 let to_conn = crate::ssh::client::open_transfer_connection(
                     &to_request,
                     Some(cancel.as_ref()),
                 )
                 .await?;
 
-                crate::ssh::stream_transfer::transfer_remote_file(
-                    &from_conn.handle(),
-                    &to_conn.handle(),
-                    &from_path,
-                    &to_path,
-                    file_size,
-                    Some(cancel),
-                    move |transferred, total| {
-                        let _ = app_progress.emit(
-                            "transfer-progress",
-                            TransferProgressPayload {
-                                transfer_id: progress_transfer_id.clone(),
-                                session_id: progress_session_id.clone(),
-                                filename: fname.clone(),
-                                transferred,
-                                total,
-                                direction: "send".to_string(),
+                match source {
+                    TransferSource::Local { path, size } => {
+                        sftp::upload_file(
+                            &to_conn.handle(),
+                            &path,
+                            &to_path,
+                            Some(cancel),
+                            move |transferred| {
+                                let _ = app_progress.emit(
+                                    "transfer-progress",
+                                    TransferProgressPayload {
+                                        transfer_id: progress_transfer_id.clone(),
+                                        session_id: progress_session_id.clone(),
+                                        filename: fname.clone(),
+                                        transferred,
+                                        total: size,
+                                        direction: "send".to_string(),
+                                    },
+                                );
                             },
-                        );
-                    },
-                )
-                .await
+                        )
+                        .await
+                    }
+                    TransferSource::Remote {
+                        from_request,
+                        from_path,
+                        size,
+                    } => {
+                        let from_conn = crate::ssh::client::open_transfer_connection(
+                            &from_request,
+                            Some(cancel.as_ref()),
+                        )
+                        .await?;
+
+                        crate::ssh::stream_transfer::transfer_remote_file(
+                            &from_conn.handle(),
+                            &to_conn.handle(),
+                            &from_path,
+                            &to_path,
+                            size,
+                            Some(cancel),
+                            move |transferred, total| {
+                                let _ = app_progress.emit(
+                                    "transfer-progress",
+                                    TransferProgressPayload {
+                                        transfer_id: progress_transfer_id.clone(),
+                                        session_id: progress_session_id.clone(),
+                                        filename: fname.clone(),
+                                        transferred,
+                                        total,
+                                        direction: "send".to_string(),
+                                    },
+                                );
+                            },
+                        )
+                        .await
+                    }
+                }
             }
             .await;
 

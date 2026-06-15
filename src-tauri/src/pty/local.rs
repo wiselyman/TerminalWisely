@@ -1,10 +1,12 @@
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use tauri::{AppHandle, Emitter};
 
 use crate::error::{AppError, AppResult};
+use crate::shell;
 use crate::types::{SessionInfo, SessionKind, TerminalOutputPayload};
 
 pub struct LocalSession {
@@ -12,6 +14,8 @@ pub struct LocalSession {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    home_dir: String,
+    local_cwd: Arc<Mutex<String>>,
 }
 
 impl LocalSession {
@@ -27,19 +31,26 @@ impl LocalSession {
             .map_err(|e| AppError::msg(e.to_string()))?;
 
         let shell = default_shell();
+        let home_dir = dirs::home_dir()
+            .map(|home| home.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string());
         let mut cmd = CommandBuilder::new(&shell);
-        if let Some(home) = dirs::home_dir() {
-            cmd.cwd(home);
-        }
+        cmd.cwd(&home_dir);
 
-        #[cfg(windows)]
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+
+        #[cfg(target_os = "macos")]
         {
-            cmd.env("TERM", "xterm-256color");
+            cmd.env("CLICOLOR", "1");
+            cmd.env(
+                "LSCOLORS",
+                "ExGxBxDxCxEgEdxbxgxcxd",
+            );
         }
 
         #[cfg(not(windows))]
         {
-            cmd.env("TERM", "xterm-256color");
             if shell.ends_with("bash") || shell.ends_with("zsh") || shell.ends_with("fish") {
                 cmd.arg("-l");
             }
@@ -78,6 +89,8 @@ impl LocalSession {
             writer: Arc::new(Mutex::new(writer)),
             master: Arc::new(Mutex::new(pair.master)),
             child: Arc::new(Mutex::new(child)),
+            home_dir: home_dir.clone(),
+            local_cwd: Arc::new(Mutex::new(home_dir)),
         })
     }
 
@@ -85,7 +98,28 @@ impl LocalSession {
         self.info.clone()
     }
 
+    pub fn current_cwd_display(&self) -> String {
+        let cwd = self.local_cwd.lock().unwrap();
+        shell::path_for_display(&self.home_dir, &cwd)
+    }
+
+    pub fn current_cwd_path(&self) -> String {
+        self.local_cwd.lock().unwrap().clone()
+    }
+
+    pub fn home_dir_path(&self) -> String {
+        self.home_dir.clone()
+    }
+
+    pub fn resolve_path(&self, path: &str) -> AppResult<PathBuf> {
+        shell::resolve_local_path(path, &self.home_dir, &self.current_cwd_path())
+    }
+
     pub fn write_input(&self, data: &str) -> AppResult<()> {
+        {
+            let mut cwd = self.local_cwd.lock().unwrap();
+            shell::update_cwd_from_input(&mut cwd, &self.home_dir, data);
+        }
         self.writer
             .lock()
             .unwrap()
@@ -99,21 +133,26 @@ impl LocalSession {
             #[cfg(windows)]
             return self.write_input("dir\r");
             #[cfg(not(windows))]
-            return self.write_input("ls -F\r");
+            return self.write_input("ls -G -F\r");
+        }
+
+        {
+            let mut cwd = self.local_cwd.lock().unwrap();
+            shell::apply_cd_target(&mut cwd, &self.home_dir, target);
         }
 
         #[cfg(windows)]
         let quoted = if target == "~" {
             "%USERPROFILE%".to_string()
         } else {
-            crate::shell::shell_cd_argument(target)
+            shell::shell_cd_argument(target)
         };
         #[cfg(not(windows))]
-        let quoted = crate::shell::shell_cd_argument(target);
+        let quoted = shell::shell_cd_argument(target);
         #[cfg(windows)]
         let cmd = format!("cd {quoted}; dir\r");
         #[cfg(not(windows))]
-        let cmd = format!("cd {quoted} && ls -F\r");
+        let cmd = format!("cd {quoted} && ls -G -F\r");
         self.write_input(&cmd)
     }
 
@@ -169,4 +208,3 @@ fn default_shell() -> String {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
     }
 }
-

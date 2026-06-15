@@ -4,6 +4,19 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.5] - 2026-06-15
+
+### Added
+- 本地终端 → SSH 跨会话传文件：Shift+点击路径或 Ctrl/Cmd+拖拽到 SSH 标签，经 SFTP 上传至目标会话
+
+### Changed
+- 本地会话跟踪 cwd；Find、预览、路径点击与 SSH 一致的相对路径解析
+- macOS 本地 Shell：`CLICOLOR=1` 彩色 ls；`ls -l` 支持 `@` / `+` 权限扩展标记
+- 终端可点击路径下划线与悬停样式
+- Find 与预览并排：打开预览时 Find 保持打开并左移，不再互相遮挡
+
+> 归档说明见 [`release-notes/v0.5.5.md`](./release-notes/v0.5.5.md)
+
 ## [0.5.4] - 2026-06-08
 
 ### Changed

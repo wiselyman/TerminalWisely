@@ -1,6 +1,6 @@
 [package]
 name = "terminal-wisely"
-version = "0.5.4"
+version = "0.5.5"
 description = "Cross-platform terminal with SSH and SFTP"
 authors = ["WangYunfei"]
 edition = "2021"

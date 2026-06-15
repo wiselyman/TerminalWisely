@@ -223,7 +223,7 @@ export function TerminalView({
       const screenElement =
         host.querySelector<HTMLElement>(".xterm-screen") ?? host;
 
-      if (kind === "ssh") {
+      if (kind === "ssh" || kind === "local") {
         const handleRemoteMouseDown = (event: MouseEvent) => {
           if (!isRemoteDragModifier(event)) return;
           if (event.button !== 0) return;
@@ -324,7 +324,6 @@ export function TerminalView({
             const links = matches.map(({ path, start, end }) => {
               const { startCol, width } = rangeToColumns(map, line, start, end);
               const resolveClickedPath = () => {
-                if (kind !== "ssh") return path;
                 const getLinePlain = (lineNumber: number) =>
                   getLinePlainText(
                     (n) => terminal.buffer.active.getLine(n - 1),
@@ -346,7 +345,7 @@ export function TerminalView({
                 text: path,
                 decorations: {
                   pointerCursor: true,
-                  underline: false,
+                  underline: true,
                 },
                 activate: (event: MouseEvent, _uri: string) => {
                   const targetPath = resolveClickedPath();
@@ -357,17 +356,17 @@ export function TerminalView({
                     }
                   }
                   if (isShiftClick(event)) {
-                    if (kind !== "ssh") {
-                      return;
-                    }
                     void (async () => {
                       try {
-                        const probe = await invoke<string>("probe_remote_path", {
-                          request: {
-                            session_id: sessionId,
-                            path: targetPath,
+                        const probe = await invoke<string>(
+                          kind === "ssh" ? "probe_remote_path" : "probe_path",
+                          {
+                            request: {
+                              session_id: sessionId,
+                              path: targetPath,
+                            },
                           },
-                        });
+                        );
                         if (probe === "file") {
                           openSendToRef.current({
                             fromSessionId: sessionId,

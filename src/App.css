@@ -1418,6 +1418,12 @@ body.workspace-resizing {
   transition: background 0.15s ease;
 }
 
+.workspace-split-preview-open .preview-panel,
+.workspace-split-preview-open .workspace-resizer {
+  position: relative;
+  z-index: 24995;
+}
+
 .workspace-resizer:hover,
 body.workspace-resizing .workspace-resizer {
   background: #388bfd;
@@ -2123,6 +2129,16 @@ body.workspace-resizing .workspace-resizer {
 
 .xterm .xterm-scrollable-element > .scrollbar {
   display: none !important;
+}
+
+.xterm-link {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--tw-accent, #58a6ff) 70%, transparent);
+  text-underline-offset: 2px;
+}
+
+.xterm-link:hover {
+  text-decoration-color: var(--tw-accent, #58a6ff);
 }
 
 .transfer-panel {
@@ -2856,6 +2872,16 @@ body.task-manager-col-resizing {
 .find-panel-backdrop.open {
   opacity: 1;
   pointer-events: auto;
+}
+
+.find-panel-backdrop.open.find-panel-with-preview {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.find-panel.find-panel-with-preview {
+  right: calc(var(--tool-rail-width, 36px) + var(--preview-width, 420px) + 6px);
+  transition: right 0.2s ease;
 }
 
 .find-panel {

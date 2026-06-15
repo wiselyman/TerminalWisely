@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { PreviewOpenResult } from "../types";
-import { useFindStore } from "./findStore";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import { useToastStore } from "./toastStore";
@@ -74,7 +73,6 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
   setEditedContent: (content) => set({ editedContent: content }),
 
   openPreview: async (sessionId, path) => {
-    useFindStore.getState().close();
     useTaskManagerStore.getState().close();
     useHostStatsStore.getState().close();
 

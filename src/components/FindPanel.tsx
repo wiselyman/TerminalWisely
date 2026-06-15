@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { FindFileEntry } from "../types";
 import { useFindStore } from "../stores/findStore";
 import { usePreviewStore } from "../stores/previewStore";
@@ -24,6 +24,8 @@ function entryLabel(entry: FindFileEntry) {
 export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
   const nameInputRef = useRef<HTMLInputElement>(null);
   const openPreview = usePreviewStore((s) => s.openPreview);
+  const previewOpen = usePreviewStore((s) => s.open);
+  const previewWidth = usePreviewStore((s) => s.width);
   const {
     width,
     setWidth,
@@ -90,10 +92,24 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
       ? "输入文件名模式后搜索，或按 Enter 执行 find"
       : `${entries.length} 条结果${truncated ? "（已截断，最多 500 条）" : ""}`;
 
+  const withPreviewClass = previewOpen ? " find-panel-with-preview" : "";
+
   return (
     <>
-      <div className="find-panel-backdrop open" onClick={close} aria-hidden="true" />
-      <aside className="find-panel open" style={{ width }} aria-hidden={false}>
+      <div
+        className={`find-panel-backdrop open${withPreviewClass}`}
+        onClick={close}
+        aria-hidden="true"
+      />
+      <aside
+        className={`find-panel open${withPreviewClass}`}
+        style={
+          previewOpen
+            ? ({ width, "--preview-width": `${previewWidth}px` } as CSSProperties)
+            : { width }
+        }
+        aria-hidden={false}
+      >
         <div
           className="find-panel-resizer"
           role="separator"

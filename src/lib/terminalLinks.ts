@@ -225,7 +225,7 @@ function isListEntryToken(token: string): boolean {
 
 function parseLsLongLine(plain: string): RemotePathMatch[] {
   const trimmed = plain.trim();
-  if (!/^[dl-][-rwxlpStTDSsNBb?]{9,}/.test(trimmed)) {
+  if (!/^[dl-][-rwxlpStTDSsNBb?]{9}[+@]?/.test(trimmed)) {
     return [];
   }
 

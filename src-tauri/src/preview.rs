@@ -73,7 +73,8 @@ impl PreviewManager {
                 {
                     entry.local_path
                 } else {
-                    resolve_local_path(&entry.source_path)?
+                    let (home, cwd) = sessions.local_path_context(&entry.session_id).await?;
+                    crate::shell::resolve_local_path(&entry.source_path, &home, &cwd)?
                 };
                 tokio::fs::write(&path, bytes).await?;
             }
@@ -174,7 +175,8 @@ impl PreviewManager {
 
         let (resolved, is_dir, total_size) = match kind {
             SessionKind::Local => {
-                let path = resolve_local_path(&request.path)?;
+                let (home, cwd) = sessions.local_path_context(&session_id).await?;
+                let path = crate::shell::resolve_local_path(&request.path, &home, &cwd)?;
                 let metadata = tokio::fs::metadata(&path).await?;
                 (path, metadata.is_dir(), metadata.len())
             }
@@ -326,7 +328,8 @@ pub async fn probe_path(
     let kind = sessions.session_kind(session_id).await?;
     match kind {
         SessionKind::Local => {
-            let resolved = resolve_local_path(path)?;
+            let (home, cwd) = sessions.local_path_context(&session_id).await?;
+            let resolved = crate::shell::resolve_local_path(path, &home, &cwd)?;
             let metadata = tokio::fs::metadata(&resolved).await?;
             if metadata.is_dir() {
                 Ok("directory".to_string())
@@ -398,36 +401,6 @@ fn text_preview_result(
         text_content: Some(text),
         local_cache_path: None,
     }
-}
-
-fn resolve_local_path(path: &str) -> AppResult<PathBuf> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err(AppError::msg("路径为空"));
-    }
-
-    let expanded = if trimmed.starts_with('~') {
-        let home = dirs::home_dir().ok_or_else(|| AppError::msg("无法解析用户目录"))?;
-        if trimmed == "~" {
-            home
-        } else if trimmed.starts_with("~/") || trimmed.starts_with("~\\") {
-            home.join(trimmed.trim_start_matches('~').trim_start_matches(['/', '\\']))
-        } else {
-            PathBuf::from(trimmed)
-        }
-    } else {
-        PathBuf::from(trimmed)
-    };
-
-    if expanded.exists() {
-        return Ok(expanded);
-    }
-
-    if expanded.is_absolute() {
-        return Err(AppError::msg(format!("路径不存在: {}", trimmed)));
-    }
-
-    Err(AppError::msg(format!("路径不存在: {}", trimmed)))
 }
 
 fn path_to_display(path: &Path) -> String {
