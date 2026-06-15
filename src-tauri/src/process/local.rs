@@ -6,9 +6,75 @@ use std::time::Duration;
 use sysinfo::{ProcessesToUpdate, System};
 
 use crate::error::{AppError, AppResult};
-use crate::types::{ProcessEntry, ProcessListResult};
+use crate::types::{ProcessEntry, ProcessListMode, ProcessListResult};
 
-pub fn list_processes() -> AppResult<ProcessListResult> {
+pub fn list_processes(mode: ProcessListMode) -> AppResult<ProcessListResult> {
+    match mode {
+        ProcessListMode::Basic => list_processes_basic(),
+        ProcessListMode::Ports => list_process_ports(),
+        ProcessListMode::Full => list_processes_full(),
+    }
+}
+
+fn is_user_process(name: &str, process: &sysinfo::Process) -> bool {
+    if name.starts_with('[') || name.starts_with("kworker") {
+        return false;
+    }
+    process
+        .cmd()
+        .first()
+        .is_none_or(|arg| !arg.to_string_lossy().starts_with('['))
+}
+
+fn list_processes_basic() -> AppResult<ProcessListResult> {
+    let mut sys = System::new();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+    thread::sleep(Duration::from_millis(200));
+    sys.refresh_cpu_usage();
+
+    let mut processes: Vec<ProcessEntry> = sys
+        .processes()
+        .iter()
+        .filter(|(_, process)| {
+            let name = process.name().to_string_lossy();
+            is_user_process(&name, process)
+        })
+        .map(|(pid, process)| ProcessEntry {
+            pid: pid.as_u32(),
+            name: process.name().to_string_lossy().into_owned(),
+            command: None,
+            cpu_percent: process.cpu_usage(),
+            memory_bytes: process.memory(),
+            ports: Vec::new(),
+        })
+        .collect();
+
+    processes.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+    Ok(ProcessListResult { processes })
+}
+
+fn list_process_ports() -> AppResult<ProcessListResult> {
+    let port_map = listen_ports_by_pid()?;
+    let mut processes: Vec<ProcessEntry> = port_map
+        .into_iter()
+        .map(|(pid, mut ports)| {
+            ports.sort_unstable();
+            ports.dedup();
+            ProcessEntry {
+                pid,
+                name: String::new(),
+                command: None,
+                cpu_percent: 0.0,
+                memory_bytes: 0,
+                ports,
+            }
+        })
+        .collect();
+    processes.sort_by_key(|entry| entry.pid);
+    Ok(ProcessListResult { processes })
+}
+
+fn list_processes_full() -> AppResult<ProcessListResult> {
     let port_map = listen_ports_by_pid()?;
 
     let mut sys = System::new();
@@ -19,6 +85,10 @@ pub fn list_processes() -> AppResult<ProcessListResult> {
     let mut processes: Vec<ProcessEntry> = sys
         .processes()
         .iter()
+        .filter(|(_, process)| {
+            let name = process.name().to_string_lossy();
+            is_user_process(&name, process)
+        })
         .map(|(pid, process)| {
             let pid_u32 = pid.as_u32();
             ProcessEntry {

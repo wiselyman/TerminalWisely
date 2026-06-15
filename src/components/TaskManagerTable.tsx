@@ -68,6 +68,8 @@ function loadColumnWidths(): ColumnWidths {
 interface TaskManagerTableProps {
   processes: ProcessEntry[];
   loading: boolean;
+  syncing?: boolean;
+  portsLoading?: boolean;
   sortKey: ProcessSortKey;
   sortDirection: SortDirection;
   onSort: (key: ProcessSortKey) => void;
@@ -92,6 +94,8 @@ function formatPorts(ports: number[]) {
 export function TaskManagerTable({
   processes,
   loading,
+  syncing = false,
+  portsLoading = false,
   sortKey,
   sortDirection,
   onKill,
@@ -190,6 +194,7 @@ export function TaskManagerTable({
     label: string,
     sort: ProcessSortKey,
     extraClass = "",
+    showSpinner = false,
   ) => (
     <th
       className={`task-manager-th-resizable ${extraClass}`.trim()}
@@ -201,6 +206,9 @@ export function TaskManagerTable({
     >
       <button type="button" className="task-manager-sort" onClick={() => onSort(sort)}>
         {label} {sortIndicator(sortKey === sort, sortDirection)}
+        {showSpinner ? (
+          <span className="task-manager-port-spinner" aria-label="端口解析中" />
+        ) : null}
       </button>
       <span
         className="task-manager-col-resizer"
@@ -213,7 +221,32 @@ export function TaskManagerTable({
   );
 
   if (loading && processes.length === 0) {
-    return <div className="task-manager-empty">正在加载进程…</div>;
+    return (
+      <div className="task-manager-table-wrap task-manager-table-wrap-loading">
+        <table className="task-manager-table task-manager-table-skeleton" aria-busy="true">
+          <thead>
+            <tr>
+              <th>进程名</th>
+              <th>端口</th>
+              <th>内存</th>
+              <th>CPU</th>
+              <th className="task-manager-th-actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 10 }, (_, index) => (
+              <tr key={index}>
+                <td><span className="task-manager-skeleton-bar task-manager-skeleton-name" /></td>
+                <td><span className="task-manager-skeleton-bar task-manager-skeleton-short" /></td>
+                <td><span className="task-manager-skeleton-bar task-manager-skeleton-short" /></td>
+                <td><span className="task-manager-skeleton-bar task-manager-skeleton-short" /></td>
+                <td />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   }
 
   if (processes.length === 0) {
@@ -221,7 +254,9 @@ export function TaskManagerTable({
   }
 
   return (
-    <div className="task-manager-table-wrap">
+    <div
+      className={`task-manager-table-wrap${syncing ? " task-manager-table-wrap-syncing" : ""}`}
+    >
       <table className="task-manager-table">
         <colgroup>
           <col
@@ -236,7 +271,7 @@ export function TaskManagerTable({
         <thead>
           <tr>
             {renderHeader("name", "进程名", "name", "task-manager-col-name")}
-            {renderHeader("port", "端口", "port")}
+            {renderHeader("port", "端口", "port", "", portsLoading)}
             {renderHeader("memory", "内存", "memory", "task-manager-th-compact")}
             {renderHeader("cpu", "CPU", "cpu", "task-manager-th-compact")}
             <th className="task-manager-th-actions" aria-label="操作" />

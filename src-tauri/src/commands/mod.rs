@@ -302,7 +302,19 @@ pub async fn save_connection(
     if remember_password && request.auth_method == AuthMethod::Password {
         saved.password = request.password.clone();
     }
-    connections.push(saved.clone());
+    if let Some(index) = connections.iter().position(|connection| {
+        connection.host == request.host
+            && connection.port == request.port
+            && connection.username == request.username
+    }) {
+        saved.id = connections[index].id.clone();
+        if !remember_password || request.auth_method != AuthMethod::Password {
+            saved.password = connections[index].password.clone();
+        }
+        connections[index] = saved.clone();
+    } else {
+        connections.push(saved.clone());
+    }
     store_connections(&app, &connections).map_err(|e| e.to_string())?;
     Ok(SavedConnectionView::from(&saved))
 }
@@ -510,7 +522,7 @@ pub async fn list_processes(
     sessions: State<'_, SessionManager>,
 ) -> Result<ProcessListResult, String> {
     sessions
-        .list_processes(&request.session_id)
+        .list_processes(&request.session_id, request.mode)
         .await
         .map_err(|e| e.to_string())
 }

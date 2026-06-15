@@ -4,6 +4,33 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.4] - 2026-06-08
+
+### Changed
+- 连接书签：未填连接名称时自动以 IP/主机地址保存；相同 host+port+用户更新已有书签
+- 本地任务管理器（macOS / Linux / Windows 本地标签）与 SSH 一致：basic → ports 分阶段加载、2s/8s 轮询、骨架屏与列头端口 spinner
+- 后端本地进程列表支持 `basic` / `ports` / `full` 三种模式
+
+### Fixed
+- Find 结果点击文件后预览被 Find 面板遮挡：打开预览时自动关闭 Find 等侧边抽屉
+- 端口定时刷新不再因 `portsLoading` 长期占用而跳过轮询
+
+> 归档说明见 [`release-notes/v0.5.4.md`](./release-notes/v0.5.4.md)
+
+## [0.5.3] - 2026-06-13
+
+### Changed
+- SSH 任务管理器分阶段加载（进程列表 → 端口），会话缓存与骨架屏
+- 默认隐藏内核线程；进程名使用 `comm`，修复 `[...]` 被 bash 误解析
+- 结束进程后立即移除列表项，已结束 PID 在确认前不再闪回
+- 轮询：CPU/内存 2s、端口 8s 分开刷新
+
+### Fixed
+- SSH 断开时停止刷新并提示「连接已断开」，替代 `Channel send error`
+- 去掉「正在解析端口…」等状态行，避免面板布局跳动
+
+> 归档说明见 [`release-notes/v0.5.3.md`](./release-notes/v0.5.3.md)
+
 ## [0.5.2] - 2026-06-12
 
 ### Fixed

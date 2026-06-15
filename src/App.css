@@ -2582,6 +2582,15 @@ body.task-manager-resizing {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  transition: opacity 0.15s ease;
+}
+
+.task-manager-table-wrap-syncing {
+  opacity: 0.72;
+}
+
+.task-manager-table-wrap-loading {
+  opacity: 1;
 }
 
 .task-manager-table {
@@ -2658,8 +2667,22 @@ body.task-manager-col-resizing {
   user-select: none;
 }
 
+.task-manager-port-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(139, 148, 158, 0.35);
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: terminal-status-spin 0.85s linear infinite;
+  -webkit-animation: terminal-status-spin 0.85s linear infinite;
+  flex-shrink: 0;
+}
+
 .task-manager-sort {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2777,6 +2800,47 @@ body.task-manager-col-resizing {
   color: #8b949e;
   text-align: center;
   font-size: 0.84rem;
+}
+
+.task-manager-status {
+  color: #58a6ff;
+}
+
+.task-manager-table-skeleton tbody td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.task-manager-skeleton-bar {
+  display: block;
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(139, 148, 158, 0.16) 0%,
+    rgba(139, 148, 158, 0.32) 50%,
+    rgba(139, 148, 158, 0.16) 100%
+  );
+  background-size: 200% 100%;
+  animation: task-manager-skeleton-shimmer 1.2s ease-in-out infinite;
+  -webkit-animation: task-manager-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.task-manager-skeleton-name {
+  width: 72%;
+}
+
+.task-manager-skeleton-short {
+  width: 48%;
+}
+
+@keyframes task-manager-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .find-panel-backdrop {

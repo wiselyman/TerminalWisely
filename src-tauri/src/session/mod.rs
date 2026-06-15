@@ -294,6 +294,7 @@ impl SessionManager {
     pub async fn list_processes(
         &self,
         session_id: &str,
+        mode: crate::types::ProcessListMode,
     ) -> AppResult<crate::types::ProcessListResult> {
         let ssh_handle = {
             let sessions = self.sessions.lock().await;
@@ -307,9 +308,9 @@ impl SessionManager {
         };
 
         if let Some(handle) = ssh_handle {
-            crate::process::list_remote_processes(handle).await
+            crate::process::list_remote_processes(handle, mode).await
         } else {
-            tokio::task::spawn_blocking(crate::process::list_local_processes)
+            tokio::task::spawn_blocking(move || crate::process::list_local_processes(mode))
                 .await
                 .map_err(|e| AppError::msg(e.to_string()))?
         }

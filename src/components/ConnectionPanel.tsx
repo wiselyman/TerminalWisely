@@ -158,9 +158,10 @@ export function ConnectionPanel({
         cols,
         rows,
       );
-      if (connectionName.trim() && result) {
+      if (result) {
+        const bookmarkName = connectionName.trim() || form.host.trim();
         await saveConnection(
-          connectionName.trim(),
+          bookmarkName,
           form,
           rememberPassword,
           result.os_id,
@@ -221,7 +222,7 @@ export function ConnectionPanel({
             required={isEditing}
             value={connectionName}
             onChange={(e) => setConnectionName(e.target.value)}
-            placeholder="生产服务器"
+            placeholder="生产服务器（留空则用 IP）"
           />
         </label>
         <label>

@@ -257,9 +257,20 @@ pub struct ProcessListResult {
     pub processes: Vec<ProcessEntry>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProcessListMode {
+    #[default]
+    Full,
+    Basic,
+    Ports,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListProcessesRequest {
     pub session_id: String,
+    #[serde(default)]
+    pub mode: ProcessListMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

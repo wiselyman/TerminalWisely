@@ -40,6 +40,8 @@ export function TaskManagerPanel({
     setWidth,
     processes,
     loading,
+    syncing,
+    portsLoading,
     error,
     lastUpdated,
     filterQuery,
@@ -140,6 +142,8 @@ export function TaskManagerPanel({
         <TaskManagerTable
           processes={filteredProcesses}
           loading={loading}
+          syncing={syncing}
+          portsLoading={portsLoading}
           sortKey={sortKey}
           sortDirection={sortDirection}
           onSort={setSort}

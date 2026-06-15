@@ -255,17 +255,45 @@ function App() {
   );
   const activeTabReady =
     activeTab != null && (activeTab.connectionStatus ?? "ready") === "ready";
+  const activeTabDisconnected = useSessionStore((state) =>
+    activeTabId != null ? state.disconnectedSessionIds.has(activeTabId) : false,
+  );
 
   useEffect(() => {
-    if (!taskManagerOpen || !activeTabId) return;
+    if (!taskManagerOpen || !activeTabId || !activeTab || activeTabDisconnected) {
+      if (activeTabDisconnected && taskManagerOpen) {
+        useTaskManagerStore.setState({
+          loading: false,
+          portsLoading: false,
+        });
+      }
+      return;
+    }
 
-    void fetchProcesses(activeTabId, { initial: true });
-    const timer = window.setInterval(() => {
-      void fetchProcesses(activeTabId);
+    void fetchProcesses(activeTabId, {
+      initial: true,
+      kind: activeTab.kind,
+    });
+
+    const basicTimer = window.setInterval(() => {
+      void fetchProcesses(activeTabId, {
+        kind: activeTab.kind,
+        refresh: "basic",
+      });
     }, 2000);
 
-    return () => window.clearInterval(timer);
-  }, [activeTabId, fetchProcesses, taskManagerOpen]);
+    const portsTimer = window.setInterval(() => {
+      void fetchProcesses(activeTabId, {
+        kind: activeTab.kind,
+        refresh: "ports",
+      });
+    }, 8000);
+
+    return () => {
+      window.clearInterval(basicTimer);
+      window.clearInterval(portsTimer);
+    };
+  }, [activeTab, activeTabDisconnected, activeTabId, fetchProcesses, taskManagerOpen]);
 
   useEffect(() => {
     if (!findOpen || !activeTabId) return;
