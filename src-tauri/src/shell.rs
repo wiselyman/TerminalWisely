@@ -52,40 +52,91 @@ pub fn extract_shell_command(text: &str) -> Option<String> {
 }
 
 pub fn apply_cd_target(cwd: &mut String, home: &str, target: &str) {
+    use std::path::{Path, PathBuf};
+
+    let target = target.trim().trim_matches('"');
     if target.is_empty() {
         *cwd = home.to_string();
         return;
     }
-    if target.starts_with('/') {
-        *cwd = target.to_string();
+
+    #[cfg(windows)]
+    if target.eq_ignore_ascii_case("%USERPROFILE%") {
+        *cwd = home.to_string();
         return;
     }
+
     if target == "~" {
         *cwd = home.to_string();
         return;
     }
-    if target.starts_with("~/") {
-        *cwd = format!("{}/{}", home.trim_end_matches('/'), &target[2..]);
+
+    let home_path = PathBuf::from(home);
+    if target.starts_with("~/") || target.starts_with("~\\") {
+        let rest = target.trim_start_matches('~').trim_start_matches(['/', '\\']);
+        *cwd = home_path.join(rest).to_string_lossy().to_string();
         return;
     }
+
+    if Path::new(target).is_absolute() {
+        *cwd = target.to_string();
+        return;
+    }
+
     if target == ".." {
-        let trimmed = cwd.trim_end_matches('/');
-        if trimmed.is_empty() || trimmed == "/" {
-            *cwd = "/".to_string();
-            return;
-        }
-        if let Some((parent, _)) = trimmed.rsplit_once('/') {
-            *cwd = if parent.is_empty() {
-                "/".to_string()
-            } else {
-                parent.to_string()
-            };
-        } else {
-            *cwd = "/".to_string();
-        }
+        let parent = PathBuf::from(cwd.as_str())
+            .parent()
+            .unwrap_or(home_path.as_path())
+            .to_string_lossy()
+            .to_string();
+        *cwd = parent;
         return;
     }
-    *cwd = format!("{}/{}", cwd.trim_end_matches('/'), target);
+
+    if target == "." {
+        return;
+    }
+
+    *cwd = PathBuf::from(cwd.as_str())
+        .join(target)
+        .to_string_lossy()
+        .to_string();
+}
+
+fn extract_cd_target(cmd: &str) -> Option<String> {
+    let trimmed = cmd.trim();
+    let lower = trimmed.to_lowercase();
+    let rest = if lower.starts_with("set-location ") {
+        trimmed["set-location ".len()..].trim()
+    } else if lower.starts_with("cd") {
+        let mut rest = trimmed[2..].trim();
+        if rest.len() >= 2 && rest.as_bytes()[0] == b'/' && rest.as_bytes()[1] == b'd'
+            && rest.as_bytes().get(2).copied() == Some(b' ')
+        {
+            rest = rest[3..].trim();
+        }
+        rest
+    } else {
+        return None;
+    };
+
+    if rest.is_empty() {
+        return Some(String::new());
+    }
+
+    let target = rest
+        .split(['&', ';', '|'])
+        .next()
+        .unwrap_or(rest)
+        .trim()
+        .trim_matches('"');
+
+    #[cfg(windows)]
+    if target.eq_ignore_ascii_case("%USERPROFILE%") {
+        return Some("~".to_string());
+    }
+
+    Some(target.to_string())
 }
 
 pub fn update_cwd_from_input(cwd: &mut String, home: &str, data: &str) {
@@ -95,25 +146,71 @@ pub fn update_cwd_from_input(cwd: &mut String, home: &str, data: &str) {
     let Some(cmd) = extract_shell_command(data) else {
         return;
     };
-    if cmd == "cd" {
-        *cwd = home.to_string();
+    let Some(target) = extract_cd_target(&cmd) else {
         return;
-    }
-    if let Some(target) = cmd.strip_prefix("cd ") {
-        apply_cd_target(cwd, home, target.trim());
-    }
+    };
+    apply_cd_target(cwd, home, &target);
 }
 
 pub fn path_for_display(home: &str, absolute: &str) -> String {
-    let home = home.trim_end_matches('/');
-    if absolute == home {
-        return "~".to_string();
+    use std::path::PathBuf;
+
+    let home_path = PathBuf::from(home);
+    let abs_path = PathBuf::from(absolute);
+
+    #[cfg(windows)]
+    {
+        let home_norm = home_path.to_string_lossy().trim_end_matches('\\').to_string();
+        let abs_norm = abs_path.to_string_lossy().to_string();
+        if abs_norm.eq_ignore_ascii_case(&home_norm) {
+            return "~".to_string();
+        }
+        let prefix = format!("{}\\", home_norm);
+        if abs_norm.len() > prefix.len() && abs_norm[..prefix.len()].eq_ignore_ascii_case(&prefix)
+        {
+            let suffix = abs_norm[prefix.len()..].replace('\\', "/");
+            return if suffix.is_empty() {
+                "~".to_string()
+            } else {
+                format!("~/{suffix}")
+            };
+        }
+        return absolute.to_string();
     }
-    let prefix = format!("{}/", home);
-    if absolute.starts_with(&prefix) {
-        return format!("~{}", &absolute[home.len()..]);
+
+    #[cfg(not(windows))]
+    {
+        let home = home.trim_end_matches('/');
+        if absolute == home {
+            return "~".to_string();
+        }
+        let prefix = format!("{home}/");
+        if absolute.starts_with(&prefix) {
+            return format!("~{}", &absolute[home.len()..]);
+        }
+        absolute.to_string()
     }
-    absolute.to_string()
+}
+
+#[cfg(windows)]
+pub fn windows_cd_and_list_command(shell: &str, path: &str) -> String {
+    let quoted = windows_path_argument(path);
+    if is_powershell(shell) {
+        format!("Set-Location {quoted}; Get-ChildItem\r")
+    } else {
+        format!("cd /d {quoted} && dir\r")
+    }
+}
+
+#[cfg(windows)]
+fn is_powershell(shell: &str) -> bool {
+    let lower = shell.to_lowercase();
+    lower.contains("powershell") || lower.contains("pwsh")
+}
+
+#[cfg(windows)]
+pub fn windows_path_argument(path: &str) -> String {
+    format!("\"{}\"", path.replace('"', ""))
 }
 
 pub fn resolve_local_path(
@@ -123,7 +220,7 @@ pub fn resolve_local_path(
 ) -> crate::error::AppResult<std::path::PathBuf> {
     use std::path::{Path, PathBuf};
 
-    use crate::error::{AppError, AppResult};
+    use crate::error::AppError;
 
     let trimmed = path.trim().trim_end_matches(['/', '\\']);
     if trimmed.is_empty() {
@@ -156,7 +253,7 @@ pub fn resolve_local_path(
 fn expand_tilde_path(home: &str, path: &str) -> crate::error::AppResult<std::path::PathBuf> {
     use std::path::PathBuf;
 
-    use crate::error::{AppError, AppResult};
+    use crate::error::AppError;
 
     if path == "~" {
         return Ok(PathBuf::from(home));
@@ -174,7 +271,7 @@ fn expand_tilde_path(home: &str, path: &str) -> crate::error::AppResult<std::pat
 
 #[cfg(test)]
 mod tests {
-    use super::shell_cd_argument;
+    use super::{apply_cd_target, extract_cd_target, shell_cd_argument};
 
     #[test]
     fn tilde_path_stays_unquoted() {
@@ -196,5 +293,24 @@ mod tests {
     fn absolute_and_relative_safe_paths() {
         assert_eq!(shell_cd_argument("/var/log"), "/var/log");
         assert_eq!(shell_cd_argument("Download"), "Download");
+    }
+
+    #[test]
+    fn apply_cd_parent_windows_style() {
+        let mut cwd = r"C:\Users\alice\Documents".to_string();
+        apply_cd_target(&mut cwd, r"C:\Users\alice", "..");
+        assert_eq!(cwd, r"C:\Users\alice");
+    }
+
+    #[test]
+    fn extract_cd_target_cmd_with_chain() {
+        assert_eq!(
+            extract_cd_target(r#"cd /d "C:\Users\alice" && dir"#),
+            Some(r"C:\Users\alice".to_string())
+        );
+        assert_eq!(
+            extract_cd_target("cd %USERPROFILE%; dir"),
+            Some("~".to_string())
+        );
     }
 }

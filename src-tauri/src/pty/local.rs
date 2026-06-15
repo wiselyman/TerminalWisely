@@ -14,6 +14,7 @@ pub struct LocalSession {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    shell: String,
     home_dir: String,
     local_cwd: Arc<Mutex<String>>,
 }
@@ -80,8 +81,8 @@ impl LocalSession {
             kind: SessionKind::Local,
             remote_home: None,
             server_id: Some("local".to_string()),
-            os_id: None,
-            os_name: None,
+            os_id: Some(crate::host::host_os_id().to_string()),
+            os_name: Some(crate::host::host_os_name().to_string()),
         };
 
         Ok(Self {
@@ -89,6 +90,7 @@ impl LocalSession {
             writer: Arc::new(Mutex::new(writer)),
             master: Arc::new(Mutex::new(pair.master)),
             child: Arc::new(Mutex::new(child)),
+            shell: shell.clone(),
             home_dir: home_dir.clone(),
             local_cwd: Arc::new(Mutex::new(home_dir)),
         })
@@ -141,18 +143,17 @@ impl LocalSession {
             shell::apply_cd_target(&mut cwd, &self.home_dir, target);
         }
 
+        let resolved = self.current_cwd_path();
         #[cfg(windows)]
-        let quoted = if target == "~" {
-            "%USERPROFILE%".to_string()
-        } else {
-            shell::shell_cd_argument(target)
+        let cmd = shell::windows_cd_and_list_command(&self.shell, &resolved);
+        #[cfg(not(windows))]
+        let cmd = {
+            let cd_arg = shell::shell_cd_argument(&shell::path_for_display(
+                &self.home_dir,
+                &resolved,
+            ));
+            format!("cd {cd_arg} && ls -G -F\r")
         };
-        #[cfg(not(windows))]
-        let quoted = shell::shell_cd_argument(target);
-        #[cfg(windows)]
-        let cmd = format!("cd {quoted}; dir\r");
-        #[cfg(not(windows))]
-        let cmd = format!("cd {quoted} && ls -G -F\r");
         self.write_input(&cmd)
     }
 

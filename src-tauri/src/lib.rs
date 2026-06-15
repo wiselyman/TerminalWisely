@@ -1,3 +1,4 @@
+mod host;
 mod host_stats;
 mod find;
 mod commands;

@@ -133,7 +133,9 @@ body,
 }
 
 .sidebar-add-option {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   padding: 8px 10px;
   border: none;
@@ -299,11 +301,31 @@ body,
 .connection-form input,
 .connection-form select {
   width: 100%;
+  box-sizing: border-box;
   border: 1px solid #30363d;
   border-radius: 8px;
-  background: #010409;
+  background-color: #010409;
   color: #e6edf3;
   padding: 8px 10px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  min-height: 38px;
+}
+
+.connection-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%238b949e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.connection-form select:focus,
+.connection-form input:focus {
+  outline: none;
+  border-color: #58a6ff;
 }
 
 .connection-form .checkbox-row {
@@ -422,6 +444,11 @@ body,
   border-radius: 10px;
   background: #161b22;
   overflow: hidden;
+}
+
+.saved-item-local {
+  margin-bottom: 8px;
+  border-color: rgba(63, 185, 80, 0.35);
 }
 
 .saved-item-main {
@@ -949,8 +976,13 @@ body.tab-reordering .terminal-drop-overlay {
 }
 
 .tab-kind.local {
-  background: rgba(63, 185, 80, 0.15);
+  background: rgba(63, 185, 80, 0.12);
   color: #3fb950;
+  padding: 2px 4px;
+}
+
+.tab-kind.local .server-os-icon {
+  display: flex;
 }
 
 .tab-title {

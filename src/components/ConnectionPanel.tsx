@@ -5,6 +5,7 @@ import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
 import { useToastStore } from "../stores/toastStore";
+import { getHostOsProfile, localTerminalTitle } from "../lib/hostOs";
 
 interface ConnectionPanelProps {
   cols: number;
@@ -61,6 +62,7 @@ export function ConnectionPanel({
   collapsed,
   onToggleCollapse,
 }: ConnectionPanelProps) {
+  const hostOs = getHostOsProfile();
   const [sshFormMode, setSshFormMode] = useState<SshFormMode | null>(null);
   const [form, setForm] = useState<SshConnectRequest>(defaultRequest);
   const [connectionName, setConnectionName] = useState("");
@@ -354,6 +356,22 @@ export function ConnectionPanel({
     </Modal>
   ) : null;
 
+  const localSavedItem = (
+    <div className="saved-item saved-item-local">
+      <button
+        type="button"
+        className="saved-item-main"
+        onClick={() => void createLocalSession(cols, rows)}
+      >
+        <ServerOsIcon osId={hostOs.osId} osName={hostOs.osName} />
+        <span className="saved-item-text">
+          <strong>{localTerminalTitle(hostOs)}</strong>
+          <span>Local Shell</span>
+        </span>
+      </button>
+    </div>
+  );
+
   const savedItem = (saved: SavedConnection) => (
     <div key={saved.id} className="saved-item">
       <button
@@ -422,29 +440,37 @@ export function ConnectionPanel({
           </div>
 
           <div className="sidebar-rail-sessions">
-            {savedConnections.length === 0 ? (
-              <p className="sidebar-rail-empty" title="暂无书签">
-                —
-              </p>
-            ) : (
-              savedConnections.map((saved) => (
-                <button
-                  key={saved.id}
-                  type="button"
-                  className="rail-session"
-                  aria-label={saved.name}
-                  title={saved.name}
-                  onClick={() => void handleSavedConnect(saved)}
-                >
-                  <ServerOsIcon
-                    osId={saved.os_id}
-                    osName={saved.os_name}
-                    size={18}
-                    showTitle={false}
-                  />
-                </button>
-              ))
-            )}
+            <button
+              type="button"
+              className="rail-session rail-session-local"
+              aria-label="本地终端"
+              title={localTerminalTitle(hostOs)}
+              onClick={() => void createLocalSession(cols, rows)}
+            >
+              <ServerOsIcon
+                osId={hostOs.osId}
+                osName={hostOs.osName}
+                size={18}
+                showTitle={false}
+              />
+            </button>
+            {savedConnections.map((saved) => (
+              <button
+                key={saved.id}
+                type="button"
+                className="rail-session"
+                aria-label={saved.name}
+                title={saved.name}
+                onClick={() => void handleSavedConnect(saved)}
+              >
+                <ServerOsIcon
+                  osId={saved.os_id}
+                  osName={saved.os_name}
+                  size={18}
+                  showTitle={false}
+                />
+              </button>
+            ))}
           </div>
         </aside>
         {sshFormModal}
@@ -457,10 +483,7 @@ export function ConnectionPanel({
     <>
       <aside className="sidebar">
         <div className="sidebar-top-row">
-          <SidebarAddMenu
-            onLocal={() => void createLocalSession(cols, rows)}
-            onRemote={openCreateForm}
-          />
+          <SidebarAddMenu onRemote={openCreateForm} />
           <button
             type="button"
             className="sidebar-toggle"
@@ -475,10 +498,11 @@ export function ConnectionPanel({
         <section className="saved-list">
           <div className="section-heading">
             <h2>书签</h2>
-            <span className="section-count">{savedConnections.length}</span>
+            <span className="section-count">{savedConnections.length + 1}</span>
           </div>
+          {localSavedItem}
           {savedConnections.length === 0 && (
-            <p className="empty-state">暂无书签</p>
+            <p className="empty-state">暂无 SSH 书签</p>
           )}
           {savedConnections.map((saved) => savedItem(saved))}
         </section>

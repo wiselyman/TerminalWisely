@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { formatConnectError } from "../lib/connectError";
+import { getHostOsProfile, localTerminalTitle } from "../lib/hostOs";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
 import type {
@@ -340,11 +341,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createLocalSession: async (cols, rows) => {
+    const hostOs = getHostOsProfile();
     const pendingId = createPendingId();
     get().addConnectingTab({
       id: pendingId,
-      title: "本地终端",
+      title: localTerminalTitle(hostOs),
       kind: "local",
+      os_id: hostOs.osId,
+      os_name: hostOs.osName,
     });
 
     try {

@@ -4,6 +4,18 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.6] - 2026-06-15
+
+### Changed
+- 本地页签与书签：Windows / macOS / Linux OS 图标；书签首项固定本地终端；「+」仅新建 SSH
+- Windows 本地 `~` 与 cd 路径；macOS 同级目录连续点击的路径解析
+- SSH 连接表单：macOS 认证方式下拉框高度与输入框对齐
+
+### Fixed
+- Windows 本地图标变形；Windows `cd %USERPROFILE%` 失败
+
+> 归档说明见 [`release-notes/v0.5.6.md`](./release-notes/v0.5.6.md)
+
 ## [0.5.5] - 2026-06-15
 
 ### Added

@@ -36,6 +36,7 @@ import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
 import { TabHomeIcon } from "./components/SidebarIcons";
 import { productIntro } from "./content/productIntro";
+import { getHostOsProfile } from "./lib/hostOs";
 import "./App.css";
 
 const SIDEBAR_WIDTH = 260;
@@ -43,6 +44,7 @@ const SIDEBAR_COLLAPSED_WIDTH = 56;
 const SIDEBAR_STORAGE_KEY = "terminal-wisely.sidebar-collapsed";
 
 function App() {
+  const hostOs = getHostOsProfile();
   const {
     tabs,
     activeTabId,
@@ -478,19 +480,21 @@ function App() {
                 title={
                   tab.kind === "ssh"
                     ? tab.os_name ?? tab.os_id ?? "SSH"
-                    : "本地终端"
+                    : tab.os_name ?? tab.os_id ?? hostOs.osName
                 }
               >
-                {tab.kind === "ssh" ? (
-                  <ServerOsIcon
-                    osId={tab.os_id}
-                    osName={tab.os_name}
-                    size={14}
-                    showTitle={false}
-                  />
-                ) : (
-                  "本地"
-                )}
+                <ServerOsIcon
+                  osId={
+                    tab.os_id ??
+                    (tab.kind === "local" ? hostOs.osId : null)
+                  }
+                  osName={
+                    tab.os_name ??
+                    (tab.kind === "local" ? hostOs.osName : null)
+                  }
+                  size={14}
+                  showTitle={false}
+                />
               </span>
               <span className="tab-title" title={tab.title}>
                 {tabConnecting ? (

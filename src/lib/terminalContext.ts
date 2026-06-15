@@ -2,9 +2,19 @@ import { buildLineColumnMap, stripAnsi } from "./terminalLinks";
 
 export function parsePromptCwd(line: string): string | null {
   const plain = stripAnsi(line).trim();
-  // Allow trailing commands on the same line, e.g. "(base) user@host:~$ ls"
-  const match = plain.match(/:(~(?:\/[^\s$#]*)?|\/[^\s$#]*)\s*[$#]/);
-  return match?.[1] ?? null;
+  // SSH / bash: user@host:~/path$
+  const colonMatch = plain.match(/:(~(?:\/[^\s$#%]*)?|\/[^\s$#%]*)[\s$#%]/);
+  if (colonMatch?.[1]) {
+    return colonMatch[1];
+  }
+  // zsh: ~/path %  or  /abs/path %
+  const zshMatch = plain.match(
+    /(?:^|\s)(~(?:\/[^\s%#]*)?|\/[^\s%#]*)\s*[%#](?:\s|$)/,
+  );
+  if (zshMatch?.[1]) {
+    return zshMatch[1];
+  }
+  return null;
 }
 
 export function joinRemotePath(parent: string, name: string): string {
@@ -84,40 +94,45 @@ function resolveCdTarget(target: string, promptCwd: string): string {
   return joinRemotePath(promptCwd, target);
 }
 
-function findPromptAbove(
+function parseCdTarget(command: string): string | null {
+  const cdOnly = command.match(/^cd\s+(.+)$/i);
+  if (!cdOnly?.[1]) {
+    return null;
+  }
+  return unquoteShellWord(cdOnly[1]);
+}
+
+/** Replay visible `cd` commands to recover cwd at a buffer line (local/zsh prompts). */
+export function replayCwdAtLine(
   getLinePlain: (lineNumber: number) => string | null,
   beforeLine: number,
-): string | null {
-  for (let i = beforeLine; i >= 1; i -= 1) {
+  initialCwd = "~",
+): string {
+  let cwd = initialCwd;
+  for (let i = 1; i < beforeLine; i += 1) {
     const plain = getLinePlain(i);
     if (!plain) {
       continue;
     }
-    const cwd = parsePromptCwd(plain);
-    if (cwd) {
-      return cwd;
-    }
-  }
-  return null;
-}
 
-function promptCwdForLine(
-  getLinePlain: (lineNumber: number) => string | null,
-  lineNumber: number,
-): string {
-  const plain = getLinePlain(lineNumber);
-  if (plain) {
-    const sameLine = parsePromptCwd(plain);
-    if (sameLine) {
-      return sameLine;
+    const cdLs = parseCdLsTarget(plain);
+    if (cdLs) {
+      cwd = resolveCdTarget(cdLs, cwd);
+      continue;
+    }
+
+    const cdTarget = parseCdTarget(extractCommandLine(plain));
+    if (cdTarget) {
+      cwd = resolveCdTarget(cdTarget, cwd);
     }
   }
-  return findPromptAbove(getLinePlain, lineNumber - 1) ?? "~";
+  return cwd;
 }
 
 function findListingParentFromCommands(
   getLinePlain: (lineNumber: number) => string | null,
   lineNumber: number,
+  initialCwd = "~",
 ): string | null {
   for (let i = lineNumber - 1; i >= 1; i -= 1) {
     const plain = getLinePlain(i);
@@ -125,14 +140,16 @@ function findListingParentFromCommands(
       continue;
     }
 
+    const cwdBefore = replayCwdAtLine(getLinePlain, i, initialCwd);
+
     const cdTarget = parseCdLsTarget(plain);
     if (cdTarget) {
-      return resolveCdTarget(cdTarget, promptCwdForLine(getLinePlain, i));
+      return resolveCdTarget(cdTarget, cwdBefore);
     }
 
     const command = extractCommandLine(plain);
     if (/^ls(\s|$)/.test(command)) {
-      return promptCwdForLine(getLinePlain, i);
+      return cwdBefore;
     }
   }
 
@@ -144,13 +161,18 @@ export function getListingParentDir(
   _totalLines: number,
   lineNumber: number,
   _clickedName: string,
+  initialCwd = "~",
 ): string | null {
-  const fromCommand = findListingParentFromCommands(getLinePlain, lineNumber);
+  const fromCommand = findListingParentFromCommands(
+    getLinePlain,
+    lineNumber,
+    initialCwd,
+  );
   if (fromCommand) {
     return fromCommand;
   }
 
-  return findPromptAbove(getLinePlain, lineNumber - 1);
+  return replayCwdAtLine(getLinePlain, lineNumber, initialCwd);
 }
 
 export function resolvePathFromListing(
@@ -167,7 +189,7 @@ export function resolvePathFromListing(
     return clickedName.replace(/[$#]+$/, "");
   }
 
-  const cleanName = clickedName.replace(/[$#]+$/, "");
+  const cleanName = clickedName.replace(/[$#]+$/, "").replace(/\/$/, "");
 
   const parent = getListingParentDir(
     getLinePlain,
