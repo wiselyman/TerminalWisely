@@ -11,6 +11,7 @@ pub enum LocalUnixRunner {
 }
 
 impl LocalUnixRunner {
+    #[cfg(windows)]
     pub fn to_windows_path(&self, path: &str) -> AppResult<PathBuf> {
         match self {
             Self::GitBash { bash_exe } => {

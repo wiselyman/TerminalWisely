@@ -142,6 +142,7 @@ impl LocalSession {
 
     pub fn resolve_host_path(&self, path: &str) -> AppResult<PathBuf> {
         let logical = shell::resolve_local_path(path, &self.home_dir, &self.current_cwd_path())?;
+        #[cfg(windows)]
         if let Some(runner) = &self.unix_runner {
             return runner.to_windows_path(&logical.to_string_lossy());
         }
@@ -198,7 +199,14 @@ impl LocalSession {
             ));
             format!("cd {cd_arg} && {list_flags}\r")
         } else {
-            shell::windows_cd_and_list_command(&self.shell, &resolved)
+            #[cfg(windows)]
+            {
+                shell::windows_cd_and_list_command(&self.shell, &resolved)
+            }
+            #[cfg(not(windows))]
+            {
+                unreachable!("non-Unix local shell is Windows-only")
+            }
         };
         self.write_input(&cmd)
     }

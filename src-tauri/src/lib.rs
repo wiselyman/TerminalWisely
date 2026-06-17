@@ -1,6 +1,7 @@
 mod host;
 mod host_stats;
 mod local_shell;
+#[cfg(windows)]
 mod msys;
 mod find;
 mod commands;

@@ -1,5 +1,12 @@
 跨平台桌面终端：本地 Git Bash + SSH/SFTP。
 
+## 更新内容（v0.5.8）
+
+### 修复
+- **macOS / Linux 构建**：修复非 Windows 平台引用 `windows_cd_and_list_command` 导致 CI 与 Release 编译失败
+
+---
+
 ## 更新内容（v0.5.7）
 
 ### Windows 本地终端

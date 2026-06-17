@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.8] - 2026-06-17
+
+### Fixed
+- macOS / Linux CI 与 Release 构建失败（非 Windows 平台误引用 Windows-only shell 辅助函数）
+
+> 归档说明见 [`release-notes/v0.5.8.md`](./release-notes/v0.5.8.md)
+
 ## [0.5.7] - 2026-06-15
 
 ### Changed
