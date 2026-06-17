@@ -6,6 +6,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use tauri::{AppHandle, Emitter};
 
 use crate::error::{AppError, AppResult};
+use crate::local_shell::{self, LocalUnixRunner};
 use crate::shell;
 use crate::types::{SessionInfo, SessionKind, TerminalOutputPayload};
 
@@ -17,6 +18,7 @@ pub struct LocalSession {
     shell: String,
     home_dir: String,
     local_cwd: Arc<Mutex<String>>,
+    unix_runner: Option<LocalUnixRunner>,
 }
 
 impl LocalSession {
@@ -31,12 +33,16 @@ impl LocalSession {
             })
             .map_err(|e| AppError::msg(e.to_string()))?;
 
-        let shell = default_shell();
-        let home_dir = dirs::home_dir()
-            .map(|home| home.to_string_lossy().to_string())
-            .unwrap_or_else(|| "/".to_string());
-        let mut cmd = CommandBuilder::new(&shell);
-        cmd.cwd(&home_dir);
+        let resolved = local_shell::resolve()?;
+        let mut cmd = if resolved.unix_runner.is_some() {
+            let mut builder = CommandBuilder::new(&resolved.shell_executable);
+            builder.arg("-l");
+            builder
+        } else {
+            let mut builder = CommandBuilder::new(&resolved.shell_executable);
+            builder.cwd(&resolved.home_dir);
+            builder
+        };
 
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
@@ -50,10 +56,15 @@ impl LocalSession {
             );
         }
 
-        #[cfg(not(windows))]
-        {
-            if shell.ends_with("bash") || shell.ends_with("zsh") || shell.ends_with("fish") {
-                cmd.arg("-l");
+        if resolved.unix_runner.is_none() {
+            #[cfg(not(windows))]
+            {
+                if resolved.shell_executable.ends_with("bash")
+                    || resolved.shell_executable.ends_with("zsh")
+                    || resolved.shell_executable.ends_with("fish")
+                {
+                    cmd.arg("-l");
+                }
             }
         }
 
@@ -77,12 +88,12 @@ impl LocalSession {
 
         let info = SessionInfo {
             id,
-            title: format!("Local ({shell})"),
+            title: resolved.info.title.clone(),
             kind: SessionKind::Local,
             remote_home: None,
             server_id: Some("local".to_string()),
-            os_id: Some(crate::host::host_os_id().to_string()),
-            os_name: Some(crate::host::host_os_name().to_string()),
+            os_id: Some(resolved.info.os_id.clone()),
+            os_name: Some(resolved.info.os_name.clone()),
         };
 
         Ok(Self {
@@ -90,9 +101,10 @@ impl LocalSession {
             writer: Arc::new(Mutex::new(writer)),
             master: Arc::new(Mutex::new(pair.master)),
             child: Arc::new(Mutex::new(child)),
-            shell: shell.clone(),
-            home_dir: home_dir.clone(),
-            local_cwd: Arc::new(Mutex::new(home_dir)),
+            shell: resolved.shell_executable,
+            home_dir: resolved.home_dir.clone(),
+            local_cwd: Arc::new(Mutex::new(resolved.home_dir)),
+            unix_runner: resolved.unix_runner,
         })
     }
 
@@ -113,8 +125,31 @@ impl LocalSession {
         self.home_dir.clone()
     }
 
+    pub fn unix_runner(&self) -> Option<&LocalUnixRunner> {
+        self.unix_runner.as_ref()
+    }
+
+    pub fn uses_unix_shell(&self) -> bool {
+        #[cfg(windows)]
+        {
+            return self.unix_runner.is_some();
+        }
+        #[cfg(not(windows))]
+        {
+            true
+        }
+    }
+
+    pub fn resolve_host_path(&self, path: &str) -> AppResult<PathBuf> {
+        let logical = shell::resolve_local_path(path, &self.home_dir, &self.current_cwd_path())?;
+        if let Some(runner) = &self.unix_runner {
+            return runner.to_windows_path(&logical.to_string_lossy());
+        }
+        Ok(logical)
+    }
+
     pub fn resolve_path(&self, path: &str) -> AppResult<PathBuf> {
-        shell::resolve_local_path(path, &self.home_dir, &self.current_cwd_path())
+        self.resolve_host_path(path)
     }
 
     pub fn write_input(&self, data: &str) -> AppResult<()> {
@@ -132,10 +167,10 @@ impl LocalSession {
     pub fn enter_directory(&mut self, path: &str) -> AppResult<()> {
         let target = path.trim().trim_end_matches(['/', '\\']);
         if target.is_empty() || target == "." {
-            #[cfg(windows)]
+            if self.uses_unix_shell() {
+                return self.write_input("ls -F\r");
+            }
             return self.write_input("dir\r");
-            #[cfg(not(windows))]
-            return self.write_input("ls -G -F\r");
         }
 
         {
@@ -144,15 +179,26 @@ impl LocalSession {
         }
 
         let resolved = self.current_cwd_path();
-        #[cfg(windows)]
-        let cmd = shell::windows_cd_and_list_command(&self.shell, &resolved);
-        #[cfg(not(windows))]
-        let cmd = {
+        let list_flags = if self.uses_unix_shell() {
+            "ls --color=auto -F"
+        } else {
+            #[cfg(target_os = "macos")]
+            {
+                "ls -G -F"
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                "ls -F"
+            }
+        };
+        let cmd = if self.uses_unix_shell() {
             let cd_arg = shell::shell_cd_argument(&shell::path_for_display(
                 &self.home_dir,
                 &resolved,
             ));
-            format!("cd {cd_arg} && ls -G -F\r")
+            format!("cd {cd_arg} && {list_flags}\r")
+        } else {
+            shell::windows_cd_and_list_command(&self.shell, &resolved)
         };
         self.write_input(&cmd)
     }
@@ -196,16 +242,5 @@ fn read_loop(mut reader: Box<dyn Read + Send>, app: AppHandle, session_id: Strin
             }
             Err(_) => break,
         }
-    }
-}
-
-fn default_shell() -> String {
-    #[cfg(windows)]
-    {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
-    }
-    #[cfg(not(windows))]
-    {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
     }
 }

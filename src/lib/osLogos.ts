@@ -49,3 +49,20 @@ const OS_LOGOS: Record<string, SimpleIcon> = {
 export function logoForOsId(osId: string): SimpleIcon | null {
   return OS_LOGOS[osId.trim().toLowerCase()] ?? null;
 }
+
+/** Brand hex on dark UI — lift near-black logos (e.g. Apple) so they stay visible. */
+export function iconFillForDarkUi(hex: string): string {
+  const raw = hex.replace("#", "").trim();
+  if (raw.length !== 6) {
+    return `#${raw}`;
+  }
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  // Relative luminance (sRGB), 0 = black.
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  if (luminance < 0.22) {
+    return "#e6edf3";
+  }
+  return `#${raw.toLowerCase()}`;
+}

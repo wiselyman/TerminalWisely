@@ -1,11 +1,21 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Modal } from "./Modal";
 import { SidebarAddMenu } from "./SidebarAddMenu";
 import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
 import { useToastStore } from "../stores/toastStore";
-import { getHostOsProfile, localTerminalTitle } from "../lib/hostOs";
+import {
+  getHostOsProfile,
+  isWindowsHost,
+  localShellInfoToProfile,
+  localShellBackendLabel,
+  type HostOsProfile,
+  type LocalShellInfo,
+} from "../lib/hostOs";
+import { GIT_FOR_WINDOWS_URL } from "../lib/localShellPreference";
 
 interface ConnectionPanelProps {
   cols: number;
@@ -62,7 +72,18 @@ export function ConnectionPanel({
   collapsed,
   onToggleCollapse,
 }: ConnectionPanelProps) {
-  const hostOs = getHostOsProfile();
+  const fallbackLocal = getHostOsProfile();
+  const [localShell, setLocalShell] = useState<{
+    profile: HostOsProfile;
+    title: string;
+    backend: LocalShellInfo["backend"];
+    git_bash_available: boolean;
+  }>({
+    profile: fallbackLocal,
+    title: isWindowsHost() ? "Git Bash 本地终端" : `${fallbackLocal.osName} 本地终端`,
+    backend: "git_bash",
+    git_bash_available: false,
+  });
   const [sshFormMode, setSshFormMode] = useState<SshFormMode | null>(null);
   const [form, setForm] = useState<SshConnectRequest>(defaultRequest);
   const [connectionName, setConnectionName] = useState("");
@@ -87,6 +108,23 @@ export function ConnectionPanel({
   useEffect(() => {
     void loadSavedConnections();
   }, [loadSavedConnections]);
+
+  const refreshLocalShell = useCallback(() => {
+    void invoke<LocalShellInfo>("get_local_shell_info")
+      .then((info) => {
+        setLocalShell({
+          profile: localShellInfoToProfile(info),
+          title: info.title,
+          backend: info.backend,
+          git_bash_available: info.git_bash_available,
+        });
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    refreshLocalShell();
+  }, [refreshLocalShell]);
 
   const openCreateForm = () => {
     setSshFormMode({ kind: "create" });
@@ -363,12 +401,28 @@ export function ConnectionPanel({
         className="saved-item-main"
         onClick={() => void createLocalSession(cols, rows)}
       >
-        <ServerOsIcon osId={hostOs.osId} osName={hostOs.osName} />
+        <ServerOsIcon osId={localShell.profile.osId} osName={localShell.profile.osName} />
         <span className="saved-item-text">
-          <strong>{localTerminalTitle(hostOs)}</strong>
-          <span>Local Shell</span>
+          <strong>{localShell.title}</strong>
+          {!isWindowsHost() ? (
+            <span>{localShellBackendLabel(localShell.backend)}</span>
+          ) : null}
         </span>
       </button>
+      {isWindowsHost() && !localShell.git_bash_available ? (
+        <div className="local-shell-meta">
+          <p className="local-shell-hint">
+            未检测到 Git Bash ·{" "}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
+            >
+              安装 Git for Windows
+            </button>
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -444,12 +498,12 @@ export function ConnectionPanel({
               type="button"
               className="rail-session rail-session-local"
               aria-label="本地终端"
-              title={localTerminalTitle(hostOs)}
+              title={localShell.title}
               onClick={() => void createLocalSession(cols, rows)}
             >
               <ServerOsIcon
-                osId={hostOs.osId}
-                osName={hostOs.osName}
+                osId={localShell.profile.osId}
+                osName={localShell.profile.osName}
                 size={18}
                 showTitle={false}
               />

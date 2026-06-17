@@ -1,4 +1,17 @@
-跨平台桌面终端：本地 Shell + SSH/SFTP。
+跨平台桌面终端：本地 Git Bash + SSH/SFTP。
+
+## 更新内容（v0.5.7）
+
+### Windows 本地终端
+- **仅 Git Bash**：Windows 本地会话统一使用 Git for Windows 自带的 Git Bash；未安装时提示安装，不再回退 PowerShell / MSYS2 / WSL
+- **路径与 Find**：Git Bash 下支持 `~`、彩色 `ls`、目录点击、Find 与文件预览（`cygpath` 转换）
+
+### 界面
+- **书签**：本地项显示「Git Bash 本地终端」，去掉重复副标题
+- **首页**：无会话时隐藏顶部标签栏；更新「快速开始」与产品介绍
+- **深色主题**：macOS Apple 等近黑品牌图标自动提亮，避免与背景融为一体
+
+---
 
 ## 更新内容（v0.5.6）
 

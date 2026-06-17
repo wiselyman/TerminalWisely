@@ -1,6 +1,6 @@
 import type { SimpleIcon } from "simple-icons";
 import { siLinux } from "simple-icons/icons";
-import { logoForOsId } from "../lib/osLogos";
+import { iconFillForDarkUi, logoForOsId } from "../lib/osLogos";
 
 interface ServerOsIconProps {
   osId?: string | null;
@@ -19,7 +19,7 @@ function BrandLogo({ icon, size }: { icon: SimpleIcon; size: number }) {
       height={size}
       aria-hidden="true"
     >
-      <path d={icon.path} fill={`#${icon.hex}`} />
+      <path d={icon.path} fill={iconFillForDarkUi(icon.hex)} />
     </svg>
   );
 }

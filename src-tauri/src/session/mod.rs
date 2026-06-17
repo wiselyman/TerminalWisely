@@ -71,7 +71,12 @@ impl SessionManager {
         self.transfers.cancel(transfer_id).await
     }
 
-    pub async fn create_local(&self, app: AppHandle, cols: u16, rows: u16) -> AppResult<SessionInfo> {
+    pub async fn create_local(
+        &self,
+        app: AppHandle,
+        cols: u16,
+        rows: u16,
+    ) -> AppResult<SessionInfo> {
         let id = Uuid::new_v4().to_string();
         let session = LocalSession::spawn(app, id.clone(), cols, rows)?;
         let info = session.info();
@@ -169,6 +174,33 @@ impl SessionManager {
         match session {
             SessionHandle::Local(s) => Ok((s.home_dir_path(), s.current_cwd_path())),
             SessionHandle::Ssh(_) => Err(AppError::msg("Not a local session")),
+        }
+    }
+
+    pub async fn local_resolve_host_path(
+        &self,
+        session_id: &str,
+        path: &str,
+    ) -> AppResult<std::path::PathBuf> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Local(s) => s.resolve_host_path(path),
+            SessionHandle::Ssh(_) => Err(AppError::msg("Not a local session")),
+        }
+    }
+
+    pub async fn local_unix_runner(
+        &self,
+        session_id: &str,
+    ) -> Option<crate::local_shell::LocalUnixRunner> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions.get(session_id)?;
+        match session {
+            SessionHandle::Local(s) => s.unix_runner().cloned(),
+            SessionHandle::Ssh(_) => None,
         }
     }
 
@@ -399,22 +431,32 @@ impl SessionManager {
                 .get(&normalized.session_id)
                 .ok_or_else(|| AppError::msg("Session not found"))?;
             match session {
-                SessionHandle::Local(s) => s.current_cwd_path(),
+                SessionHandle::Local(s) => (
+                    s.current_cwd_path(),
+                    s.unix_runner().cloned(),
+                ),
                 SessionHandle::Ssh(_) => {
                     return Err(AppError::msg("Not a local session"));
                 }
             }
         };
 
+        let (cwd, unix_runner) = local_cwd;
+
         let start_path = if normalized.path.trim().is_empty() || normalized.path == "." {
-            local_cwd
+            cwd
         } else {
             resolve_local_find_start(&normalized.path)?
         };
 
         let normalized_for_blocking = normalized.clone();
+        let runner_for_blocking = unix_runner.clone();
         tokio::task::spawn_blocking(move || {
-            crate::find::find_local_files(&start_path, normalized_for_blocking)
+            crate::find::find_local_files(
+                &start_path,
+                normalized_for_blocking,
+                runner_for_blocking.as_ref(),
+            )
         })
         .await
         .map_err(|e| AppError::msg(e.to_string()))?
@@ -475,9 +517,9 @@ impl SessionManager {
             };
 
             if is_local {
-                let (home, cwd) = self.local_path_context(&request.from_session_id).await?;
-                let resolved =
-                    crate::shell::resolve_local_path(&request.remote_path, &home, &cwd)?;
+                let resolved = self
+                    .local_resolve_host_path(&request.from_session_id, &request.remote_path)
+                    .await?;
                 let metadata = tokio::fs::metadata(&resolved).await?;
                 if metadata.is_dir() {
                     return Err(AppError::msg("请选择文件，不能发送目录"));

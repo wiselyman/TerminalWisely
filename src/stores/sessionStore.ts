@@ -1,7 +1,14 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { formatConnectError } from "../lib/connectError";
-import { getHostOsProfile, localTerminalTitle } from "../lib/hostOs";
+import {
+  getHostOsProfile,
+  isWindowsHost,
+  localShellInfoToProfile,
+  localTerminalTitle,
+  type LocalShellInfo,
+} from "../lib/hostOs";
+import { GIT_BASH_INSTALL_HINT } from "../lib/localShellPreference";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
 import type {
@@ -341,14 +348,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createLocalSession: async (cols, rows) => {
-    const hostOs = getHostOsProfile();
+    let shellInfo: LocalShellInfo | null = null;
+    try {
+      shellInfo = await invoke<LocalShellInfo>("get_local_shell_info");
+    } catch {
+      shellInfo = null;
+    }
+
+    if (isWindowsHost() && !shellInfo?.git_bash_available) {
+      useToastStore.getState().pushToast(GIT_BASH_INSTALL_HINT, false);
+      return;
+    }
+
+    const profile = shellInfo
+      ? localShellInfoToProfile(shellInfo)
+      : getHostOsProfile();
     const pendingId = createPendingId();
     get().addConnectingTab({
       id: pendingId,
-      title: localTerminalTitle(hostOs),
+      title: shellInfo?.title ?? localTerminalTitle(profile),
       kind: "local",
-      os_id: hostOs.osId,
-      os_name: hostOs.osName,
+      os_id: profile.osId,
+      os_name: profile.osName,
     });
 
     try {

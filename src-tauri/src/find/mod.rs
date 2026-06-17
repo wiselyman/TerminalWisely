@@ -1,5 +1,7 @@
 mod local;
 mod remote;
+#[cfg(windows)]
+mod msys;
 
 use crate::error::{AppError, AppResult};
 use crate::types::{FindFilesRequest, FindFilesResult};
@@ -43,16 +45,31 @@ pub async fn find_remote_files(
     remote::find_files(handle, start_path, request, MAX_RESULTS).await
 }
 
-pub fn find_local_files(start_path: &str, request: FindFilesRequest) -> AppResult<FindFilesResult> {
+pub fn find_local_files(
+    start_path: &str,
+    request: FindFilesRequest,
+    unix_runner: Option<&crate::local_shell::LocalUnixRunner>,
+) -> AppResult<FindFilesResult> {
+    #[cfg(windows)]
+    if let Some(runner) = unix_runner {
+        return msys::find_files(runner.bash_exe(), start_path, request, MAX_RESULTS);
+    }
+
     #[cfg(unix)]
     {
+        let _ = unix_runner;
         local::find_files(start_path, request, MAX_RESULTS)
     }
-    #[cfg(not(unix))]
+    #[cfg(all(not(unix), not(windows)))]
     {
-        let _ = (start_path, request);
+        let _ = (start_path, request, unix_runner);
+        Err(AppError::msg("本地 find 不可用"))
+    }
+    #[cfg(all(not(unix), windows))]
+    {
+        let _ = (start_path, request, unix_runner);
         Err(AppError::msg(
-            "本地 Windows 会话暂不支持 find 命令，请连接 Linux SSH 主机后使用",
+            "本地终端需要 Git Bash；请先安装 Git for Windows",
         ))
     }
 }

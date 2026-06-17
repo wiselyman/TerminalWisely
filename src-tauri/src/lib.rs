@@ -1,5 +1,7 @@
 mod host;
 mod host_stats;
+mod local_shell;
+mod msys;
 mod find;
 mod commands;
 mod error;
@@ -45,6 +47,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::create_local_session,
+            commands::get_local_shell_info,
             commands::create_ssh_session,
             commands::terminal_input,
             commands::resize_terminal,

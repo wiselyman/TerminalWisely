@@ -2,7 +2,7 @@ export const productIntro = {
   name: "TerminalWisely",
   tagline: "为日常运维准备的桌面终端",
   summary:
-    "在同一窗口里管理本地 Shell 与 SSH 会话。拖拽上传、点击浏览与预览、Find 文件搜索、服务器资源监控、任务管理器、快捷下载、跨服发送，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
+    "在同一窗口里管理本地 Git Bash 与 SSH 会话。拖拽上传、点击浏览与预览、Find 文件搜索、服务器资源监控、任务管理器、快捷下载、跨服发送，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
   features: [
     {
       title: "拖拽上传",
@@ -42,7 +42,7 @@ export const productIntro = {
     {
       title: "Find 文件搜索",
       description:
-        "右侧贴边工具栏打开，在当前页签对应机器执行 find 查找文件；点击结果进入目录或预览。",
+        "右侧贴边工具栏打开，在当前页签对应环境执行 find；Windows 本地需 Git Bash。点击结果进入目录或预览。",
     },
     {
       title: "任务管理器",
@@ -53,18 +53,18 @@ export const productIntro = {
   steps: [
     {
       icon: "local" as const,
-      iconLabel: "Local 本地终端",
-      text: "点击侧栏按钮，创建本地终端。",
+      iconLabel: "Git Bash 本地终端",
+      text: "侧栏书签第一项，点击打开 Git Bash 本地终端（Windows 需先安装 Git for Windows）。",
     },
     {
       icon: "ssh" as const,
       iconLabel: "Remote 远程 SSH",
-      text: "点击侧栏按钮，填写 SSH 信息并连接远程主机。",
+      text: "侧栏 + 填写主机信息，连接远程 Linux 服务器。",
     },
     {
       icon: "bookmark" as const,
       iconLabel: "书签",
-      text: "将常用连接保存为书签；在 SSH 页签用 + 添加快捷目录，单击 ls 中的文件体验预览。",
+      text: "常用 SSH 保存为书签；页签 ~ 回用户目录，单击 ls 输出浏览目录与预览文件。",
     },
   ],
 } as const;

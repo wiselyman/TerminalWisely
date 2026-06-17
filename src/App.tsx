@@ -35,7 +35,6 @@ import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
 import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
 import { TabHomeIcon } from "./components/SidebarIcons";
-import { productIntro } from "./content/productIntro";
 import { getHostOsProfile } from "./lib/hostOs";
 import "./App.css";
 
@@ -359,6 +358,7 @@ function App() {
       />
 
       <main className="workspace">
+        {tabs.length > 0 ? (
         <div
           className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
           ref={tabBarRef}
@@ -370,9 +370,6 @@ function App() {
             event.preventDefault();
           }}
         >
-          {tabs.length === 0 && (
-            <div className="empty-workspace">{productIntro.name}</div>
-          )}
           {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
             return (
@@ -545,6 +542,7 @@ function App() {
             );
           })}
         </div>
+        ) : null}
 
         {tabContextMenu ? (
           <TabContextMenu

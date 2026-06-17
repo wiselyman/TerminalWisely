@@ -52,6 +52,11 @@ pub fn extract_shell_command(text: &str) -> Option<String> {
 }
 
 pub fn apply_cd_target(cwd: &mut String, home: &str, target: &str) {
+    if uses_unix_path_semantics(home) {
+        apply_cd_target_unix(cwd, home, target);
+        return;
+    }
+
     use std::path::{Path, PathBuf};
 
     let target = target.trim().trim_matches('"');
@@ -155,6 +160,10 @@ pub fn update_cwd_from_input(cwd: &mut String, home: &str, data: &str) {
 pub fn path_for_display(home: &str, absolute: &str) -> String {
     use std::path::PathBuf;
 
+    if uses_unix_path_semantics(home) {
+        return path_for_display_unix(home, absolute);
+    }
+
     let home_path = PathBuf::from(home);
     let abs_path = PathBuf::from(absolute);
 
@@ -227,6 +236,10 @@ pub fn resolve_local_path(
         return Err(AppError::msg("路径为空"));
     }
 
+    if uses_unix_path_semantics(home) {
+        return Ok(PathBuf::from(resolve_unix_path(home, cwd, trimmed)));
+    }
+
     if trimmed.starts_with('~') {
         return expand_tilde_path(home, trimmed);
     }
@@ -267,6 +280,107 @@ fn expand_tilde_path(home: &str, path: &str) -> crate::error::AppResult<std::pat
         return Err(AppError::msg(format!("路径不存在: {path}")));
     }
     Ok(PathBuf::from(path))
+}
+
+fn uses_unix_path_semantics(home: &str) -> bool {
+    home.starts_with('/') && !home.starts_with("//")
+}
+
+fn apply_cd_target_unix(cwd: &mut String, home: &str, target: &str) {
+    let target = target.trim().trim_matches('"');
+    if target.is_empty() || target == "~" {
+        *cwd = home.to_string();
+        return;
+    }
+
+    if target.starts_with("~/") {
+        let rest = target.trim_start_matches("~/");
+        *cwd = join_unix_path(home, rest);
+        return;
+    }
+
+    if target.starts_with('/') {
+        *cwd = normalize_unix_path(target);
+        return;
+    }
+
+    if target == ".." {
+        *cwd = parent_unix_path(cwd, home);
+        return;
+    }
+
+    if target == "." {
+        return;
+    }
+
+    *cwd = join_unix_path(cwd, target);
+}
+
+fn path_for_display_unix(home: &str, absolute: &str) -> String {
+    let home = home.trim_end_matches('/');
+    if absolute == home {
+        return "~".to_string();
+    }
+    let prefix = format!("{home}/");
+    if absolute.starts_with(&prefix) {
+        return format!("~{}", &absolute[home.len()..]);
+    }
+    absolute.to_string()
+}
+
+fn resolve_unix_path(home: &str, cwd: &str, path: &str) -> String {
+    if path == "~" {
+        return home.to_string();
+    }
+    if path.starts_with("~/") {
+        return join_unix_path(home, path.trim_start_matches("~/"));
+    }
+    if path.starts_with('/') {
+        return normalize_unix_path(path);
+    }
+    join_unix_path(cwd, path)
+}
+
+fn join_unix_path(base: &str, segment: &str) -> String {
+    let base = base.trim_end_matches('/');
+    let segment = segment.trim_matches('/');
+    if segment.is_empty() {
+        return base.to_string();
+    }
+    normalize_unix_path(&format!("{base}/{segment}"))
+}
+
+fn parent_unix_path(path: &str, home: &str) -> String {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == home.trim_end_matches('/') {
+        return home.to_string();
+    }
+    if let Some((parent, _)) = trimmed.rsplit_once('/') {
+        if parent.is_empty() {
+            return "/".to_string();
+        }
+        return parent.to_string();
+    }
+    home.to_string()
+}
+
+fn normalize_unix_path(path: &str) -> String {
+    let mut parts = Vec::new();
+    for part in path.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            parts.pop();
+            continue;
+        }
+        parts.push(part);
+    }
+    if path.starts_with('/') {
+        format!("/{}", parts.join("/"))
+    } else {
+        parts.join("/")
+    }
 }
 
 #[cfg(test)]

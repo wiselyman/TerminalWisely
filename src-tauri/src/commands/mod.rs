@@ -15,6 +15,7 @@ use crate::types::{
     PreviewOpenRequest, PreviewOpenResult, ProbePathRequest, ProbeRemotePathRequest,
     FindFilesRequest, FindFilesResult,
     HostStatsRequest, HostStatsSnapshot,
+    LocalShellInfo,
     ProcessListResult, SavedConnectionView, SessionCwdRequest, SessionInfo, SshConnectRequest, SshConnectResult,
     TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
 };
@@ -52,6 +53,11 @@ pub async fn create_local_session(
         .create_local(app, cols, rows)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_local_shell_info() -> LocalShellInfo {
+    crate::host::local_shell_info()
 }
 
 #[tauri::command]

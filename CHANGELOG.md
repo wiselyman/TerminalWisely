@@ -4,6 +4,19 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.7] - 2026-06-15
+
+### Changed
+- Windows 本地终端：仅 Git Bash；未安装 Git for Windows 时提示安装，不再回退 PowerShell / MSYS2 / WSL
+- Git Bash 本地路径、Find、预览与 `cygpath` 集成
+- 书签与页签：Git Bash 本地终端命名；无会话时隐藏标签栏
+- 首页「快速开始」与产品介绍更新
+
+### Fixed
+- 深色主题下 macOS Apple 等品牌图标不可见
+
+> 归档说明见 [`release-notes/v0.5.7.md`](./release-notes/v0.5.7.md)
+
 ## [0.5.6] - 2026-06-15
 
 ### Changed

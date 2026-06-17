@@ -23,6 +23,17 @@ pub struct SessionInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalShellInfo {
+    /// `git_bash` or `native` (non-Windows)
+    pub backend: String,
+    pub os_id: String,
+    pub os_name: String,
+    pub title: String,
+    #[serde(default)]
+    pub git_bash_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalOutputPayload {
     pub session_id: String,
     pub data: String,

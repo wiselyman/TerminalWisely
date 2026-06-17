@@ -73,8 +73,9 @@ impl PreviewManager {
                 {
                     entry.local_path
                 } else {
-                    let (home, cwd) = sessions.local_path_context(&entry.session_id).await?;
-                    crate::shell::resolve_local_path(&entry.source_path, &home, &cwd)?
+                    sessions
+                        .local_resolve_host_path(&entry.session_id, &entry.source_path)
+                        .await?
                 };
                 tokio::fs::write(&path, bytes).await?;
             }
@@ -175,8 +176,9 @@ impl PreviewManager {
 
         let (resolved, is_dir, total_size) = match kind {
             SessionKind::Local => {
-                let (home, cwd) = sessions.local_path_context(&session_id).await?;
-                let path = crate::shell::resolve_local_path(&request.path, &home, &cwd)?;
+                let path = sessions
+                    .local_resolve_host_path(&session_id, &request.path)
+                    .await?;
                 let metadata = tokio::fs::metadata(&path).await?;
                 (path, metadata.is_dir(), metadata.len())
             }
@@ -328,9 +330,8 @@ pub async fn probe_path(
     let kind = sessions.session_kind(session_id).await?;
     match kind {
         SessionKind::Local => {
-            let (home, cwd) = sessions.local_path_context(&session_id).await?;
-            let resolved = crate::shell::resolve_local_path(path, &home, &cwd)?;
-            let metadata = tokio::fs::metadata(&resolved).await?;
+            let path = sessions.local_resolve_host_path(session_id, path).await?;
+            let metadata = tokio::fs::metadata(&path).await?;
             if metadata.is_dir() {
                 Ok("directory".to_string())
             } else {
