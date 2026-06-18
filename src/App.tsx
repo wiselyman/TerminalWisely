@@ -16,6 +16,7 @@ import { TerminalView } from "./components/TerminalView";
 import { ToastContainer } from "./components/ToastContainer";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
 import { extractDroppedPaths } from "./lib/terminalLinks";
+import { getTerminalFontFamily } from "./lib/terminalFont";
 import {
   hasLocalFileDrop,
   hasRemoteDrag,
@@ -80,6 +81,13 @@ function App() {
       >,
     [tabs],
   );
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--tw-mono-font",
+      getTerminalFontFamily(),
+    );
+  }, []);
 
   useEffect(() => {
     let disposed = false;

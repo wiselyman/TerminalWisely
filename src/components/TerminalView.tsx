@@ -32,6 +32,7 @@ import {
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
 import { isTabReordering } from "../lib/tabPointerReorder";
+import { TERMINAL_FONT_SIZE, TERMINAL_LINE_HEIGHT, getTerminalFontFamily } from "../lib/terminalFont";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { createTransferId } from "../lib/transferId";
 import { formatTransferError } from "../lib/transferError";
@@ -200,8 +201,9 @@ export function TerminalView({
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      fontSize: TERMINAL_FONT_SIZE,
+      lineHeight: TERMINAL_LINE_HEIGHT,
+      fontFamily: getTerminalFontFamily(),
       theme: {
         background: "#0d1117",
         foreground: "#e6edf3",

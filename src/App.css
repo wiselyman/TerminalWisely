@@ -4,6 +4,7 @@
   --scrollbar-track: transparent;
   --scrollbar-thumb: #30363d;
   --scrollbar-thumb-hover: #484f58;
+  --tw-mono-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: #e6edf3;
   background: #010409;
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -1734,7 +1735,7 @@ body.workspace-resizing .workspace-resizer {
   word-break: break-word;
   background: #0d1117;
   color: #e6edf3;
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-family: var(--tw-mono-font);
   font-size: 0.82rem;
   line-height: 1.5;
   box-sizing: border-box;
@@ -1828,7 +1829,7 @@ body.workspace-resizing .workspace-resizer {
   overflow: auto;
   background: #0d1117;
   color: #e6edf3;
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-family: var(--tw-mono-font);
   font-size: 0.82rem;
   line-height: 1.5;
   outline: none;
@@ -1880,7 +1881,7 @@ body.workspace-resizing .workspace-resizer {
 .preview-text-body {
   margin: 0;
   padding: 12px 14px;
-  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-family: var(--tw-mono-font);
   font-size: 0.82rem;
   line-height: 1.5;
   color: #e6edf3;
@@ -1920,7 +1921,7 @@ body.workspace-resizing .workspace-resizer {
   padding: 0.1em 0.35em;
   border-radius: 4px;
   background: #161b22;
-  font-family: "Cascadia Code", Consolas, monospace;
+  font-family: var(--tw-mono-font);
 }
 
 .preview-markdown-body pre {
@@ -2203,6 +2204,9 @@ body.workspace-resizing .workspace-resizer {
   height: 100%;
   width: 100%;
   box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 .xterm-viewport {
