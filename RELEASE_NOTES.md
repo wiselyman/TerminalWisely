@@ -1,5 +1,12 @@
 跨平台桌面终端：本地 Git Bash + SSH/SFTP。
 
+## 更新内容（v0.5.11）
+
+### 修复
+- **Linux 终端英文发虚**：内置 JetBrains Mono / Noto Sans Mono，不再依赖系统字体；xterm 启动前预加载字体
+
+---
+
 ## 更新内容（v0.5.10）
 
 ### 改进

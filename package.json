@@ -1,7 +1,7 @@
 {
   "name": "terminal-wisely",
   "private": true,
-  "version": "0.5.10",
+  "version": "0.5.11",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,6 +11,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/noto-sans-mono": "^5.2.10",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",

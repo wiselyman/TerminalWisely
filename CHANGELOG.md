@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.11] - 2026-06-15
+
+### Fixed
+- Linux / Ubuntu 终端英文回退到系统默认等宽字体；内置 JetBrains Mono 与 Noto Sans Mono 并在 xterm 初始化前加载
+
+> 归档说明见 [`release-notes/v0.5.11.md`](./release-notes/v0.5.11.md)
+
 ## [0.5.10] - 2026-06-15
 
 ### Changed

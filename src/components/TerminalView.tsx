@@ -32,7 +32,7 @@ import {
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
 import { isTabReordering } from "../lib/tabPointerReorder";
-import { TERMINAL_FONT_SIZE, TERMINAL_LINE_HEIGHT, getTerminalFontFamily } from "../lib/terminalFont";
+import { TERMINAL_FONT_SIZE, TERMINAL_LINE_HEIGHT, ensureTerminalFontsLoaded, getTerminalFontFamily } from "../lib/terminalFont";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { createTransferId } from "../lib/transferId";
 import { formatTransferError } from "../lib/transferError";
@@ -197,14 +197,22 @@ export function TerminalView({
   useEffect(() => {
     if (isConnecting || !containerRef.current || !hostRef.current) return;
 
-    const host = hostRef.current;
+    let disposed = false;
+    let effectCleanup: (() => void) | undefined;
 
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontSize: TERMINAL_FONT_SIZE,
-      lineHeight: TERMINAL_LINE_HEIGHT,
-      fontFamily: getTerminalFontFamily(),
-      theme: {
+    void ensureTerminalFontsLoaded().then(() => {
+      if (disposed || !containerRef.current || !hostRef.current) return;
+
+      const host = hostRef.current;
+
+      const terminal = new Terminal({
+        cursorBlink: true,
+        fontSize: TERMINAL_FONT_SIZE,
+        lineHeight: TERMINAL_LINE_HEIGHT,
+        fontFamily: getTerminalFontFamily(),
+        fontWeight: 400,
+        fontWeightBold: 700,
+        theme: {
         background: "#0d1117",
         foreground: "#e6edf3",
         cursor: "#58a6ff",
@@ -494,21 +502,27 @@ export function TerminalView({
       markFirstOutput();
     }
 
+      effectCleanup = () => {
+        cleanupRemoteDrag?.();
+        if (resizeTimerRef.current !== null) {
+          clearTimeout(resizeTimerRef.current);
+        }
+        if (highlightTimerRef.current !== null) {
+          clearTimeout(highlightTimerRef.current);
+        }
+        clearUploadHighlights(sessionId);
+        onData.dispose();
+        terminal.dispose();
+        terminalRef.current = null;
+        fitAddonRef.current = null;
+        lastContainerSizeRef.current = { width: 0, height: 0 };
+        lastSizeRef.current = { cols: 0, rows: 0 };
+      };
+    });
+
     return () => {
-      cleanupRemoteDrag?.();
-      if (resizeTimerRef.current !== null) {
-        clearTimeout(resizeTimerRef.current);
-      }
-      if (highlightTimerRef.current !== null) {
-        clearTimeout(highlightTimerRef.current);
-      }
-      clearUploadHighlights(sessionId);
-      onData.dispose();
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-      lastContainerSizeRef.current = { width: 0, height: 0 };
-      lastSizeRef.current = { cols: 0, rows: 0 };
+      disposed = true;
+      effectCleanup?.();
     };
   }, [isConnecting, kind, markFirstOutput, sessionId, setSessionDisconnected, syncSize]);
 

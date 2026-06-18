@@ -1,3 +1,7 @@
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/noto-sans-mono/400.css";
+
 import { isWindowsHost } from "./hostOs";
 
 function isMacHost(): boolean {
@@ -6,21 +10,21 @@ function isMacHost(): boolean {
   return platform.includes("mac") || ua.includes("macintosh");
 }
 
+const BUNDLED_MONO = "'JetBrains Mono', 'Noto Sans Mono'";
+
 /** Monospace stack tuned per host OS (xterm canvas + CJK). */
 export function getTerminalFontFamily(): string {
   if (isWindowsHost()) {
-    return "'Cascadia Code', 'Cascadia Mono', Consolas, monospace";
+    return `'Cascadia Code', 'Cascadia Mono', Consolas, ${BUNDLED_MONO}, monospace`;
   }
   if (isMacHost()) {
-    return "'JetBrains Mono', 'SF Mono', Menlo, Monaco, 'Cascadia Code', monospace";
+    return `'JetBrains Mono', 'SF Mono', Menlo, Monaco, 'Cascadia Code', ${BUNDLED_MONO}, monospace`;
   }
   return [
     "'JetBrains Mono'",
-    "'Fira Code'",
-    "'Cascadia Mono'",
+    "'Noto Sans Mono'",
     "'Ubuntu Mono'",
     "'Noto Sans Mono CJK SC'",
-    "'Noto Sans Mono'",
     "'DejaVu Sans Mono'",
     "monospace",
   ].join(", ");
@@ -28,3 +32,21 @@ export function getTerminalFontFamily(): string {
 
 export const TERMINAL_FONT_SIZE = 14;
 export const TERMINAL_LINE_HEIGHT = 1.25;
+
+const BUNDLED_FAMILIES = ["JetBrains Mono", "Noto Sans Mono"] as const;
+
+/** Wait for bundled woff2 faces before xterm measures glyphs. */
+export async function ensureTerminalFontsLoaded(): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts?.load) {
+    return;
+  }
+
+  const px = `${TERMINAL_FONT_SIZE}px`;
+  await Promise.all(
+    BUNDLED_FAMILIES.flatMap((family) => [
+      document.fonts.load(`${px} "${family}"`),
+      document.fonts.load(`500 ${px} "${family}"`),
+    ]),
+  );
+  await document.fonts.ready;
+}
