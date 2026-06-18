@@ -1,3 +1,4 @@
+mod disk_io;
 mod local;
 mod remote;
 

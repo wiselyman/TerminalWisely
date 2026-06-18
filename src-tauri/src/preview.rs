@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -7,8 +8,10 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
+use crate::preview_sudo;
 use crate::session::SessionManager;
 use crate::ssh::client;
+use crate::ssh::client::ClientHandler;
 use crate::ssh::sftp;
 use crate::types::{PreviewOpenRequest, PreviewOpenResult, SessionKind};
 
@@ -21,6 +24,7 @@ struct PreviewEntry {
     local_path: PathBuf,
     #[allow(dead_code)]
     kind: String,
+    uses_sudo: bool,
 }
 
 #[derive(Clone, Default)]
@@ -49,6 +53,7 @@ impl PreviewManager {
         sessions: &SessionManager,
         handle_id: &str,
         content: String,
+        sudo_password: Option<String>,
     ) -> AppResult<PreviewOpenResult> {
         let entry = self
             .entries
@@ -81,8 +86,19 @@ impl PreviewManager {
             }
             SessionKind::Ssh => {
                 let ssh = sessions.ssh_snapshot(&entry.session_id).await?;
-                let conn = client::open_transfer_connection(&ssh.connect_request(), None).await?;
-                sftp::write_remote_bytes(&conn.handle(), &entry.source_path, bytes).await?;
+                if entry.uses_sudo {
+                    preview_sudo::write_remote_bytes_sudo(
+                        &ssh.handle(),
+                        &entry.source_path,
+                        sudo_password.as_deref(),
+                        bytes,
+                    )
+                    .await?;
+                } else {
+                    let conn =
+                        client::open_transfer_connection(&ssh.connect_request(), None).await?;
+                    sftp::write_remote_bytes(&conn.handle(), &entry.source_path, bytes).await?;
+                }
             }
         }
 
@@ -109,6 +125,7 @@ impl PreviewManager {
             total_size,
             false,
             content,
+            entry.uses_sudo,
         ))
     }
 
@@ -185,11 +202,9 @@ impl PreviewManager {
             SessionKind::Ssh => {
                 let ssh = sessions.ssh_snapshot(&session_id).await?;
                 let resolved = ssh.resolve_remote_path(&request.path).await?;
-                let is_dir = sftp::is_remote_directory(&ssh.handle(), &resolved).await?;
-                let size = sftp::remote_file_size(&ssh.handle(), &resolved)
-                    .await
-                    .unwrap_or(0);
-                (PathBuf::from(resolved), is_dir, size)
+                let (is_dir, total_size) =
+                    probe_ssh_file(&ssh.handle(), &resolved).await?;
+                (PathBuf::from(resolved), is_dir, total_size)
             }
         };
 
@@ -214,10 +229,21 @@ impl PreviewManager {
 
         match preview_kind.as_str() {
             "text" | "markdown" | "html" | "csv" => {
-                let (text, truncated) = match kind {
-                    SessionKind::Local => read_local_text(&resolved, total_size).await?,
+                let sudo_password = request.sudo_password.as_deref();
+                let (text, truncated, uses_sudo) = match kind {
+                    SessionKind::Local => {
+                        let (text, truncated) = read_local_text(&resolved, total_size).await?;
+                        (text, truncated, false)
+                    }
                     SessionKind::Ssh => {
-                        read_remote_text(sessions, &session_id, &resolved_str, total_size).await?
+                        read_remote_text(
+                            sessions,
+                            &session_id,
+                            &resolved_str,
+                            total_size,
+                            sudo_password,
+                        )
+                        .await?
                     }
                 };
 
@@ -228,6 +254,7 @@ impl PreviewManager {
                         source_path: resolved_str.clone(),
                         local_path: resolved.clone(),
                         kind: preview_kind.clone(),
+                        uses_sudo,
                     },
                 );
 
@@ -238,9 +265,14 @@ impl PreviewManager {
                     resolved_str,
                     filename,
                     extension,
-                    total_size,
+                    if total_size > 0 {
+                        total_size
+                    } else {
+                        text.len() as u64
+                    },
                     truncated,
                     text,
+                    uses_sudo,
                 ))
             }
             "image" | "pdf" => {
@@ -262,6 +294,7 @@ impl PreviewManager {
                         source_path: resolved_str.clone(),
                         local_path: cache_path.clone(),
                         kind: preview_kind.clone(),
+                        uses_sudo: false,
                     },
                 );
 
@@ -277,6 +310,7 @@ impl PreviewManager {
                     editable: false,
                     text_content: None,
                     local_cache_path: Some(path_to_display(&cache_path)),
+                    uses_sudo: false,
                 })
             }
             _ => {
@@ -301,6 +335,7 @@ impl PreviewManager {
                         source_path: resolved_str.clone(),
                         local_path: cache_path.clone(),
                         kind: "unsupported".to_string(),
+                        uses_sudo: false,
                     },
                 );
 
@@ -316,6 +351,7 @@ impl PreviewManager {
                     editable: false,
                     text_content: None,
                     local_cache_path: Some(path_to_display(&cache_path)),
+                    uses_sudo: false,
                 })
             }
         }
@@ -388,6 +424,7 @@ fn text_preview_result(
     total_size: u64,
     truncated: bool,
     text: String,
+    uses_sudo: bool,
 ) -> PreviewOpenResult {
     PreviewOpenResult {
         handle_id,
@@ -401,6 +438,7 @@ fn text_preview_result(
         truncated,
         text_content: Some(text),
         local_cache_path: None,
+        uses_sudo,
     }
 }
 
@@ -423,18 +461,55 @@ async fn read_local_text(path: &Path, total_size: u64) -> AppResult<(String, boo
     Ok((decode_text_bytes(&bytes), truncated))
 }
 
+async fn probe_ssh_file(
+    handle: &Arc<Mutex<russh::client::Handle<ClientHandler>>>,
+    path: &str,
+) -> AppResult<(bool, u64)> {
+    match (
+        sftp::is_remote_directory(handle, path).await,
+        sftp::remote_file_size(handle, path).await,
+    ) {
+        (Ok(is_dir), Ok(size)) => Ok((is_dir, size)),
+        (Err(err), _) | (_, Err(err)) if preview_sudo::is_permission_denied(&err) => {
+            if path.ends_with('/') {
+                return Err(AppError::msg("这是目录，请单击进入目录"));
+            }
+            Ok((false, 0))
+        }
+        (Err(err), _) => Err(err),
+        (_, Err(err)) => Err(err),
+    }
+}
+
 async fn read_remote_text(
     sessions: &SessionManager,
     session_id: &str,
     remote_path: &str,
     total_size: u64,
-) -> AppResult<(String, bool)> {
+    sudo_password: Option<&str>,
+) -> AppResult<(String, bool, bool)> {
     let truncated = total_size > MAX_TEXT_PREVIEW_BYTES;
-    let limit = total_size.min(MAX_TEXT_PREVIEW_BYTES) as usize;
+    let limit = if total_size > 0 {
+        total_size.min(MAX_TEXT_PREVIEW_BYTES) as usize
+    } else {
+        MAX_TEXT_PREVIEW_BYTES as usize
+    };
+
     let ssh = sessions.ssh_snapshot(session_id).await?;
     let conn = client::open_transfer_connection(&ssh.connect_request(), None).await?;
-    let (bytes, _) = sftp::read_remote_file_bytes(&conn.handle(), remote_path, limit).await?;
-    Ok((decode_text_bytes(&bytes), truncated))
+
+    match sftp::read_remote_file_bytes(&conn.handle(), remote_path, limit).await {
+        Ok((bytes, _)) => Ok((decode_text_bytes(&bytes), truncated, false)),
+        Err(err) if preview_sudo::is_permission_denied(&err) => {
+            let bytes =
+                preview_sudo::read_remote_bytes_sudo(&ssh.handle(), remote_path, sudo_password, limit)
+                    .await?;
+            let actual_truncated = total_size > MAX_TEXT_PREVIEW_BYTES
+                || (total_size == 0 && bytes.len() >= limit);
+            Ok((decode_text_bytes(&bytes), actual_truncated, true))
+        }
+        Err(err) => Err(err),
+    }
 }
 
 fn decode_text_bytes(bytes: &[u8]) -> String {

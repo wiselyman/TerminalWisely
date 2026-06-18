@@ -160,26 +160,16 @@ function isContainerImageReference(token: string): boolean {
   return /^[\w.-]+(?:(?:\/[\w.-]+)+)?(?::[\w][\w.-]*)?$/u.test(normalized);
 }
 
-function isLikelyShellPromptLine(line: string): boolean {
-  const trimmed = line.trim();
-  if (/:(~(?:\/[^\s$#]*)?|\/[^\s$#]*)\s*[$#]/.test(trimmed)) return true;
-  if (/[@:][^$#\s]+[$#]/.test(trimmed)) return true;
-  return false;
-}
-
-function getPromptEndIndex(line: string): number | null {
-  const plain = stripAnsi(line);
-  const match = plain.match(/:(~(?:\/[^\s$#]*)?|\/[^\s$#]*)\s*[$#]/);
-  if (!match || match.index === undefined) {
-    return null;
-  }
-  return match.index + match[0].length;
-}
-
 function isNonLinkableLine(line: string): boolean {
   const trimmed = line.trim();
+  if (/^Last login:/i.test(trimmed)) return true;
   if (/^[\w.-]+:\s/.test(trimmed)) return true;
-  if (/^(IMAGE|REPOSITORY|CONTAINER ID)\s+/i.test(trimmed)) return true;
+  if (/^(IMAGE|REPOSITORY|CONTAINER ID|NAMES?|PORTS|STATUS|COMMAND|CREATED|TAG|DIGEST|ID)\s+/i.test(trimmed)) {
+    return true;
+  }
+  if (/^(PID|USER|CPU|MEM|VSZ|RSS|TTY|STAT|START|TIME|COMMAND)\s+/i.test(trimmed)) {
+    return true;
+  }
   if (trimmed.includes("没有那个") || /no such file/i.test(trimmed)) return true;
   return false;
 }
@@ -187,26 +177,45 @@ function isNonLinkableLine(line: string): boolean {
 function isNoiseToken(token: string): boolean {
   if (/^\d+$/.test(token)) return true;
   if (/^\d{4}$/.test(token)) return true;
-  if (/^(\d{1,2}:\d{2})$/.test(token)) return true;
+  if (/^(\d{1,2}:\d{2}(?::\d{2})?)$/.test(token)) return true;
   if (/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i.test(token)) {
+    return true;
+  }
+  if (/^\d+\.\d+([KMGTPEZY]?B?)?$/i.test(token)) return true;
+  if (/^\d+\.?\d*[KMGTPEZY]B?$/i.test(token)) return true;
+  if (/^[0-9a-f]{7,}$/i.test(token)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+    return true;
+  }
+  if (/^v?\d+\.\d+(\.\d+)*([+-][\w.-]+)?$/i.test(token)) return true;
+  if (/^\d+(?:\.\d+)?%$/.test(token)) return true;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?$/.test(token)) return true;
+  if (/^(Up|Exited|Created|Paused|Restarting|Running|Dead|Removed)$/i.test(token)) {
+    return true;
+  }
+  if (/^\d+\s*(?:second|minute|hour|day|week|month|year)s?\s*ago$/i.test(token)) {
+    return true;
+  }
+  if (/^(?:\d+\s*)?(?:second|minute|hour|day|week|month|year)s?\s*ago$/i.test(token)) {
     return true;
   }
   return false;
 }
 
-function isExplicitPath(token: string): boolean {
-  if (!token || token === ".") return false;
-  if (isContainerImageReference(token)) return false;
+function hasFilenameExtension(token: string): boolean {
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0 || dot === token.length - 1) return false;
 
-  if (isFilesystemPathPrefix(token)) {
-    return true;
-  }
+  const ext = token.slice(dot + 1);
+  if (!/^[\w\u0080-\uFFFF-]{1,32}$/u.test(ext)) return false;
+  if (/^\d+$/u.test(ext)) return false;
+  if (!/[A-Za-z\u0080-\uFFFF]/u.test(ext)) return false;
 
-  if (token.includes("/") || token.includes(":")) {
-    return false;
-  }
+  const prefix = token.slice(0, dot);
+  if (/^\d+$/.test(prefix)) return false;
+  if (/^\d+\.\d*$/.test(token)) return false;
 
-  return /\.[^./\\:]{1,32}$/u.test(token);
+  return true;
 }
 
 function isListEntryToken(token: string): boolean {
@@ -217,6 +226,8 @@ function isListEntryToken(token: string): boolean {
   if (isNoiseToken(normalized)) return false;
   if (isContainerImageReference(normalized)) return false;
   if (normalized.includes("/") || normalized.includes(":")) return false;
+  if (normalized.includes("->")) return false;
+  if (hasFilenameExtension(normalized)) return true;
   if (/^[\w.\u0080-\uFFFF-]+$/u.test(normalized) && normalized.length <= 255) {
     return true;
   }
@@ -255,13 +266,22 @@ function pushMatch(
   const normalized = normalizePathToken(path);
   if (!normalized) return;
   if (isContainerImageReference(normalized)) return;
+  if (isNoiseToken(normalized)) return;
   const key = `${start}:${normalized}`;
   if (seen.has(key)) return;
   seen.add(key);
   matches.push({ path: normalized, start, end });
 }
 
-export function findRemotePathMatches(text: string): RemotePathMatch[] {
+export interface RemotePathMatchOptions {
+  /** Set when this line is output from a recent `ls` command in the buffer. */
+  inLsOutput?: boolean;
+}
+
+export function findRemotePathMatches(
+  text: string,
+  options?: RemotePathMatchOptions,
+): RemotePathMatch[] {
   const plain = stripAnsi(text);
   if (isNonLinkableLine(plain)) {
     return [];
@@ -277,33 +297,17 @@ export function findRemotePathMatches(text: string): RemotePathMatch[] {
     return matches;
   }
 
-  const matches: RemotePathMatch[] = [];
-  const seen = new Set<string>();
-  const onPromptLine = isLikelyShellPromptLine(plain);
-  const promptEnd = onPromptLine ? getPromptEndIndex(plain) : null;
-
-  for (const token of tokenizeLine(plain)) {
-    if (promptEnd !== null && token.start < promptEnd) {
-      continue;
-    }
-    const path = normalizePathToken(token.value);
-    if (onPromptLine) {
-      if (!isExplicitPath(path)) continue;
-    } else if (!isListEntryToken(path) && !isExplicitPath(path)) {
-      continue;
-    }
-    pushMatch(matches, seen, path, token.start, token.end);
+  if (!options?.inLsOutput) {
+    return [];
   }
 
-  const inlinePathPattern = /(?:^|\s)((?:~\/|\.\/|\.\.\/|\/)[^\s'"$#]+)/gu;
-  for (const match of plain.matchAll(inlinePathPattern)) {
-    const path = match[1];
-    const start = (match.index ?? 0) + match[0].length - path.length;
-    if (promptEnd !== null && start < promptEnd) {
-      continue;
-    }
-    const end = start + path.length;
-    pushMatch(matches, seen, path, start, end);
+  const matches: RemotePathMatch[] = [];
+  const seen = new Set<string>();
+
+  for (const token of tokenizeLine(plain)) {
+    const path = normalizePathToken(token.value);
+    if (!isListEntryToken(path)) continue;
+    pushMatch(matches, seen, path, token.start, token.end);
   }
 
   return matches.sort((a, b) => a.start - b.start);

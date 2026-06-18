@@ -596,7 +596,9 @@ body,
   min-width: 0;
   min-height: 0;
   height: 100%;
+  padding-right: var(--workspace-panel-inset, 0px);
   background: #010409;
+  transition: padding-right 0.2s ease;
 }
 
 .tab-bar {

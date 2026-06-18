@@ -7,7 +7,7 @@ use sysinfo::{Disks, Networks, ProcessesToUpdate, System};
 
 use crate::error::{AppError, AppResult};
 use crate::types::{
-    DiskUsageEntry, HostStatsSnapshot, LoggedInUser, NetworkCounter,
+    DiskIoCounter, DiskUsageEntry, HostStatsSnapshot, LoggedInUser, NetworkCounter,
 };
 
 pub fn collect() -> AppResult<HostStatsSnapshot> {
@@ -48,6 +48,7 @@ pub fn collect() -> AppResult<HostStatsSnapshot> {
 
     let disks = collect_disks();
     let networks = collect_networks();
+    let disk_io = collect_disk_io();
     let logged_in_users = collect_logged_in_users()?;
 
     Ok(HostStatsSnapshot {
@@ -69,6 +70,7 @@ pub fn collect() -> AppResult<HostStatsSnapshot> {
         logged_in_users,
         disks,
         networks,
+        disk_io,
         sampled_at: chrono::Utc::now().timestamp_millis(),
     })
 }
@@ -104,6 +106,17 @@ fn collect_networks() -> Vec<NetworkCounter> {
             tx_bytes: data.total_transmitted(),
         })
         .collect()
+}
+
+fn collect_disk_io() -> DiskIoCounter {
+    #[cfg(unix)]
+    {
+        return super::disk_io::read_linux_disk_io();
+    }
+    #[cfg(windows)]
+    {
+        DiskIoCounter::default()
+    }
 }
 
 fn is_loopback(name: &str) -> bool {

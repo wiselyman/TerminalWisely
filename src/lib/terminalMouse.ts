@@ -4,7 +4,7 @@ import {
   findRemotePathMatches,
   rangeToColumns,
 } from "./terminalLinks";
-import { getLinePlainText, resolvePathFromListing } from "./terminalContext";
+import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "./terminalContext";
 
 export interface TerminalMouseCell {
   col: number;
@@ -44,14 +44,15 @@ export function findRemotePathAtCell(
   if (!line) return null;
 
   const map = buildLineColumnMap(line);
-  const matches = findRemotePathMatches(map.plain);
-  if (matches.length === 0) return null;
-
   const getLinePlain = (lineNumber: number) =>
     getLinePlainText(
       (n) => terminal.buffer.active.getLine(n - 1),
       lineNumber,
     );
+  const matches = findRemotePathMatches(map.plain, {
+    inLsOutput: isLineInLsOutput(getLinePlain, cell.bufferLineNumber),
+  });
+  if (matches.length === 0) return null;
 
   for (const match of matches) {
     const { startCol, width } = rangeToColumns(

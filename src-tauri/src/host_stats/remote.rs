@@ -168,6 +168,23 @@ while IFS= read -r line; do
 done < <(awk 'NR>2 {print}' /proc/net/dev 2>/dev/null)
 printf '],'
 
+TW_DISK_READ_BYTES=0
+TW_DISK_WRITE_BYTES=0
+while read -r major minor name rio rmerge rsect ruse wio wmerge wsect rest; do
+  case "$name" in
+    loop*|ram*|fd*) continue ;;
+  esac
+  if [[ "$name" == nvme* ]] && [[ "$name" == *p* ]]; then continue; fi
+  if [[ "$name" =~ ^[shv]d[a-z][0-9]+$ ]]; then continue; fi
+  if [[ "$name" =~ ^xvd[a-z][0-9]+$ ]]; then continue; fi
+  if [[ "$name" == mmcblk* ]] && [[ "$name" == *p* ]]; then continue; fi
+  if ! [[ "$rsect" =~ ^[0-9]+$ ]] || ! [[ "$wsect" =~ ^[0-9]+$ ]]; then continue; fi
+  TW_DISK_READ_BYTES=$((TW_DISK_READ_BYTES + rsect * 512))
+  TW_DISK_WRITE_BYTES=$((TW_DISK_WRITE_BYTES + wsect * 512))
+done < /proc/diskstats 2>/dev/null
+
+printf '"disk_io":{"read_bytes":%s,"write_bytes":%s},' "$TW_DISK_READ_BYTES" "$TW_DISK_WRITE_BYTES"
+
 printf '"sampled_at":%s' "$(($(date +%s)*1000))"
 printf '}\n'
 TW_HOST_STATS_EOF"#;

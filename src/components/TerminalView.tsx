@@ -24,7 +24,7 @@ import {
   isRemoteDragModifier,
 } from "../lib/terminalMouse";
 import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
-import { getLinePlainText, resolvePathFromListing } from "../lib/terminalContext";
+import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "../lib/terminalContext";
 import {
   clearUploadHighlights,
   scheduleUploadHighlight,
@@ -45,6 +45,7 @@ interface TerminalViewProps {
   active: boolean;
   connectionStatus?: "connecting" | "ready";
   title: string;
+  layoutRevision?: string;
 }
 
 async function listenSafely<T>(
@@ -60,6 +61,7 @@ export function TerminalView({
   active,
   connectionStatus = "ready",
   title,
+  layoutRevision = "",
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -315,7 +317,14 @@ export function TerminalView({
             }
 
             const map = buildLineColumnMap(line);
-            const matches = findRemotePathMatches(map.plain);
+            const getLinePlain = (lineNumber: number) =>
+              getLinePlainText(
+                (n) => terminal.buffer.active.getLine(n - 1),
+                lineNumber,
+              );
+            const matches = findRemotePathMatches(map.plain, {
+              inLsOutput: isLineInLsOutput(getLinePlain, bufferLineNumber),
+            });
             if (matches.length === 0) {
               callback(undefined);
               return;
@@ -323,19 +332,13 @@ export function TerminalView({
 
             const links = matches.map(({ path, start, end }) => {
               const { startCol, width } = rangeToColumns(map, line, start, end);
-              const resolveClickedPath = () => {
-                const getLinePlain = (lineNumber: number) =>
-                  getLinePlainText(
-                    (n) => terminal.buffer.active.getLine(n - 1),
-                    lineNumber,
-                  );
-                return resolvePathFromListing(
+              const resolveClickedPath = () =>
+                resolvePathFromListing(
                   getLinePlain,
                   terminal.buffer.active.length,
                   bufferLineNumber,
                   path,
                 );
-              };
 
               return {
                 range: {
@@ -527,15 +530,31 @@ export function TerminalView({
         unlistenResized = unlisten;
       });
 
+    const host = hostRef.current;
+    const container = containerRef.current;
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => scheduleSyncSize())
+        : null;
+    if (resizeObserver && host) {
+      resizeObserver.observe(host);
+    }
+    if (resizeObserver && container) {
+      resizeObserver.observe(container);
+    }
+
     scheduleSyncSize();
+    const raf = requestAnimationFrame(() => scheduleSyncSize());
     terminalRef.current?.focus();
 
     return () => {
       disposed = true;
+      cancelAnimationFrame(raf);
       window.removeEventListener("resize", onWindowResize);
       unlistenResized?.();
+      resizeObserver?.disconnect();
     };
-  }, [active, isConnecting, kind, sessionId, scheduleSyncSize]);
+  }, [active, isConnecting, kind, sessionId, scheduleSyncSize, layoutRevision]);
 
   useEffect(() => {
     if (isConnecting) return;

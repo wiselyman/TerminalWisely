@@ -504,7 +504,7 @@ pub async fn preview_save(
     previews: State<'_, crate::preview::PreviewManager>,
 ) -> Result<crate::types::PreviewOpenResult, String> {
     previews
-        .save(&sessions, &request.handle_id, request.content)
+        .save(&sessions, &request.handle_id, request.content, request.sudo_password)
         .await
         .map_err(|e| e.to_string())
 }

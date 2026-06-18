@@ -134,14 +134,17 @@ function App() {
   const previewWidth = usePreviewStore((s) => s.width);
   const setPreviewWidth = usePreviewStore((s) => s.setWidth);
   const taskManagerOpen = useTaskManagerStore((s) => s.open);
+  const taskManagerWidth = useTaskManagerStore((s) => s.width);
   const toggleTaskManager = useTaskManagerStore((s) => s.toggleOpen);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
   const findOpen = useFindStore((s) => s.open);
+  const findWidth = useFindStore((s) => s.width);
   const toggleFind = useFindStore((s) => s.toggleOpen);
   const openFind = useFindStore((s) => s.openFind);
   const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
   const resetFindResults = useFindStore((s) => s.resetResults);
   const hostStatsOpen = useHostStatsStore((s) => s.open);
+  const hostStatsWidth = useHostStatsStore((s) => s.width);
   const toggleHostStats = useHostStatsStore((s) => s.toggleOpen);
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
@@ -152,6 +155,25 @@ function App() {
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
     : SIDEBAR_WIDTH;
+
+  const workspacePanelInset = hostStatsOpen
+    ? hostStatsWidth
+    : findOpen
+      ? findWidth
+      : taskManagerOpen
+        ? taskManagerWidth
+        : 0;
+
+  const terminalLayoutRevision = useMemo(
+    () =>
+      [
+        sidebarCollapsed,
+        previewOpen,
+        previewWidth,
+        workspacePanelInset,
+      ].join("|"),
+    [sidebarCollapsed, previewOpen, previewWidth, workspacePanelInset],
+  );
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
@@ -347,6 +369,7 @@ function App() {
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
+          "--workspace-panel-inset": `${workspacePanelInset}px`,
         } as CSSProperties
       }
     >
@@ -580,6 +603,7 @@ function App() {
                   active={tab.id === activeTabId}
                   connectionStatus={tab.connectionStatus ?? "ready"}
                   title={tab.title}
+                  layoutRevision={terminalLayoutRevision}
                 />
               ))
             )}

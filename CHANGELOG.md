@@ -4,6 +4,20 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.9] - 2026-06-18
+
+### Added
+- 服务器资源面板：磁盘读/写速度与累计 IO（SSH / Linux 本地）
+
+### Changed
+- 终端可点击路径：限定为 `ls` 输出与显式路径，避免误点登录行、docker 等普通文本
+- 侧栏/预览/右侧面板变化时终端自动 refit
+
+### Fixed
+- SSH 预览/编辑 root 权限文件时 permission denied；支持 sudo 密码弹窗读写
+
+> 归档说明见 [`release-notes/v0.5.9.md`](./release-notes/v0.5.9.md)
+
 ## [0.5.8] - 2026-06-17
 
 ### Fixed

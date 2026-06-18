@@ -7,6 +7,17 @@ import { useToastStore } from "./toastStore";
 
 const PREVIEW_WIDTH_KEY = "terminal-wisely.preview-width";
 const DEFAULT_PREVIEW_WIDTH = 420;
+export const PREVIEW_SUDO_REQUIRED = "PREVIEW_SUDO_REQUIRED";
+
+interface SudoPromptState {
+  sessionId: string;
+  path: string;
+  action: "open" | "save";
+}
+
+function isSudoRequiredError(message: string): boolean {
+  return message.includes(PREVIEW_SUDO_REQUIRED);
+}
 
 interface PreviewState {
   open: boolean;
@@ -22,6 +33,8 @@ interface PreviewState {
   searchRegex: boolean;
   searchWholeWord: boolean;
   markdownMode: "source" | "preview";
+  sudoPrompt: SudoPromptState | null;
+  sudoPassword: string;
   setWidth: (width: number) => void;
   setSearchQuery: (query: string) => void;
   setActiveMatchIndex: (index: number) => void;
@@ -30,8 +43,15 @@ interface PreviewState {
   setSearchWholeWord: (value: boolean) => void;
   setMarkdownMode: (mode: "source" | "preview") => void;
   setEditedContent: (content: string) => void;
-  openPreview: (sessionId: string, path: string) => Promise<void>;
-  savePreview: () => Promise<void>;
+  setSudoPassword: (password: string) => void;
+  closeSudoPrompt: () => void;
+  submitSudoPassword: () => Promise<void>;
+  openPreview: (
+    sessionId: string,
+    path: string,
+    sudoPassword?: string,
+  ) => Promise<void>;
+  savePreview: (sudoPassword?: string) => Promise<void>;
   closePreview: () => Promise<void>;
 }
 
@@ -49,6 +69,8 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
   searchRegex: false,
   searchWholeWord: false,
   markdownMode: "source",
+  sudoPrompt: null,
+  sudoPassword: "",
 
   setWidth: (width) => {
     const next = Math.max(280, Math.min(width, 900));
@@ -72,7 +94,29 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
 
   setEditedContent: (content) => set({ editedContent: content }),
 
-  openPreview: async (sessionId, path) => {
+  setSudoPassword: (password) => set({ sudoPassword: password }),
+
+  closeSudoPrompt: () => set({ sudoPrompt: null, sudoPassword: "" }),
+
+  submitSudoPassword: async () => {
+    const { sudoPrompt, sudoPassword } = get();
+    if (!sudoPrompt || !sudoPassword.trim()) {
+      useToastStore.getState().pushToast("请输入 sudo 密码", false);
+      return;
+    }
+
+    if (sudoPrompt.action === "open") {
+      await get().openPreview(
+        sudoPrompt.sessionId,
+        sudoPrompt.path,
+        sudoPassword,
+      );
+    } else {
+      await get().savePreview(sudoPassword);
+    }
+  },
+
+  openPreview: async (sessionId, path, sudoPassword) => {
     useTaskManagerStore.getState().close();
     useHostStatsStore.getState().close();
 
@@ -87,6 +131,8 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
       searchRegex: false,
       searchWholeWord: false,
       markdownMode: "source",
+      sudoPrompt: null,
+      sudoPassword: "",
     });
 
     try {
@@ -98,36 +144,75 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
       }
 
       const result = await invoke<PreviewOpenResult>("preview_open", {
-        request: { session_id: sessionId, path },
+        request: {
+          session_id: sessionId,
+          path,
+          sudo_password: sudoPassword ?? null,
+        },
       });
-      set({ data: result, loading: false, error: null, open: true });
+      set({
+        data: result,
+        loading: false,
+        error: null,
+        open: true,
+        sudoPrompt: null,
+        sudoPassword: "",
+      });
     } catch (err) {
       const message = String(err);
+      if (isSudoRequiredError(message)) {
+        set({
+          loading: false,
+          error: null,
+          open: true,
+          sudoPrompt: { sessionId, path, action: "open" },
+          sudoPassword: "",
+        });
+        return;
+      }
       set({ loading: false, error: message, open: true });
       useToastStore.getState().pushToast(message, false);
     }
   },
 
-  savePreview: async () => {
+  savePreview: async (sudoPassword) => {
     const { data, editedContent, saving } = get();
     if (!data?.handle_id || !data.editable || saving) return;
 
     const content = editedContent ?? data.text_content ?? "";
-    set({ saving: true });
+    set({ saving: true, sudoPrompt: null });
 
     try {
       const result = await invoke<PreviewOpenResult>("preview_save", {
-        request: { handle_id: data.handle_id, content },
+        request: {
+          handle_id: data.handle_id,
+          content,
+          sudo_password: sudoPassword ?? null,
+        },
       });
       set({
         data: result,
         editedContent: null,
         saving: false,
         error: null,
+        sudoPrompt: null,
+        sudoPassword: "",
       });
       useToastStore.getState().pushToast("已保存", true);
     } catch (err) {
       const message = String(err);
+      if (isSudoRequiredError(message)) {
+        set({
+          saving: false,
+          sudoPrompt: {
+            sessionId: data.session_id,
+            path: data.resolved_path,
+            action: "save",
+          },
+          sudoPassword: "",
+        });
+        return;
+      }
       set({ saving: false });
       useToastStore.getState().pushToast(message, false);
     }
@@ -149,6 +234,8 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
       editedContent: null,
       searchQuery: "",
       activeMatchIndex: 0,
+      sudoPrompt: null,
+      sudoPassword: "",
     });
   },
 }));

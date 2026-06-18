@@ -20,9 +20,20 @@ export interface NetworkRates {
   txBps: number;
 }
 
+export interface DiskIoRates {
+  readBps: number;
+  writeBps: number;
+}
+
 interface NetworkSample {
   rxBytes: number;
   txBytes: number;
+  sampledAt: number;
+}
+
+interface DiskIoSample {
+  readBytes: number;
+  writeBytes: number;
   sampledAt: number;
 }
 
@@ -36,9 +47,13 @@ interface HostStatsState {
   networkRates: NetworkRates | null;
   totalRxBytes: number;
   totalTxBytes: number;
+  diskIoRates: DiskIoRates | null;
+  totalDiskReadBytes: number;
+  totalDiskWriteBytes: number;
   history: HostStatsHistoryPoint[];
   activeSessionId: string | null;
   prevNetworkSample: NetworkSample | null;
+  prevDiskIoSample: DiskIoSample | null;
   setWidth: (width: number) => void;
   toggleOpen: () => void;
   close: () => void;
@@ -66,9 +81,13 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
   networkRates: null,
   totalRxBytes: 0,
   totalTxBytes: 0,
+  diskIoRates: null,
+  totalDiskReadBytes: 0,
+  totalDiskWriteBytes: 0,
   history: [],
   activeSessionId: null,
   prevNetworkSample: null,
+  prevDiskIoSample: null,
 
   setWidth: (width) => {
     const next = Math.max(320, Math.min(width, 720));
@@ -102,8 +121,12 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
       networkRates: null,
       totalRxBytes: 0,
       totalTxBytes: 0,
+      diskIoRates: null,
+      totalDiskReadBytes: 0,
+      totalDiskWriteBytes: 0,
       history: [],
       prevNetworkSample: null,
+      prevDiskIoSample: null,
     }),
 
   fetchStats: async (sessionId, options) => {
@@ -134,6 +157,25 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
         }
       }
 
+      const diskTotals = snapshot.disk_io ?? { read_bytes: 0, write_bytes: 0 };
+      const prevDisk = get().prevDiskIoSample;
+      let diskIoRates: DiskIoRates | null = null;
+      if (prevDisk && snapshot.sampled_at > prevDisk.sampledAt) {
+        const deltaSec = (snapshot.sampled_at - prevDisk.sampledAt) / 1000;
+        if (deltaSec > 0) {
+          diskIoRates = {
+            readBps: Math.max(
+              0,
+              (diskTotals.read_bytes - prevDisk.readBytes) / deltaSec,
+            ),
+            writeBps: Math.max(
+              0,
+              (diskTotals.write_bytes - prevDisk.writeBytes) / deltaSec,
+            ),
+          };
+        }
+      }
+
       const historyPoint: HostStatsHistoryPoint = {
         cpu: snapshot.cpu_usage_percent,
         mem: memPercent,
@@ -149,9 +191,17 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
         networkRates,
         totalRxBytes: totals.rx,
         totalTxBytes: totals.tx,
+        diskIoRates,
+        totalDiskReadBytes: diskTotals.read_bytes,
+        totalDiskWriteBytes: diskTotals.write_bytes,
         prevNetworkSample: {
           rxBytes: totals.rx,
           txBytes: totals.tx,
+          sampledAt: snapshot.sampled_at,
+        },
+        prevDiskIoSample: {
+          readBytes: diskTotals.read_bytes,
+          writeBytes: diskTotals.write_bytes,
           sampledAt: snapshot.sampled_at,
         },
         history: [...state.history, historyPoint].slice(-HISTORY_LIMIT),

@@ -67,15 +67,63 @@ export function unquoteShellWord(word: string): string {
   return result;
 }
 
+function isLikelyShellPromptLine(line: string): boolean {
+  const trimmed = stripAnsi(line).trim();
+  if (/:(~(?:\/[^\s$#%]*)?|\/[^\s$#%]*)\s*[$#%]/.test(trimmed)) return true;
+  if (/[@:][^$#%\s]+[$#%]/.test(trimmed)) return true;
+  return false;
+}
+
+function isLsCommand(command: string): boolean {
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+  if (/^ls(\s|$)/.test(trimmed)) return true;
+  if (/(?:&&|;)\s*ls(\s|$)/.test(trimmed)) return true;
+  return false;
+}
+
 function extractCommandLine(line: string): string {
   const plain = stripAnsi(line).trim();
   const afterPrompt = plain.match(
-    /:(~(?:\/[^\s$#]*)?|\/[^\s$#]*)\s*[$#]\s*(.+)$/,
+    /:(~(?:\/[^\s$#%]*)?|\/[^\s$#%]*)\s*[$#%]\s*(.+)$/,
   );
   if (afterPrompt?.[2]?.trim()) {
     return afterPrompt[2].trim();
   }
-  return plain;
+  const zshMatch = plain.match(
+    /(?:~(?:\/[^\s%#]*)?|\/[^\s%#]*)\s*[%#]\s*(.+)$/,
+  );
+  if (zshMatch?.[1]?.trim()) {
+    return zshMatch[1].trim();
+  }
+  return "";
+}
+
+/** True when this buffer line is output from a recent `ls` (not login text, prompts, etc.). */
+export function isLineInLsOutput(
+  getLinePlain: (lineNumber: number) => string | null,
+  lineNumber: number,
+): boolean {
+  if (lineNumber < 1) return false;
+
+  const currentLine = getLinePlain(lineNumber);
+  if (currentLine) {
+    const trimmed = stripAnsi(currentLine).trim();
+    if (/^Last login:/i.test(trimmed)) return false;
+    if (isLikelyShellPromptLine(currentLine)) return false;
+  }
+
+  for (let i = lineNumber - 1; i >= 1; i -= 1) {
+    const plain = getLinePlain(i);
+    if (!plain) continue;
+
+    if (isLikelyShellPromptLine(plain)) {
+      const cmd = extractCommandLine(plain);
+      return isLsCommand(cmd);
+    }
+  }
+
+  return false;
 }
 
 function parseCdLsTarget(line: string): string | null {

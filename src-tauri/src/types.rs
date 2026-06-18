@@ -201,6 +201,8 @@ pub struct ProbeRemotePathRequest {
 pub struct PreviewOpenRequest {
     pub session_id: String,
     pub path: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,6 +219,8 @@ pub struct OpenPreviewHandleRequest {
 pub struct PreviewSaveRequest {
     pub handle_id: String,
     pub content: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,6 +238,8 @@ pub struct PreviewOpenResult {
     pub text_content: Option<String>,
     #[serde(default)]
     pub local_cache_path: Option<String>,
+    #[serde(default)]
+    pub uses_sudo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -382,6 +388,14 @@ pub struct NetworkCounter {
     pub tx_bytes: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DiskIoCounter {
+    #[serde(default)]
+    pub read_bytes: u64,
+    #[serde(default)]
+    pub write_bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostStatsSnapshot {
     pub hostname: String,
@@ -405,5 +419,7 @@ pub struct HostStatsSnapshot {
     pub logged_in_users: Vec<LoggedInUser>,
     pub disks: Vec<DiskUsageEntry>,
     pub networks: Vec<NetworkCounter>,
+    #[serde(default)]
+    pub disk_io: DiskIoCounter,
     pub sampled_at: i64,
 }

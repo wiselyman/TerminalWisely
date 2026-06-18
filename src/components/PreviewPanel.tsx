@@ -8,6 +8,7 @@ import {
 } from "../lib/previewSearch";
 import { usePreviewStore } from "../stores/previewStore";
 import { useToastStore } from "../stores/toastStore";
+import { Modal } from "./Modal";
 import { EditableTextPreview } from "./preview/EditableTextPreview";
 import { HtmlPreview } from "./preview/HtmlPreview";
 import { ImagePreview } from "./preview/ImagePreview";
@@ -41,6 +42,11 @@ export function PreviewPanel({ sessionTitle }: PreviewPanelProps) {
     setEditedContent,
     savePreview,
     closePreview,
+    sudoPrompt,
+    sudoPassword,
+    setSudoPassword,
+    closeSudoPrompt,
+    submitSudoPassword,
   } = usePreviewStore();
   const pushToast = useToastStore((s) => s.pushToast);
 
@@ -141,6 +147,41 @@ export function PreviewPanel({ sessionTitle }: PreviewPanelProps) {
   };
 
   return (
+    <>
+      {sudoPrompt ? (
+        <Modal title="需要 sudo 权限" onClose={closeSudoPrompt}>
+          <form
+            className="connection-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitSudoPassword();
+            }}
+          >
+            <p className="modal-hint">
+              {sudoPrompt.action === "open" ? "读取" : "保存"}系统文件需要管理员权限。
+              请输入当前 SSH 用户在服务器上的 sudo 密码。
+            </p>
+            <p className="modal-hint preview-panel-path">{sudoPrompt.path}</p>
+            <label>
+              sudo 密码
+              <input
+                type="password"
+                value={sudoPassword}
+                onChange={(event) => setSudoPassword(event.target.value)}
+                autoFocus
+              />
+            </label>
+            <div className="form-row">
+              <button type="submit" disabled={loading || saving}>
+                {loading || saving ? "处理中…" : "确认"}
+              </button>
+              <button type="button" onClick={closeSudoPrompt}>
+                取消
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     <aside className="preview-panel" aria-label="文件预览">
       <div className="preview-panel-head">
         <div className="preview-panel-title-wrap">
@@ -155,6 +196,7 @@ export function PreviewPanel({ sessionTitle }: PreviewPanelProps) {
               {data.kind}
               {data.total_size > 0 ? ` · ${formatFileSize(data.total_size)}` : ""}
               {data.truncated ? " · 已截断" : ""}
+              {data.uses_sudo ? " · sudo" : ""}
               {dirty ? " · 未保存" : ""}
             </span>
           ) : null}
@@ -357,5 +399,6 @@ export function PreviewPanel({ sessionTitle }: PreviewPanelProps) {
         ) : null}
       </div>
     </aside>
+    </>
   );
 }

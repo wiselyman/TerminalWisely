@@ -136,6 +136,7 @@ export interface PreviewOpenResult {
   editable: boolean;
   text_content?: string | null;
   local_cache_path?: string | null;
+  uses_sudo?: boolean;
 }
 
 export interface ProcessEntry {
@@ -185,6 +186,11 @@ export interface NetworkCounter {
   tx_bytes: number;
 }
 
+export interface DiskIoCounter {
+  read_bytes: number;
+  write_bytes: number;
+}
+
 export interface HostStatsSnapshot {
   hostname: string;
   os_name: string;
@@ -204,5 +210,6 @@ export interface HostStatsSnapshot {
   logged_in_users: LoggedInUser[];
   disks: DiskUsageEntry[];
   networks: NetworkCounter[];
+  disk_io?: DiskIoCounter;
   sampled_at: number;
 }

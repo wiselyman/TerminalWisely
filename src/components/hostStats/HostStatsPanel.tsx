@@ -6,6 +6,7 @@ import {
 } from "../../lib/hostStatsFormat";
 import { useHostStatsStore } from "../../stores/hostStatsStore";
 import { ServerOsIcon } from "../ServerOsIcon";
+import { HostStatsDiskIoCard } from "./HostStatsDiskIoCard";
 import { HostStatsDiskList } from "./HostStatsDiskList";
 import { HostStatsMetricCard } from "./HostStatsMetricCard";
 import { HostStatsNetworkCard } from "./HostStatsNetworkCard";
@@ -33,6 +34,9 @@ export function HostStatsPanel({
     networkRates,
     totalRxBytes,
     totalTxBytes,
+    diskIoRates,
+    totalDiskReadBytes,
+    totalDiskWriteBytes,
     history,
     close,
   } = useHostStatsStore();
@@ -171,6 +175,11 @@ export function HostStatsPanel({
                   networkRates={networkRates}
                   totalRxBytes={totalRxBytes}
                   totalTxBytes={totalTxBytes}
+                />
+                <HostStatsDiskIoCard
+                  diskIoRates={diskIoRates}
+                  totalReadBytes={totalDiskReadBytes}
+                  totalWriteBytes={totalDiskWriteBytes}
                 />
               </div>
 

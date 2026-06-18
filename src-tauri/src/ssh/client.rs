@@ -110,6 +110,77 @@ async fn authenticate_handle(
     Ok(())
 }
 
+pub async fn exec_command_with_stdin(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    command: &str,
+    stdin_data: &[u8],
+    max_stdout_bytes: usize,
+) -> AppResult<Vec<u8>> {
+    use std::io::Cursor;
+
+    let mut channel = {
+        let handle_guard = handle.lock().await;
+        handle_guard
+            .channel_open_session()
+            .await
+            .map_err(AppError::from)?
+    };
+
+    channel
+        .exec(true, command)
+        .await
+        .map_err(AppError::from)?;
+
+    if !stdin_data.is_empty() {
+        channel
+            .data(Cursor::new(stdin_data.to_vec()))
+            .await
+            .map_err(AppError::from)?;
+    }
+    channel.eof().await.map_err(AppError::from)?;
+
+    let mut stdout = Vec::new();
+    let mut stderr = String::new();
+    let mut exit_status: Option<u32> = None;
+
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Data { data }) => {
+                if max_stdout_bytes == 0 || stdout.len() < max_stdout_bytes {
+                    let take = if max_stdout_bytes == 0 {
+                        data.len()
+                    } else {
+                        max_stdout_bytes.saturating_sub(stdout.len())
+                    };
+                    stdout.extend_from_slice(&data[..data.len().min(take)]);
+                }
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
+            }
+            Some(ChannelMsg::ExitStatus { exit_status: code }) => {
+                exit_status = Some(code);
+            }
+            Some(ChannelMsg::Close | ChannelMsg::Eof) | None => break,
+            _ => {}
+        }
+    }
+
+    match exit_status {
+        Some(0) | None => Ok(stdout),
+        Some(code) => {
+            let detail = stderr.trim();
+            if detail.is_empty() {
+                Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
+            } else {
+                Err(AppError::msg(format!(
+                    "远程命令失败，退出码 {code}: {detail}"
+                )))
+            }
+        }
+    }
+}
+
 pub async fn exec_command(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     command: &str,

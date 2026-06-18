@@ -7,6 +7,7 @@ mod find;
 mod commands;
 mod error;
 mod preview;
+mod preview_sudo;
 mod process;
 mod pty;
 mod session;
