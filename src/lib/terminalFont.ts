@@ -34,19 +34,29 @@ export const TERMINAL_FONT_SIZE = 14;
 export const TERMINAL_LINE_HEIGHT = 1.25;
 
 const BUNDLED_FAMILIES = ["JetBrains Mono", "Noto Sans Mono"] as const;
+const FONT_LOAD_TIMEOUT_MS = 2500;
 
-/** Wait for bundled woff2 faces before xterm measures glyphs. */
+/**
+ * Best-effort font preload for xterm glyph metrics.
+ * Must never reject or hang: WebKitGTK on Linux (incl. ARM64) can stall on
+ * document.fonts.ready or reject loads for weights not in @font-face.
+ */
 export async function ensureTerminalFontsLoaded(): Promise<void> {
   if (typeof document === "undefined" || !document.fonts?.load) {
     return;
   }
 
   const px = `${TERMINAL_FONT_SIZE}px`;
-  await Promise.all(
-    BUNDLED_FAMILIES.flatMap((family) => [
-      document.fonts.load(`${px} "${family}"`),
-      document.fonts.load(`500 ${px} "${family}"`),
-    ]),
+  const loads = BUNDLED_FAMILIES.map((family) =>
+    document.fonts.load(`${px} "${family}"`),
   );
-  await document.fonts.ready;
+
+  try {
+    await Promise.race([
+      Promise.allSettled(loads),
+      new Promise<void>((resolve) => setTimeout(resolve, FONT_LOAD_TIMEOUT_MS)),
+    ]);
+  } catch {
+    // Ignore — terminal must still open with fallback fonts.
+  }
 }

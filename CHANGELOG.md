@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.12] - 2026-06-15
+
+### Fixed
+- Linux / ARM64 Ubuntu 终端黑屏：字体 `document.fonts.load` 预加载不再阻塞 xterm 初始化
+
+> 归档说明见 [`release-notes/v0.5.12.md`](./release-notes/v0.5.12.md)
+
 ## [0.5.11] - 2026-06-15
 
 ### Fixed
