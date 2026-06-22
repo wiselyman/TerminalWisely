@@ -1,5 +1,12 @@
 跨平台桌面终端：本地 Git Bash + SSH/SFTP。
 
+## 更新内容（v0.5.13）
+
+### 修复
+- **Linux 窗口全黑**：启动时禁用 WebKitGTK DMABUF 渲染路径，修复部分 ARM64 / NVIDIA 等环境下 WebView 不显示内容的问题
+
+---
+
 ## 更新内容（v0.5.12）
 
 ### 修复

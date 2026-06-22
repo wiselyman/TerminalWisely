@@ -20,6 +20,15 @@ use session::SessionManager;
 use tauri::image::Image;
 use tauri::Manager;
 
+#[cfg(target_os = "linux")]
+fn apply_linux_webkit_workarounds() {
+    // Blank window on some Linux GPU stacks (NVIDIA, ARM Mali, etc.).
+    // Must be set before WebKitGTK initializes. See tauri-apps/tauri#9394.
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
 fn apply_window_icon(app: &tauri::App) -> tauri::Result<()> {
     let icon_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("icons/32x32.png");
     if !icon_path.exists() {
@@ -36,6 +45,9 @@ fn apply_window_icon(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
+
+    #[cfg(target_os = "linux")]
+    apply_linux_webkit_workarounds();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

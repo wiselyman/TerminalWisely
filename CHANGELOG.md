@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.5.13] - 2026-06-15
+
+### Fixed
+- Linux 窗口全黑/空白：启动前设置 `WEBKIT_DISABLE_DMABUF_RENDERER=1`（WebKitGTK 与部分 GPU 驱动不兼容）
+
+> 归档说明见 [`release-notes/v0.5.13.md`](./release-notes/v0.5.13.md)
+
 ## [0.5.12] - 2026-06-15
 
 ### Fixed

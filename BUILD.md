@@ -93,6 +93,20 @@ CI 全绿只代表「能编出来」，以下需在**真实机器**上各测一�
 | Linux x64 | Ubuntu 22.04+ / Fedora |
 | Linux ARM64 | ARM 服务器或树莓派 64 位 |
 
+### Linux 窗口全黑 / 全白
+
+部分 Linux 显卡驱动与 WebKitGTK 的 DMABUF 渲染路径不兼容，窗口能打开但内容不显示（x64 正常、ARM64 黑屏也可能由此引起）。v0.5.13 起应用启动时会自动设置 `WEBKIT_DISABLE_DMABUF_RENDERER=1`。
+
+若仍异常，可在终端手动测试：
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 terminal-wisely
+# 仍不行再试：
+WEBKIT_DISABLE_COMPOSITING_MODE=1 terminal-wisely
+```
+
+详见 [Tauri Linux 图形问题](https://v2.tauri.app/develop/debug/linux-graphics/)。
+
 未签名安装包在 macOS / Windows 首次打开会有安全提示，属正常现象。
 
 ### 仓库权限
