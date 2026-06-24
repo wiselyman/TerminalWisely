@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { FindFileEntry, FindFilesResult, FindTypeFilter } from "../types";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useTaskManagerStore } from "./taskManagerStore";
+import { closeCommandNavigator } from "./commandNavigatorStore";
 
 const FIND_WIDTH_KEY = "terminal-wisely.find-width";
 const FIND_OPTIONS_KEY = "terminal-wisely.find-options";
@@ -122,6 +123,7 @@ export const useFindStore = create<FindState>((set, get) => ({
   openFind: (sessionId) => {
     useTaskManagerStore.getState().close();
     useHostStatsStore.getState().close();
+    closeCommandNavigator();
     set((state) => ({
       open: true,
       activeSessionId: sessionId,

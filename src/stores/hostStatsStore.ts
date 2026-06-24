@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { HostStatsSnapshot } from "../types";
+import { closeCommandNavigator } from "./commandNavigatorStore";
 import { useFindStore } from "./findStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 
@@ -101,6 +102,7 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
       if (next) {
         useTaskManagerStore.getState().close();
         useFindStore.getState().close();
+        closeCommandNavigator();
       }
       return { open: next };
     });

@@ -152,6 +152,22 @@ export interface ProcessListResult {
   processes: ProcessEntry[];
 }
 
+export interface UnixUserEntry {
+  name: string;
+  uid: number;
+  description?: string | null;
+}
+
+export interface UnixGroupEntry {
+  name: string;
+  gid: number;
+}
+
+export interface PasswdAccountsResult {
+  users: UnixUserEntry[];
+  groups: UnixGroupEntry[];
+}
+
 export type FindTypeFilter = "all" | "file" | "directory";
 
 export interface FindFileEntry {
@@ -164,6 +180,65 @@ export interface FindFilesResult {
   entries: FindFileEntry[];
   truncated: boolean;
   start_path: string;
+}
+
+export type CommandSubcategory =
+  | "service"
+  | "journal"
+  | "disk"
+  | "process"
+  | "network"
+  | "package"
+  | "file"
+  | "user"
+  | "cron"
+  | "kernel";
+
+export type DistroFamily =
+  | "universal"
+  | "debian"
+  | "rhel"
+  | "alpine"
+  | "arch"
+  | "suse";
+
+export type CommandShortcutScope = "all" | "server";
+
+export type SearchKeywordVariant = "package" | "file-content" | "filename";
+
+export type CommandParamInputKind =
+  | "text"
+  | "systemd-unit"
+  | "path"
+  | "process-pid"
+  | "process-name"
+  | "chmod-mode"
+  | "unix-user"
+  | "unix-group"
+  | "search-keyword"
+  | "port";
+
+export interface CommandParam {
+  name: string;
+  label: string;
+  default?: string;
+  required?: boolean;
+  placeholder?: string;
+  inputKind?: CommandParamInputKind;
+  keywordVariant?: SearchKeywordVariant;
+}
+
+export interface CommandTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  subcategory: CommandSubcategory;
+  distroFamilies: DistroFamily[];
+  template: string;
+  params: CommandParam[];
+  scope: CommandShortcutScope;
+  server_id?: string | null;
+  builtin: boolean;
 }
 
 export interface LoggedInUser {

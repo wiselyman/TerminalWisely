@@ -192,6 +192,12 @@ pub struct InsertLocalPathsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertTerminalCommandRequest {
+    pub session_id: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProbeRemotePathRequest {
     pub session_id: String,
     pub path: String,
@@ -288,6 +294,52 @@ pub struct ListProcessesRequest {
     pub session_id: String,
     #[serde(default)]
     pub mode: ProcessListMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListSystemdUnitsRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemdUnitsResult {
+    pub units: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnixUserEntry {
+    pub name: String,
+    pub uid: u32,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnixGroupEntry {
+    pub name: String,
+    pub gid: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListPasswdAccountsRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswdAccountsResult {
+    pub users: Vec<UnixUserEntry>,
+    pub groups: Vec<UnixGroupEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletePathRequest {
+    pub session_id: String,
+    pub partial: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletePathResult {
+    pub completions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

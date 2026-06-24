@@ -8,6 +8,8 @@ import { FindPanel } from "./components/FindPanel";
 import { FindTool } from "./components/FindTool";
 import { HostStatsPanel } from "./components/hostStats/HostStatsPanel";
 import { HostStatsTool } from "./components/HostStatsTool";
+import { CommandNavigatorPanel } from "./components/CommandNavigatorPanel";
+import { CommandNavigatorTool } from "./components/CommandNavigatorTool";
 import { TaskManagerTool } from "./components/TaskManagerTool";
 import { WorkspaceToolRail } from "./components/WorkspaceToolRail";
 import { TaskManagerPanel } from "./components/TaskManagerPanel";
@@ -28,6 +30,7 @@ import { startTabPointerReorder } from "./lib/tabPointerReorder";
 import { useSessionStore } from "./stores/sessionStore";
 import { usePreviewStore } from "./stores/previewStore";
 import { useHostStatsStore } from "./stores/hostStatsStore";
+import { useCommandNavigatorStore } from "./stores/commandNavigatorStore";
 import { useFindStore } from "./stores/findStore";
 import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useToastStore } from "./stores/toastStore";
@@ -144,20 +147,19 @@ function App() {
   const previewWidth = usePreviewStore((s) => s.width);
   const setPreviewWidth = usePreviewStore((s) => s.setWidth);
   const taskManagerOpen = useTaskManagerStore((s) => s.open);
-  const taskManagerWidth = useTaskManagerStore((s) => s.width);
   const toggleTaskManager = useTaskManagerStore((s) => s.toggleOpen);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
   const findOpen = useFindStore((s) => s.open);
-  const findWidth = useFindStore((s) => s.width);
   const toggleFind = useFindStore((s) => s.toggleOpen);
   const openFind = useFindStore((s) => s.openFind);
   const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
   const resetFindResults = useFindStore((s) => s.resetResults);
   const hostStatsOpen = useHostStatsStore((s) => s.open);
-  const hostStatsWidth = useHostStatsStore((s) => s.width);
   const toggleHostStats = useHostStatsStore((s) => s.toggleOpen);
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
+  const commandNavOpen = useCommandNavigatorStore((s) => s.open);
+  const toggleCommandNav = useCommandNavigatorStore((s) => s.toggleOpen);
   const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
@@ -166,23 +168,10 @@ function App() {
     ? SIDEBAR_COLLAPSED_WIDTH
     : SIDEBAR_WIDTH;
 
-  const workspacePanelInset = hostStatsOpen
-    ? hostStatsWidth
-    : findOpen
-      ? findWidth
-      : taskManagerOpen
-        ? taskManagerWidth
-        : 0;
-
   const terminalLayoutRevision = useMemo(
     () =>
-      [
-        sidebarCollapsed,
-        previewOpen,
-        previewWidth,
-        workspacePanelInset,
-      ].join("|"),
-    [sidebarCollapsed, previewOpen, previewWidth, workspacePanelInset],
+      [sidebarCollapsed, previewOpen, previewWidth].join("|"),
+    [sidebarCollapsed, previewOpen, previewWidth],
   );
 
   useEffect(() => {
@@ -288,6 +277,9 @@ function App() {
   );
   const activeTabReady =
     activeTab != null && (activeTab.connectionStatus ?? "ready") === "ready";
+  const activeTabServerId =
+    activeTab?.server_id ??
+    (activeTab?.kind === "local" ? "local" : activeTabId ?? "");
   const activeTabDisconnected = useSessionStore((state) =>
     activeTabId != null ? state.disconnectedSessionIds.has(activeTabId) : false,
   );
@@ -379,7 +371,6 @@ function App() {
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
-          "--workspace-panel-inset": `${workspacePanelInset}px`,
         } as CSSProperties
       }
     >
@@ -659,6 +650,13 @@ function App() {
           disabled={!activeTabReady}
           onClick={toggleHostStats}
         />
+        <CommandNavigatorTool
+          active={commandNavOpen}
+          disabled={!activeTabReady}
+          onClick={() => {
+            if (activeTabId) toggleCommandNav(activeTabId);
+          }}
+        />
       </WorkspaceToolRail>
       {activeTabId && taskManagerOpen ? (
         <TaskManagerPanel
@@ -678,6 +676,15 @@ function App() {
           sessionTitle={activeSessionTitle ?? activeTabId}
           osId={activeTab?.os_id}
           osName={activeTab?.os_name}
+        />
+      ) : null}
+      {activeTabId && activeTab && commandNavOpen ? (
+        <CommandNavigatorPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? activeTabId}
+          osId={activeTab.os_id}
+          tabKind={activeTab.kind}
+          serverId={activeTabServerId}
         />
       ) : null}
     </div>

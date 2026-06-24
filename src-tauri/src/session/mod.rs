@@ -360,6 +360,91 @@ impl SessionManager {
         }
     }
 
+    pub async fn list_systemd_units(&self, session_id: &str) -> AppResult<Vec<String>> {
+        let ssh_handle = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(_) => None,
+                SessionHandle::Ssh(s) => Some(s.handle()),
+            }
+        };
+
+        if let Some(handle) = ssh_handle {
+            crate::systemd::list_remote_systemd_units(handle).await
+        } else {
+            tokio::task::spawn_blocking(crate::systemd::list_local_systemd_units)
+                .await
+                .map_err(|e| AppError::msg(e.to_string()))?
+        }
+    }
+
+    pub async fn list_passwd_accounts(
+        &self,
+        session_id: &str,
+    ) -> AppResult<crate::types::PasswdAccountsResult> {
+        let ssh_handle = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(_) => None,
+                SessionHandle::Ssh(s) => Some(s.handle()),
+            }
+        };
+
+        if let Some(handle) = ssh_handle {
+            crate::passwd::list_remote_passwd_accounts(handle).await
+        } else {
+            tokio::task::spawn_blocking(crate::passwd::list_local_passwd_accounts)
+                .await
+                .map_err(|e| AppError::msg(e.to_string()))?
+        }
+    }
+
+    pub async fn complete_path(&self, session_id: &str, partial: &str) -> AppResult<Vec<String>> {
+        let (kind, cwd, home, ssh_snap) = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Local(s) => (
+                    SessionKind::Local,
+                    s.current_cwd_path(),
+                    s.home_dir_path(),
+                    None,
+                ),
+                SessionHandle::Ssh(s) => (
+                    SessionKind::Ssh,
+                    String::new(),
+                    String::new(),
+                    Some(s.snapshot()),
+                ),
+            }
+        };
+
+        match kind {
+            SessionKind::Local => {
+                let partial = partial.to_string();
+                tokio::task::spawn_blocking(move || {
+                    crate::path_complete::complete_local_path_from_partial(
+                        &partial, &cwd, &home,
+                    )
+                })
+                .await
+                .map_err(|e| AppError::msg(e.to_string()))?
+            }
+            SessionKind::Ssh => {
+                let ssh = ssh_snap.ok_or_else(|| AppError::msg("Not an SSH session"))?;
+                crate::path_complete::complete_remote_path_from_partial(ssh, partial).await
+            }
+        }
+    }
+
     pub async fn kill_process(
         &self,
         session_id: &str,

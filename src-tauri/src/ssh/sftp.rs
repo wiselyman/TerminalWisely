@@ -255,6 +255,20 @@ pub async fn is_remote_directory(
     Ok(metadata.file_type() == FileType::Dir)
 }
 
+pub async fn list_remote_directory(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    remote_path: &str,
+) -> AppResult<Vec<(String, bool)>> {
+    let sftp = open_sftp_session(handle).await?;
+    let read_dir = sftp.read_dir(remote_path.to_string()).await?;
+    Ok(read_dir
+        .map(|entry| {
+            let is_dir = entry.file_type() == FileType::Dir;
+            (entry.file_name(), is_dir)
+        })
+        .collect())
+}
+
 pub async fn download_file<F>(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     remote_path: &str,

@@ -4,6 +4,20 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.6.0] - 2026-06-15
+
+### Added
+- 命令导航：贴边工具栏、90+ 内置运维命令、自定义命令、按发行版筛选、插入终端不自动执行
+- 网络/防火墙/端口：ss 监听、lsof 占用、UFW/firewalld 状态与开放端口、iptables/nftables 查看
+- 多发行版软件包命令（apt、dnf/yum、apk、zypper、pacman）
+- 后端：`list_systemd_units`、`list_passwd_accounts`、`complete_path`
+
+### Changed
+- 场景化参数向导：systemd 服务、路径补全、进程、chmod、chown、搜索关键词、常见端口
+- 命令面板浮层布局，不与终端分栏
+
+> 归档说明见 [`release-notes/v0.6.0.md`](./release-notes/v0.6.0.md)
+
 ## [0.5.13] - 2026-06-15
 
 ### Fixed

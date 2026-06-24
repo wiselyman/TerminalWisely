@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { ProcessEntry, ProcessListResult, SessionKind } from "../types";
 import type { ProcessSortKey, SortDirection } from "../components/TaskManagerTable";
+import { closeCommandNavigator } from "./commandNavigatorStore";
 import { useFindStore } from "./findStore";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useSessionStore } from "./sessionStore";
@@ -200,6 +201,7 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
       if (next) {
         useFindStore.getState().close();
         useHostStatsStore.getState().close();
+        closeCommandNavigator();
       }
       return { open: next };
     });

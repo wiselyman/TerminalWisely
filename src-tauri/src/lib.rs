@@ -6,12 +6,15 @@ mod msys;
 mod find;
 mod commands;
 mod error;
+mod path_complete;
+mod passwd;
 mod preview;
 mod preview_sudo;
 mod process;
 mod pty;
 mod session;
 mod shell;
+mod systemd;
 mod ssh;
 mod transfer;
 mod types;
@@ -75,6 +78,7 @@ pub fn run() {
             commands::transfer_remote_file,
             commands::enter_directory,
             commands::insert_local_paths_command,
+            commands::insert_terminal_command,
             commands::get_saved_connections,
             commands::save_connection,
             commands::update_saved_connection,
@@ -91,6 +95,9 @@ pub fn run() {
             commands::open_preview_path,
             commands::open_preview_handle,
             commands::list_processes,
+            commands::list_systemd_units,
+            commands::list_passwd_accounts,
+            commands::complete_path,
             commands::kill_process,
             commands::find_files,
             commands::get_session_cwd,

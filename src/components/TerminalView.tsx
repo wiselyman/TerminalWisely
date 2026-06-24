@@ -36,6 +36,7 @@ import { TERMINAL_FONT_SIZE, TERMINAL_LINE_HEIGHT, ensureTerminalFontsLoaded, ge
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { createTransferId } from "../lib/transferId";
 import { formatTransferError } from "../lib/transferError";
+import { TERMINAL_FOCUS_EVENT } from "../stores/commandNavigatorStore";
 import { useToastStore } from "../stores/toastStore";
 import { TerminalStatusOverlay } from "./TerminalStatusOverlay";
 import "@xterm/xterm/css/xterm.css";
@@ -525,6 +526,16 @@ export function TerminalView({
       lastSizeRef.current = { cols: 0, rows: 0 };
     };
   }, [isConnecting, kind, markFirstOutput, sessionId, setSessionDisconnected, syncSize]);
+
+  useEffect(() => {
+    const onFocusRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string }>).detail;
+      if (detail?.sessionId !== sessionId || !activeRef.current) return;
+      terminalRef.current?.focus();
+    };
+    window.addEventListener(TERMINAL_FOCUS_EVENT, onFocusRequest);
+    return () => window.removeEventListener(TERMINAL_FOCUS_EVENT, onFocusRequest);
+  }, [sessionId]);
 
   useEffect(() => {
     if (isConnecting || !active) return;

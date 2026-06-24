@@ -328,6 +328,27 @@ fn path_for_display_unix(home: &str, absolute: &str) -> String {
     absolute.to_string()
 }
 
+/// Resolve a directory path for tab-completion (does not require the path to exist).
+pub fn resolve_directory_path(path: &str, home: &str, cwd: &str) -> String {
+    if path.trim().is_empty() {
+        return cwd.trim_end_matches('/').to_string();
+    }
+    let trimmed = path.trim().trim_end_matches(['/', '\\']);
+    if uses_unix_path_semantics(home) {
+        return resolve_unix_path(home, cwd, trimmed);
+    }
+
+    use std::path::{Path, PathBuf};
+    if Path::new(trimmed).is_absolute() {
+        trimmed.to_string()
+    } else {
+        PathBuf::from(cwd)
+            .join(trimmed)
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
 fn resolve_unix_path(home: &str, cwd: &str, path: &str) -> String {
     if path == "~" {
         return home.to_string();

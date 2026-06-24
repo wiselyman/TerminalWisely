@@ -11,7 +11,7 @@ use crate::transfer::CANCELLED_MSG;
 use crate::transfer::TransferRegistry;
 use crate::types::{
     AuthMethod, DeviceRecord, DownloadFileRequest, EnterDirectoryRequest,
-    InsertLocalPathsRequest, KillProcessRequest, ListProcessesRequest, PreviewCloseRequest,
+    InsertLocalPathsRequest, InsertTerminalCommandRequest, KillProcessRequest, ListProcessesRequest, PreviewCloseRequest,
     PreviewOpenRequest, PreviewOpenResult, ProbePathRequest, ProbeRemotePathRequest,
     FindFilesRequest, FindFilesResult,
     HostStatsRequest, HostStatsSnapshot,
@@ -286,6 +286,17 @@ pub async fn insert_local_paths_command(
 }
 
 #[tauri::command]
+pub async fn insert_terminal_command(
+    request: InsertTerminalCommandRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions
+        .write_input(&request.session_id, &request.command)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_saved_connections(app: AppHandle) -> Result<Vec<SavedConnectionView>, String> {
     load_connections(&app)
         .map(|connections| connections.iter().map(SavedConnectionView::from).collect())
@@ -530,6 +541,41 @@ pub async fn list_processes(
     sessions
         .list_processes(&request.session_id, request.mode)
         .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_systemd_units(
+    request: crate::types::ListSystemdUnitsRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<crate::types::SystemdUnitsResult, String> {
+    sessions
+        .list_systemd_units(&request.session_id)
+        .await
+        .map(|units| crate::types::SystemdUnitsResult { units })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_passwd_accounts(
+    request: crate::types::ListPasswdAccountsRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<crate::types::PasswdAccountsResult, String> {
+    sessions
+        .list_passwd_accounts(&request.session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn complete_path(
+    request: crate::types::CompletePathRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<crate::types::CompletePathResult, String> {
+    sessions
+        .complete_path(&request.session_id, &request.partial)
+        .await
+        .map(|completions| crate::types::CompletePathResult { completions })
         .map_err(|e| e.to_string())
 }
 
