@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.6.1] - 2026-06-24
+
+### Fixed
+- macOS / SSH：鼠标追踪模式未关闭时移动光标会向 shell 注入 SGR 乱码（`35;x;yM`）；打开、聚焦、切标签、断开连接时自动 reset
+
+> 归档说明见 [`release-notes/v0.6.1.md`](./release-notes/v0.6.1.md)
+
 ## [0.6.0] - 2026-06-15
 
 ### Added

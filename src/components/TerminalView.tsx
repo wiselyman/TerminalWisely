@@ -23,6 +23,7 @@ import {
   getTerminalMouseCell,
   isRemoteDragModifier,
 } from "../lib/terminalMouse";
+import { resetTerminalMouseTracking } from "../lib/terminalMouseMode";
 import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
 import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "../lib/terminalContext";
 import {
@@ -221,6 +222,7 @@ export function TerminalView({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(host);
+    resetTerminalMouseTracking(terminal);
     fitAddonRef.current = fitAddon;
     terminalRef.current = terminal;
 
@@ -233,6 +235,9 @@ export function TerminalView({
         // Terminal may already be disposed.
       }
     });
+
+    const onHostFocus = () => resetTerminalMouseTracking(terminal);
+    host.addEventListener("focus", onHostFocus, true);
 
     let cleanupRemoteDrag: (() => void) | undefined;
 
@@ -518,6 +523,7 @@ export function TerminalView({
         clearTimeout(highlightTimerRef.current);
       }
       clearUploadHighlights(sessionId);
+      host.removeEventListener("focus", onHostFocus, true);
       onData.dispose();
       terminal.dispose();
       terminalRef.current = null;
@@ -621,6 +627,7 @@ export function TerminalView({
         listenSafely<SessionLifecyclePayload>("session-disconnected", (payload) => {
           if (payload.session_id !== sessionId) return;
           if (kind !== "ssh") return;
+          resetTerminalMouseTracking(terminalRef.current);
           setSessionDisconnected(sessionId);
         }),
       ]);
@@ -776,6 +783,11 @@ export function TerminalView({
       container?.removeEventListener("drop", handleDrop);
     };
   }, [active, isConnecting, kind, sessionId, pushToast, scheduleHighlight, setStatusMessage]);
+
+  useEffect(() => {
+    if (!active || isConnecting) return;
+    resetTerminalMouseTracking(terminalRef.current);
+  }, [active, isConnecting, sessionId]);
 
   useEffect(() => {
     if (!active) {
