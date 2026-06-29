@@ -32,6 +32,15 @@ npm run tauri build
 
 产物位于 `src-tauri/target/release/bundle/`。
 
+### 应用图标
+
+源文件为 `src-tauri/icons/app-icon.svg`（深色底 + 蓝色 `>` 与绿色光标，象征终端提示符）。修改后重新生成各平台尺寸：
+
+```bash
+npx tauri icon src-tauri/icons/app-icon.svg -o src-tauri/icons
+cp src-tauri/icons/128x128.png public/icon.png
+```
+
 ## CI
 
 - **CI**（`.github/workflows/ci.yml`）：每次 push / PR 在 Windows、macOS、Linux 上跑编译检查。
@@ -57,9 +66,10 @@ Release 工作流会构建以下产物：
 
 1. **打版本 tag**（推荐）  
    1. 更新 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 版本号  
-   2. **编写 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)**（会出现在 GitHub Release 描述顶部，即更新说明红框位置）  
-   3. 同步更新 [`CHANGELOG.md`](./CHANGELOG.md)，并将该版本正文归档到 `release-notes/vX.Y.Z.md`  
-   4. 提交后打 tag 并推送：
+   2. 更新 [`README.md`](./README.md) 顶部 **当前版本** 号，并补充本次用户可见的新功能（若有）  
+   3. **编写 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)**（会出现在 GitHub Release 描述顶部，即更新说明红框位置）  
+   4. 同步更新 [`CHANGELOG.md`](./CHANGELOG.md)，并将该版本正文归档到 `release-notes/vX.Y.Z.md`  
+   5. 提交后打 tag 并推送：
    ```bash
    git tag v0.2.0
    git push origin v0.2.0

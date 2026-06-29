@@ -3,6 +3,22 @@ import type { Terminal } from "@xterm/xterm";
 const SYNTHETIC_FLAG = "__twSyntheticTerminalMouseup";
 
 let suppressChromeClickUntil = 0;
+let intentionalTabLeftDown: { tabId: string; at: number } | null = null;
+
+/** Record a deliberate left mousedown on a tab so suppress logic does not eat the click. */
+export function noteIntentionalTabLeftMouseDown(tabId: string): void {
+  intentionalTabLeftDown = { tabId, at: Date.now() };
+}
+
+export function isIntentionalTabLeftClick(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tabEl = target.closest<HTMLElement>(".tab[data-session-id]");
+  const tabId = tabEl?.dataset.sessionId;
+  if (!tabId || !intentionalTabLeftDown) return false;
+  const { tabId: downId, at } = intentionalTabLeftDown;
+  if (Date.now() - at > 800) return false;
+  return tabId === downId;
+}
 
 /** Document-level mouseup only xterm should see — app handlers must ignore it. */
 export function isSyntheticTerminalMouseEvent(event: MouseEvent): boolean {
@@ -19,6 +35,17 @@ export function armChromeClickSuppress(durationMs = 1000): void {
   suppressChromeClickUntil = Date.now() + durationMs;
 }
 
+export function clearChromeClickSuppress(): void {
+  suppressChromeClickUntil = 0;
+}
+
+function isTabChromeTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    !!target.closest(".tab[data-session-id], .tab-bar")
+  );
+}
+
 /**
  * End stale xterm selection drag listeners (missed mouseup after text select).
  * xterm registers document mousemove/mouseup during selection drag; if mouseup
@@ -28,7 +55,9 @@ export function armChromeClickSuppress(durationMs = 1000): void {
  * a right-click pairs with a stranded left mousedown from selection drag and
  * produces a spurious click (common in desktop WebViews).
  */
-export function releaseStaleXtermDocumentMouseListeners(): void {
+export function releaseStaleXtermDocumentMouseListeners(options?: {
+  armClickSuppress?: boolean;
+}): void {
   const event = new MouseEvent("mouseup", {
     bubbles: true,
     cancelable: true,
@@ -38,7 +67,9 @@ export function releaseStaleXtermDocumentMouseListeners(): void {
   });
   (event as MouseEvent & { [SYNTHETIC_FLAG]?: boolean })[SYNTHETIC_FLAG] = true;
   document.dispatchEvent(event);
-  armChromeClickSuppress(400);
+  if (options?.armClickSuppress !== false) {
+    armChromeClickSuppress(400);
+  }
 }
 
 const terminalBySession = new Map<string, Terminal>();
@@ -71,11 +102,14 @@ export function bindOutsideTerminalMouseCleanup(): () => void {
     if (isSyntheticTerminalMouseEvent(event)) return;
     if (isInsideTerminalHost(event.target)) return;
     if (event.button !== 0) return;
-    releaseStaleXtermDocumentMouseListeners();
+    releaseStaleXtermDocumentMouseListeners({
+      armClickSuppress: !isTabChromeTarget(event.target),
+    });
   };
 
   const onSpuriousTabClick = (event: MouseEvent) => {
     if (!shouldSuppressChromeClickAfterTerminalRelease()) return;
+    if (isIntentionalTabLeftClick(event.target)) return;
     if (!(event.target instanceof HTMLElement)) return;
     if (!event.target.closest(".tab[data-session-id]")) return;
     event.preventDefault();

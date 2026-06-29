@@ -42,7 +42,7 @@ import { TabHomeIcon } from "./components/SidebarIcons";
 import { getHostOsProfile } from "./lib/hostOs";
 import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
 import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
-import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress } from "./lib/terminalSelectionDrag";
+import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
 import "./App.css";
 
 const SIDEBAR_WIDTH = 260;
@@ -397,6 +397,7 @@ function App() {
   useEffect(() => {
     const blockSpuriousTabClick = (event: MouseEvent) => {
       if (Date.now() >= suppressTabClickUntilRef.current) return;
+      if (isIntentionalTabLeftClick(event.target)) return;
       if (!(event.target instanceof HTMLElement)) return;
       if (!event.target.closest(".tab[data-session-id]")) return;
       event.preventDefault();
@@ -523,6 +524,9 @@ function App() {
               onMouseDown={(event) => {
                 tabPointerButtonRef.current = event.button;
                 if (event.button === 0) {
+                  clearChromeClickSuppress();
+                  suppressTabClickUntilRef.current = 0;
+                  noteIntentionalTabLeftMouseDown(tab.id);
                   startTabReorder(tab.id, event);
                 }
               }}

@@ -4,6 +4,19 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.6.3] - 2026-06-29
+
+### Changed
+- 应用图标：全新 `W_` 品牌标识（蓝色 W + 绿色终端光标）
+
+### Fixed
+- 多页签并存时点击页签无法切换会话（点击抑制误拦 intentional tab click）
+
+### Docs
+- README 同步 v0.6.x；发布流程要求更新 README 版本号
+
+> 归档说明见 [`release-notes/v0.6.3.md`](./release-notes/v0.6.3.md)
+
 ## [0.6.2] - 2026-06-25
 
 ### Fixed
