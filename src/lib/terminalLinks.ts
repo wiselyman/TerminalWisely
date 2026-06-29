@@ -325,6 +325,11 @@ export function isShiftClick(event: MouseEvent): boolean {
   return event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
 }
 
+/** xterm link activate runs on mouseup — ignore right/middle button. */
+export function isPrimaryLinkActivate(event: MouseEvent): boolean {
+  return event.button === 0;
+}
+
 export function quotePath(path: string): string {
   return `"${path.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }

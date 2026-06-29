@@ -40,6 +40,9 @@ import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
 import { TabHomeIcon } from "./components/SidebarIcons";
 import { getHostOsProfile } from "./lib/hostOs";
+import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
+import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
+import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress } from "./lib/terminalSelectionDrag";
 import "./App.css";
 
 const SIDEBAR_WIDTH = 260;
@@ -138,6 +141,9 @@ function App() {
     y: number;
   } | null>(null);
   const tabReorderCleanupRef = useRef<(() => void) | null>(null);
+  const suppressTabClickUntilRef = useRef(0);
+  const tabPointerButtonRef = useRef(0);
+  const skipTabBarContextMenuRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1",
   );
@@ -205,7 +211,10 @@ function App() {
     };
   }, []);
 
-  const startTabReorder = (tabId: string, event: ReactMouseEvent) => {
+  const startTabReorder = (
+    tabId: string,
+    event: Pick<ReactMouseEvent, "button" | "clientX" | "clientY" | "target">,
+  ) => {
     if (event.button !== 0) return;
     if (
       (event.target as HTMLElement).closest(
@@ -365,6 +374,96 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeTabId, openFind]);
 
+  useEffect(() => {
+    document.addEventListener("contextmenu", suppressBrowserContextMenu);
+    return () =>
+      document.removeEventListener("contextmenu", suppressBrowserContextMenu);
+  }, []);
+
+  useEffect(() => {
+    const onArmTabRightClick = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+      if (!resolveTabContextMenuTarget(event.target)) return;
+      tabPointerButtonRef.current = 2;
+      armChromeClickSuppress(1000);
+      suppressTabClickUntilRef.current = Date.now() + 1000;
+    };
+
+    document.addEventListener("mousedown", onArmTabRightClick, true);
+    return () =>
+      document.removeEventListener("mousedown", onArmTabRightClick, true);
+  }, []);
+
+  useEffect(() => {
+    const blockSpuriousTabClick = (event: MouseEvent) => {
+      if (Date.now() >= suppressTabClickUntilRef.current) return;
+      if (!(event.target instanceof HTMLElement)) return;
+      if (!event.target.closest(".tab[data-session-id]")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+
+    document.addEventListener("click", blockSpuriousTabClick, true);
+    return () =>
+      document.removeEventListener("click", blockSpuriousTabClick, true);
+  }, []);
+
+  useEffect(() => bindOutsideTerminalMouseCleanup(), []);
+
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    if (!bar) return;
+
+    const openTabContextMenu = (event: MouseEvent, tabEl: HTMLElement) => {
+      const tabId = tabEl.dataset.sessionId;
+      if (!tabId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      tabPointerButtonRef.current = 2;
+      armChromeClickSuppress(1000);
+      suppressTabClickUntilRef.current = Date.now() + 1000;
+      setActiveTab(tabId);
+      setTabContextMenu({
+        tabId,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    };
+
+    const onTabBarMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+
+      const tabEl = resolveTabContextMenuTarget(event.target);
+      if (!tabEl) return;
+
+      skipTabBarContextMenuRef.current = true;
+      openTabContextMenu(event, tabEl);
+    };
+
+    const onTabBarContextMenu = (event: MouseEvent) => {
+      if (skipTabBarContextMenuRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        skipTabBarContextMenuRef.current = false;
+        return;
+      }
+
+      const tabEl = resolveTabContextMenuTarget(event.target);
+      if (!tabEl) return;
+
+      openTabContextMenu(event, tabEl);
+    };
+
+    bar.addEventListener("mousedown", onTabBarMouseDown, true);
+    bar.addEventListener("contextmenu", onTabBarContextMenu, true);
+    return () => {
+      bar.removeEventListener("mousedown", onTabBarMouseDown, true);
+      bar.removeEventListener("contextmenu", onTabBarContextMenu, true);
+    };
+  }, [setActiveTab, tabs.length]);
+
   return (
     <div
       className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
@@ -413,18 +512,31 @@ function App() {
               data-drop-kind={
                 tabDropTargetId === tab.id ? tabDropKind ?? undefined : undefined
               }
-              onClick={() => setActiveTab(tab.id)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
+              onClick={() => {
+                if (tabPointerButtonRef.current !== 0) {
+                  tabPointerButtonRef.current = 0;
+                  return;
+                }
+                if (Date.now() < suppressTabClickUntilRef.current) return;
                 setActiveTab(tab.id);
-                setTabContextMenu({
-                  tabId: tab.id,
-                  x: event.clientX,
-                  y: event.clientY,
-                });
               }}
-              onMouseDown={(event) => startTabReorder(tab.id, event)}
+              onMouseDown={(event) => {
+                tabPointerButtonRef.current = event.button;
+                if (event.button === 0) {
+                  startTabReorder(tab.id, event);
+                }
+              }}
+              onContextMenu={(event) => {
+                // Handled by native tab-bar listener; block duplicate React path.
+                event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 0) {
+                  event.preventDefault();
+                  tabPointerButtonRef.current = event.button;
+                  suppressTabClickUntilRef.current = Date.now() + 1000;
+                }
+              }}
               onDragOver={(event) => {
                 if (tabReorderDragId) return;
                 if (tabConnecting) return;

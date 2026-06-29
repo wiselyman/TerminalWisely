@@ -9,6 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import {
+  isSyntheticTerminalMouseEvent,
+  armChromeClickSuppress,
+} from "../lib/terminalSelectionDrag";
 import { invoke } from "@tauri-apps/api/core";
 import {
   shortcutAccentColor,
@@ -44,11 +48,17 @@ function useAnchoredMenu() {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const anchorRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const openedAtRef = useRef(0);
 
   useEffect(() => {
     if (!open) return;
 
-    const onPointerDown = (event: MouseEvent) => {
+    openedAtRef.current = performance.now();
+
+    const onDismiss = (event: MouseEvent) => {
+      if (isSyntheticTerminalMouseEvent(event)) return;
+      if (event.button !== 0) return;
+      if (performance.now() - openedAtRef.current < 500) return;
       const target = event.target as Node;
       if (
         anchorRef.current?.contains(target) ||
@@ -65,10 +75,17 @@ function useAnchoredMenu() {
       }
     };
 
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      if (disposed) return;
+      document.addEventListener("click", onDismiss, true);
+      document.addEventListener("keydown", onKeyDown);
+    }, 0);
+
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      disposed = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("click", onDismiss, true);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
@@ -239,7 +256,7 @@ export function TabDirectoryShortcuts({
     shortcut: DirectoryShortcut,
   ) => {
     event.preventDefault();
-    event.stopPropagation();
+    armChromeClickSuppress(1000);
     setEditingShortcut(shortcut);
     setEditPath(shortcut.path);
     setEditScope(shortcut.scope);

@@ -15,6 +15,7 @@ import {
   extractDroppedPaths,
   findRemotePathMatches,
   isModifierClick,
+  isPrimaryLinkActivate,
   isShiftClick,
   rangeToColumns,
 } from "../lib/terminalLinks";
@@ -24,6 +25,14 @@ import {
   isRemoteDragModifier,
 } from "../lib/terminalMouse";
 import { resetTerminalMouseTracking } from "../lib/terminalMouseMode";
+import {
+  armChromeClickSuppress,
+  bindTerminalSelectionDragRelease,
+  isSyntheticTerminalMouseEvent,
+  registerTerminalSession,
+  shouldSuppressChromeClickAfterTerminalRelease,
+  unregisterTerminalSession,
+} from "../lib/terminalSelectionDrag";
 import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
 import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "../lib/terminalContext";
 import {
@@ -217,12 +226,15 @@ export function TerminalView({
       },
       scrollback: 5000,
       allowProposedApi: true,
+      rightClickSelectsWord: false,
     });
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(host);
     resetTerminalMouseTracking(terminal);
+    registerTerminalSession(sessionId, terminal);
+    const cleanupSelectionDrag = bindTerminalSelectionDragRelease(host, terminal);
     fitAddonRef.current = fitAddon;
     terminalRef.current = terminal;
 
@@ -238,6 +250,18 @@ export function TerminalView({
 
     const onHostFocus = () => resetTerminalMouseTracking(terminal);
     host.addEventListener("focus", onHostFocus, true);
+
+    const onHostMouseDown = (event: MouseEvent) => {
+      if (event.button === 2) {
+        armChromeClickSuppress(800);
+      }
+    };
+    const onHostContextMenu = () => {
+      // macOS trackpad secondary click may skip mousedown(button=2).
+      armChromeClickSuppress(800);
+    };
+    host.addEventListener("mousedown", onHostMouseDown, true);
+    host.addEventListener("contextmenu", onHostContextMenu, true);
 
     let cleanupRemoteDrag: (() => void) | undefined;
 
@@ -372,6 +396,10 @@ export function TerminalView({
                   underline: true,
                 },
                 activate: (event: MouseEvent, _uri: string) => {
+                  if (!isPrimaryLinkActivate(event)) return;
+                  if (isSyntheticTerminalMouseEvent(event)) return;
+                  if (shouldSuppressChromeClickAfterTerminalRelease()) return;
+
                   const targetPath = resolveClickedPath();
                   if (isModifierClick(event)) {
                     if (suppressModifierActivate) {
@@ -515,6 +543,8 @@ export function TerminalView({
 
     return () => {
       disposed = true;
+      cleanupSelectionDrag();
+      unregisterTerminalSession(sessionId);
       cleanupRemoteDrag?.();
       if (resizeTimerRef.current !== null) {
         clearTimeout(resizeTimerRef.current);
@@ -523,6 +553,8 @@ export function TerminalView({
         clearTimeout(highlightTimerRef.current);
       }
       clearUploadHighlights(sessionId);
+      host.removeEventListener("mousedown", onHostMouseDown, true);
+      host.removeEventListener("contextmenu", onHostContextMenu, true);
       host.removeEventListener("focus", onHostFocus, true);
       onData.dispose();
       terminal.dispose();

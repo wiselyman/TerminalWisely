@@ -4,6 +4,16 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.6.2] - 2026-06-25
+
+### Fixed
+- 终端选区后页签右键需点两次、或右键被当成左键切换页签
+- 文件路径链接右键误开预览（xterm `activate` 在 `mouseup` 不区分按键）
+- WebView 浏览器右键与应用菜单冲突；终端区保留系统复制菜单
+- Windows / macOS / Linux 统一处理；macOS 触控板 secondary click 加固
+
+> 归档说明见 [`release-notes/v0.6.2.md`](./release-notes/v0.6.2.md)
+
 ## [0.6.1] - 2026-06-24
 
 ### Fixed

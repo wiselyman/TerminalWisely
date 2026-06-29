@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { isSyntheticTerminalMouseEvent } from "../lib/terminalSelectionDrag";
 
 interface TabContextMenuProps {
   x: number;
@@ -31,9 +32,19 @@ export function TabContextMenu({
   onCloseRight,
 }: TabContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const openedAtRef = useRef(0);
 
   useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
+    openedAtRef.current = performance.now();
+
+    const isNearOpenPoint = (event: MouseEvent) =>
+      Math.hypot(event.clientX - x, event.clientY - y) <= 8;
+
+    const onDismiss = (event: MouseEvent) => {
+      if (isSyntheticTerminalMouseEvent(event)) return;
+      if (event.button !== 0) return;
+      const elapsed = performance.now() - openedAtRef.current;
+      if (elapsed < 900 && isNearOpenPoint(event)) return;
       if (menuRef.current?.contains(event.target as Node)) return;
       onClose();
     };
@@ -44,13 +55,22 @@ export function TabContextMenu({
       }
     };
 
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      if (disposed) return;
+      document.addEventListener("mousedown", onDismiss, true);
+      document.addEventListener("click", onDismiss, true);
+      document.addEventListener("keydown", onKeyDown);
+    }, 0);
+
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
+      disposed = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("mousedown", onDismiss, true);
+      document.removeEventListener("click", onDismiss, true);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, x, y]);
 
   const hasLeft = tabIndex > 0;
   const hasRight = tabIndex >= 0 && tabIndex < tabCount - 1;
