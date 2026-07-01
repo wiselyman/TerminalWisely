@@ -36,6 +36,8 @@ interface FindState {
   open: boolean;
   width: number;
   sessionCwd: string | null;
+  followTerminalCwd: boolean;
+  searchPath: string;
   namePattern: string;
   typeFilter: FindTypeFilter;
   maxDepth: number;
@@ -52,6 +54,8 @@ interface FindState {
   setTypeFilter: (filter: FindTypeFilter) => void;
   setMaxDepth: (depth: number) => void;
   setCaseInsensitive: (value: boolean) => void;
+  setSearchPath: (path: string) => void;
+  resetSearchPathToTerminal: () => void;
   openFind: (sessionId: string) => void;
   toggleOpen: (sessionId: string) => void;
   close: () => void;
@@ -73,6 +77,8 @@ export const useFindStore = create<FindState>((set, get) => ({
   open: false,
   width: Number(localStorage.getItem(FIND_WIDTH_KEY)) || DEFAULT_FIND_WIDTH,
   sessionCwd: null,
+  followTerminalCwd: true,
+  searchPath: "",
   namePattern: savedOptions.namePattern ?? "",
   typeFilter: savedOptions.typeFilter ?? "all",
   maxDepth: savedOptions.maxDepth ?? 8,
@@ -112,6 +118,20 @@ export const useFindStore = create<FindState>((set, get) => ({
     set({ caseInsensitive });
   },
 
+  setSearchPath: (searchPath) => {
+    set({
+      searchPath,
+      followTerminalCwd: false,
+    });
+  },
+
+  resetSearchPathToTerminal: () => {
+    set({
+      followTerminalCwd: true,
+      searchPath: "",
+    });
+  },
+
   resetResults: () =>
     set({
       entries: [],
@@ -127,6 +147,8 @@ export const useFindStore = create<FindState>((set, get) => ({
     set((state) => ({
       open: true,
       activeSessionId: sessionId,
+      followTerminalCwd: true,
+      searchPath: "",
       focusNonce: state.focusNonce + 1,
     }));
     void get().loadSessionCwd(sessionId);
@@ -169,11 +191,13 @@ export const useFindStore = create<FindState>((set, get) => ({
 
     set({ loading: true, error: null, activeSessionId: sessionId });
 
+    const path = state.followTerminalCwd ? "." : state.searchPath.trim() || ".";
+
     try {
       const result = await invoke<FindFilesResult>("find_files", {
         request: {
           session_id: sessionId,
-          path: ".",
+          path,
           name_pattern: namePattern,
           type_filter: state.typeFilter,
           max_depth: state.maxDepth,

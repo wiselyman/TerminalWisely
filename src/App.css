@@ -1145,6 +1145,89 @@ body.tab-reordering .terminal-drop-overlay {
   cursor: default;
 }
 
+.terminal-fs-context-menu {
+  position: fixed;
+  z-index: 30000;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #161b22;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.terminal-fs-dialog .terminal-fs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.terminal-fs-dialog .terminal-fs-field span {
+  font-size: 0.82rem;
+  color: #8b949e;
+}
+
+.terminal-fs-dialog .terminal-fs-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+  color: #e6edf3;
+  font-size: 0.88rem;
+}
+
+.terminal-fs-confirm {
+  margin: 0 0 16px;
+  font-size: 0.88rem;
+  color: #e6edf3;
+  line-height: 1.5;
+}
+
+.terminal-fs-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.terminal-fs-actions .terminal-fs-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.terminal-fs-actions .terminal-fs-btn:hover:not(:disabled) {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.terminal-fs-actions .terminal-fs-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.terminal-fs-actions .terminal-fs-btn-primary {
+  background: #21262d;
+  color: #e6edf3;
+  border-color: #388bfd;
+}
+
+.terminal-fs-actions .terminal-fs-btn-primary:hover:not(:disabled) {
+  background: #388bfd;
+  color: #fff;
+}
+
+.terminal-fs-context-menu .tab-context-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: #30363d;
+}
+
 .tab-shortcut-empty {
   margin: 0 4px 8px;
   color: #8b949e;
@@ -3127,6 +3210,25 @@ body.find-panel-resizing {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.find-panel-scope-field .path-input {
+  margin-top: 4px;
+}
+
+.find-panel-follow-cwd {
+  align-self: flex-start;
+  margin-top: 4px;
+  border: none;
+  background: transparent;
+  color: #58a6ff;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.find-panel-follow-cwd:hover {
+  text-decoration: underline;
 }
 
 .find-panel-start-path,

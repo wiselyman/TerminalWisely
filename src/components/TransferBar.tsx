@@ -3,6 +3,7 @@ import {
   formatMegabytes,
   formatSpeedMbps,
   formatTransferDirection,
+  formatTransferMethod,
   formatTransferPercent,
 } from "../lib/transferFormat";
 import type { TransferProgressPayload } from "../types";
@@ -41,6 +42,7 @@ export function TransferBar({ progress, sessionLabel, onCancel }: TransferBarPro
   const percent = formatTransferPercent(progress.transferred, progress.total);
   const hasTotal = progress.total > 0;
   const indeterminate = hasTotal && progress.transferred === 0;
+  const methodLabel = formatTransferMethod(progress.method);
   const speedLabel = formatSpeedMbps(speedBps);
 
   const sizeLabel = hasTotal
@@ -49,9 +51,16 @@ export function TransferBar({ progress, sessionLabel, onCancel }: TransferBarPro
       ? formatMegabytes(progress.transferred)
       : null;
 
-  const metricParts = [sizeLabel, speedLabel, percent !== null ? `${percent}%` : null].filter(
-    Boolean,
-  );
+  const metricParts = [
+    methodLabel,
+    sizeLabel,
+    speedLabel,
+    percent !== null ? `${percent}%` : null,
+  ].filter(Boolean);
+
+  const destinationLabel =
+    progress.destination_path ??
+    (sessionLabel ? sessionLabel : null);
 
   return (
     <div className="transfer-bar">
@@ -59,8 +68,8 @@ export function TransferBar({ progress, sessionLabel, onCancel }: TransferBarPro
         <div className="transfer-bar-head">
           <span className="transfer-bar-label">
             {formatTransferDirection(progress.direction)} · {progress.filename}
-            {sessionLabel ? (
-              <span className="transfer-bar-session"> · {sessionLabel}</span>
+            {destinationLabel ? (
+              <span className="transfer-bar-session"> → {destinationLabel}</span>
             ) : null}
           </span>
           <span className="transfer-bar-metrics">

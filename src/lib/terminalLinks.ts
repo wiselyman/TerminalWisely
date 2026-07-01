@@ -1,7 +1,15 @@
-const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
+const CSI_PATTERN = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+const OSC_PATTERN = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
+const OSC8_PATTERN = /\x1b\]8;[^\x07]*(?:\x07|\x1b\\)/g;
 
+/** Strip OSC 8 hyperlink sequences from raw PTY output (GNU ls default with COLORTERM). */
+export function stripOsc8Hyperlinks(data: string): string {
+  return data.replace(OSC8_PATTERN, "");
+}
+
+/** Strip CSI color codes, OSC hyperlinks (ls --hyperlink), and related non-printing escapes. */
 export function stripAnsi(text: string): string {
-  return text.replace(ANSI_PATTERN, "");
+  return text.replace(OSC_PATTERN, "").replace(CSI_PATTERN, "");
 }
 
 export interface LineColumnMap {
@@ -30,7 +38,9 @@ export function buildLineColumnMap(
     const chars = stripAnsi(cell.getChars() ?? "");
     const cellWidth = cell.getWidth() || 1;
     if (chars) {
-      indexToCol[plain.length] = col;
+      for (let i = 0; i < chars.length; i++) {
+        indexToCol[plain.length + i] = col;
+      }
       plain += chars;
     }
     col += cellWidth;
@@ -52,22 +62,19 @@ export function rangeToColumns(
     return { startCol, width: 1 };
   }
 
-  let endCol: number;
-  if (end < map.plainLength) {
-    endCol = map.indexToCol[end] ?? startCol + 1;
-  } else {
-    const lastCharCol = map.indexToCol[end - 1] ?? startCol;
-    const lastCell = line.getCell(lastCharCol);
-    endCol = lastCharCol + (lastCell?.getWidth() || 1);
-  }
+  const lastCharCol = map.indexToCol[end - 1] ?? startCol;
+  const lastCell = line.getCell(lastCharCol);
+  const endColExclusive = lastCharCol + (lastCell?.getWidth() || 1);
 
-  return { startCol, width: Math.max(1, endCol - startCol) };
+  return { startCol, width: Math.max(1, endColExclusive - startCol) };
 }
 
 export interface RemotePathMatch {
   path: string;
   start: number;
   end: number;
+  /** From `ls -F` trailing `/` on the token. */
+  isDirectory?: boolean;
 }
 
 interface LineToken {
@@ -119,6 +126,30 @@ function tokenizeLine(text: string): LineToken[] {
 
 function normalizePathToken(token: string): string {
   return token.replace(/[/\\]+$/, "").replace(/[$#]+$/, "");
+}
+
+/** Map a raw ls token to plain-text [start, end) indices matching visible characters only. */
+function linkRangeForToken(rawToken: string, start: number): { start: number; end: number } {
+  const normalized = normalizePathToken(rawToken);
+  return { start, end: start + normalized.length };
+}
+
+/** xterm link columns: 1-based start, 0-based exclusive end. */
+export function matchToXtermRange(
+  map: LineColumnMap,
+  line: { getCell: (col: number) => { getWidth: () => number } | undefined | null },
+  start: number,
+  end: number,
+  bufferLineNumber: number,
+): {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+} {
+  const { startCol, width } = rangeToColumns(map, line, start, end);
+  return {
+    start: { x: startCol + 1, y: bufferLineNumber },
+    end: { x: startCol + width, y: bufferLineNumber },
+  };
 }
 
 function isFilesystemPathPrefix(token: string): boolean {
@@ -250,8 +281,8 @@ function parseLsLongLine(plain: string): RemotePathMatch[] {
   return [
     {
       path,
-      start: last.start,
-      end: last.end,
+      ...linkRangeForToken(last.value, last.start),
+      isDirectory: last.value.endsWith("/"),
     },
   ];
 }
@@ -259,18 +290,22 @@ function parseLsLongLine(plain: string): RemotePathMatch[] {
 function pushMatch(
   matches: RemotePathMatch[],
   seen: Set<string>,
-  path: string,
+  rawToken: string,
   start: number,
-  end: number,
+  _end: number,
 ) {
-  const normalized = normalizePathToken(path);
+  const normalized = normalizePathToken(rawToken);
   if (!normalized) return;
   if (isContainerImageReference(normalized)) return;
   if (isNoiseToken(normalized)) return;
   const key = `${start}:${normalized}`;
   if (seen.has(key)) return;
   seen.add(key);
-  matches.push({ path: normalized, start, end });
+  matches.push({
+    path: normalized,
+    ...linkRangeForToken(rawToken, start),
+    isDirectory: rawToken.endsWith("/"),
+  });
 }
 
 export interface RemotePathMatchOptions {
@@ -289,12 +324,7 @@ export function findRemotePathMatches(
 
   const lsLongMatches = parseLsLongLine(plain);
   if (lsLongMatches.length > 0) {
-    const matches: RemotePathMatch[] = [];
-    const seen = new Set<string>();
-    for (const match of lsLongMatches) {
-      pushMatch(matches, seen, match.path, match.start, match.end);
-    }
-    return matches;
+    return lsLongMatches;
   }
 
   if (!options?.inLsOutput) {
@@ -307,7 +337,7 @@ export function findRemotePathMatches(
   for (const token of tokenizeLine(plain)) {
     const path = normalizePathToken(token.value);
     if (!isListEntryToken(path)) continue;
-    pushMatch(matches, seen, path, token.start, token.end);
+    pushMatch(matches, seen, token.value, token.start, token.end);
   }
 
   return matches.sort((a, b) => a.start - b.start);

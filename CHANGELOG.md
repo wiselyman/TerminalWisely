@@ -4,6 +4,27 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.7.0] - 2026-06-30
+
+### Added
+- 终端 `ls` 文件/目录右键：重命名、删除、移动到目录；复制名称与路径
+- 跨 SSH 会话文件发送：SCP 源机直传（`scp_transfer`），书签密码自动注入
+- Ctrl/Cmd+目录：打包 tar.gz 下载
+
+### Changed
+- SSH 首次连接：认证后立即 spawn shell；OS/`$HOME` 探测与设备历史写入后台化
+- SSH 传输层：20s 连接超时、最多 3 次尝试、30s keepalive；重连先 shutdown 旧 shell loop
+- Find：cwd 自动同步、`PathInput` Tab 补全；传输条显示 `destination_path`
+- 终端链接：悬停下划线、`ls -F` 目录 hint
+
+### Fixed
+- `TerminalFsDialog` 确认/取消按钮等宽；右键 probe 失败不再 toast
+- `TERMINAL_FOCUS_EVENT` import 缺失导致渲染崩溃
+- SFTP `remote_path_kind` 软处理不存在路径；`update_metadata` 不覆盖用户 cwd
+- 跨服 SCP 进度与链接识别若干问题
+
+> 归档说明见 [`release-notes/v0.7.0.md`](./release-notes/v0.7.0.md)
+
 ## [0.6.3] - 2026-06-29
 
 ### Changed

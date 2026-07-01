@@ -46,6 +46,10 @@ impl LocalSession {
 
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        #[cfg(target_os = "linux")]
+        {
+            cmd.env("LS_OPTIONS", "--hyperlink=never");
+        }
 
         #[cfg(target_os = "macos")]
         {

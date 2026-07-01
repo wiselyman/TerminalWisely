@@ -3,6 +3,7 @@ import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEve
 import type { FindFileEntry } from "../types";
 import { useFindStore } from "../stores/findStore";
 import { usePreviewStore } from "../stores/previewStore";
+import { PathInput } from "./PathInput";
 
 interface FindPanelProps {
   sessionId: string;
@@ -30,6 +31,10 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
     width,
     setWidth,
     sessionCwd,
+    followTerminalCwd,
+    searchPath,
+    setSearchPath,
+    resetSearchPathToTerminal,
     namePattern,
     setNamePattern,
     typeFilter,
@@ -133,9 +138,27 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
         </div>
 
         <div className="find-panel-toolbar">
-          <p className="find-panel-scope" title={sessionCwd ?? undefined}>
-            搜索范围：{sessionCwd ?? "当前目录"}
-          </p>
+          <label className="find-panel-field find-panel-scope-field">
+            <span>搜索范围</span>
+            <PathInput
+              sessionId={sessionId}
+              value={followTerminalCwd ? (sessionCwd ?? "") : searchPath}
+              onChange={setSearchPath}
+              placeholder={sessionCwd ?? "当前目录"}
+            />
+            {!followTerminalCwd ? (
+              <button
+                type="button"
+                className="find-panel-follow-cwd"
+                onClick={() => {
+                  resetSearchPathToTerminal();
+                  void useFindStore.getState().loadSessionCwd(sessionId);
+                }}
+              >
+                跟随终端当前目录
+              </button>
+            ) : null}
+          </label>
 
           <label className="find-panel-field">
             <span>文件名 (-name)</span>

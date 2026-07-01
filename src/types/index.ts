@@ -80,6 +80,9 @@ export interface TransferProgressPayload {
   transferred: number;
   total: number;
   direction: "upload" | "download" | string;
+  /** `scp` server-to-server, `stream` cat relay, `sftp` sftp relay */
+  method?: string | null;
+  destination_path?: string | null;
 }
 
 export interface TransferCompletePayload {
@@ -109,6 +112,23 @@ export interface TransferRemoteRequest {
   to_session_id: string;
   remote_dir?: string | null;
   transfer_id?: string | null;
+}
+
+export interface FsPathRequest {
+  session_id: string;
+  path: string;
+}
+
+export interface FsRenameRequest {
+  session_id: string;
+  path: string;
+  new_name: string;
+}
+
+export interface FsMoveRequest {
+  session_id: string;
+  path: string;
+  dest_dir: string;
 }
 
 export type ConnectionStatus = "connecting" | "ready";

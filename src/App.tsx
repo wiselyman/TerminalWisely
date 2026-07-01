@@ -332,9 +332,22 @@ function App() {
   useEffect(() => {
     if (!findOpen || !activeTabId) return;
 
-    useFindStore.setState({ activeSessionId: activeTabId });
+    useFindStore.setState({
+      activeSessionId: activeTabId,
+      followTerminalCwd: true,
+      searchPath: "",
+    });
     resetFindResults();
     void loadSessionCwd(activeTabId);
+
+    const timer = window.setInterval(() => {
+      const { followTerminalCwd } = useFindStore.getState();
+      if (followTerminalCwd) {
+        void loadSessionCwd(activeTabId);
+      }
+    }, 2000);
+
+    return () => window.clearInterval(timer);
   }, [activeTabId, findOpen, loadSessionCwd, resetFindResults]);
 
   useEffect(() => {

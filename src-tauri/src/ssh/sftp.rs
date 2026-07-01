@@ -5,8 +5,7 @@ use std::sync::Arc;
 use russh::client;
 use russh::ChannelMsg;
 use russh_sftp::client::{Config as SftpConfig, SftpSession};
-use russh_sftp::protocol::OpenFlags;
-use russh_sftp::protocol::FileType;
+use russh_sftp::protocol::{FileType, OpenFlags};
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
@@ -166,6 +165,40 @@ pub async fn remove_remote_file(
     Ok(())
 }
 
+pub async fn rename_remote_path(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    old: &str,
+    new: &str,
+) -> AppResult<()> {
+    let sftp = open_sftp_session(handle).await?;
+    sftp.rename(old.to_string(), new.to_string())
+        .await
+        .map_err(AppError::from)?;
+    Ok(())
+}
+
+pub async fn remove_remote_path(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    path: &str,
+) -> AppResult<()> {
+    let sftp = open_sftp_session(handle).await?;
+    let metadata = sftp.metadata(path.to_string()).await?;
+    if metadata.file_type() == FileType::Dir {
+        match sftp.remove_dir(path.to_string()).await {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                let quoted = crate::shell::shell_quote_remote_path(path);
+                drop(sftp);
+                crate::ssh::client::exec_command(handle, &format!("rm -rf {quoted}")).await?;
+                Ok(())
+            }
+        }
+    } else {
+        sftp.remove_file(path.to_string()).await?;
+        Ok(())
+    }
+}
+
 pub async fn upload_file<F>(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     local_path: &Path,
@@ -250,9 +283,30 @@ pub async fn is_remote_directory(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     remote_path: &str,
 ) -> AppResult<bool> {
+    match remote_path_kind(handle, remote_path).await? {
+        Some(true) => Ok(true),
+        Some(false) => Ok(false),
+        None => Err(AppError::msg("No such file")),
+    }
+}
+
+/// `Some(true)` directory, `Some(false)` file, `None` when path does not exist.
+pub async fn remote_path_kind(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    remote_path: &str,
+) -> AppResult<Option<bool>> {
     let sftp = open_sftp_session(handle).await?;
-    let metadata = sftp.metadata(remote_path.to_string()).await?;
-    Ok(metadata.file_type() == FileType::Dir)
+    match sftp.metadata(remote_path.to_string()).await {
+        Ok(metadata) => Ok(Some(metadata.file_type() == FileType::Dir)),
+        Err(err) => {
+            let message = err.to_string();
+            if message.contains("No such file") || message.contains("not found") {
+                Ok(None)
+            } else {
+                Err(err.into())
+            }
+        }
+    }
 }
 
 pub async fn list_remote_directory(

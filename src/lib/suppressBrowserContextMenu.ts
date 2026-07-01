@@ -2,7 +2,9 @@
 function hasAppContextMenu(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
-    !!target.closest(".tab[data-session-id], .tab-shortcut-folder")
+    !!target.closest(
+      ".tab[data-session-id], .tab-shortcut-folder, .terminal-fs-context-menu",
+    )
   );
 }
 

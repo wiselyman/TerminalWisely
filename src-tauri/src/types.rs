@@ -52,6 +52,11 @@ pub struct TransferProgressPayload {
     pub transferred: u64,
     pub total: u64,
     pub direction: String,
+    /// `scp` = server-to-server scp, `stream` = cat relay via app, `sftp` = sftp relay
+    #[serde(default)]
+    pub method: Option<String>,
+    #[serde(default)]
+    pub destination_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +257,26 @@ pub struct PreviewOpenResult {
 pub struct ProbePathRequest {
     pub session_id: String,
     pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsPathRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsRenameRequest {
+    pub session_id: String,
+    pub path: String,
+    pub new_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FsMoveRequest {
+    pub session_id: String,
+    pub path: String,
+    pub dest_dir: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

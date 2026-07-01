@@ -10,12 +10,12 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::pty::local::LocalSession;
 use crate::ssh::client::{emit_transfer_complete, emit_transfer_progress, SshSession};
-use crate::ssh::sftp;
+use crate::ssh::{probe, sftp};
 use crate::transfer::TransferRegistry;
 use crate::types::{
     DeviceRecord, DownloadFileRequest, ProbeRemotePathRequest, SavedConnection, SessionInfo,
     SessionKind, SshConnectRequest, TerminalOutputPayload, TransferProgressPayload,
-    TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
+    TransferRemoteRequest, UploadFileResult, UploadFilesRequest, AuthMethod,
 };
 
 pub enum SessionHandle {
@@ -103,6 +103,42 @@ impl SessionManager {
             .await
             .insert(id, SessionHandle::Ssh(session));
         Ok((info, os_profile))
+    }
+
+    pub async fn probe_ssh_metadata(
+        &self,
+        session_id: &str,
+    ) -> AppResult<Option<probe::ServerOsProfile>> {
+        let handle = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Ssh(s) => s.handle(),
+                SessionHandle::Local(_) => return Ok(None),
+            }
+        };
+
+        let (remote_home, os_profile) = {
+            let guard = handle.lock().await;
+            let home = sftp::resolve_remote_home(&guard).await?;
+            let os = probe::probe_remote_os(&guard).await.ok();
+            (home, os)
+        };
+
+        let mut sessions = self.sessions.lock().await;
+        let session = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Ssh(s) => {
+                s.update_metadata(remote_home, os_profile.clone()).await;
+            }
+            SessionHandle::Local(_) => {}
+        }
+
+        Ok(os_profile)
     }
 
     pub async fn write_input(&self, session_id: &str, data: &str) -> AppResult<()> {
@@ -240,6 +276,8 @@ impl SessionManager {
                 0,
                 0,
                 "upload",
+                None,
+                None,
             );
         }
 
@@ -285,6 +323,8 @@ impl SessionManager {
             0,
             0,
             "download",
+            None,
+            None,
         );
 
         let ssh = {
@@ -300,6 +340,53 @@ impl SessionManager {
 
         let result = ssh
             .download_file(app, request, &transfer_id, Some(handle.cancel))
+            .await;
+        self.transfers.clear(&transfer_id).await;
+        result
+    }
+
+    pub async fn download_directory(
+        &self,
+        app: AppHandle,
+        request: DownloadFileRequest,
+    ) -> AppResult<String> {
+        let session_id = request.session_id.clone();
+        let transfer_id = TransferRegistry::resolve_transfer_id(request.transfer_id.clone());
+        let handle = self
+            .transfers
+            .begin(transfer_id.clone(), session_id.clone(), "download")
+            .await;
+
+        let dir_name = std::path::Path::new(&request.remote_path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("folder");
+
+        emit_transfer_progress(
+            &app,
+            &transfer_id,
+            &session_id,
+            &format!("{dir_name}.tar.gz"),
+            0,
+            0,
+            "download",
+            None,
+            None,
+        );
+
+        let ssh = {
+            let sessions = self.sessions.lock().await;
+            let session = sessions
+                .get(&session_id)
+                .ok_or_else(|| AppError::msg("Session not found"))?;
+            match session {
+                SessionHandle::Ssh(s) => s.snapshot(),
+                _ => return Err(AppError::msg("Not an SSH session")),
+            }
+        };
+
+        let result = ssh
+            .download_directory(app, request, &transfer_id, Some(handle.cancel))
             .await;
         self.transfers.clear(&transfer_id).await;
         result
@@ -328,10 +415,10 @@ impl SessionManager {
             }
         };
         let resolved = ssh.resolve_remote_path(&request.path).await?;
-        if sftp::is_remote_directory(&ssh.handle(), &resolved).await? {
-            Ok("directory".to_string())
-        } else {
-            Ok("file".to_string())
+        match sftp::remote_path_kind(&ssh.handle(), &resolved).await? {
+            Some(true) => Ok("directory".to_string()),
+            Some(false) => Ok("file".to_string()),
+            None => Ok("file".to_string()),
         }
     }
 
@@ -656,7 +743,7 @@ impl SessionManager {
             None => to_snap.current_remote_cwd().await,
         };
         let to_path = format!("{}/{}", to_dir.trim_end_matches('/'), filename);
-        let to_request = to_snap.connect_request().clone();
+        let to_request = enrich_connect_request_from_bookmarks(&app, &to_snap.connect_request());
         let to_session_id = to_snap.session_id();
 
         let file_size = match &source {
@@ -677,6 +764,8 @@ impl SessionManager {
             0,
             file_size,
             "send",
+            None,
+            Some(&to_path),
         );
         let manager = self.clone();
         let app_bg = app.clone();
@@ -685,18 +774,18 @@ impl SessionManager {
         let progress_transfer_id = transfer_id.clone();
         let registry_transfer_id = transfer_id.clone();
         let fname = filename.clone();
+        let to_path_progress = to_path.clone();
         let cancel = handle.cancel;
 
         tokio::spawn(async move {
             let transfer_result = async {
-                let to_conn = crate::ssh::client::open_transfer_connection(
-                    &to_request,
-                    Some(cancel.as_ref()),
-                )
-                .await?;
-
                 match source {
                     TransferSource::Local { path, size } => {
+                        let to_conn = crate::ssh::client::open_transfer_connection(
+                            &to_request,
+                            Some(cancel.as_ref()),
+                        )
+                        .await?;
                         sftp::upload_file(
                             &to_conn.handle(),
                             &path,
@@ -712,6 +801,8 @@ impl SessionManager {
                                         transferred,
                                         total: size,
                                         direction: "send".to_string(),
+                                        method: Some("sftp".to_string()),
+                                        destination_path: Some(to_path_progress.clone()),
                                     },
                                 );
                             },
@@ -723,29 +814,48 @@ impl SessionManager {
                         from_path,
                         size,
                     } => {
+                        let from_request =
+                            enrich_connect_request_from_bookmarks(&app_progress, &from_request);
+                        let to_request =
+                            enrich_connect_request_from_bookmarks(&app_progress, &to_request);
                         let from_conn = crate::ssh::client::open_transfer_connection(
                             &from_request,
                             Some(cancel.as_ref()),
                         )
                         .await?;
+                        let to_conn = crate::ssh::client::open_transfer_connection(
+                            &to_request,
+                            Some(cancel.as_ref()),
+                        )
+                        .await?;
 
-                        crate::ssh::stream_transfer::transfer_remote_file(
+                        let app_for_scp = app_progress.clone();
+                        let tid_for_scp = progress_transfer_id.clone();
+                        let sid_for_scp = progress_session_id.clone();
+                        let fname_for_scp = fname.clone();
+
+                        let to_path_for_progress = to_path_progress.clone();
+
+                        crate::ssh::scp_transfer::transfer_remote_via_server_scp(
                             &from_conn.handle(),
-                            &to_conn.handle(),
+                            Some(&to_conn.handle()),
                             &from_path,
+                            &to_request,
                             &to_path,
                             size,
                             Some(cancel),
-                            move |transferred, total| {
-                                let _ = app_progress.emit(
+                            move |transferred, total, method| {
+                                let _ = app_for_scp.emit(
                                     "transfer-progress",
                                     TransferProgressPayload {
-                                        transfer_id: progress_transfer_id.clone(),
-                                        session_id: progress_session_id.clone(),
-                                        filename: fname.clone(),
+                                        transfer_id: tid_for_scp.clone(),
+                                        session_id: sid_for_scp.clone(),
+                                        filename: fname_for_scp.clone(),
                                         transferred,
                                         total,
                                         direction: "send".to_string(),
+                                        method: Some(method.to_string()),
+                                        destination_path: Some(to_path_for_progress.clone()),
                                     },
                                 );
                             },
@@ -795,21 +905,7 @@ impl SessionManager {
                 return;
             }
 
-            let success_message = format!("已发送到目标服务器: {filename}");
-
-            if manager.write_input(&to_session_id, "ls\r").await.is_err() {
-                emit_transfer_complete(
-                    &app_bg,
-                    &registry_transfer_id,
-                    &to_session_id,
-                    "send",
-                    &format!("{success_message}（刷新目录失败）"),
-                    true,
-                    vec![filename.clone()],
-                    None,
-                );
-                return;
-            }
+            let success_message = format!("已发送到 {to_path}");
 
             emit_transfer_complete(
                 &app_bg,
@@ -821,9 +917,128 @@ impl SessionManager {
                 vec![filename],
                 None,
             );
+
+            let manager_refresh = manager.clone();
+            let refresh_session_id = to_session_id.clone();
+            tokio::spawn(async move {
+                let _ = manager_refresh
+                    .write_input(&refresh_session_id, "ls\r")
+                    .await;
+            });
         });
 
         Ok(())
+    }
+
+    pub async fn refresh_listing(&self, session_id: &str) -> AppResult<()> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Local(s) => {
+                let cmd = if s.uses_unix_shell() {
+                    "ls --color=auto -F\r"
+                } else {
+                    "dir\r"
+                };
+                s.write_input(cmd)
+            }
+            SessionHandle::Ssh(s) => s.write_input("ls -F\r"),
+        }
+    }
+
+    pub async fn rename_path(
+        &self,
+        session_id: &str,
+        path: &str,
+        new_name: &str,
+    ) -> AppResult<()> {
+        validate_fs_name(new_name)?;
+
+        let kind = self.session_kind(session_id).await?;
+        match kind {
+            SessionKind::Local => {
+                let old_path = self.local_resolve_host_path(session_id, path).await?;
+                let parent = old_path
+                    .parent()
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                let new_path = parent.join(new_name.trim());
+                tokio::fs::rename(&old_path, &new_path).await?;
+            }
+            SessionKind::Ssh => {
+                let ssh = self.ssh_snapshot(session_id).await?;
+                let resolved = ssh.resolve_remote_path(path).await?;
+                let parent = remote_parent_path(&resolved)?;
+                let new_path = remote_join_path(&parent, new_name.trim());
+                sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await?;
+            }
+        }
+
+        self.refresh_listing(session_id).await
+    }
+
+    pub async fn delete_path(&self, session_id: &str, path: &str) -> AppResult<()> {
+        let kind = self.session_kind(session_id).await?;
+        match kind {
+            SessionKind::Local => {
+                let resolved = self.local_resolve_host_path(session_id, path).await?;
+                let metadata = tokio::fs::metadata(&resolved).await?;
+                if metadata.is_dir() {
+                    tokio::fs::remove_dir_all(&resolved).await?;
+                } else {
+                    tokio::fs::remove_file(&resolved).await?;
+                }
+            }
+            SessionKind::Ssh => {
+                let ssh = self.ssh_snapshot(session_id).await?;
+                let resolved = ssh.resolve_remote_path(path).await?;
+                sftp::remove_remote_path(&ssh.handle(), &resolved).await?;
+            }
+        }
+
+        self.refresh_listing(session_id).await
+    }
+
+    pub async fn move_path(
+        &self,
+        session_id: &str,
+        path: &str,
+        dest_dir: &str,
+    ) -> AppResult<()> {
+        let kind = self.session_kind(session_id).await?;
+        match kind {
+            SessionKind::Local => {
+                let resolved = self.local_resolve_host_path(session_id, path).await?;
+                let dest = self.local_resolve_host_path(session_id, dest_dir).await?;
+                let metadata = tokio::fs::metadata(&dest).await?;
+                if !metadata.is_dir() {
+                    return Err(AppError::msg("目标必须是目录"));
+                }
+                let file_name = resolved
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or_else(|| AppError::msg("无效的文件名"))?;
+                let new_path = dest.join(file_name);
+                tokio::fs::rename(&resolved, &new_path).await?;
+            }
+            SessionKind::Ssh => {
+                let ssh = self.ssh_snapshot(session_id).await?;
+                let resolved = ssh.resolve_remote_path(path).await?;
+                let dest = ssh.resolve_remote_path(dest_dir).await?;
+                if !sftp::is_remote_directory(&ssh.handle(), &dest).await? {
+                    return Err(AppError::msg("目标必须是目录"));
+                }
+                let file_name = std::path::Path::new(&resolved)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or_else(|| AppError::msg("无效的文件名"))?;
+                let new_path = remote_join_path(&dest, file_name);
+                sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await?;
+            }
+        }
+
+        self.refresh_listing(session_id).await
     }
 
     pub fn emit_terminal_message(app: &AppHandle, session_id: &str, message: &str) {
@@ -849,6 +1064,26 @@ pub fn expand_path(path: &str) -> AppResult<String> {
     } else {
         Ok(path.to_string())
     }
+}
+
+pub fn enrich_connect_request_from_bookmarks(
+    app: &AppHandle,
+    request: &SshConnectRequest,
+) -> SshConnectRequest {
+    let mut req = request.clone();
+    let Ok(connections) = load_connections(app) else {
+        return req;
+    };
+    let Some(saved) = connections.iter().find(|saved| {
+        saved.host == req.host && saved.port == req.port && saved.username == req.username
+    }) else {
+        return req;
+    };
+    if let Some(password) = saved.password.clone().filter(|value| !value.is_empty()) {
+        req.auth_method = AuthMethod::Password;
+        req.password = Some(password);
+    }
+    req
 }
 
 pub fn default_download_dir() -> AppResult<String> {
@@ -996,6 +1231,44 @@ pub fn load_device_history(app: &AppHandle) -> AppResult<Vec<DeviceRecord>> {
         Some(value) => Ok(serde_json::from_value(value.clone())?),
         None => Ok(Vec::new()),
     }
+}
+
+fn validate_fs_name(name: &str) -> AppResult<()> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::msg("名称不能为空"));
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err(AppError::msg("无效的名称"));
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return Err(AppError::msg("名称不能包含路径分隔符"));
+    }
+    Ok(())
+}
+
+fn remote_parent_path(path: &str) -> AppResult<String> {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "/" {
+        return Err(AppError::msg("无法操作根目录"));
+    }
+    if let Some((parent, _)) = trimmed.rsplit_once('/') {
+        Ok(if parent.is_empty() {
+            "/".to_string()
+        } else {
+            parent.to_string()
+        })
+    } else {
+        Err(AppError::msg("无效的路径"))
+    }
+}
+
+fn remote_join_path(base: &str, segment: &str) -> String {
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        segment.trim_matches('/')
+    )
 }
 
 fn resolve_local_find_start(path: &str) -> AppResult<String> {

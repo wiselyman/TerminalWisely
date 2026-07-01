@@ -10,7 +10,7 @@ use russh::ChannelMsg;
 use russh_keys::load_secret_key;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, watch, Mutex};
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, timeout, Duration};
 
 use crate::error::{AppError, AppResult};
 use crate::session::{expand_path, SessionManager};
@@ -67,13 +67,48 @@ pub struct SshSessionSnapshot {
     connect_request: SshConnectRequest,
 }
 
+const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+const SSH_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(400);
+const SSH_CONNECT_MAX_ATTEMPTS: usize = 3;
+
 fn ssh_client_config() -> Arc<client::Config> {
     Arc::new(client::Config {
         inactivity_timeout: Some(Duration::from_secs(3600)),
+        keepalive_interval: Some(Duration::from_secs(30)),
+        keepalive_max: 3,
         window_size: 16 * 1024 * 1024,
         maximum_packet_size: 64 * 1024,
         ..Default::default()
     })
+}
+
+fn default_remote_home(username: &str) -> String {
+    format!("/home/{username}")
+}
+
+async fn connect_ssh_transport(host: &str, port: u16) -> AppResult<client::Handle<ClientHandler>> {
+    let config = ssh_client_config();
+    let target = (host, port);
+    let mut last_err: Option<AppError> = None;
+
+    for attempt in 0..SSH_CONNECT_MAX_ATTEMPTS {
+        if attempt > 0 {
+            sleep(SSH_CONNECT_RETRY_DELAY).await;
+        }
+
+        match timeout(
+            SSH_CONNECT_TIMEOUT,
+            client::connect(config.clone(), target, ClientHandler),
+        )
+        .await
+        {
+            Ok(Ok(handle)) => return Ok(handle),
+            Ok(Err(err)) => last_err = Some(err.into()),
+            Err(_) => last_err = Some(AppError::msg("连接服务器超时，请检查网络或地址")),
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| AppError::msg("无法连接服务器")))
 }
 
 async fn authenticate_handle(
@@ -244,11 +279,7 @@ pub async fn open_transfer_connection(
     check_cancel(cancel)?;
 
     let connect = async {
-        let config = ssh_client_config();
-        let mut handle =
-            client::connect(config, (request.host.as_str(), request.port), ClientHandler)
-                .await
-                .map_err(AppError::from)?;
+        let mut handle = connect_ssh_transport(&request.host, request.port).await?;
         authenticate_handle(&mut handle, request).await?;
         Ok::<_, AppError>(Arc::new(Mutex::new(handle)))
     };
@@ -284,15 +315,12 @@ impl SshSession {
         cols: u16,
         rows: u16,
     ) -> AppResult<(Self, Option<probe::ServerOsProfile>)> {
-        let config = ssh_client_config();
-
-        let mut handle = client::connect(config, (request.host.as_str(), request.port), ClientHandler)
-            .await?;
+        let mut handle =
+            connect_ssh_transport(&request.host, request.port).await?;
 
         authenticate_handle(&mut handle, &request).await?;
 
-        let os_profile = probe::probe_remote_os(&handle).await.ok();
-        let remote_home = sftp::resolve_remote_home(&handle).await?;
+        let remote_home = default_remote_home(&request.username);
         let remote_cwd = Arc::new(Mutex::new(remote_home.clone()));
         let handle = Arc::new(Mutex::new(handle));
         let shell_dead = Arc::new(AtomicBool::new(false));
@@ -313,8 +341,8 @@ impl SshSession {
                     "{}@{}:{}",
                     request.username, request.host, request.port
                 )),
-                os_id: os_profile.as_ref().map(|os| os.os_id.clone()),
-                os_name: os_profile.as_ref().and_then(|os| os.os_name.clone()),
+                os_id: None,
+                os_name: None,
             },
             connect_request: request,
             handle: handle.clone(),
@@ -328,7 +356,28 @@ impl SshSession {
 
         session.spawn_shell_loop(app, id, handle, remote_home, remote_cwd, shell_dead, cols, rows);
 
-        Ok((session, os_profile))
+        Ok((session, None))
+    }
+
+    pub async fn update_metadata(
+        &mut self,
+        remote_home: String,
+        os_profile: Option<probe::ServerOsProfile>,
+    ) {
+        let previous_home = self.remote_home.clone();
+        let default_guess = default_remote_home(&self.connect_request.username);
+        {
+            let mut cwd = self.remote_cwd.lock().await;
+            if *cwd == previous_home || *cwd == default_guess {
+                *cwd = remote_home.clone();
+            }
+        }
+        self.remote_home = remote_home.clone();
+        self.info.remote_home = Some(remote_home);
+        if let Some(ref os) = os_profile {
+            self.info.os_id = Some(os.os_id.clone());
+            self.info.os_name = os.os_name.clone();
+        }
     }
 
     fn spawn_shell_loop(
@@ -395,11 +444,12 @@ impl SshSession {
             "正在重新连接…",
         );
 
-        let config = ssh_client_config();
-        let mut handle = client::connect(
-            config,
-            (self.connect_request.host.as_str(), self.connect_request.port),
-            ClientHandler,
+        let _ = self.shutdown_tx.send(true);
+        sleep(Duration::from_millis(150)).await;
+
+        let mut handle = connect_ssh_transport(
+            &self.connect_request.host,
+            self.connect_request.port,
         )
         .await?;
         authenticate_handle(&mut handle, &self.connect_request).await?;
@@ -515,6 +565,18 @@ impl SshSession {
             .await
     }
 
+    pub async fn download_directory(
+        &self,
+        app: AppHandle,
+        request: DownloadFileRequest,
+        transfer_id: &str,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    ) -> AppResult<String> {
+        self.snapshot()
+            .download_directory(app, request, transfer_id, cancel)
+            .await
+    }
+
     pub async fn exec_command(&self, command: &str) -> AppResult<String> {
         exec_command(&self.handle, command).await
     }
@@ -588,6 +650,8 @@ impl SshSessionSnapshot {
                             transferred,
                             total,
                             direction: "upload".to_string(),
+                            method: None,
+                            destination_path: None,
                         },
                     );
                 },
@@ -710,6 +774,77 @@ impl SshSessionSnapshot {
                         transferred,
                         total,
                         direction: "download".to_string(),
+                        method: None,
+                        destination_path: None,
+                    },
+                );
+            },
+        )
+        .await
+        {
+            Ok(()) => Ok(local_path),
+            Err(err) if err.is_cancelled() => {
+                let _ = tokio::fs::remove_file(&local).await;
+                Err(err)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub async fn download_directory(
+        &self,
+        app: AppHandle,
+        request: DownloadFileRequest,
+        transfer_id: &str,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    ) -> AppResult<String> {
+        let remote_path = self.resolve_remote_path(&request.remote_path).await?;
+        if !sftp::is_remote_directory(&self.handle, &remote_path).await? {
+            return Err(AppError::msg("请选择目录"));
+        }
+
+        let dir_name = Path::new(&remote_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("folder");
+
+        let local_path = if let Some(path) = request.local_path {
+            path
+        } else {
+            let download_dir = crate::session::default_download_dir()?;
+            std::fs::create_dir_all(&download_dir)?;
+            format!("{download_dir}/{dir_name}.tar.gz")
+        };
+
+        let local = PathBuf::from(&local_path);
+        if let Some(parent) = local.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let transfer =
+            open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
+        let handle = transfer.handle();
+        let session_id = self.info.id.clone();
+        let archive_name = format!("{dir_name}.tar.gz");
+        let tid = transfer_id.to_string();
+
+        match crate::ssh::scp_transfer::download_remote_directory_archive(
+            &handle,
+            &remote_path,
+            &local,
+            cancel,
+            move |transferred, total| {
+                let _ = app.emit(
+                    "transfer-progress",
+                    TransferProgressPayload {
+                        transfer_id: tid.clone(),
+                        session_id: session_id.clone(),
+                        filename: archive_name.clone(),
+                        transferred,
+                        total,
+                        direction: "download".to_string(),
+                        method: None,
+                        destination_path: None,
                     },
                 );
             },
@@ -998,6 +1133,8 @@ pub fn emit_transfer_progress(
     transferred: u64,
     total: u64,
     direction: &str,
+    method: Option<&str>,
+    destination_path: Option<&str>,
 ) {
     let _ = app.emit(
         "transfer-progress",
@@ -1008,6 +1145,8 @@ pub fn emit_transfer_progress(
             transferred,
             total,
             direction: direction.to_string(),
+            method: method.map(str::to_string),
+            destination_path: destination_path.map(str::to_string),
         },
     );
 }

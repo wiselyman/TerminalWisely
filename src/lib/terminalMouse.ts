@@ -36,10 +36,15 @@ export function getTerminalMouseCell(
   };
 }
 
+export interface RemotePathAtCell {
+  path: string;
+  directoryHint: boolean;
+}
+
 export function findRemotePathAtCell(
   terminal: Terminal,
   cell: TerminalMouseCell,
-): string | null {
+): RemotePathAtCell | null {
   const line = terminal.buffer.active.getLine(cell.bufferLineNumber - 1);
   if (!line) return null;
 
@@ -62,12 +67,15 @@ export function findRemotePathAtCell(
       match.end,
     );
     if (cell.col >= startCol && cell.col < startCol + width) {
-      return resolvePathFromListing(
-        getLinePlain,
-        terminal.buffer.active.length,
-        cell.bufferLineNumber,
-        match.path,
-      );
+      return {
+        path: resolvePathFromListing(
+          getLinePlain,
+          terminal.buffer.active.length,
+          cell.bufferLineNumber,
+          match.path,
+        ),
+        directoryHint: match.isDirectory === true,
+      };
     }
   }
 
