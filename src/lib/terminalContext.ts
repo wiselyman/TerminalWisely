@@ -91,10 +91,10 @@ function extractCommandLine(line: string): string {
     return afterPrompt[2].trim();
   }
   const zshMatch = plain.match(
-    /(?:~(?:\/[^\s%#]*)?|\/[^\s%#]*)\s*[%#]\s*(.+)$/,
+    /(?:^|\s)(~(?:\/[^\s%#]*)?|\/[^\s%#]*)\s*[%#]\s*(.+)$/,
   );
-  if (zshMatch?.[1]?.trim()) {
-    return zshMatch[1].trim();
+  if (zshMatch?.[2]?.trim()) {
+    return zshMatch[2].trim();
   }
   return "";
 }
@@ -172,6 +172,14 @@ export function replayCwdAtLine(
     const cdTarget = parseCdTarget(extractCommandLine(plain));
     if (cdTarget) {
       cwd = resolveCdTarget(cdTarget, cwd);
+      continue;
+    }
+
+    if (isLikelyShellPromptLine(plain)) {
+      const promptCwd = parsePromptCwd(plain);
+      if (promptCwd) {
+        cwd = promptCwd;
+      }
     }
   }
   return cwd;
@@ -197,7 +205,8 @@ function findListingParentFromCommands(
 
     const command = extractCommandLine(plain);
     if (/^ls(\s|$)/.test(command)) {
-      return cwdBefore;
+      const promptCwd = parsePromptCwd(plain);
+      return promptCwd ?? cwdBefore;
     }
   }
 
@@ -218,6 +227,17 @@ export function getListingParentDir(
   );
   if (fromCommand) {
     return fromCommand;
+  }
+
+  for (let i = lineNumber - 1; i >= 1; i -= 1) {
+    const plain = getLinePlain(i);
+    if (!plain || !isLikelyShellPromptLine(plain)) {
+      continue;
+    }
+    const promptCwd = parsePromptCwd(plain);
+    if (promptCwd) {
+      return promptCwd;
+    }
   }
 
   return replayCwdAtLine(getLinePlain, lineNumber, initialCwd);

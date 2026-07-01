@@ -4,6 +4,15 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.7.1] - 2026-07-01
+
+### Fixed
+- 终端底部右键文件菜单向上翻转，避免被窗口裁切
+- `ls` 列表文件路径从 shell 提示符解析 cwd（如 `~/下载`），修复重命名/删除报 `No such file`
+- zsh `extractCommandLine` 误返回 cwd 而非命令
+
+> 归档说明见 [`release-notes/v0.7.1.md`](./release-notes/v0.7.1.md)
+
 ## [0.7.0] - 2026-06-30
 
 ### Added

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isSyntheticTerminalMouseEvent } from "../lib/terminalSelectionDrag";
 
@@ -14,9 +14,19 @@ interface TerminalLinkContextMenuProps {
 }
 
 const MENU_WIDTH = 220;
+const MENU_MARGIN = 8;
 
 function clampMenuLeft(left: number) {
-  return Math.min(Math.max(8, left), window.innerWidth - MENU_WIDTH - 8);
+  return Math.min(Math.max(MENU_MARGIN, left), window.innerWidth - MENU_WIDTH - MENU_MARGIN);
+}
+
+function computeMenuPosition(x: number, y: number, menuHeight: number) {
+  const left = clampMenuLeft(x);
+  let top = y + 6;
+  if (top + menuHeight > window.innerHeight - MENU_MARGIN) {
+    top = Math.max(MENU_MARGIN, y - menuHeight - 6);
+  }
+  return { top, left };
 }
 
 export function TerminalLinkContextMenu({
@@ -31,6 +41,18 @@ export function TerminalLinkContextMenu({
 }: TerminalLinkContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const openedAtRef = useRef(0);
+  const [position, setPosition] = useState(() =>
+    computeMenuPosition(x, y, 240),
+  );
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const next = computeMenuPosition(x, y, el.offsetHeight);
+    setPosition((prev) =>
+      prev.top === next.top && prev.left === next.left ? prev : next,
+    );
+  }, [x, y]);
 
   useEffect(() => {
     openedAtRef.current = performance.now();
@@ -77,8 +99,8 @@ export function TerminalLinkContextMenu({
       role="menu"
       aria-label="文件操作"
       style={{
-        top: y + 6,
-        left: clampMenuLeft(x),
+        top: position.top,
+        left: position.left,
         width: MENU_WIDTH,
       }}
       onMouseDown={(event) => event.stopPropagation()}

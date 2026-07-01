@@ -1147,7 +1147,7 @@ body.tab-reordering .terminal-drop-overlay {
 
 .terminal-fs-context-menu {
   position: fixed;
-  z-index: 30000;
+  z-index: 40000;
   border: 1px solid #30363d;
   border-radius: 8px;
   background: #161b22;
