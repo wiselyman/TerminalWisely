@@ -11,6 +11,7 @@ import { HostStatsDiskList } from "./HostStatsDiskList";
 import { HostStatsMetricCard } from "./HostStatsMetricCard";
 import { HostStatsNetworkCard } from "./HostStatsNetworkCard";
 import { HostStatsUserList } from "./HostStatsUserList";
+import { WorkspacePanelBackdrop } from "../WorkspacePanelBackdrop";
 
 interface HostStatsPanelProps {
   sessionId: string;
@@ -38,7 +39,6 @@ export function HostStatsPanel({
     totalDiskReadBytes,
     totalDiskWriteBytes,
     history,
-    close,
   } = useHostStatsStore();
 
   const memPercent = snapshot
@@ -78,7 +78,7 @@ export function HostStatsPanel({
 
   return (
     <>
-      <div className="host-stats-backdrop open" onClick={close} aria-hidden="true" />
+      <WorkspacePanelBackdrop />
       <aside className="host-stats-panel open" style={{ width }} aria-hidden={false}>
         <div
           className="host-stats-resizer"
@@ -92,14 +92,6 @@ export function HostStatsPanel({
             <h2 className="host-stats-title">服务器资源</h2>
             <p className="host-stats-session">{sessionTitle}</p>
           </div>
-          <button
-            type="button"
-            className="host-stats-close"
-            onClick={close}
-            aria-label="关闭服务器资源"
-          >
-            ×
-          </button>
         </div>
 
         <div className="host-stats-body">

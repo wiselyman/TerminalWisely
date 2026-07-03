@@ -1,12 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import { inferOsIdFromName } from "../lib/osLogos";
 import type { HostStatsSnapshot } from "../types";
 import { closeCommandNavigator } from "./commandNavigatorStore";
 import { useFindStore } from "./findStore";
+import { useSessionStore } from "./sessionStore";
 import { useTaskManagerStore } from "./taskManagerStore";
+import {
+  readWorkspacePanelWidth,
+  setWorkspacePanelWidth,
+  subscribeWorkspacePanelWidth,
+} from "../lib/workspacePanelWidth";
 
-const HOST_STATS_WIDTH_KEY = "terminal-wisely.host-stats-width";
-const DEFAULT_HOST_STATS_WIDTH = 400;
 const HISTORY_LIMIT = 30;
 
 export interface HostStatsHistoryPoint {
@@ -74,7 +79,7 @@ function sumNetworkBytes(snapshot: HostStatsSnapshot) {
 
 export const useHostStatsStore = create<HostStatsState>((set, get) => ({
   open: false,
-  width: Number(localStorage.getItem(HOST_STATS_WIDTH_KEY)) || DEFAULT_HOST_STATS_WIDTH,
+  width: readWorkspacePanelWidth(),
   snapshot: null,
   loading: false,
   error: null,
@@ -91,8 +96,7 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
   prevDiskIoSample: null,
 
   setWidth: (width) => {
-    const next = Math.max(320, Math.min(width, 720));
-    localStorage.setItem(HOST_STATS_WIDTH_KEY, String(next));
+    const next = setWorkspacePanelWidth(width);
     set({ width: next });
   },
 
@@ -185,6 +189,15 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
         tx: networkRates?.txBps ?? 0,
       };
 
+      const inferredOsId = inferOsIdFromName(snapshot.os_name);
+      const tab = useSessionStore.getState().tabs.find((item) => item.id === sessionId);
+      if (inferredOsId && tab && !tab.os_id) {
+        useSessionStore.getState().updateSessionMetadata(sessionId, {
+          os_id: inferredOsId,
+          os_name: snapshot.os_name,
+        });
+      }
+
       set((state) => ({
         snapshot,
         loading: false,
@@ -217,3 +230,9 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
     }
   },
 }));
+
+subscribeWorkspacePanelWidth((width) => {
+  if (useHostStatsStore.getState().width !== width) {
+    useHostStatsStore.setState({ width });
+  }
+});

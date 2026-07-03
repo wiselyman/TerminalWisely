@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
+  PathSizeResult,
   SessionKind,
   SessionLifecyclePayload,
   TerminalOutputPayload,
@@ -46,12 +47,14 @@ import { usePreviewStore } from "../stores/previewStore";
 import { isTabReordering } from "../lib/tabPointerReorder";
 import { TERMINAL_FONT_SIZE, TERMINAL_LINE_HEIGHT, ensureTerminalFontsLoaded, getTerminalFontFamily } from "../lib/terminalFont";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
-import { createTransferId } from "../lib/transferId";
+import { downloadRemotePath } from "../lib/sessionDownload";
 import { formatTransferError } from "../lib/transferError";
+import { invokeWithSudoRetry } from "../lib/invokeWithSudoRetry";
 import { copyToClipboard } from "../lib/clipboard";
 import { TERMINAL_FOCUS_EVENT } from "../stores/commandNavigatorStore";
 import { useToastStore } from "../stores/toastStore";
 import { TerminalStatusOverlay } from "./TerminalStatusOverlay";
+import { PathSizeDialog } from "./PathSizeDialog";
 import { TerminalLinkContextMenu } from "./TerminalLinkContextMenu";
 import {
   TerminalFsDialog,
@@ -131,6 +134,13 @@ export function TerminalView({
     mode: TerminalFsDialogMode;
     path: string;
     pathKind: "file" | "directory";
+  } | null>(null);
+  const [pathSizeDialog, setPathSizeDialog] = useState<{
+    path: string;
+    pathKind: "file" | "directory";
+    loading: boolean;
+    result: PathSizeResult | null;
+    error: string | null;
   } | null>(null);
   const setFsContextMenuRef = useRef(setFsContextMenu);
   const setFsDialogRef = useRef(setFsDialog);
@@ -523,7 +533,6 @@ export function TerminalView({
                       return;
                     }
                     void (async () => {
-                      let transferId: string | null = null;
                       try {
                         const probe = await invoke<string>("probe_remote_path", {
                           request: {
@@ -531,38 +540,13 @@ export function TerminalView({
                             path: targetPath,
                           },
                         });
-                        transferId = createTransferId();
-                        const baseName =
-                          targetPath.split("/").pop() ||
-                          targetPath.split("\\").pop() ||
-                          targetPath;
-                        const downloadName =
-                          probe === "directory" ? `${baseName}.tar.gz` : baseName;
-                        upsertTransferRef.current({
-                          transfer_id: transferId,
-                          session_id: sessionId,
-                          filename: downloadName,
-                          transferred: 0,
-                          total: 0,
-                          direction: "download",
-                        });
-                        const command =
-                          probe === "directory"
-                            ? "download_directory"
-                            : "download_file";
-                        await invoke(command, {
-                          request: {
-                            session_id: sessionId,
-                            remote_path: targetPath,
-                            local_path: null,
-                            transfer_id: transferId,
-                          },
-                        });
+                        await downloadRemotePath(
+                          sessionId,
+                          targetPath,
+                          probe === "directory" ? "directory" : "file",
+                        );
                       } catch (err) {
-                        if (transferId) {
-                          removeTransferRef.current(transferId);
-                        }
-                        pushToastRef.current(String(err), false);
+                        pushToastRef.current(formatTransferError(err), false);
                       }
                     })();
                     return;
@@ -974,6 +958,7 @@ export function TerminalView({
         <TerminalLinkContextMenu
           x={fsContextMenu.x}
           y={fsContextMenu.y}
+          pathKind={fsContextMenu.pathKind}
           onClose={() => setFsContextMenu(null)}
           onCopyName={() => {
             void copyToClipboard(terminalPathBasename(fsContextMenu.path))
@@ -992,6 +977,71 @@ export function TerminalView({
               .catch((err) => {
                 pushToast(String(err), false);
               });
+          }}
+          onDownload={
+            kind === "ssh"
+              ? () => {
+                  const { path, pathKind } = fsContextMenu;
+                  void downloadRemotePath(sessionId, path, pathKind).catch(
+                    (err) => {
+                      pushToast(formatTransferError(err), false);
+                    },
+                  );
+                }
+              : undefined
+          }
+          onSendToRemote={
+            kind === "ssh" && fsContextMenu.pathKind === "file"
+              ? () => {
+                  openSendTo({
+                    fromSessionId: sessionId,
+                    remotePath: fsContextMenu.path,
+                  });
+                }
+              : undefined
+          }
+          onPreview={() => {
+            void openPreview(sessionId, fsContextMenu.path);
+          }}
+          onViewSize={() => {
+            const { path, pathKind } = fsContextMenu;
+            setPathSizeDialog({
+              path,
+              pathKind,
+              loading: true,
+              result: null,
+              error: null,
+            });
+            void (async () => {
+              try {
+                const result = await invokeWithSudoRetry<PathSizeResult>(
+                  (sudoPassword) =>
+                    invoke<PathSizeResult>("get_path_size", {
+                      request: {
+                        session_id: sessionId,
+                        path,
+                        sudo_password: sudoPassword ?? null,
+                      },
+                    }),
+                  { action: "查看大小", path },
+                );
+                setPathSizeDialog({
+                  path,
+                  pathKind,
+                  loading: false,
+                  result,
+                  error: null,
+                });
+              } catch (err) {
+                setPathSizeDialog({
+                  path,
+                  pathKind,
+                  loading: false,
+                  result: null,
+                  error: String(err),
+                });
+              }
+            })();
           }}
           onRename={() => {
             setFsDialog({
@@ -1023,6 +1073,16 @@ export function TerminalView({
           path={fsDialog.path}
           pathKind={fsDialog.pathKind}
           onClose={() => setFsDialog(null)}
+        />
+      ) : null}
+      {pathSizeDialog && active ? (
+        <PathSizeDialog
+          path={pathSizeDialog.path}
+          pathKind={pathSizeDialog.pathKind}
+          loading={pathSizeDialog.loading}
+          result={pathSizeDialog.result}
+          error={pathSizeDialog.error}
+          onClose={() => setPathSizeDialog(null)}
         />
       ) : null}
     </div>

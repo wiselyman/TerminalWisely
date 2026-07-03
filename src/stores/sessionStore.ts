@@ -9,6 +9,7 @@ import {
   type LocalShellInfo,
 } from "../lib/hostOs";
 import { GIT_BASH_INSTALL_HINT } from "../lib/localShellPreference";
+import { uniqueTabTitle } from "../lib/tabTitle";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
 import type {
@@ -66,14 +67,37 @@ interface SessionState {
   statusMessage: string | null;
   disconnectedSessionIds: Set<string>;
   sendTo: SendToRequest | null;
+  pendingSudoTransfers: Record<
+    string,
+    {
+      fromSessionId: string;
+      remotePath: string;
+      toSessionId: string;
+      remoteDir?: string | null;
+    }
+  >;
   openSendTo: (request: SendToRequest) => void;
   closeSendTo: () => void;
-  transferRemote: (toSessionId: string) => Promise<void>;
+  transferRemote: (
+    toSessionId: string,
+    remoteDir?: string | null,
+  ) => Promise<void>;
   startRemoteTransfer: (
     fromSessionId: string,
     remotePath: string,
     toSessionId: string,
+    sudoPassword?: string,
+    remoteDir?: string | null,
   ) => Promise<void>;
+  takePendingSudoTransfer: (
+    transferId: string,
+  ) => {
+    fromSessionId: string;
+    remotePath: string;
+    toSessionId: string;
+    remoteDir?: string | null;
+  } | null;
+  clearPendingSudoTransfer: (transferId: string) => void;
   addTab: (info: SessionInfo) => void;
   addConnectingTab: (info: SessionInfo) => void;
   promoteConnectingTab: (pendingId: string, session: SessionInfo) => void;
@@ -83,10 +107,19 @@ interface SessionState {
   closeTabsToLeft: (id: string) => Promise<void>;
   closeTabsToRight: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
+  activateHome: () => void;
   reorderTabs: (
     dragId: string,
     targetId: string,
     position: "before" | "after",
+  ) => void;
+  updateSessionMetadata: (
+    sessionId: string,
+    patch: {
+      os_id?: string | null;
+      os_name?: string | null;
+      remote_home?: string | null;
+    },
   ) => void;
   loadSavedConnections: () => Promise<void>;
   loadDeviceHistory: () => Promise<void>;
@@ -162,6 +195,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   statusMessage: null,
   disconnectedSessionIds: new Set<string>(),
   sendTo: null,
+  pendingSudoTransfers: {},
+
+  takePendingSudoTransfer: (transferId) => {
+    const entry = get().pendingSudoTransfers[transferId];
+    if (!entry) return null;
+    const { [transferId]: _, ...rest } = get().pendingSudoTransfers;
+    set({ pendingSudoTransfers: rest });
+    return entry;
+  },
+
+  clearPendingSudoTransfer: (transferId) => {
+    const { [transferId]: _, ...rest } = get().pendingSudoTransfers;
+    set({ pendingSudoTransfers: rest });
+  },
 
   addTab: (info) => {
     set((state) => ({
@@ -174,17 +221,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   addConnectingTab: (info) => {
-    set((state) => ({
-      tabs: [
-        ...state.tabs.map((tab) => ({ ...tab, active: false })),
-        {
-          ...info,
-          active: true,
-          connectionStatus: "connecting" as const,
-        },
-      ],
-      activeTabId: info.id,
-    }));
+    set((state) => {
+      const title = uniqueTabTitle(info.title, state.tabs, info.id);
+      return {
+        tabs: [
+          ...state.tabs.map((tab) => ({ ...tab, active: false })),
+          {
+            ...info,
+            title,
+            active: true,
+            connectionStatus: "connecting" as const,
+          },
+        ],
+        activeTabId: info.id,
+      };
+    });
   },
 
   promoteConnectingTab: (pendingId, session) => {
@@ -193,6 +244,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         if (tab.id !== pendingId) return tab;
         return {
           ...session,
+          title: tab.title,
           active: tab.active,
           connectionStatus: "ready" as const,
         };
@@ -284,6 +336,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }));
   },
 
+  activateHome: () => {
+    set((state) => ({
+      activeTabId: null,
+      tabs: state.tabs.map((tab) => ({ ...tab, active: false })),
+    }));
+  },
+
   reorderTabs: (dragId, targetId, position) => {
     set((state) => {
       const tabs = [...state.tabs];
@@ -304,6 +363,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       tabs.splice(insertIndex, 0, moved);
       return { tabs };
     });
+  },
+
+  updateSessionMetadata: (sessionId, patch) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => {
+        if (tab.id !== sessionId) return tab;
+        return {
+          ...tab,
+          os_id: patch.os_id ?? tab.os_id,
+          os_name: patch.os_name ?? tab.os_name,
+          remote_home: patch.remote_home ?? tab.remote_home,
+        };
+      }),
+    }));
   },
 
   loadSavedConnections: async () => {
@@ -414,6 +487,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       id: pendingId,
       title: saved?.name ?? (saved ? `${saved.username}@${saved.host}` : "SSH"),
       kind: "ssh",
+      os_id: saved?.os_id ?? null,
+      os_name: saved?.os_name ?? null,
     });
 
     try {
@@ -523,7 +598,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   openSendTo: (request) => set({ sendTo: request }),
   closeSendTo: () => set({ sendTo: null }),
 
-  transferRemote: async (toSessionId) => {
+  transferRemote: async (toSessionId, remoteDir) => {
     const sendTo = get().sendTo;
     if (!sendTo) return;
     const payload = {
@@ -535,10 +610,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       payload.fromSessionId,
       payload.remotePath,
       toSessionId,
+      undefined,
+      remoteDir ?? null,
     );
   },
 
-  startRemoteTransfer: async (fromSessionId, remotePath, toSessionId) => {
+  startRemoteTransfer: async (
+    fromSessionId,
+    remotePath,
+    toSessionId,
+    sudoPassword,
+    remoteDir,
+  ) => {
     if (fromSessionId === toSessionId) {
       useToastStore.getState().pushToast("不能发送到同一个 SSH 会话", false);
       return;
@@ -564,17 +647,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       direction: "send",
     });
 
+    if (!sudoPassword) {
+      set((state) => ({
+        pendingSudoTransfers: {
+          ...state.pendingSudoTransfers,
+          [transferId]: {
+            fromSessionId,
+            remotePath,
+            toSessionId,
+            remoteDir: remoteDir ?? null,
+          },
+        },
+      }));
+    }
+
     try {
       await invoke("transfer_remote_file", {
         request: {
           from_session_id: fromSessionId,
           remote_path: remotePath,
           to_session_id: toSessionId,
-          remote_dir: null,
+          remote_dir: remoteDir?.trim() || null,
           transfer_id: transferId,
+          sudo_password: sudoPassword ?? null,
         },
       });
     } catch (err) {
+      get().clearPendingSudoTransfer(transferId);
       get().removeTransfer(transferId);
       throw err;
     }

@@ -4,6 +4,7 @@ import {
 } from "./TaskManagerTable";
 import type { ProcessEntry } from "../types";
 import { useTaskManagerStore } from "../stores/taskManagerStore";
+import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 
 interface TaskManagerPanelProps {
   sessionId: string;
@@ -49,7 +50,6 @@ export function TaskManagerPanel({
     sortKey,
     sortDirection,
     setSort,
-    close,
     killProcess,
   } = useTaskManagerStore();
 
@@ -94,11 +94,7 @@ export function TaskManagerPanel({
 
   return (
     <>
-      <div
-        className="task-manager-backdrop open"
-        onClick={close}
-        aria-hidden="true"
-      />
+      <WorkspacePanelBackdrop />
       <aside className="task-manager-panel open" style={{ width }} aria-hidden={false}>
         <div
           className="task-manager-resizer"
@@ -114,16 +110,6 @@ export function TaskManagerPanel({
             {lastUpdatedLabel ? (
               <p className="task-manager-meta">更新于 {lastUpdatedLabel}</p>
             ) : null}
-          </div>
-          <div className="task-manager-head-actions">
-            <button
-              type="button"
-              className="task-manager-close"
-              onClick={close}
-              aria-label="关闭任务管理器"
-            >
-              ×
-            </button>
           </div>
         </div>
 

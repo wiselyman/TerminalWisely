@@ -11,6 +11,7 @@ import { useCommandNavigatorStore } from "../stores/commandNavigatorStore";
 import { useToastStore } from "../stores/toastStore";
 import { CommandEditorDialog } from "./CommandEditorDialog";
 import { CommandRunDialog } from "./CommandRunDialog";
+import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 
 interface CommandNavigatorPanelProps {
   sessionId: string;
@@ -49,7 +50,6 @@ export function CommandNavigatorPanel({
     setQuery,
     subcategory,
     setSubcategory,
-    close,
     openRunDialog,
     openEditor,
     deleteCustomCommand,
@@ -132,6 +132,7 @@ export function CommandNavigatorPanel({
 
   return (
     <>
+      <WorkspacePanelBackdrop />
       <aside className="cmd-nav-panel open" style={{ width }}>
         <div
           className="cmd-nav-panel-resizer"
@@ -150,14 +151,6 @@ export function CommandNavigatorPanel({
               ) : null}
             </p>
           </div>
-          <button
-            type="button"
-            className="cmd-nav-panel-close"
-            onClick={close}
-            aria-label="关闭命令面板"
-          >
-            ×
-          </button>
         </div>
 
         <div className="cmd-nav-panel-toolbar">

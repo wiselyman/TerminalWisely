@@ -4,10 +4,13 @@ import type { FindFileEntry, FindFilesResult, FindTypeFilter } from "../types";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import { closeCommandNavigator } from "./commandNavigatorStore";
+import {
+  readWorkspacePanelWidth,
+  setWorkspacePanelWidth,
+  subscribeWorkspacePanelWidth,
+} from "../lib/workspacePanelWidth";
 
-const FIND_WIDTH_KEY = "terminal-wisely.find-width";
 const FIND_OPTIONS_KEY = "terminal-wisely.find-options";
-const DEFAULT_FIND_WIDTH = 420;
 
 interface PersistedFindOptions {
   namePattern?: string;
@@ -32,6 +35,35 @@ function persistFindOptions(options: PersistedFindOptions) {
 
 const savedOptions = loadFindOptions();
 
+interface FindSessionSnapshot {
+  sessionCwd: string | null;
+  followTerminalCwd: boolean;
+  searchPath: string;
+  entries: FindFileEntry[];
+  truncated: boolean;
+  lastRunAt: number | null;
+}
+
+function captureSessionSnapshot(state: FindState): FindSessionSnapshot {
+  return {
+    sessionCwd: state.sessionCwd,
+    followTerminalCwd: state.followTerminalCwd,
+    searchPath: state.searchPath,
+    entries: state.entries,
+    truncated: state.truncated,
+    lastRunAt: state.lastRunAt,
+  };
+}
+
+const defaultSessionFindState = {
+  sessionCwd: null as string | null,
+  followTerminalCwd: true,
+  searchPath: "",
+  entries: [] as FindFileEntry[],
+  truncated: false,
+  lastRunAt: null as number | null,
+};
+
 interface FindState {
   open: boolean;
   width: number;
@@ -48,6 +80,7 @@ interface FindState {
   error: string | null;
   lastRunAt: number | null;
   activeSessionId: string | null;
+  sessionSnapshots: Record<string, FindSessionSnapshot>;
   focusNonce: number;
   setWidth: (width: number) => void;
   setNamePattern: (pattern: string) => void;
@@ -56,6 +89,7 @@ interface FindState {
   setCaseInsensitive: (value: boolean) => void;
   setSearchPath: (path: string) => void;
   resetSearchPathToTerminal: () => void;
+  activateSession: (sessionId: string) => void;
   openFind: (sessionId: string) => void;
   toggleOpen: (sessionId: string) => void;
   close: () => void;
@@ -75,7 +109,7 @@ function snapshotOptions(state: FindState): PersistedFindOptions {
 
 export const useFindStore = create<FindState>((set, get) => ({
   open: false,
-  width: Number(localStorage.getItem(FIND_WIDTH_KEY)) || DEFAULT_FIND_WIDTH,
+  width: readWorkspacePanelWidth(),
   sessionCwd: null,
   followTerminalCwd: true,
   searchPath: "",
@@ -89,11 +123,11 @@ export const useFindStore = create<FindState>((set, get) => ({
   error: null,
   lastRunAt: null,
   activeSessionId: null,
+  sessionSnapshots: {},
   focusNonce: 0,
 
   setWidth: (width) => {
-    const next = Math.max(320, Math.min(width, 720));
-    localStorage.setItem(FIND_WIDTH_KEY, String(next));
+    const next = setWorkspacePanelWidth(width);
     set({ width: next });
   },
 
@@ -140,18 +174,40 @@ export const useFindStore = create<FindState>((set, get) => ({
       lastRunAt: null,
     }),
 
+  activateSession: (sessionId) => {
+    const state = get();
+    let sessionSnapshots = state.sessionSnapshots;
+
+    if (state.activeSessionId && state.activeSessionId !== sessionId) {
+      sessionSnapshots = {
+        ...sessionSnapshots,
+        [state.activeSessionId]: captureSessionSnapshot(state),
+      };
+    }
+
+    const restored = sessionSnapshots[sessionId];
+    set({
+      activeSessionId: sessionId,
+      sessionSnapshots,
+      loading: false,
+      error: null,
+      ...(restored ?? defaultSessionFindState),
+    });
+    void get().loadSessionCwd(sessionId);
+  },
+
   openFind: (sessionId) => {
     useTaskManagerStore.getState().close();
     useHostStatsStore.getState().close();
     closeCommandNavigator();
-    set((state) => ({
+    const state = get();
+    if (!state.open || state.activeSessionId !== sessionId) {
+      get().activateSession(sessionId);
+    }
+    set((current) => ({
       open: true,
-      activeSessionId: sessionId,
-      followTerminalCwd: true,
-      searchPath: "",
-      focusNonce: state.focusNonce + 1,
+      focusNonce: current.focusNonce + 1,
     }));
-    void get().loadSessionCwd(sessionId);
   },
 
   toggleOpen: (sessionId) => {
@@ -163,12 +219,23 @@ export const useFindStore = create<FindState>((set, get) => ({
     get().openFind(sessionId);
   },
 
-  close: () =>
+  close: () => {
+    const state = get();
+    if (!state.activeSessionId) {
+      set({ open: false, loading: false, error: null });
+      return;
+    }
+
     set({
       open: false,
       loading: false,
       error: null,
-    }),
+      sessionSnapshots: {
+        ...state.sessionSnapshots,
+        [state.activeSessionId]: captureSessionSnapshot(state),
+      },
+    });
+  },
 
   loadSessionCwd: async (sessionId) => {
     try {
@@ -222,3 +289,9 @@ export const useFindStore = create<FindState>((set, get) => ({
     }
   },
 }));
+
+subscribeWorkspacePanelWidth((width) => {
+  if (useFindStore.getState().width !== width) {
+    useFindStore.setState({ width });
+  }
+});

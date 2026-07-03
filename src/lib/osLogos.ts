@@ -50,6 +50,31 @@ export function logoForOsId(osId: string): SimpleIcon | null {
   return OS_LOGOS[osId.trim().toLowerCase()] ?? null;
 }
 
+const OS_NAME_HINTS: Array<[RegExp, string]> = [
+  [/ubuntu/i, "ubuntu"],
+  [/debian/i, "debian"],
+  [/centos/i, "centos"],
+  [/red\s*hat|rhel/i, "rhel"],
+  [/rocky/i, "rocky"],
+  [/alma/i, "alma"],
+  [/fedora/i, "fedora"],
+  [/alpine/i, "alpine"],
+  [/arch/i, "arch"],
+  [/opensuse|suse/i, "opensuse"],
+  [/macos|darwin|os\s*x/i, "macos"],
+  [/windows|microsoft/i, "windows"],
+  [/freebsd/i, "freebsd"],
+];
+
+/** Best-effort os_id from a pretty OS name (e.g. host stats or probe). */
+export function inferOsIdFromName(osName: string | null | undefined): string | null {
+  if (!osName?.trim()) return null;
+  for (const [pattern, osId] of OS_NAME_HINTS) {
+    if (pattern.test(osName)) return osId;
+  }
+  return null;
+}
+
 /** Brand hex on dark UI — lift near-black logos (e.g. Apple) so they stay visible. */
 export function iconFillForDarkUi(hex: string): string {
   const raw = hex.replace("#", "").trim();

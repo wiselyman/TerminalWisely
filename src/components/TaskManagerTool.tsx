@@ -1,4 +1,4 @@
-import { TaskManagerIcon } from "./SidebarIcons";
+import { TaskManagerIcon } from "./WorkspaceToolIcons";
 import { WorkspaceToolButton } from "./WorkspaceToolRail";
 
 interface TaskManagerToolProps {
@@ -14,7 +14,7 @@ export function TaskManagerTool({
 }: TaskManagerToolProps) {
   return (
     <WorkspaceToolButton
-      label="任务管理器"
+      label="进程管理"
       active={active}
       disabled={disabled}
       onClick={onClick}

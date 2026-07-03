@@ -137,6 +137,15 @@ pub struct SshConnectResult {
     pub os_name: Option<String>,
 }
 
+/// Emitted after background SSH metadata probe (OS logo, home dir) completes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionMetadataUpdated {
+    pub session_id: String,
+    pub os_id: Option<String>,
+    pub os_name: Option<String>,
+    pub remote_home: Option<String>,
+}
+
 impl From<&SavedConnection> for SavedConnectionView {
     fn from(saved: &SavedConnection) -> Self {
         Self {
@@ -173,6 +182,8 @@ pub struct UploadFilesRequest {
     pub remote_dir: Option<String>,
     #[serde(default)]
     pub transfer_id: Option<String>,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,6 +193,8 @@ pub struct DownloadFileRequest {
     pub local_path: Option<String>,
     #[serde(default)]
     pub transfer_id: Option<String>,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,6 +267,21 @@ pub struct PreviewOpenResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathSizeRequest {
+    pub session_id: String,
+    pub path: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathSizeResult {
+    pub path: String,
+    pub kind: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProbePathRequest {
     pub session_id: String,
     pub path: String,
@@ -263,6 +291,8 @@ pub struct ProbePathRequest {
 pub struct FsPathRequest {
     pub session_id: String,
     pub path: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +300,8 @@ pub struct FsRenameRequest {
     pub session_id: String,
     pub path: String,
     pub new_name: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -277,6 +309,8 @@ pub struct FsMoveRequest {
     pub session_id: String,
     pub path: String,
     pub dest_dir: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,6 +321,8 @@ pub struct TransferRemoteRequest {
     pub remote_dir: Option<String>,
     #[serde(default)]
     pub transfer_id: Option<String>,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

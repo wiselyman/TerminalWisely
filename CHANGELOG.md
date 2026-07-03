@@ -4,6 +4,23 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.8.0] - 2026-07-03
+
+### Added
+- SSH `ls` 右键：下载文件/文件夹、发送到其他服务器、编辑和预览、查看路径大小
+- 跨服发送对话框：选择目标会话 + 远程目录（`PathInput` Tab 补全）后确认传输
+- 后端 `path_size` 与目录/文件下载命令整合；`invokeWithSudoRetry` 统一 sudo 交互
+
+### Changed
+- 无边框窗口与自定义 `WindowControls`；工作区侧栏/工具轨 Lucide 图标与 `WorkspacePanelBackdrop`
+- 预览 `PreviewDock` / 面板布局；`SendToDialog` 不再点击会话即传输
+- 页签指针拖拽：`tab-drag-ghost`、标签栏 Y 轴钳制
+
+### Fixed
+- 工作区面板开关时终端 refit 与焦点
+
+> 归档说明：[`release-notes/v0.8.0.md`](./release-notes/v0.8.0.md)
+
 ## [0.7.1] - 2026-07-01
 
 ### Fixed

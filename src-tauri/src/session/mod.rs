@@ -8,7 +8,9 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
+use crate::preview_sudo;
 use crate::pty::local::LocalSession;
+use crate::shell::shell_quote_remote_path;
 use crate::ssh::client::{emit_transfer_complete, emit_transfer_progress, SshSession};
 use crate::ssh::{probe, sftp};
 use crate::transfer::TransferRegistry;
@@ -422,6 +424,53 @@ impl SessionManager {
         }
     }
 
+    pub async fn get_path_size(
+        &self,
+        request: crate::types::PathSizeRequest,
+    ) -> AppResult<crate::types::PathSizeResult> {
+        let kind = self.session_kind(&request.session_id).await?;
+        let sudo_password = request.sudo_password.as_deref();
+
+        match kind {
+            SessionKind::Local => {
+                let resolved = self
+                    .local_resolve_host_path(&request.session_id, &request.path)
+                    .await?;
+                let (is_dir, size_bytes) = crate::path_size::local_path_size(&resolved).await?;
+                Ok(crate::types::PathSizeResult {
+                    path: request.path,
+                    kind: if is_dir {
+                        "directory".to_string()
+                    } else {
+                        "file".to_string()
+                    },
+                    size_bytes,
+                })
+            }
+            SessionKind::Ssh => {
+                let ssh = self.ssh_snapshot(&request.session_id).await?;
+                let resolved = ssh.resolve_remote_path(&request.path).await?;
+                let is_dir = sftp::is_remote_directory(&ssh.handle(), &resolved).await?;
+                let size_bytes = crate::path_size::remote_path_size(
+                    &ssh.handle(),
+                    &resolved,
+                    is_dir,
+                    sudo_password,
+                )
+                .await?;
+                Ok(crate::types::PathSizeResult {
+                    path: request.path,
+                    kind: if is_dir {
+                        "directory".to_string()
+                    } else {
+                        "file".to_string()
+                    },
+                    size_bytes,
+                })
+            }
+        }
+    }
+
     pub async fn list_processes(
         &self,
         session_id: &str,
@@ -776,6 +825,7 @@ impl SessionManager {
         let fname = filename.clone();
         let to_path_progress = to_path.clone();
         let cancel = handle.cancel;
+        let sudo_password = request.sudo_password.clone();
 
         tokio::spawn(async move {
             let transfer_result = async {
@@ -786,28 +836,68 @@ impl SessionManager {
                             Some(cancel.as_ref()),
                         )
                         .await?;
-                        sftp::upload_file(
+                        let app_sftp = app_progress.clone();
+                        let tid_sftp = progress_transfer_id.clone();
+                        let sid_sftp = progress_session_id.clone();
+                        let fname_sftp = fname.clone();
+                        let dest_sftp = to_path_progress.clone();
+                        let app_sudo = app_progress.clone();
+                        let tid_sudo = progress_transfer_id.clone();
+                        let sid_sudo = progress_session_id.clone();
+                        let fname_sudo = fname.clone();
+                        let dest_sudo = to_path_progress.clone();
+                        match sftp::upload_file(
                             &to_conn.handle(),
                             &path,
                             &to_path,
-                            Some(cancel),
+                            Some(cancel.clone()),
                             move |transferred| {
-                                let _ = app_progress.emit(
+                                let _ = app_sftp.emit(
                                     "transfer-progress",
                                     TransferProgressPayload {
-                                        transfer_id: progress_transfer_id.clone(),
-                                        session_id: progress_session_id.clone(),
-                                        filename: fname.clone(),
+                                        transfer_id: tid_sftp.clone(),
+                                        session_id: sid_sftp.clone(),
+                                        filename: fname_sftp.clone(),
                                         transferred,
                                         total: size,
                                         direction: "send".to_string(),
                                         method: Some("sftp".to_string()),
-                                        destination_path: Some(to_path_progress.clone()),
+                                        destination_path: Some(dest_sftp.clone()),
                                     },
                                 );
                             },
                         )
                         .await
+                        {
+                            Ok(()) => Ok(()),
+                            Err(err) if err.is_cancelled() => Err(err),
+                            Err(err) if preview_sudo::is_permission_denied(&err) => {
+                                preview_sudo::install_remote_file_via_sudo(
+                                    &to_conn.handle(),
+                                    &path,
+                                    &to_path,
+                                    sudo_password.as_deref(),
+                                    Some(cancel),
+                                    move |transferred| {
+                                        let _ = app_sudo.emit(
+                                            "transfer-progress",
+                                            TransferProgressPayload {
+                                                transfer_id: tid_sudo.clone(),
+                                                session_id: sid_sudo.clone(),
+                                                filename: fname_sudo.clone(),
+                                                transferred,
+                                                total: size,
+                                                direction: "send".to_string(),
+                                                method: Some("sudo".to_string()),
+                                                destination_path: Some(dest_sudo.clone()),
+                                            },
+                                        );
+                                    },
+                                )
+                                .await
+                            }
+                            Err(err) => Err(err),
+                        }
                     }
                     TransferSource::Remote {
                         from_request,
@@ -835,15 +925,16 @@ impl SessionManager {
                         let fname_for_scp = fname.clone();
 
                         let to_path_for_progress = to_path_progress.clone();
+                        let sudo_password_scp = sudo_password.clone();
 
-                        crate::ssh::scp_transfer::transfer_remote_via_server_scp(
+                        match crate::ssh::scp_transfer::transfer_remote_via_server_scp(
                             &from_conn.handle(),
                             Some(&to_conn.handle()),
                             &from_path,
                             &to_request,
                             &to_path,
                             size,
-                            Some(cancel),
+                            Some(cancel.clone()),
                             move |transferred, total, method| {
                                 let _ = app_for_scp.emit(
                                     "transfer-progress",
@@ -861,6 +952,38 @@ impl SessionManager {
                             },
                         )
                         .await
+                        {
+                            Ok(()) => Ok(()),
+                            Err(err) if err.is_cancelled() => Err(err),
+                            Err(err)
+                                if preview_sudo::is_permission_denied(&err)
+                                    || err.to_string().to_lowercase().contains("permission denied") =>
+                            {
+                                let tmp_dest = format!("/tmp/.tw-{}", Uuid::new_v4());
+                                crate::ssh::scp_transfer::transfer_remote_via_server_scp(
+                                    &from_conn.handle(),
+                                    Some(&to_conn.handle()),
+                                    &from_path,
+                                    &to_request,
+                                    &tmp_dest,
+                                    size,
+                                    Some(cancel),
+                                    |_, _, _| {},
+                                )
+                                .await?;
+                                let quoted_tmp = shell_quote_remote_path(&tmp_dest);
+                                let quoted_dest = shell_quote_remote_path(&to_path);
+                                preview_sudo::exec_remote_sudo(
+                                    &to_conn.handle(),
+                                    &format!("mv -f {quoted_tmp} {quoted_dest}"),
+                                    sudo_password_scp.as_deref(),
+                                    "发送",
+                                    &to_path,
+                                )
+                                .await
+                            }
+                            Err(err) => Err(err),
+                        }
                     }
                 }
             }
@@ -953,6 +1076,7 @@ impl SessionManager {
         session_id: &str,
         path: &str,
         new_name: &str,
+        sudo_password: Option<&str>,
     ) -> AppResult<()> {
         validate_fs_name(new_name)?;
 
@@ -971,14 +1095,36 @@ impl SessionManager {
                 let resolved = ssh.resolve_remote_path(path).await?;
                 let parent = remote_parent_path(&resolved)?;
                 let new_path = remote_join_path(&parent, new_name.trim());
-                sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await?;
+                if let Err(err) =
+                    sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await
+                {
+                    if preview_sudo::is_permission_denied(&err) {
+                        let quoted_src = shell_quote_remote_path(&resolved);
+                        let quoted_dest = shell_quote_remote_path(&new_path);
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &format!("mv {quoted_src} {quoted_dest}"),
+                            sudo_password,
+                            "重命名",
+                            &resolved,
+                        )
+                        .await?;
+                    } else {
+                        return Err(err);
+                    }
+                }
             }
         }
 
         self.refresh_listing(session_id).await
     }
 
-    pub async fn delete_path(&self, session_id: &str, path: &str) -> AppResult<()> {
+    pub async fn delete_path(
+        &self,
+        session_id: &str,
+        path: &str,
+        sudo_password: Option<&str>,
+    ) -> AppResult<()> {
         let kind = self.session_kind(session_id).await?;
         match kind {
             SessionKind::Local => {
@@ -993,7 +1139,21 @@ impl SessionManager {
             SessionKind::Ssh => {
                 let ssh = self.ssh_snapshot(session_id).await?;
                 let resolved = ssh.resolve_remote_path(path).await?;
-                sftp::remove_remote_path(&ssh.handle(), &resolved).await?;
+                if let Err(err) = sftp::remove_remote_path(&ssh.handle(), &resolved).await {
+                    if preview_sudo::is_permission_denied(&err) {
+                        let quoted = shell_quote_remote_path(&resolved);
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &format!("rm -rf {quoted}"),
+                            sudo_password,
+                            "删除",
+                            &resolved,
+                        )
+                        .await?;
+                    } else {
+                        return Err(err);
+                    }
+                }
             }
         }
 
@@ -1005,6 +1165,7 @@ impl SessionManager {
         session_id: &str,
         path: &str,
         dest_dir: &str,
+        sudo_password: Option<&str>,
     ) -> AppResult<()> {
         let kind = self.session_kind(session_id).await?;
         match kind {
@@ -1034,7 +1195,24 @@ impl SessionManager {
                     .and_then(|n| n.to_str())
                     .ok_or_else(|| AppError::msg("无效的文件名"))?;
                 let new_path = remote_join_path(&dest, file_name);
-                sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await?;
+                if let Err(err) =
+                    sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await
+                {
+                    if preview_sudo::is_permission_denied(&err) {
+                        let quoted_src = shell_quote_remote_path(&resolved);
+                        let quoted_dest = shell_quote_remote_path(&new_path);
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &format!("mv {quoted_src} {quoted_dest}"),
+                            sudo_password,
+                            "移动",
+                            &resolved,
+                        )
+                        .await?;
+                    } else {
+                        return Err(err);
+                    }
+                }
             }
         }
 

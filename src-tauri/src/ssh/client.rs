@@ -13,6 +13,7 @@ use tokio::sync::{mpsc, watch, Mutex};
 use tokio::time::{sleep, timeout, Duration};
 
 use crate::error::{AppError, AppResult};
+use crate::preview_sudo;
 use crate::session::{expand_path, SessionManager};
 use crate::ssh::{probe, sftp};
 use crate::types::{
@@ -539,16 +540,22 @@ impl SshSession {
     }
 
     pub async fn enter_remote_directory(&mut self, remote_path: &str) -> AppResult<()> {
-        let cd_target = remote_path.trim().trim_end_matches('/');
-        if cd_target.is_empty() || cd_target == "." {
+        let Some(cd_target) = normalize_remote_path_input(remote_path) else {
+            self.write_input("ls -F\r")?;
+            return Ok(());
+        };
+        if cd_target == "." {
             self.write_input("ls -F\r")?;
             return Ok(());
         }
 
-        let cmd = format!("cd {} && ls -F\r", crate::shell::shell_cd_argument(cd_target));
+        let cmd = format!(
+            "cd {} && ls -F\r",
+            crate::shell::shell_cd_argument(&cd_target)
+        );
         self.write_input(&cmd)?;
 
-        let resolved = self.resolve_remote_path(cd_target).await?;
+        let resolved = self.resolve_remote_path(&cd_target).await?;
         *self.remote_cwd.lock().await = resolved;
         Ok(())
     }
@@ -616,6 +623,7 @@ impl SshSessionSnapshot {
         let handle = transfer.handle();
         let session_id = self.info.id.clone();
         let mut results = Vec::new();
+        let sudo_password = request.sudo_password.clone();
 
         for local_path in request.local_paths {
             let local = PathBuf::from(&local_path);
@@ -663,12 +671,39 @@ impl SshSessionSnapshot {
                     let _ = sftp::remove_remote_file(&handle, &remote_path).await;
                     return Err(err);
                 }
-            Err(err) => {
-                return Err(AppError::msg(format!(
-                    "无法上传到 {}：{}",
-                    remote_path, err
-                )));
-            }
+                Err(err) if preview_sudo::is_permission_denied(&err) => {
+                    let app_sudo = app.clone();
+                    let sid_sudo = session_id.clone();
+                    let tid_sudo = transfer_id.to_string();
+                    let fname_sudo = file_name.to_string();
+                    let dest_sudo = remote_path.clone();
+                    preview_sudo::install_remote_file_via_sudo(
+                        &handle,
+                        &local,
+                        &remote_path,
+                        sudo_password.as_deref(),
+                        cancel.clone(),
+                        move |transferred| {
+                            let _ = app_sudo.emit(
+                                "transfer-progress",
+                                TransferProgressPayload {
+                                    transfer_id: tid_sudo.clone(),
+                                    session_id: sid_sudo.clone(),
+                                    filename: fname_sudo.clone(),
+                                    transferred,
+                                    total,
+                                    direction: "upload".to_string(),
+                                    method: Some("sudo".to_string()),
+                                    destination_path: Some(dest_sudo.clone()),
+                                },
+                            );
+                        },
+                    )
+                    .await?;
+                }
+                Err(err) => {
+                    return Err(err);
+                }
             }
 
             results.push(UploadFileResult {
@@ -682,13 +717,8 @@ impl SshSessionSnapshot {
     }
 
     pub async fn resolve_remote_path(&self, remote_path: &str) -> AppResult<String> {
-        let path = sanitize_shell_path(remote_path)
-            .trim()
-            .trim_end_matches('/')
-            .to_string();
-        if path.is_empty() {
-            return Err(AppError::msg("Path is empty"));
-        }
+        let path = normalize_remote_path_input(remote_path)
+            .ok_or_else(|| AppError::msg("Path is empty"))?;
 
         let home = self
             .info
@@ -758,11 +788,13 @@ impl SshSessionSnapshot {
         let session_id = self.info.id.clone();
         let fname = file_name.to_string();
         let tid = transfer_id.to_string();
+        let sudo_password = request.sudo_password.clone();
 
-        match sftp::download_file(
+        match preview_sudo::download_remote_file_with_sudo(
             &handle,
             &remote_path,
             &local,
+            sudo_password.as_deref(),
             cancel,
             move |transferred, total| {
                 let _ = app.emit(
@@ -827,11 +859,13 @@ impl SshSessionSnapshot {
         let session_id = self.info.id.clone();
         let archive_name = format!("{dir_name}.tar.gz");
         let tid = transfer_id.to_string();
+        let sudo_password = request.sudo_password.clone();
 
-        match crate::ssh::scp_transfer::download_remote_directory_archive(
+        match preview_sudo::download_remote_directory_with_sudo(
             &handle,
             &remote_path,
             &local,
+            sudo_password.as_deref(),
             cancel,
             move |transferred, total| {
                 let _ = app.emit(
@@ -1151,6 +1185,22 @@ pub fn emit_transfer_progress(
     );
 }
 
+/// Trim whitespace and trailing slashes from remote path input.
+/// Inputs that denote filesystem root (`/`, `//`, etc.) normalize to `"/"`.
+fn normalize_remote_path_input(remote_path: &str) -> Option<String> {
+    let sanitized = sanitize_shell_path(remote_path);
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let stripped = trimmed.trim_end_matches('/');
+    if stripped.is_empty() {
+        Some("/".to_string())
+    } else {
+        Some(stripped.to_string())
+    }
+}
+
 /// Strip shell-style quotes from path segments, e.g. `~/'下载'` → `~/下载`.
 fn sanitize_shell_path(path: &str) -> String {
     let trimmed = path.trim();
@@ -1208,7 +1258,7 @@ fn sanitize_shell_path(path: &str) -> String {
 
 #[cfg(test)]
 mod path_tests {
-    use super::sanitize_shell_path;
+    use super::{normalize_remote_path_input, sanitize_shell_path};
 
     #[test]
     fn quoted_segment_after_tilde() {
@@ -1218,6 +1268,24 @@ mod path_tests {
     #[test]
     fn quoted_absolute_segment() {
         assert_eq!(sanitize_shell_path("/'My Dir'/file.txt"), "/My Dir/file.txt");
+    }
+
+    #[test]
+    fn normalize_root_path() {
+        assert_eq!(normalize_remote_path_input("/"), Some("/".to_string()));
+        assert_eq!(normalize_remote_path_input("//"), Some("/".to_string()));
+        assert_eq!(normalize_remote_path_input("  /  "), Some("/".to_string()));
+    }
+
+    #[test]
+    fn normalize_non_root_paths() {
+        assert_eq!(
+            normalize_remote_path_input("/var/log/"),
+            Some("/var/log".to_string())
+        );
+        assert_eq!(normalize_remote_path_input("foo"), Some("foo".to_string()));
+        assert_eq!(normalize_remote_path_input(""), None);
+        assert_eq!(normalize_remote_path_input("   "), None);
     }
 }
 

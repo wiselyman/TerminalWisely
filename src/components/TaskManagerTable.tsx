@@ -12,20 +12,20 @@ const ACTIONS_COLUMN_WIDTH = 28;
 
 const DEFAULT_COLUMN_WIDTHS = {
   port: 56,
-  memory: 52,
-  cpu: 44,
+  memory: 80,
+  cpu: 52,
 } as const;
 
 const MIN_COLUMN_WIDTHS: Record<ResizableColumnKey, number> = {
   name: 80,
   port: 48,
-  memory: 48,
-  cpu: 40,
+  memory: 64,
+  cpu: 44,
 };
 
 const MAX_COLUMN_WIDTHS = {
-  memory: 64,
-  cpu: 52,
+  memory: 96,
+  cpu: 64,
 } as const;
 
 interface ColumnWidths {
@@ -50,12 +50,12 @@ function loadColumnWidths(): ColumnWidths {
       name: typeof parsed.name === "number" ? parsed.name : null,
       port: parsed.port ?? DEFAULT_COLUMN_WIDTHS.port,
       memory: clamp(
-        parsed.memory ?? DEFAULT_COLUMN_WIDTHS.memory,
+        Math.max(parsed.memory ?? DEFAULT_COLUMN_WIDTHS.memory, DEFAULT_COLUMN_WIDTHS.memory),
         MIN_COLUMN_WIDTHS.memory,
         MAX_COLUMN_WIDTHS.memory,
       ),
       cpu: clamp(
-        parsed.cpu ?? DEFAULT_COLUMN_WIDTHS.cpu,
+        Math.max(parsed.cpu ?? DEFAULT_COLUMN_WIDTHS.cpu, DEFAULT_COLUMN_WIDTHS.cpu),
         MIN_COLUMN_WIDTHS.cpu,
         MAX_COLUMN_WIDTHS.cpu,
       ),
@@ -289,10 +289,10 @@ export function TaskManagerTable({
               >
                 {formatPorts(process.ports)}
               </td>
-              <td className="task-manager-cell-truncate task-manager-cell-compact">
+              <td className="task-manager-cell-compact" title={formatFileSize(process.memory_bytes)}>
                 {formatFileSize(process.memory_bytes)}
               </td>
-              <td className="task-manager-cell-truncate task-manager-cell-compact">
+              <td className="task-manager-cell-compact" title={`${process.cpu_percent.toFixed(1)}%`}>
                 {process.cpu_percent.toFixed(1)}%
               </td>
               <td className="task-manager-actions">

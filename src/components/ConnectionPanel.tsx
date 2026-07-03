@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Modal } from "./Modal";
-import { SidebarAddMenu } from "./SidebarAddMenu";
+import { WindowControls } from "./WindowControls";
 import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
@@ -22,6 +22,8 @@ interface ConnectionPanelProps {
   rows: number;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  macWindowChrome?: boolean;
+  onRegisterNewRemote?: (open: () => void) => void;
 }
 
 const defaultRequest: SshConnectRequest = {
@@ -71,6 +73,8 @@ export function ConnectionPanel({
   rows,
   collapsed,
   onToggleCollapse,
+  macWindowChrome = false,
+  onRegisterNewRemote,
 }: ConnectionPanelProps) {
   const fallbackLocal = getHostOsProfile();
   const [localShell, setLocalShell] = useState<{
@@ -126,12 +130,16 @@ export function ConnectionPanel({
     refreshLocalShell();
   }, [refreshLocalShell]);
 
-  const openCreateForm = () => {
+  const openCreateForm = useCallback(() => {
     setSshFormMode({ kind: "create" });
     setForm(defaultRequest);
     setConnectionName("");
     setRememberPassword(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    onRegisterNewRemote?.(openCreateForm);
+  }, [onRegisterNewRemote, openCreateForm]);
 
   const openEditForm = (saved: SavedConnection) => {
     setSshFormMode({ kind: "edit", saved });
@@ -394,35 +402,39 @@ export function ConnectionPanel({
     </Modal>
   ) : null;
 
-  const localSavedItem = (
-    <div className="saved-item saved-item-local">
+  const localTerminalTitle = !isWindowsHost()
+    ? `${localShell.title} · ${localShellBackendLabel(localShell.backend)}`
+    : localShell.title;
+
+  const sidebarChromeRow = (expanded: boolean) => (
+    <div
+      className={`sidebar-chrome-row${expanded ? "" : " sidebar-chrome-row-collapsed"}`}
+    >
+      {expanded ? (
+        <button
+          type="button"
+          className="sidebar-local-btn sidebar-local-btn-icon"
+          onClick={() => void createLocalSession(cols, rows)}
+          aria-label={localTerminalTitle}
+          title={localTerminalTitle}
+        >
+          <ServerOsIcon
+            osId={localShell.profile.osId}
+            osName={localShell.profile.osName}
+            size={18}
+            showTitle={false}
+          />
+        </button>
+      ) : null}
       <button
         type="button"
-        className="saved-item-main"
-        onClick={() => void createLocalSession(cols, rows)}
+        className="sidebar-toggle"
+        onClick={onToggleCollapse}
+        aria-label={expanded ? "收起侧栏" : "展开侧栏"}
+        title={expanded ? "收起侧栏" : "展开侧栏"}
       >
-        <ServerOsIcon osId={localShell.profile.osId} osName={localShell.profile.osName} />
-        <span className="saved-item-text">
-          <strong>{localShell.title}</strong>
-          {!isWindowsHost() ? (
-            <span>{localShellBackendLabel(localShell.backend)}</span>
-          ) : null}
-        </span>
+        <SidebarChevronIcon expanded={expanded} />
       </button>
-      {isWindowsHost() && !localShell.git_bash_available ? (
-        <div className="local-shell-meta">
-          <p className="local-shell-hint">
-            未检测到 Git Bash ·{" "}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
-            >
-              安装 Git for Windows
-            </button>
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 
@@ -433,7 +445,7 @@ export function ConnectionPanel({
         className="saved-item-main"
         onClick={() => void handleSavedConnect(saved)}
       >
-        <ServerOsIcon osId={saved.os_id} osName={saved.os_name} />
+        <ServerOsIcon osId={saved.os_id} osName={saved.os_name} size={16} showTitle={false} />
         <span className="saved-item-text">
           <strong>{saved.name}</strong>
           <span>
@@ -450,8 +462,8 @@ export function ConnectionPanel({
       >
         <svg
           viewBox="0 0 16 16"
-          width="14"
-          height="14"
+          width="12"
+          height="12"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.2"
@@ -467,7 +479,7 @@ export function ConnectionPanel({
         title="删除"
         onClick={() => void deleteSavedConnection(saved.id)}
       >
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
           <path
             fill="currentColor"
             d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1h-.997a.58.58 0 0 0-.01 0H11Zm1.958 1H3.042l.853 10.66A1 1 0 0 0 4.885 15h6.23a1 1 0 0 0 .99-1.84l.853-10.66Z"
@@ -481,17 +493,12 @@ export function ConnectionPanel({
     return (
       <>
         <aside className="sidebar sidebar-collapsed">
-          <div className="sidebar-top-row sidebar-top-row-collapsed">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              onClick={onToggleCollapse}
-              aria-label="展开侧栏"
-              title="展开侧栏"
-            >
-              <SidebarChevronIcon expanded={false} />
-            </button>
-          </div>
+          {macWindowChrome ? (
+            <div className="sidebar-macos-chrome">
+              <WindowControls layout="macos" />
+            </div>
+          ) : null}
+          {sidebarChromeRow(false)}
 
           <div className="sidebar-rail-sessions">
             <button
@@ -536,25 +543,28 @@ export function ConnectionPanel({
   return (
     <>
       <aside className="sidebar">
-        <div className="sidebar-top-row">
-          <SidebarAddMenu onRemote={openCreateForm} />
-          <button
-            type="button"
-            className="sidebar-toggle"
-            onClick={onToggleCollapse}
-            aria-label="收起侧栏"
-            title="收起侧栏"
-          >
-            <SidebarChevronIcon expanded={true} />
-          </button>
-        </div>
+        {macWindowChrome ? (
+          <div className="sidebar-macos-chrome">
+            <WindowControls layout="macos" />
+          </div>
+        ) : null}
+
+        {sidebarChromeRow(true)}
+
+        {isWindowsHost() && !localShell.git_bash_available ? (
+          <p className="local-shell-hint-banner">
+            未检测到 Git Bash ·{" "}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
+            >
+              安装 Git for Windows
+            </button>
+          </p>
+        ) : null}
 
         <section className="saved-list">
-          <div className="section-heading">
-            <h2>书签</h2>
-            <span className="section-count">{savedConnections.length + 1}</span>
-          </div>
-          {localSavedItem}
           {savedConnections.length === 0 && (
             <p className="empty-state">暂无 SSH 书签</p>
           )}

@@ -2,45 +2,43 @@ import { invoke } from "@tauri-apps/api/core";
 import { invokeWithSudoRetry } from "./invokeWithSudoRetry";
 import { createTransferId } from "./transferId";
 import { useSessionStore } from "../stores/sessionStore";
-import type { UploadFileResult } from "../types";
 
-function uploadLabel(localPaths: string[]): string {
-  if (localPaths.length === 1) {
-    const path = localPaths[0];
-    const parts = path.split(/[/\\]/);
-    return parts[parts.length - 1] || path;
-  }
-  return `${localPaths.length} 个文件`;
-}
-
-export async function uploadLocalPathsToSession(
+export async function downloadRemotePath(
   sessionId: string,
-  localPaths: string[],
-  remoteDir?: string | null,
-): Promise<UploadFileResult[]> {
+  remotePath: string,
+  kind: "file" | "directory",
+): Promise<string> {
   const transferId = createTransferId();
+  const baseName =
+    remotePath.split("/").pop() ||
+    remotePath.split("\\").pop() ||
+    remotePath;
+  const downloadName = kind === "directory" ? `${baseName}.tar.gz` : baseName;
+
   useSessionStore.getState().upsertTransfer({
     transfer_id: transferId,
     session_id: sessionId,
-    filename: uploadLabel(localPaths),
+    filename: downloadName,
     transferred: 0,
     total: 0,
-    direction: "upload",
+    direction: "download",
   });
+
+  const command = kind === "directory" ? "download_directory" : "download_file";
 
   try {
     return await invokeWithSudoRetry(
       (sudoPassword) =>
-        invoke<UploadFileResult[]>("upload_files", {
+        invoke<string>(command, {
           request: {
             session_id: sessionId,
-            local_paths: localPaths,
-            remote_dir: remoteDir ?? null,
+            remote_path: remotePath,
+            local_path: null,
             transfer_id: transferId,
             sudo_password: sudoPassword ?? null,
           },
         }),
-      { action: "上传" },
+      { action: "下载", path: remotePath },
     );
   } catch (err) {
     useSessionStore.getState().removeTransfer(transferId);

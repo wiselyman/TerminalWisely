@@ -34,6 +34,26 @@ export function TabHomeIcon() {
   );
 }
 
+/** lucide: plus */
+export function ChromePlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
+
 export function LocalTerminalIcon() {
   return (
     <svg
@@ -86,66 +106,6 @@ export function BookmarkIcon() {
       aria-hidden="true"
     >
       <path d="M3.5 2.75h9v10.75L8 11.5 3.5 13.5V2.75z" />
-    </svg>
-  );
-}
-
-/** Process list + activity bars — task manager metaphor. */
-export function TaskManagerIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="2.25" y="2.5" width="11.5" height="11" rx="1.2" />
-      <path d="M4.5 5.25h3.75M4.5 7.5h3M4.5 9.75h2.5" />
-      <path d="M10.25 10.75V9M11.5 10.75V7.25M12.75 10.75V5.5" />
-    </svg>
-  );
-}
-
-export function FindIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="7" cy="7" r="4.25" />
-      <path d="M10.5 10.5 13.25 13.25" />
-    </svg>
-  );
-}
-
-export function HostStatsIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="2.25" y="2.5" width="11.5" height="11" rx="1.2" />
-      <path d="M4.5 11V8.25L6.25 6.5 8 8.5 10.75 5.5 11.5 6.25V11" />
-      <path d="M4.5 11h7" />
     </svg>
   );
 }

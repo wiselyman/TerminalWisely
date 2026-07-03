@@ -7,11 +7,14 @@ import { useFindStore } from "./findStore";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useSessionStore } from "./sessionStore";
 import { useToastStore } from "./toastStore";
+import {
+  readWorkspacePanelWidth,
+  setWorkspacePanelWidth,
+  subscribeWorkspacePanelWidth,
+} from "../lib/workspacePanelWidth";
 
-const TASK_MANAGER_WIDTH_KEY = "terminal-wisely.task-manager-width";
 const TASK_MANAGER_SORT_KEY = "terminal-wisely.task-manager-sort-key";
 const TASK_MANAGER_SORT_DIR_KEY = "terminal-wisely.task-manager-sort-dir";
-const DEFAULT_TASK_MANAGER_WIDTH = 380;
 const KILLED_TOMBSTONE_MS = 20_000;
 
 type ProcessListMode = "full" | "basic" | "ports";
@@ -162,7 +165,7 @@ interface TaskManagerState {
 
 export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
   open: false,
-  width: Number(localStorage.getItem(TASK_MANAGER_WIDTH_KEY)) || DEFAULT_TASK_MANAGER_WIDTH,
+  width: readWorkspacePanelWidth(),
   processes: [],
   loading: false,
   syncing: false,
@@ -174,8 +177,7 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
   sortDirection: readSortDirection(),
 
   setWidth: (width) => {
-    const next = Math.max(320, Math.min(width, 720));
-    localStorage.setItem(TASK_MANAGER_WIDTH_KEY, String(next));
+    const next = setWorkspacePanelWidth(width);
     set({ width: next });
   },
 
@@ -402,3 +404,9 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
     }
   },
 }));
+
+subscribeWorkspacePanelWidth((width) => {
+  if (useTaskManagerStore.getState().width !== width) {
+    useTaskManagerStore.setState({ width });
+  }
+});

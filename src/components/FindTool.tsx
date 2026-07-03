@@ -1,4 +1,4 @@
-import { FindIcon } from "./SidebarIcons";
+import { FindInFilesIcon } from "./WorkspaceToolIcons";
 import { WorkspaceToolButton } from "./WorkspaceToolRail";
 
 interface FindToolProps {
@@ -10,12 +10,12 @@ interface FindToolProps {
 export function FindTool({ active, disabled, onClick }: FindToolProps) {
   return (
     <WorkspaceToolButton
-      label="Find"
+      label="在文件中查找"
       active={active}
       disabled={disabled}
       onClick={onClick}
     >
-      <FindIcon />
+      <FindInFilesIcon />
     </WorkspaceToolButton>
   );
 }

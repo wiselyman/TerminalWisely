@@ -5,9 +5,14 @@ import { isSyntheticTerminalMouseEvent } from "../lib/terminalSelectionDrag";
 interface TerminalLinkContextMenuProps {
   x: number;
   y: number;
+  pathKind: "file" | "directory";
   onClose: () => void;
   onCopyName: () => void;
   onCopyPath: () => void;
+  onDownload?: () => void;
+  onSendToRemote?: () => void;
+  onPreview: () => void;
+  onViewSize: () => void;
   onRename: () => void;
   onDelete: () => void;
   onMove: () => void;
@@ -32,9 +37,14 @@ function computeMenuPosition(x: number, y: number, menuHeight: number) {
 export function TerminalLinkContextMenu({
   x,
   y,
+  pathKind,
   onClose,
   onCopyName,
   onCopyPath,
+  onDownload,
+  onSendToRemote,
+  onPreview,
+  onViewSize,
   onRename,
   onDelete,
   onMove,
@@ -42,7 +52,7 @@ export function TerminalLinkContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const openedAtRef = useRef(0);
   const [position, setPosition] = useState(() =>
-    computeMenuPosition(x, y, 240),
+    computeMenuPosition(x, y, 280),
   );
 
   useLayoutEffect(() => {
@@ -128,6 +138,48 @@ export function TerminalLinkContextMenu({
         复制文件路径
       </button>
       <div className="tab-context-menu-separator" role="separator" />
+      {onDownload ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onDownload();
+            onClose();
+          }}
+        >
+          {pathKind === "directory" ? "下载文件夹" : "下载文件"}
+        </button>
+      ) : null}
+      {onSendToRemote ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onSendToRemote();
+            onClose();
+          }}
+        >
+          发送到其他服务器
+        </button>
+      ) : null}
+      {onDownload || onSendToRemote ? (
+        <div className="tab-context-menu-separator" role="separator" />
+      ) : null}
+      {pathKind === "file" ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onPreview();
+            onClose();
+          }}
+        >
+          编辑和预览
+        </button>
+      ) : null}
       <button
         type="button"
         className="tab-context-menu-item"
@@ -160,6 +212,18 @@ export function TerminalLinkContextMenu({
         }}
       >
         移动到目录
+      </button>
+      <div className="tab-context-menu-separator" role="separator" />
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onViewSize();
+          onClose();
+        }}
+      >
+        查看大小
       </button>
     </div>,
     document.body,

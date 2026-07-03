@@ -23,6 +23,13 @@ export interface SessionInfo {
   os_name?: string | null;
 }
 
+export interface SessionMetadataUpdatedPayload {
+  session_id: string;
+  os_id?: string | null;
+  os_name?: string | null;
+  remote_home?: string | null;
+}
+
 export interface SshConnectRequest {
   host: string;
   port: number;
@@ -112,23 +119,39 @@ export interface TransferRemoteRequest {
   to_session_id: string;
   remote_dir?: string | null;
   transfer_id?: string | null;
+  sudo_password?: string | null;
+}
+
+export interface PathSizeRequest {
+  session_id: string;
+  path: string;
+  sudo_password?: string | null;
+}
+
+export interface PathSizeResult {
+  path: string;
+  kind: "file" | "directory" | string;
+  size_bytes: number;
 }
 
 export interface FsPathRequest {
   session_id: string;
   path: string;
+  sudo_password?: string | null;
 }
 
 export interface FsRenameRequest {
   session_id: string;
   path: string;
   new_name: string;
+  sudo_password?: string | null;
 }
 
 export interface FsMoveRequest {
   session_id: string;
   path: string;
   dest_dir: string;
+  sudo_password?: string | null;
 }
 
 export type ConnectionStatus = "connecting" | "ready";

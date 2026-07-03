@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
+import { SudoPasswordModal } from "./components/SudoPasswordModal";
 import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { FindPanel } from "./components/FindPanel";
@@ -26,20 +28,29 @@ import {
 } from "./lib/remoteDrag";
 import { dropEffectForKind } from "./lib/dragVisual";
 import { uploadLocalPathsToSession } from "./lib/sessionUpload";
+import { formatTransferError } from "./lib/transferError";
 import { startTabPointerReorder } from "./lib/tabPointerReorder";
+import { isSudoRequiredError } from "./stores/previewStore";
+import {
+  extractPathFromSudoError,
+  requestSudoPassword,
+} from "./stores/sudoPromptStore";
 import { useSessionStore } from "./stores/sessionStore";
-import { usePreviewStore } from "./stores/previewStore";
 import { useHostStatsStore } from "./stores/hostStatsStore";
+import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { useCommandNavigatorStore } from "./stores/commandNavigatorStore";
 import { useFindStore } from "./stores/findStore";
 import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useToastStore } from "./stores/toastStore";
-import type { TransferCompletePayload, TransferProgressPayload } from "./types";
+import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
+import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
 import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
 import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
-import { TabHomeIcon } from "./components/SidebarIcons";
-import { getHostOsProfile } from "./lib/hostOs";
+import { TabHomeIcon, ChromePlusIcon } from "./components/SidebarIcons";
+import { getHostOsProfile, getPlatformShellClass, isMacHost } from "./lib/hostOs";
+import { isTauriRuntime } from "./lib/isTauri";
+import { WindowControls } from "./components/WindowControls";
 import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
 import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
 import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
@@ -51,14 +62,19 @@ const SIDEBAR_STORAGE_KEY = "terminal-wisely.sidebar-collapsed";
 
 function App() {
   const hostOs = getHostOsProfile();
+  const platformClass = getPlatformShellClass();
+  const macWindowChrome = isMacHost();
+  const tauriDragRegion = isTauriRuntime() ? true : undefined;
   const {
     tabs,
     activeTabId,
+    savedConnections,
     closeTab,
     closeOtherTabs,
     closeTabsToLeft,
     closeTabsToRight,
     setActiveTab,
+    activateHome,
     reorderTabs,
     activeTransfers,
     upsertTransfer,
@@ -89,6 +105,27 @@ function App() {
   );
 
   useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<SessionMetadataUpdatedPayload>(
+      "session-metadata-updated",
+      (event) => {
+        const payload = event.payload;
+        useSessionStore.getState().updateSessionMetadata(payload.session_id, {
+          os_id: payload.os_id,
+          os_name: payload.os_name,
+          remote_home: payload.remote_home,
+        });
+        void useSessionStore.getState().loadSavedConnections();
+      },
+    ).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     void ensureTerminalFontsLoaded().then(() => {
       document.documentElement.style.setProperty(
         "--tw-mono-font",
@@ -107,8 +144,45 @@ function App() {
           upsertTransfer(event.payload);
         }),
         listen<TransferCompletePayload>("transfer-complete", (event) => {
-          removeTransfer(event.payload.transfer_id);
-          pushToast(event.payload.message, event.payload.success);
+          const payload = event.payload;
+          if (
+            !payload.success &&
+            payload.direction === "send" &&
+            isSudoRequiredError(payload.message)
+          ) {
+            const ctx = useSessionStore
+              .getState()
+              .takePendingSudoTransfer(payload.transfer_id);
+            removeTransfer(payload.transfer_id);
+            if (ctx) {
+              void (async () => {
+                try {
+                  const password = await requestSudoPassword({
+                    action: "发送",
+                    path:
+                      extractPathFromSudoError(payload.message) || ctx.remotePath,
+                  });
+                  await useSessionStore
+                    .getState()
+                    .startRemoteTransfer(
+                      ctx.fromSessionId,
+                      ctx.remotePath,
+                      ctx.toSessionId,
+                      password,
+                      ctx.remoteDir ?? null,
+                    );
+                } catch {
+                  pushToast("已取消 sudo 操作", false);
+                }
+              })();
+              return;
+            }
+          }
+          useSessionStore
+            .getState()
+            .clearPendingSudoTransfer(payload.transfer_id);
+          removeTransfer(payload.transfer_id);
+          pushToast(payload.message, payload.success);
         }),
       ]);
 
@@ -131,10 +205,6 @@ function App() {
     null,
   );
   const [tabReorderDragId, setTabReorderDragId] = useState<string | null>(null);
-  const [tabReorderTarget, setTabReorderTarget] = useState<{
-    id: string;
-    position: "before" | "after";
-  } | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{
     tabId: string;
     x: number;
@@ -149,35 +219,30 @@ function App() {
   );
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
   const tabBarRef = useRef<HTMLDivElement>(null);
-  const previewOpen = usePreviewStore((s) => s.open);
-  const previewWidth = usePreviewStore((s) => s.width);
-  const setPreviewWidth = usePreviewStore((s) => s.setWidth);
+  const openNewRemoteRef = useRef<() => void>(() => {});
+  const registerNewRemote = useCallback((open: () => void) => {
+    openNewRemoteRef.current = open;
+  }, []);
   const taskManagerOpen = useTaskManagerStore((s) => s.open);
-  const toggleTaskManager = useTaskManagerStore((s) => s.toggleOpen);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
   const findOpen = useFindStore((s) => s.open);
-  const toggleFind = useFindStore((s) => s.toggleOpen);
   const openFind = useFindStore((s) => s.openFind);
   const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
-  const resetFindResults = useFindStore((s) => s.resetResults);
   const hostStatsOpen = useHostStatsStore((s) => s.open);
-  const toggleHostStats = useHostStatsStore((s) => s.toggleOpen);
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
   const commandNavOpen = useCommandNavigatorStore((s) => s.open);
-  const toggleCommandNav = useCommandNavigatorStore((s) => s.toggleOpen);
-  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(
-    null,
-  );
+  const workspacePanelWidth = useTaskManagerStore((s) => s.width);
+  const workspacePanelOpen =
+    taskManagerOpen || findOpen || hostStatsOpen || commandNavOpen;
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
     : SIDEBAR_WIDTH;
 
   const terminalLayoutRevision = useMemo(
-    () =>
-      [sidebarCollapsed, previewOpen, previewWidth].join("|"),
-    [sidebarCollapsed, previewOpen, previewWidth],
+    () => String(sidebarCollapsed),
+    [sidebarCollapsed],
   );
 
   useEffect(() => {
@@ -201,7 +266,6 @@ function App() {
 
   const clearTabReorderState = () => {
     setTabReorderDragId(null);
-    setTabReorderTarget(null);
   };
 
   useEffect(() => {
@@ -224,15 +288,21 @@ function App() {
       return;
     }
 
+    const tabElement = (event.target as HTMLElement).closest<HTMLElement>(
+      ".tab[data-session-id]",
+    );
+    if (!tabElement) return;
+
     tabReorderCleanupRef.current?.();
     tabReorderCleanupRef.current = startTabPointerReorder({
       tabId,
+      tabElement,
       startX: event.clientX,
       startY: event.clientY,
-      onPreview: (target) => {
+      onDragStart: () => {
         setTabReorderDragId(tabId);
-        setTabReorderTarget(target);
       },
+      onPreview: (_target) => {},
       onReorder: (dragId, targetId, position) => {
         reorderTabs(dragId, targetId, position);
       },
@@ -248,41 +318,22 @@ function App() {
     activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [activeTabId, tabs.length]);
 
-  useEffect(() => {
-    const onMouseMove = (event: MouseEvent) => {
-      const state = resizeStateRef.current;
-      if (!state) return;
-      const delta = state.startX - event.clientX;
-      setPreviewWidth(state.startWidth + delta);
-    };
-
-    const onMouseUp = () => {
-      resizeStateRef.current = null;
-      document.body.classList.remove("workspace-resizing");
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [setPreviewWidth]);
-
-  const startPreviewResize = (event: ReactMouseEvent) => {
-    event.preventDefault();
-    resizeStateRef.current = {
-      startX: event.clientX,
-      startWidth: previewWidth,
-    };
-    document.body.classList.add("workspace-resizing");
-  };
-
   const activeSessionTitle =
     activeTabId != null ? sessionTitles[activeTabId] : undefined;
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId),
     [activeTabId, tabs],
+  );
+  const hostStatsSnapshot = useHostStatsStore((s) => s.snapshot);
+  const activeSessionOs = useMemo(
+    () =>
+      resolveSessionOsProfile(
+        activeTab,
+        savedConnections,
+        hostOs,
+        hostStatsSnapshot?.os_name,
+      ),
+    [activeTab, savedConnections, hostOs, hostStatsSnapshot?.os_name],
   );
   const activeTabReady =
     activeTab != null && (activeTab.connectionStatus ?? "ready") === "ready";
@@ -332,13 +383,12 @@ function App() {
   useEffect(() => {
     if (!findOpen || !activeTabId) return;
 
-    useFindStore.setState({
-      activeSessionId: activeTabId,
-      followTerminalCwd: true,
-      searchPath: "",
-    });
-    resetFindResults();
-    void loadSessionCwd(activeTabId);
+    const { activeSessionId, activateSession } = useFindStore.getState();
+    if (activeSessionId !== activeTabId) {
+      activateSession(activeTabId);
+    } else {
+      void loadSessionCwd(activeTabId);
+    }
 
     const timer = window.setInterval(() => {
       const { followTerminalCwd } = useFindStore.getState();
@@ -348,7 +398,7 @@ function App() {
     }, 2000);
 
     return () => window.clearInterval(timer);
-  }, [activeTabId, findOpen, loadSessionCwd, resetFindResults]);
+  }, [activeTabId, findOpen, loadSessionCwd]);
 
   useEffect(() => {
     if (!hostStatsOpen || !activeTabId) return;
@@ -478,37 +528,74 @@ function App() {
     };
   }, [setActiveTab, tabs.length]);
 
+  const onTitlebarDoubleClick = () => {
+    if (!isTauriRuntime()) return;
+    void getCurrentWindow().toggleMaximize();
+  };
+
   return (
     <div
-      className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
+          ...(workspacePanelOpen
+            ? { "--workspace-panel-width": `${workspacePanelWidth}px` }
+            : {}),
         } as CSSProperties
       }
     >
-      <ConnectionPanel
-        cols={terminalSize.cols}
-        rows={terminalSize.rows}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
-      />
+      <div className="app-body">
+        <ConnectionPanel
+          cols={terminalSize.cols}
+          rows={terminalSize.rows}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
+          macWindowChrome={macWindowChrome}
+          onRegisterNewRemote={registerNewRemote}
+        />
 
-      <main className="workspace">
-        {tabs.length > 0 ? (
-        <div
-          className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
-          ref={tabBarRef}
-          onWheel={(event) => {
-            if (!tabBarRef.current) return;
-            const bar = tabBarRef.current;
-            if (bar.scrollWidth <= bar.clientWidth) return;
-            bar.scrollLeft += event.deltaY + event.deltaX;
-            event.preventDefault();
-          }}
-        >
+        <div className="workspace-frame">
+          <header className="chrome-titlebar">
+            <div className="chrome-titlebar-main">
+              <div
+                className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
+                ref={tabBarRef}
+                onWheel={(event) => {
+                  if (!tabBarRef.current) return;
+                  const bar = tabBarRef.current;
+                  if (bar.scrollWidth <= bar.clientWidth) return;
+                  bar.scrollLeft += event.deltaY + event.deltaX;
+                  event.preventDefault();
+                }}
+              >
+                <div
+                  className={`tab tab-home-entry ${activeTabId === null ? "active" : ""}`}
+                  data-tab-role="home"
+                  onClick={() => {
+                    if (tabPointerButtonRef.current !== 0) {
+                      tabPointerButtonRef.current = 0;
+                      return;
+                    }
+                    if (Date.now() < suppressTabClickUntilRef.current) return;
+                    activateHome();
+                  }}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
+                  {activeTabId === null ? (
+                    <>
+                      <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                      <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                    </>
+                  ) : null}
+                  <span className="tab-kind home" title="Home">
+                    <TabHomeIcon />
+                  </span>
+                  <span className="tab-title">Home</span>
+                </div>
           {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
+            const tabOs = resolveSessionOsProfile(tab, savedConnections, hostOs);
             return (
             <div
               key={tab.id}
@@ -517,10 +604,8 @@ function App() {
               } ${
                 tabDropTargetId === tab.id ? "tab-drop-target" : ""
               } ${tabDropTargetId === tab.id && tabDropKind === "remote" ? "tab-drop-target-remote" : ""} ${
-                tabReorderTarget?.id === tab.id
-                  ? `tab-reorder-${tabReorderTarget.position}`
-                  : ""
-              } ${tabReorderDragId === tab.id ? "tab-reorder-dragging" : ""}`}
+                tabReorderDragId === tab.id ? "tab-reorder-dragging" : ""
+              }`}
               data-session-id={tab.id}
               data-tab-kind={tab.kind}
               data-drop-kind={
@@ -621,27 +706,27 @@ function App() {
                     pushToast(`已上传到 ${tab.title}: ${names}`, true);
                   })
                   .catch((err) => {
-                    pushToast(String(err), false);
+                    pushToast(formatTransferError(err), false);
                   });
               }}
             >
+              {tab.active ? (
+                <>
+                  <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                  <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                </>
+              ) : null}
               <span
                 className={`tab-kind ${tab.kind}`}
                 title={
                   tab.kind === "ssh"
-                    ? tab.os_name ?? tab.os_id ?? "SSH"
-                    : tab.os_name ?? tab.os_id ?? hostOs.osName
+                    ? tabOs.osName ?? tabOs.osId ?? "SSH"
+                    : tabOs.osName ?? hostOs.osName
                 }
               >
                 <ServerOsIcon
-                  osId={
-                    tab.os_id ??
-                    (tab.kind === "local" ? hostOs.osId : null)
-                  }
-                  osName={
-                    tab.os_name ??
-                    (tab.kind === "local" ? hostOs.osName : null)
-                  }
+                  osId={tabOs.osId}
+                  osName={tabOs.osName}
                   size={14}
                   showTitle={false}
                 />
@@ -694,96 +779,103 @@ function App() {
             </div>
             );
           })}
-        </div>
-        ) : null}
+              </div>
+              <button
+                type="button"
+                className="chrome-new-session"
+                aria-label="新建 SSH 连接"
+                title="新建 SSH 连接"
+                onClick={() => openNewRemoteRef.current()}
+              >
+                <ChromePlusIcon />
+              </button>
 
-        {tabContextMenu ? (
-          <TabContextMenu
-            x={tabContextMenu.x}
-            y={tabContextMenu.y}
-            tabIndex={tabs.findIndex((tab) => tab.id === tabContextMenu.tabId)}
-            tabCount={tabs.length}
-            onClose={() => setTabContextMenu(null)}
-            onCloseTab={() => void closeTab(tabContextMenu.tabId)}
-            onCloseOthers={() => void closeOtherTabs(tabContextMenu.tabId)}
-            onCloseLeft={() => void closeTabsToLeft(tabContextMenu.tabId)}
-            onCloseRight={() => void closeTabsToRight(tabContextMenu.tabId)}
+          <div
+            className="chrome-titlebar-drag"
+            data-tauri-drag-region={tauriDragRegion ? "" : undefined}
+            onDoubleClick={onTitlebarDoubleClick}
           />
-        ) : null}
 
-        <div
-          className={`workspace-split${previewOpen ? " workspace-split-preview-open" : ""}`}
-          style={
-            previewOpen
-              ? ({
-                  "--preview-width": `${previewWidth}px`,
-                } as CSSProperties)
-              : undefined
-          }
-        >
-          <div className="terminal-stack">
-            {tabs.length === 0 ? (
-              <WorkspaceWelcome />
-            ) : (
-              tabs.map((tab) => (
-                <TerminalView
-                  key={tab.id}
-                  sessionId={tab.id}
-                  kind={tab.kind}
-                  active={tab.id === activeTabId}
-                  connectionStatus={tab.connectionStatus ?? "ready"}
-                  title={tab.title}
-                  layoutRevision={terminalLayoutRevision}
-                />
-              ))
-            )}
-          </div>
+          {!macWindowChrome ? <WindowControls layout="windows" /> : null}
+            </div>
+          </header>
 
-          {previewOpen ? (
-            <>
-              <div
-                className="workspace-resizer"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="调整预览面板宽度"
-                onMouseDown={startPreviewResize}
-              />
-              <PreviewPanel sessionTitle={activeSessionTitle} />
-            </>
+          {tabContextMenu ? (
+            <TabContextMenu
+              x={tabContextMenu.x}
+              y={tabContextMenu.y}
+              tabIndex={tabs.findIndex((tab) => tab.id === tabContextMenu.tabId)}
+              tabCount={tabs.length}
+              onClose={() => setTabContextMenu(null)}
+              onCloseTab={() => void closeTab(tabContextMenu.tabId)}
+              onCloseOthers={() => void closeOtherTabs(tabContextMenu.tabId)}
+              onCloseLeft={() => void closeTabsToLeft(tabContextMenu.tabId)}
+              onCloseRight={() => void closeTabsToRight(tabContextMenu.tabId)}
+            />
           ) : null}
-        </div>
 
-        <TransferPanel
-          transfers={transferList}
-          sessionTitles={sessionTitles}
-          onCancel={(transferId) => void cancelTransfer(transferId)}
-        />
-      </main>
+          <main className="workspace">
+            <div className="workspace-split">
+              <div className="terminal-stack">
+                {activeTabId === null ? <WorkspaceWelcome /> : null}
+                {tabs.map((tab) => (
+                  <TerminalView
+                    key={tab.id}
+                    sessionId={tab.id}
+                    kind={tab.kind}
+                    active={tab.id === activeTabId}
+                    connectionStatus={tab.connectionStatus ?? "ready"}
+                    title={tab.title}
+                    layoutRevision={terminalLayoutRevision}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <TransferPanel
+              transfers={transferList}
+              sessionTitles={sessionTitles}
+              onCancel={(transferId) => void cancelTransfer(transferId)}
+            />
+          </main>
+        </div>
+      </div>
       <SendToDialog />
+      {activeTabId ? (
+        <PreviewPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle}
+        />
+      ) : null}
       <ToastContainer />
+      <SudoPasswordModal />
       <WorkspaceToolRail>
         <TaskManagerTool
           active={taskManagerOpen}
           disabled={!activeTabReady}
-          onClick={toggleTaskManager}
+          onClick={() => {
+            if (activeTabId) switchWorkspacePanel("taskManager", activeTabId);
+          }}
         />
         <FindTool
           active={findOpen}
           disabled={!activeTabReady}
           onClick={() => {
-            if (activeTabId) toggleFind(activeTabId);
+            if (activeTabId) switchWorkspacePanel("find", activeTabId);
           }}
         />
         <HostStatsTool
           active={hostStatsOpen}
           disabled={!activeTabReady}
-          onClick={toggleHostStats}
+          onClick={() => {
+            if (activeTabId) switchWorkspacePanel("hostStats", activeTabId);
+          }}
         />
         <CommandNavigatorTool
           active={commandNavOpen}
           disabled={!activeTabReady}
           onClick={() => {
-            if (activeTabId) toggleCommandNav(activeTabId);
+            if (activeTabId) switchWorkspacePanel("commandNav", activeTabId);
           }}
         />
       </WorkspaceToolRail>
@@ -803,8 +895,8 @@ function App() {
         <HostStatsPanel
           sessionId={activeTabId}
           sessionTitle={activeSessionTitle ?? activeTabId}
-          osId={activeTab?.os_id}
-          osName={activeTab?.os_name}
+          osId={activeSessionOs.osId}
+          osName={activeSessionOs.osName}
         />
       ) : null}
       {activeTabId && activeTab && commandNavOpen ? (

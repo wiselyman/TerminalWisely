@@ -17,11 +17,14 @@ import { useHostStatsStore } from "./hostStatsStore";
 import { useSessionStore } from "./sessionStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import { useToastStore } from "./toastStore";
+import {
+  readWorkspacePanelWidth,
+  setWorkspacePanelWidth,
+  subscribeWorkspacePanelWidth,
+} from "../lib/workspacePanelWidth";
 
-const WIDTH_KEY = "terminal-wisely.command-nav-width";
 const CUSTOM_KEY = "terminal-wisely.command-nav-custom";
 const HIDDEN_KEY = "terminal-wisely.command-nav-hidden";
-const DEFAULT_WIDTH = 400;
 
 export const TERMINAL_FOCUS_EVENT = "terminal-wisely-focus";
 
@@ -147,7 +150,7 @@ const CLEAR_READLINE_LINE = "\x15";
 export const useCommandNavigatorStore = create<CommandNavigatorState>(
   (set, get) => ({
     open: false,
-    width: Number(localStorage.getItem(WIDTH_KEY)) || DEFAULT_WIDTH,
+    width: readWorkspacePanelWidth(),
     query: "",
     subcategory: "all",
     customCommands: loadCustomCommands(),
@@ -159,8 +162,7 @@ export const useCommandNavigatorStore = create<CommandNavigatorState>(
     editorOpen: false,
 
     setWidth: (width) => {
-      const next = Math.max(320, Math.min(width, 720));
-      localStorage.setItem(WIDTH_KEY, String(next));
+      const next = setWorkspacePanelWidth(width);
       set({ width: next });
     },
 
@@ -261,6 +263,12 @@ export const useCommandNavigatorStore = create<CommandNavigatorState>(
     },
   }),
 );
+
+subscribeWorkspacePanelWidth((width) => {
+  if (useCommandNavigatorStore.getState().width !== width) {
+    useCommandNavigatorStore.setState({ width });
+  }
+});
 
 export function closeCommandNavigator() {
   useCommandNavigatorStore.getState().close();

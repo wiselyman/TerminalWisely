@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::session::{
@@ -17,7 +17,8 @@ use crate::types::{
     FsMoveRequest, FsPathRequest, FsRenameRequest,
     HostStatsRequest, HostStatsSnapshot,
     LocalShellInfo,
-    ProcessListResult, SavedConnectionView, SessionCwdRequest, SessionInfo, SshConnectRequest, SshConnectResult,
+    ProcessListResult, SavedConnectionView, SessionCwdRequest, SessionInfo, SessionMetadataUpdated,
+    SshConnectRequest, SshConnectResult,
     TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
 };
 
@@ -28,9 +29,30 @@ fn spawn_ssh_post_connect_tasks(
 ) {
     tauri::async_runtime::spawn(async move {
         let sessions = app.state::<SessionManager>();
-        let os_profile = sessions.probe_ssh_metadata(&session_id).await.ok().flatten();
+        let probe_result = sessions.probe_ssh_metadata(&session_id).await;
+        let os_profile = probe_result.as_ref().ok().and_then(|value| value.clone());
         if let Some(ref os) = os_profile {
             let _ = update_matching_saved_connections_os(&app, &request, os);
+        }
+        if probe_result.is_ok() {
+            let session_info = sessions
+                .list()
+                .await
+                .into_iter()
+                .find(|item| item.id == session_id);
+            let payload = SessionMetadataUpdated {
+                session_id: session_id.clone(),
+                os_id: session_info
+                    .as_ref()
+                    .and_then(|s| s.os_id.clone())
+                    .or_else(|| os_profile.as_ref().map(|os| os.os_id.clone())),
+                os_name: session_info
+                    .as_ref()
+                    .and_then(|s| s.os_name.clone())
+                    .or_else(|| os_profile.as_ref().and_then(|os| os.os_name.clone())),
+                remote_home: session_info.and_then(|s| s.remote_home),
+            };
+            let _ = app.emit("session-metadata-updated", payload);
         }
         let _ = record_device_history(&app, &request);
     });
@@ -329,7 +351,12 @@ pub async fn rename_path(
     sessions: State<'_, SessionManager>,
 ) -> Result<(), String> {
     sessions
-        .rename_path(&request.session_id, &request.path, &request.new_name)
+        .rename_path(
+            &request.session_id,
+            &request.path,
+            &request.new_name,
+            request.sudo_password.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -340,7 +367,11 @@ pub async fn delete_path(
     sessions: State<'_, SessionManager>,
 ) -> Result<(), String> {
     sessions
-        .delete_path(&request.session_id, &request.path)
+        .delete_path(
+            &request.session_id,
+            &request.path,
+            request.sudo_password.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -351,7 +382,12 @@ pub async fn move_path(
     sessions: State<'_, SessionManager>,
 ) -> Result<(), String> {
     sessions
-        .move_path(&request.session_id, &request.path, &request.dest_dir)
+        .move_path(
+            &request.session_id,
+            &request.path,
+            &request.dest_dir,
+            request.sudo_password.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -577,6 +613,17 @@ pub async fn preview_close(
 ) -> Result<(), String> {
     previews.close(&request.handle_id).await;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_path_size(
+    request: crate::types::PathSizeRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<crate::types::PathSizeResult, String> {
+    sessions
+        .get_path_size(request)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

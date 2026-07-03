@@ -7,6 +7,7 @@ mod find;
 mod commands;
 mod error;
 mod path_complete;
+mod path_size;
 mod passwd;
 mod preview;
 mod preview_sudo;
@@ -96,6 +97,7 @@ pub fn run() {
             commands::preview_close,
             commands::preview_save,
             commands::probe_path,
+            commands::get_path_size,
             commands::open_preview_path,
             commands::open_preview_handle,
             commands::list_processes,

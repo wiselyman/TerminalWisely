@@ -2,7 +2,7 @@ export const productIntro = {
   name: "TerminalWisely",
   tagline: "为日常运维准备的桌面终端",
   summary:
-    "在同一窗口里管理本地 Git Bash 与 SSH 会话。拖拽上传、点击浏览与预览、Find 文件搜索、服务器资源监控、任务管理器、快捷下载、跨服发送，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
+    "在同一窗口里管理本地 Git Bash 与 SSH 会话。拖拽上传、点击浏览与预览、右键下载与跨服发送、Find 文件搜索、服务器资源监控、任务管理器，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
   features: [
     {
       title: "拖拽上传",
@@ -15,14 +15,9 @@ export const productIntro = {
         "单击 ls 中的目录进入；单击文件在右侧预览面板打开（文本、Markdown、CSV、图片、PDF 等），文本类支持全文搜索。",
     },
     {
-      title: "快捷下载",
+      title: "右键下载与跨服发送",
       description:
-        "Ctrl / Cmd + 单击终端里的文件路径，下载到本机 Downloads/TerminalWisely 文件夹。",
-    },
-    {
-      title: "跨服发送",
-      description:
-        "在 A 的 ls 输出里按住 Ctrl/Cmd，将文件名拖到顶部 B 的 SSH 标签再松开；也可用 Shift + 点击选择目标。",
+        "SSH 会话中右键 ls 列出的文件或文件夹：下载到本机、发送到其他 SSH 服务器；也可沿用 Ctrl/Cmd+点击或拖拽到目标标签。",
     },
     {
       title: "页签快捷目录",
@@ -64,12 +59,12 @@ export const productIntro = {
     {
       icon: "ssh" as const,
       iconLabel: "Remote 远程 SSH",
-      text: "侧栏 + 填写主机信息，连接远程 Linux 服务器。",
+      text: "页签栏右侧 + 或侧栏书签连接远程 Linux 服务器。",
     },
     {
       icon: "bookmark" as const,
       iconLabel: "书签",
-      text: "常用 SSH 保存为书签；页签 ~ 回用户目录，单击 ls 输出浏览目录与预览文件。",
+      text: "常用 SSH 保存为书签；在 SSH 终端右键 ls 中的路径可下载、预览或发送到其他服务器。",
     },
   ],
 } as const;
