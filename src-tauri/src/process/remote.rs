@@ -7,7 +7,7 @@ use crate::ssh::client::{exec_command, ClientHandler};
 use crate::types::{ProcessEntry, ProcessListMode, ProcessListResult};
 use russh::client;
 
-const LIST_PROCESSES_BASIC_SCRIPT: &str = r#"bash -s <<'TW_BASIC_EOF'
+const LIST_PROCESSES_BASIC_SCRIPT: &str = r#"bash --noprofile --norc -s <<'TW_BASIC_EOF'
 set -eu
 ps_file=$(mktemp)
 trap 'rm -f "$ps_file"' EXIT
@@ -33,7 +33,7 @@ done < "$ps_file"
 printf ']\n'
 TW_BASIC_EOF"#;
 
-const LIST_PROCESS_PORTS_SCRIPT: &str = r#"bash -s <<'TW_PORTS_EOF'
+const LIST_PROCESS_PORTS_SCRIPT: &str = r#"bash --noprofile --norc -s <<'TW_PORTS_EOF'
 set -eu
 ports_file=$(mktemp)
 ps_file=$(mktemp)
@@ -181,7 +181,7 @@ done < "$ps_file"
 printf ']\n'
 TW_PORTS_EOF"#;
 
-const LIST_PROCESSES_SCRIPT: &str = r#"bash -s <<'TW_LIST_EOF'
+const LIST_PROCESSES_SCRIPT: &str = r#"bash --noprofile --norc -s <<'TW_LIST_EOF'
 set -eu
 ports_file=$(mktemp)
 ps_file=$(mktemp)
@@ -377,16 +377,26 @@ fn map_ssh_exec_error(err: AppError) -> AppError {
     }
 }
 
-fn parse_process_list(stdout: &str, context: &str) -> AppResult<ProcessListResult> {
+fn extract_json_array(stdout: &str) -> Option<&str> {
     let trimmed = stdout.trim();
-    if trimmed.is_empty() {
+    let start = trimmed.find('[')?;
+    let end = trimmed.rfind(']')?;
+    if end < start {
+        return None;
+    }
+    Some(&trimmed[start..=end])
+}
+
+fn parse_process_list(stdout: &str, context: &str) -> AppResult<ProcessListResult> {
+    let payload = extract_json_array(stdout).unwrap_or(stdout.trim());
+    if payload.is_empty() {
         return Ok(ProcessListResult {
             processes: Vec::new(),
         });
     }
 
-    let processes: Vec<ProcessEntry> = serde_json::from_str(trimmed)
-        .map_err(|err| AppError::msg(format!("{context}: {err}; 输出: {trimmed}")))?;
+    let processes: Vec<ProcessEntry> = serde_json::from_str(payload)
+        .map_err(|err| AppError::msg(format!("{context}: {err}; 输出: {payload}")))?;
 
     Ok(normalize_processes(processes))
 }

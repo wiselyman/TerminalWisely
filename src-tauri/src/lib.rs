@@ -46,6 +46,19 @@ fn apply_window_icon(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn apply_macos_window_effects(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use tauri::window::{Effect, EffectState, WindowEffectsConfig};
+
+    window.set_effects(WindowEffectsConfig {
+        effects: vec![Effect::HudWindow],
+        state: Some(EffectState::Active),
+        radius: Some(10.0),
+        ..Default::default()
+    })?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
@@ -61,6 +74,10 @@ pub fn run() {
         .manage(preview::PreviewManager::new())
         .setup(|app| {
             apply_window_icon(app)?;
+            if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                apply_macos_window_effects(&window)?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

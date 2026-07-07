@@ -2,7 +2,6 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Modal } from "./Modal";
-import { WindowControls } from "./WindowControls";
 import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
@@ -22,7 +21,6 @@ interface ConnectionPanelProps {
   rows: number;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  macWindowChrome?: boolean;
   onRegisterNewRemote?: (open: () => void) => void;
 }
 
@@ -73,7 +71,6 @@ export function ConnectionPanel({
   rows,
   collapsed,
   onToggleCollapse,
-  macWindowChrome = false,
   onRegisterNewRemote,
 }: ConnectionPanelProps) {
   const fallbackLocal = getHostOsProfile();
@@ -493,11 +490,6 @@ export function ConnectionPanel({
     return (
       <>
         <aside className="sidebar sidebar-collapsed">
-          {macWindowChrome ? (
-            <div className="sidebar-macos-chrome">
-              <WindowControls layout="macos" />
-            </div>
-          ) : null}
           {sidebarChromeRow(false)}
 
           <div className="sidebar-rail-sessions">
@@ -543,12 +535,6 @@ export function ConnectionPanel({
   return (
     <>
       <aside className="sidebar">
-        {macWindowChrome ? (
-          <div className="sidebar-macos-chrome">
-            <WindowControls layout="macos" />
-          </div>
-        ) : null}
-
         {sidebarChromeRow(true)}
 
         {isWindowsHost() && !localShell.git_bash_available ? (

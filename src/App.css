@@ -24,6 +24,8 @@
   --tab-radius: 10px;
   --chrome-titlebar-height: 40px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .app-shell.platform-linux {
@@ -96,10 +98,25 @@ body,
 .chrome-titlebar {
   display: flex;
   flex-shrink: 0;
+  align-items: stretch;
   height: var(--chrome-titlebar-height);
   background: var(--tab-strip-bg);
   user-select: none;
   -webkit-app-region: no-drag;
+}
+
+.chrome-titlebar-macos-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 10px 0 14px;
+  background: var(--tab-strip-bg);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.app-shell.platform-macos .chrome-titlebar-macos-controls {
+  padding: 0 8px 0 12px;
 }
 
 .chrome-titlebar-main {
@@ -138,6 +155,7 @@ body,
 
 .chrome-titlebar-main .tab-bar,
 .chrome-new-session,
+.chrome-titlebar-macos-controls,
 .window-controls,
 .sidebar-chrome-row .sidebar-toggle,
 .sidebar-chrome-row .sidebar-local-btn {
@@ -145,15 +163,20 @@ body,
   app-region: no-drag;
 }
 
+.app-shell.platform-macos .chrome-new-session {
+  align-self: flex-end;
+  margin: 0 4px 2px;
+}
+
 .chrome-new-session {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  align-self: center;
+  align-self: flex-end;
   width: 28px;
   height: 28px;
-  margin: 0 4px 4px;
+  margin: 0 4px 2px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -240,7 +263,7 @@ body,
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 100%;
+  height: auto;
 }
 
 .wc-macos {

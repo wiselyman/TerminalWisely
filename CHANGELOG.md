@@ -4,6 +4,16 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.8.1] - 2026-07-07
+
+### Fixed
+- 远程任务管理器：SSH 输出含 `Could not chdir to home directory` 时仍能从 JSON 段解析进程列表；脚本使用 `bash --noprofile --norc`
+- macOS：窗口圆角（`HudWindow` 效果）、交通灯移入标签栏、收起侧栏不再遮挡
+- macOS：页签单击切换（`acceptFirstMouse`、mousedown 激活）
+- macOS：标签栏「+」与页签垂直对齐
+
+> 归档说明：[`release-notes/v0.8.1.md`](./release-notes/v0.8.1.md)
+
 ## [0.8.0] - 2026-07-03
 
 ### Added

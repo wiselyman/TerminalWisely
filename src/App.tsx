@@ -551,12 +551,16 @@ function App() {
           rows={terminalSize.rows}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
-          macWindowChrome={macWindowChrome}
           onRegisterNewRemote={registerNewRemote}
         />
 
         <div className="workspace-frame">
           <header className="chrome-titlebar">
+            {macWindowChrome ? (
+              <div className="chrome-titlebar-macos-controls">
+                <WindowControls layout="macos" />
+              </div>
+            ) : null}
             <div className="chrome-titlebar-main">
               <div
                 className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
@@ -625,6 +629,7 @@ function App() {
                   clearChromeClickSuppress();
                   suppressTabClickUntilRef.current = 0;
                   noteIntentionalTabLeftMouseDown(tab.id);
+                  setActiveTab(tab.id);
                   startTabReorder(tab.id, event);
                 }
               }}
