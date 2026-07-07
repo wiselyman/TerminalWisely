@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.8.2] - 2026-07-07
+
+### Fixed
+- macOS Release：`apply_macos_window_effects` 改用 `EffectsBuilder`，修复 `WindowEffectsConfig` 导入导致 macOS CI 编译失败、`.dmg` 缺失
+
+> 归档说明：[`release-notes/v0.8.2.md`](./release-notes/v0.8.2.md)
+
 ## [0.8.1] - 2026-07-07
 
 ### Fixed

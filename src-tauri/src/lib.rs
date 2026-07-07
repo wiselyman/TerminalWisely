@@ -48,14 +48,15 @@ fn apply_window_icon(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg(target_os = "macos")]
 fn apply_macos_window_effects(window: &tauri::WebviewWindow) -> tauri::Result<()> {
-    use tauri::window::{Effect, EffectState, WindowEffectsConfig};
+    use tauri::window::{Effect, EffectState, EffectsBuilder};
 
-    window.set_effects(WindowEffectsConfig {
-        effects: vec![Effect::HudWindow],
-        state: Some(EffectState::Active),
-        radius: Some(10.0),
-        ..Default::default()
-    })?;
+    window.set_effects(
+        EffectsBuilder::new()
+            .effect(Effect::HudWindow)
+            .state(EffectState::Active)
+            .radius(10.0)
+            .build(),
+    )?;
     Ok(())
 }
 

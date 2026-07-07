@@ -1,5 +1,12 @@
 跨平台桌面终端：本地 Git Bash + SSH/SFTP。
 
+## 更新内容（v0.8.2）
+
+### 修复
+- **macOS 构建**：修正窗口圆角 API 调用（`EffectsBuilder`），恢复 Release 中 macOS `.dmg` 安装包
+
+---
+
 ## 更新内容（v0.8.1）
 
 ### 修复
