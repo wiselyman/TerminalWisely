@@ -39,6 +39,13 @@ export function clearChromeClickSuppress(): void {
   suppressChromeClickUntil = 0;
 }
 
+function isInteractiveChromeTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return !!target.closest(
+    ".window-controls, .chrome-new-session, .sidebar-toggle, .sidebar-local-btn",
+  );
+}
+
 function isTabChromeTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
@@ -101,6 +108,7 @@ export function bindOutsideTerminalMouseCleanup(): () => void {
   const onMouseDown = (event: MouseEvent) => {
     if (isSyntheticTerminalMouseEvent(event)) return;
     if (isInsideTerminalHost(event.target)) return;
+    if (isInteractiveChromeTarget(event.target)) return;
     if (event.button !== 0) return;
     releaseStaleXtermDocumentMouseListeners({
       armClickSuppress: !isTabChromeTarget(event.target),

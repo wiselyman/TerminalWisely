@@ -4,6 +4,15 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.8.3] - 2026-07-07
+
+### Fixed
+- macOS：全宽标题栏，交通灯固定于窗口左上角，侧栏状态不影响位置
+- macOS：交通灯按钮点击失效（排除窗口控件 from xterm 选区清理）
+- macOS：透明窗口 + `macOSPrivateApi` + `EffectsBuilder` 圆角
+
+> 归档说明：[`release-notes/v0.8.3.md`](./release-notes/v0.8.3.md)
+
 ## [0.8.2] - 2026-07-07
 
 ### Fixed

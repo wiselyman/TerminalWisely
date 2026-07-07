@@ -545,17 +545,7 @@ function App() {
         } as CSSProperties
       }
     >
-      <div className="app-body">
-        <ConnectionPanel
-          cols={terminalSize.cols}
-          rows={terminalSize.rows}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
-          onRegisterNewRemote={registerNewRemote}
-        />
-
-        <div className="workspace-frame">
-          <header className="chrome-titlebar">
+      <header className="chrome-titlebar">
             {macWindowChrome ? (
               <div className="chrome-titlebar-macos-controls">
                 <WindowControls layout="macos" />
@@ -805,6 +795,16 @@ function App() {
             </div>
           </header>
 
+      <div className="app-body">
+        <ConnectionPanel
+          cols={terminalSize.cols}
+          rows={terminalSize.rows}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
+          onRegisterNewRemote={registerNewRemote}
+        />
+
+        <div className="workspace-frame">
           {tabContextMenu ? (
             <TabContextMenu
               x={tabContextMenu.x}

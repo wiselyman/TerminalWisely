@@ -26,6 +26,12 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   border-radius: 10px;
   overflow: hidden;
+  background: #010409;
+}
+
+html:has(.app-shell.platform-macos),
+body:has(.app-shell.platform-macos) {
+  background: transparent;
 }
 
 .app-shell.platform-linux {
@@ -113,10 +119,12 @@ body,
   background: var(--tab-strip-bg);
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  position: relative;
+  z-index: 2;
 }
 
 .app-shell.platform-macos .chrome-titlebar-macos-controls {
-  padding: 0 8px 0 12px;
+  padding: 0 12px 0 14px;
 }
 
 .chrome-titlebar-main {
@@ -211,6 +219,16 @@ body,
   app-region: drag;
 }
 
+.app-shell.platform-macos .sidebar-chrome-row {
+  height: auto;
+  min-height: 36px;
+  padding: 6px 8px;
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .sidebar-chrome-row-collapsed {
   justify-content: center;
   padding: 0;
@@ -267,12 +285,14 @@ body,
 }
 
 .wc-macos {
+  position: relative;
   width: 12px;
   height: 12px;
   padding: 0;
   border: none;
   border-radius: 50%;
   cursor: default;
+  flex-shrink: 0;
 }
 
 .wc-macos.wc-close {

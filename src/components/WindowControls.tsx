@@ -93,18 +93,21 @@ export function WindowControls({ layout }: WindowControlsProps) {
           type="button"
           className="wc-macos wc-close"
           aria-label="关闭"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void appWindow.close()}
         />
         <button
           type="button"
           className="wc-macos wc-minimize"
           aria-label="最小化"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void appWindow.minimize()}
         />
         <button
           type="button"
           className="wc-macos wc-maximize"
           aria-label={maximized ? "还原" : "最大化"}
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void appWindow.toggleMaximize()}
         />
       </div>
