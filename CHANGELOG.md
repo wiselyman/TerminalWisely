@@ -4,6 +4,14 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [0.8.4] - 2026-07-08
+
+### Fixed
+- macOS：移除系统原生交通灯叠加（`tauri.macos.conf.json` 显式 `decorations: false`），仅保留自定义控件
+- macOS：交通灯悬停显示 ✕ / − / +
+
+> 归档说明：[`release-notes/v0.8.4.md`](./release-notes/v0.8.4.md)
+
 ## [0.8.3] - 2026-07-07
 
 ### Fixed

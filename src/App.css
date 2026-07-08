@@ -293,22 +293,57 @@ body,
   border-radius: 50%;
   cursor: default;
   flex-shrink: 0;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.wc-macos::after {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.window-controls-macos:hover .wc-macos::after {
+  opacity: 1;
 }
 
 .wc-macos.wc-close {
   background: #ff5f57;
 }
 
+.wc-macos.wc-close::after {
+  content: "✕";
+  font-size: 8px;
+}
+
 .wc-macos.wc-minimize {
   background: #febc2e;
+}
+
+.wc-macos.wc-minimize::after {
+  content: "−";
+  font-size: 11px;
+  margin-top: -1px;
 }
 
 .wc-macos.wc-maximize {
   background: #28c840;
 }
 
+.wc-macos.wc-maximize::after {
+  content: "+";
+  font-size: 10px;
+}
+
 .wc-macos:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.96);
 }
 
 .window-controls-windows {

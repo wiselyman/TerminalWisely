@@ -2,6 +2,7 @@
   "app": {
     "windows": [
       {
+        "decorations": false,
         "transparent": true
       }
     ]
