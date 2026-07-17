@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
+use crate::fs_archive;
 use crate::preview_sudo;
 use crate::pty::local::LocalSession;
 use crate::shell::shell_quote_remote_path;
@@ -713,7 +714,7 @@ impl SessionManager {
         request: TransferRemoteRequest,
     ) -> AppResult<()> {
         if request.from_session_id == request.to_session_id {
-            return Err(AppError::msg("源和目标不能是同一个会话"));
+            return Err(AppError::code("ERR_SAME_SESSION"));
         }
 
         enum TransferSource {
@@ -725,6 +726,7 @@ impl SessionManager {
                 from_request: SshConnectRequest,
                 from_path: String,
                 size: u64,
+                recursive: bool,
             },
         }
 
@@ -743,7 +745,7 @@ impl SessionManager {
                     .await?;
                 let metadata = tokio::fs::metadata(&resolved).await?;
                 if metadata.is_dir() {
-                    return Err(AppError::msg("请选择文件，不能发送目录"));
+                    return Err(AppError::code("ERR_CANNOT_SEND_DIRECTORY"));
                 }
                 TransferSource::Local {
                     path: resolved,
@@ -752,13 +754,28 @@ impl SessionManager {
             } else {
                 let from_snap = self.ssh_snapshot(&request.from_session_id).await?;
                 let from_path = from_snap.resolve_remote_path(&request.remote_path).await?;
-                let size = crate::ssh::sftp::remote_file_size(&from_snap.handle(), &from_path)
+                let recursive = sftp::is_remote_directory(&from_snap.handle(), &from_path)
                     .await
-                    .unwrap_or(0);
+                    .unwrap_or(false);
+                let size = if recursive {
+                    crate::path_size::remote_path_size(
+                        &from_snap.handle(),
+                        &from_path,
+                        true,
+                        None,
+                    )
+                    .await
+                    .unwrap_or(0)
+                } else {
+                    crate::ssh::sftp::remote_file_size(&from_snap.handle(), &from_path)
+                        .await
+                        .unwrap_or(0)
+                };
                 TransferSource::Remote {
                     from_request: from_snap.connect_request().clone(),
                     from_path,
                     size,
+                    recursive,
                 }
             }
         };
@@ -783,7 +800,7 @@ impl SessionManager {
                 .ok_or_else(|| AppError::msg("目标会话不存在"))?;
             match to {
                 SessionHandle::Ssh(s) => s.snapshot(),
-                _ => return Err(AppError::msg("目标会话必须是 SSH 连接")),
+                _ => return Err(AppError::code("ERR_TARGET_MUST_BE_SSH")),
             }
         };
 
@@ -903,6 +920,7 @@ impl SessionManager {
                         from_request,
                         from_path,
                         size,
+                        recursive,
                     } => {
                         let from_request =
                             enrich_connect_request_from_bookmarks(&app_progress, &from_request);
@@ -934,6 +952,7 @@ impl SessionManager {
                             &to_request,
                             &to_path,
                             size,
+                            recursive,
                             Some(cancel.clone()),
                             move |transferred, total, method| {
                                 let _ = app_for_scp.emit(
@@ -967,6 +986,7 @@ impl SessionManager {
                                     &to_request,
                                     &tmp_dest,
                                     size,
+                                    recursive,
                                     Some(cancel),
                                     |_, _, _| {},
                                 )
@@ -996,7 +1016,7 @@ impl SessionManager {
                     if let Ok(to_conn) =
                         crate::ssh::client::open_transfer_connection(&to_request, None).await
                     {
-                        let _ = crate::ssh::sftp::remove_remote_file(
+                        let _ = crate::ssh::sftp::remove_remote_path(
                             &to_conn.handle(),
                             &to_path,
                         )
@@ -1206,6 +1226,112 @@ impl SessionManager {
                             &format!("mv {quoted_src} {quoted_dest}"),
                             sudo_password,
                             "移动",
+                            &resolved,
+                        )
+                        .await?;
+                    } else {
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
+        self.refresh_listing(session_id).await
+    }
+
+    pub async fn compress_path(
+        &self,
+        session_id: &str,
+        path: &str,
+        sudo_password: Option<&str>,
+    ) -> AppResult<()> {
+        let kind = self.session_kind(session_id).await?;
+        match kind {
+            SessionKind::Local => {
+                let resolved = self.local_resolve_host_path(session_id, path).await?;
+                let parent = resolved
+                    .parent()
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                let basename = resolved
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                let archive = fs_archive::local_archive_output_path(parent, basename);
+                fs_archive::local_compress(parent, basename, &archive).await?;
+            }
+            SessionKind::Ssh => {
+                let ssh = self.ssh_snapshot(session_id).await?;
+                let resolved = ssh.resolve_remote_path(path).await?;
+                let parent = remote_parent_path(&resolved)?;
+                let basename = resolved
+                    .rsplit('/')
+                    .next()
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                let archive_path = fs_archive::archive_output_path(&parent, basename);
+                let cmd =
+                    fs_archive::remote_compress_command(&parent, basename, &archive_path);
+                if let Err(err) = crate::ssh::client::exec_command(&ssh.handle(), &cmd).await {
+                    if preview_sudo::is_permission_denied(&err) {
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &cmd,
+                            sudo_password,
+                            "压缩",
+                            &resolved,
+                        )
+                        .await?;
+                    } else {
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
+        self.refresh_listing(session_id).await
+    }
+
+    pub async fn extract_archive(
+        &self,
+        session_id: &str,
+        path: &str,
+        sudo_password: Option<&str>,
+    ) -> AppResult<()> {
+        let kind = self.session_kind(session_id).await?;
+        match kind {
+            SessionKind::Local => {
+                let resolved = self.local_resolve_host_path(session_id, path).await?;
+                let basename = resolved
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                let archive_kind = fs_archive::archive_kind_from_name(basename)
+                    .ok_or_else(|| AppError::msg("不支持的压缩格式"))?;
+                let parent = resolved
+                    .parent()
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                fs_archive::local_extract(archive_kind, &resolved, parent).await?;
+            }
+            SessionKind::Ssh => {
+                let ssh = self.ssh_snapshot(session_id).await?;
+                let resolved = ssh.resolve_remote_path(path).await?;
+                let basename = resolved
+                    .rsplit('/')
+                    .next()
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(|| AppError::msg("无效路径"))?;
+                let archive_kind = fs_archive::archive_kind_from_name(basename)
+                    .ok_or_else(|| AppError::msg("不支持的压缩格式"))?;
+                let parent = remote_parent_path(&resolved)?;
+                let cmd =
+                    fs_archive::remote_extract_command(archive_kind, &resolved, &parent)?;
+                if let Err(err) = crate::ssh::client::exec_command(&ssh.handle(), &cmd).await {
+                    if preview_sudo::is_permission_denied(&err) {
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &cmd,
+                            sudo_password,
+                            "解压",
                             &resolved,
                         )
                         .await?;

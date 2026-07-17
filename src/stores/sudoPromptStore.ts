@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import i18n from "../i18n";
 
 export interface SudoPromptRequest {
   action: string;
@@ -73,5 +74,5 @@ export function extractPathFromSudoError(message: string): string {
 
 export function extractActionFromSudoError(message: string): string {
   const match = message.match(/PREVIEW_SUDO_REQUIRED:\s*(\S+)/);
-  return match?.[1] ?? "操作";
+  return match?.[1] ?? i18n.t("common:genericAction");
 }

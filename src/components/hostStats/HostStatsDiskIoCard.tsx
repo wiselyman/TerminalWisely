@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { formatBytes, formatRate } from "../../lib/hostStatsFormat";
 
 interface HostStatsDiskIoCardProps {
@@ -11,24 +12,28 @@ export function HostStatsDiskIoCard({
   totalReadBytes,
   totalWriteBytes,
 }: HostStatsDiskIoCardProps) {
+  const { t } = useTranslation("tools");
   return (
     <div className="host-stats-network-card">
       <div className="host-stats-network-head">
-        <p className="host-stats-network-card-label">磁盘 IO</p>
+        <p className="host-stats-network-card-label">{t("hostStats.diskIo")}</p>
         <div className="host-stats-network-stats">
           <span className="host-stats-network-rate">
-            <span className="host-stats-network-dir">读</span>
-            {diskIoRates ? formatRate(diskIoRates.readBps) : "采样中…"}
+            <span className="host-stats-network-dir">{t("hostStats.read")}</span>
+            {diskIoRates ? formatRate(diskIoRates.readBps) : t("hostStats.sampling")}
           </span>
           <span className="host-stats-network-divider" aria-hidden="true">
             ·
           </span>
           <span className="host-stats-network-rate">
-            <span className="host-stats-network-dir">写</span>
-            {diskIoRates ? formatRate(diskIoRates.writeBps) : "采样中…"}
+            <span className="host-stats-network-dir">{t("hostStats.write")}</span>
+            {diskIoRates ? formatRate(diskIoRates.writeBps) : t("hostStats.sampling")}
           </span>
           <span className="host-stats-network-total">
-            累计 {formatBytes(totalReadBytes)} / {formatBytes(totalWriteBytes)}
+            {t("hostStats.total", {
+              a: formatBytes(totalReadBytes),
+              b: formatBytes(totalWriteBytes),
+            })}
           </span>
         </div>
       </div>

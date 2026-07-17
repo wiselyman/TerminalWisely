@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { ProcessEntry } from "../types";
 import { formatFileSize } from "../lib/fileType";
 
@@ -101,6 +102,7 @@ export function TaskManagerTable({
   onKill,
   onSort,
 }: TaskManagerTableProps) {
+  const { t } = useTranslation("tools");
   const [confirmPid, setConfirmPid] = useState<number | null>(null);
   const [columnWidths, setColumnWidths] = useState(loadColumnWidths);
   const resizeRef = useRef<{
@@ -207,14 +209,17 @@ export function TaskManagerTable({
       <button type="button" className="task-manager-sort" onClick={() => onSort(sort)}>
         {label} {sortIndicator(sortKey === sort, sortDirection)}
         {showSpinner ? (
-          <span className="task-manager-port-spinner" aria-label="端口解析中" />
+          <span
+            className="task-manager-port-spinner"
+            aria-label={t("taskManager.portsLoadingAria")}
+          />
         ) : null}
       </button>
       <span
         className="task-manager-col-resizer"
         role="separator"
         aria-orientation="vertical"
-        aria-label={`调整${label}列宽`}
+        aria-label={t("taskManager.resizeColAria", { label })}
         onMouseDown={(event) => startColumnResize(column, event)}
       />
     </th>
@@ -226,10 +231,10 @@ export function TaskManagerTable({
         <table className="task-manager-table task-manager-table-skeleton" aria-busy="true">
           <thead>
             <tr>
-              <th>进程名</th>
-              <th>端口</th>
-              <th>内存</th>
-              <th>CPU</th>
+              <th>{t("taskManager.colName")}</th>
+              <th>{t("taskManager.colPort")}</th>
+              <th>{t("taskManager.colMemory")}</th>
+              <th>{t("taskManager.colCpu")}</th>
               <th className="task-manager-th-actions" />
             </tr>
           </thead>
@@ -250,7 +255,7 @@ export function TaskManagerTable({
   }
 
   if (processes.length === 0) {
-    return <div className="task-manager-empty">暂无进程数据</div>;
+    return <div className="task-manager-empty">{t("taskManager.empty")}</div>;
   }
 
   return (
@@ -270,11 +275,11 @@ export function TaskManagerTable({
         </colgroup>
         <thead>
           <tr>
-            {renderHeader("name", "进程名", "name", "task-manager-col-name")}
-            {renderHeader("port", "端口", "port", "", portsLoading)}
-            {renderHeader("memory", "内存", "memory", "task-manager-th-compact")}
-            {renderHeader("cpu", "CPU", "cpu", "task-manager-th-compact")}
-            <th className="task-manager-th-actions" aria-label="操作" />
+            {renderHeader("name", t("taskManager.colName"), "name", "task-manager-col-name")}
+            {renderHeader("port", t("taskManager.colPort"), "port", "", portsLoading)}
+            {renderHeader("memory", t("taskManager.colMemory"), "memory", "task-manager-th-compact")}
+            {renderHeader("cpu", t("taskManager.colCpu"), "cpu", "task-manager-th-compact")}
+            <th className="task-manager-th-actions" aria-label={t("taskManager.colActionsAria")} />
           </tr>
         </thead>
         <tbody>
@@ -299,27 +304,30 @@ export function TaskManagerTable({
                 {confirmPid === process.pid ? (
                   <div className="task-manager-kill-confirm">
                     <span className="task-manager-kill-confirm-text">
-                      结束 {process.name} ({process.pid})？
+                      {t("taskManager.killConfirm", {
+                        name: process.name,
+                        pid: process.pid,
+                      })}
                     </span>
                     <div className="task-manager-kill-confirm-actions">
                       <button
                         type="button"
                         className="task-manager-confirm-cancel"
-                        aria-label="取消"
+                        aria-label={t("common:cancel")}
                         onClick={() => setConfirmPid(null)}
                       >
-                        取消
+                        {t("common:cancel")}
                       </button>
                       <button
                         type="button"
                         className="task-manager-confirm-kill"
-                        aria-label="确认结束"
+                        aria-label={t("taskManager.confirmKill")}
                         onClick={() => {
                           setConfirmPid(null);
                           onKill(process);
                         }}
                       >
-                        结束
+                        {t("taskManager.kill")}
                       </button>
                     </div>
                   </div>
@@ -327,8 +335,11 @@ export function TaskManagerTable({
                   <button
                     type="button"
                     className="task-manager-kill"
-                    aria-label={`结束进程 ${process.name} (${process.pid})`}
-                    title={`结束 ${process.name}`}
+                    aria-label={t("taskManager.killAria", {
+                      name: process.name,
+                      pid: process.pid,
+                    })}
+                    title={t("taskManager.killTitle", { name: process.name })}
                     onClick={() => setConfirmPid(process.pid)}
                   >
                     ×

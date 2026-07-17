@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
+import { LocaleSwitcher } from "./components/LocaleSwitcher";
 import { SudoPasswordModal } from "./components/SudoPasswordModal";
 import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
@@ -29,6 +31,7 @@ import {
 import { dropEffectForKind } from "./lib/dragVisual";
 import { uploadLocalPathsToSession } from "./lib/sessionUpload";
 import { formatTransferError } from "./lib/transferError";
+import { formatAppError } from "./lib/formatAppError";
 import { startTabPointerReorder } from "./lib/tabPointerReorder";
 import { isSudoRequiredError } from "./stores/previewStore";
 import {
@@ -61,6 +64,7 @@ const SIDEBAR_COLLAPSED_WIDTH = 56;
 const SIDEBAR_STORAGE_KEY = "terminal-wisely.sidebar-collapsed";
 
 function App() {
+  const { t } = useTranslation("shell");
   const hostOs = getHostOsProfile();
   const platformClass = getPlatformShellClass();
   const macWindowChrome = isMacHost();
@@ -88,7 +92,7 @@ function App() {
     void invoke("enter_directory", {
       request: { session_id: sessionId, path: "~" },
     }).catch((err) => {
-      pushToast(String(err), false);
+      pushToast(formatAppError(err), false);
     });
   };
   const transferList = useMemo(
@@ -158,7 +162,7 @@ function App() {
               void (async () => {
                 try {
                   const password = await requestSudoPassword({
-                    action: "发送",
+                    action: t("sudoActionSend"),
                     path:
                       extractPathFromSudoError(payload.message) || ctx.remotePath,
                   });
@@ -172,7 +176,7 @@ function App() {
                       ctx.remoteDir ?? null,
                     );
                 } catch {
-                  pushToast("已取消 sudo 操作", false);
+                  pushToast(t("toastSudoCancelled"), false);
                 }
               })();
               return;
@@ -182,7 +186,7 @@ function App() {
             .getState()
             .clearPendingSudoTransfer(payload.transfer_id);
           removeTransfer(payload.transfer_id);
-          pushToast(payload.message, payload.success);
+          pushToast(formatAppError(payload.message), payload.success);
         }),
       ]);
 
@@ -547,9 +551,10 @@ function App() {
     >
       <header className="chrome-titlebar">
             {macWindowChrome ? (
-              <div className="chrome-titlebar-macos-controls">
-                <WindowControls layout="macos" />
-              </div>
+              <div
+                className="chrome-titlebar-macos-controls chrome-titlebar-macos-traffic-spacer"
+                aria-hidden
+              />
             ) : null}
             <div className="chrome-titlebar-main">
               <div
@@ -582,10 +587,10 @@ function App() {
                       <span className="tab-curve tab-curve-end" aria-hidden="true" />
                     </>
                   ) : null}
-                  <span className="tab-kind home" title="Home">
+                  <span className="tab-kind home" title={t("homeTabTitle")}>
                     <TabHomeIcon />
                   </span>
-                  <span className="tab-title">Home</span>
+                  <span className="tab-title">{t("homeTabTitle")}</span>
                 </div>
           {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
@@ -678,7 +683,7 @@ function App() {
                 const remotePayload = parseRemoteDrag(dataTransfer);
                 if (remotePayload) {
                   if (remotePayload.fromSessionId === tab.id) {
-                    pushToast("不能发送到同一个 SSH 会话", false);
+                    pushToast(t("toastCannotSendSameSession"), false);
                     return;
                   }
                   setActiveTab(tab.id);
@@ -687,7 +692,7 @@ function App() {
                     remotePayload.remotePath,
                     tab.id,
                   ).catch((err) => {
-                    pushToast(String(err), false);
+                    pushToast(formatAppError(err), false);
                   });
                   return;
                 }
@@ -698,7 +703,7 @@ function App() {
                 void uploadLocalPathsToSession(tab.id, paths)
                   .then((results) => {
                     const names = results.map((item) => item.filename).join(", ");
-                    pushToast(`已上传到 ${tab.title}: ${names}`, true);
+                    pushToast(t("toastUploadedTo", { title: tab.title, names }), true);
                   })
                   .catch((err) => {
                     pushToast(formatTransferError(err), false);
@@ -737,8 +742,8 @@ function App() {
                   <button
                     type="button"
                     className="tab-home"
-                    title="回到用户目录 ~"
-                    aria-label={`回到用户目录 ${tab.title}`}
+                    title={t("goHomeTitle")}
+                    aria-label={t("goHomeAria", { title: tab.title })}
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -763,7 +768,7 @@ function App() {
                 type="button"
                 className="tab-close"
                 onMouseDown={(event) => event.stopPropagation()}
-                aria-label={`关闭 ${tab.title}`}
+                aria-label={t("closeTabAria", { title: tab.title })}
                 onClick={(event) => {
                   event.stopPropagation();
                   void closeTab(tab.id);
@@ -778,12 +783,13 @@ function App() {
               <button
                 type="button"
                 className="chrome-new-session"
-                aria-label="新建 SSH 连接"
-                title="新建 SSH 连接"
+                aria-label={t("newSsh")}
+                title={t("newSsh")}
                 onClick={() => openNewRemoteRef.current()}
               >
                 <ChromePlusIcon />
               </button>
+              <LocaleSwitcher />
 
           <div
             className="chrome-titlebar-drag"

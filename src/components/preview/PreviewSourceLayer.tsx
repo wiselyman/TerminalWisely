@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   findSearchMatches,
   injectSearchHighlights,
@@ -9,8 +9,6 @@ import {
   escapePlainSource,
   highlightSourceCode,
 } from "../../lib/syntaxHighlight";
-
-const SYNTAX_DEBOUNCE_MS = 200;
 
 interface PreviewSourceLayerProps {
   text: string;
@@ -57,20 +55,6 @@ function SearchHighlightedText({
   );
 }
 
-function useDeferredSyntaxHtml(text: string, extension: string) {
-  const [html, setHtml] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setHtml(highlightSourceCode(text, extension));
-    }, SYNTAX_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(timer);
-  }, [extension, text]);
-
-  return html;
-}
-
 export function PreviewSourceLayer({
   text,
   extension,
@@ -79,7 +63,14 @@ export function PreviewSourceLayer({
   searchOptions,
 }: PreviewSourceLayerProps) {
   const searching = query.trim().length > 0;
-  const syntaxHtml = useDeferredSyntaxHtml(text, extension);
+
+  // Sync with `text` so the highlight layer updates in the same paint as the
+  // overlay textarea — avoids both input lag (stale HTML) and color flicker
+  // (plain ↔ highlighted). Store sync is debounced separately in the editor.
+  const syntaxHtml = useMemo(
+    () => highlightSourceCode(text, extension),
+    [text, extension],
+  );
 
   const matches = useMemo(
     () =>

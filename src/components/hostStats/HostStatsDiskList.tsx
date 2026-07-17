@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { DiskUsageEntry } from "../../types";
 import { formatBytes, percentUsed } from "../../lib/hostStatsFormat";
 
@@ -6,8 +7,9 @@ interface HostStatsDiskListProps {
 }
 
 export function HostStatsDiskList({ disks }: HostStatsDiskListProps) {
+  const { t } = useTranslation("tools");
   if (disks.length === 0) {
-    return <p className="host-stats-empty">暂无磁盘信息</p>;
+    return <p className="host-stats-empty">{t("hostStats.noDisks")}</p>;
   }
 
   return (

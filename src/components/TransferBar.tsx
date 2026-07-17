@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   formatMegabytes,
   formatSpeedMbps,
@@ -15,6 +16,7 @@ interface TransferBarProps {
 }
 
 export function TransferBar({ progress, sessionLabel, onCancel }: TransferBarProps) {
+  const { t } = useTranslation("tools");
   const [speedBps, setSpeedBps] = useState(0);
   const sampleRef = useRef({ transferred: 0, at: Date.now() });
 
@@ -73,7 +75,7 @@ export function TransferBar({ progress, sessionLabel, onCancel }: TransferBarPro
             ) : null}
           </span>
           <span className="transfer-bar-metrics">
-            {metricParts.length > 0 ? metricParts.join(" · ") : "准备中…"}
+            {metricParts.length > 0 ? metricParts.join(" · ") : t("transfer.preparing")}
           </span>
         </div>
         <div className="transfer-bar-track" aria-hidden="true">
@@ -95,7 +97,7 @@ export function TransferBar({ progress, sessionLabel, onCancel }: TransferBarPro
           void onCancel();
         }}
       >
-        取消传输
+        {t("transfer.cancelTransfer")}
       </button>
     </div>
   );

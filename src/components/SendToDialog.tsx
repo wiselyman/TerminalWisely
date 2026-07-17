@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../stores/sessionStore";
 import { useToastStore } from "../stores/toastStore";
+import { formatAppError } from "../lib/formatAppError";
 import { PathInput } from "./PathInput";
 
 export function SendToDialog() {
+  const { t } = useTranslation("terminal");
   const sendTo = useSessionStore((s) => s.sendTo);
   const closeSendTo = useSessionStore((s) => s.closeSendTo);
   const transferRemote = useSessionStore((s) => s.transferRemote);
@@ -65,7 +68,7 @@ export function SendToDialog() {
     setPending(true);
     void transferRemote(selectedTargetId, remoteDir.trim() || null)
       .catch((err) => {
-        pushToast(String(err), false);
+        pushToast(formatAppError(err), false);
       })
       .finally(() => {
         setPending(false);
@@ -91,13 +94,13 @@ export function SendToDialog() {
         aria-labelledby="send-to-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <h3 id="send-to-title">发送到其他服务器</h3>
+        <h3 id="send-to-title">{t("sendToTitle")}</h3>
         <p className="send-to-path">{fileLabel}</p>
         {targets.length === 0 ? (
-          <p className="send-to-empty">没有其他 SSH 连接，请先打开目标服务器。</p>
+          <p className="send-to-empty">{t("sendToEmpty")}</p>
         ) : (
           <>
-            <p className="send-to-section-label">选择目标服务器</p>
+            <p className="send-to-section-label">{t("sendToSelectTarget")}</p>
             <ul className="send-to-list">
               {targets.map((tab) => {
                 const selected = selectedTargetId === tab.id;
@@ -120,17 +123,15 @@ export function SendToDialog() {
             </ul>
             {selectedTargetId ? (
               <label className="terminal-fs-field send-to-dir-field">
-                <span>目标目录</span>
+                <span>{t("sendToDestDir")}</span>
                 <PathInput
                   sessionId={selectedTargetId}
                   value={remoteDir}
                   disabled={pending}
-                  placeholder="输入目标目录路径"
+                  placeholder={t("destDirPlaceholder")}
                   onChange={setRemoteDir}
                 />
-                <span className="send-to-dir-hint">
-                  留空则使用目标会话当前目录；输入时可 Tab 补全路径。
-                </span>
+                <span className="send-to-dir-hint">{t("sendToDestHint")}</span>
               </label>
             ) : null}
           </>
@@ -143,7 +144,7 @@ export function SendToDialog() {
             onMouseDown={(event) => event.stopPropagation()}
             onClick={closeSendTo}
           >
-            取消
+            {t("common:cancel")}
           </button>
           {targets.length > 0 ? (
             <button
@@ -153,7 +154,7 @@ export function SendToDialog() {
               onMouseDown={(event) => event.stopPropagation()}
               onClick={handleSend}
             >
-              {pending ? "正在启动传输…" : "发送"}
+              {pending ? t("sendToStarting") : t("sendToSubmit")}
             </button>
           ) : null}
         </div>

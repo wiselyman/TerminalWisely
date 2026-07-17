@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { FindFileEntry } from "../types";
 import { useFindStore } from "../stores/findStore";
 import { usePreviewStore } from "../stores/previewStore";
@@ -24,6 +25,7 @@ function entryLabel(entry: FindFileEntry) {
 }
 
 export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
+  const { t } = useTranslation("tools");
   const nameInputRef = useRef<HTMLInputElement>(null);
   const openPreview = usePreviewStore((s) => s.openPreview);
   const {
@@ -92,8 +94,8 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
 
   const resultSummary =
     lastRunAt == null
-      ? "输入文件名模式后搜索，或按 Enter 执行 find"
-      : `${entries.length} 条结果${truncated ? "（已截断，最多 500 条）" : ""}`;
+      ? t("find.hintBeforeRun")
+      : `${t("find.resultCount", { count: entries.length })}${truncated ? t("find.resultTruncated") : ""}`;
 
   return (
     <>
@@ -107,24 +109,24 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
           className="find-panel-resizer"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整 Find 面板宽度"
+          aria-label={t("find.resizeAria")}
           onMouseDown={startResize}
         />
         <div className="find-panel-head">
           <div className="find-panel-title-wrap">
-            <h2 className="find-panel-title">Find</h2>
+            <h2 className="find-panel-title">{t("find.title")}</h2>
             <p className="find-panel-session">{sessionTitle}</p>
           </div>
         </div>
 
         <div className="find-panel-toolbar">
           <label className="find-panel-field find-panel-scope-field">
-            <span>搜索范围</span>
+            <span>{t("find.scope")}</span>
             <PathInput
               sessionId={sessionId}
               value={followTerminalCwd ? (sessionCwd ?? "") : searchPath}
               onChange={setSearchPath}
-              placeholder={sessionCwd ?? "当前目录"}
+              placeholder={sessionCwd ?? t("find.cwdPlaceholder")}
             />
             {!followTerminalCwd ? (
               <button
@@ -135,20 +137,20 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
                   void useFindStore.getState().loadSessionCwd(sessionId);
                 }}
               >
-                跟随终端当前目录
+                {t("find.followCwd")}
               </button>
             ) : null}
           </label>
 
           <label className="find-panel-field">
-            <span>文件名 (-name)</span>
+            <span>{t("find.nameLabel")}</span>
             <input
               ref={nameInputRef}
               type="text"
               value={namePattern}
               onChange={(event) => setNamePattern(event.target.value)}
-              placeholder="例如 *.log"
-              aria-label="find 文件名模式"
+              placeholder={t("find.namePlaceholder")}
+              aria-label={t("find.nameAria")}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
@@ -160,28 +162,28 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
 
           <div className="find-panel-field-row">
             <label className="find-panel-field find-panel-field-inline">
-              <span>类型</span>
+              <span>{t("find.typeLabel")}</span>
               <select
                 value={typeFilter}
                 onChange={(event) =>
                   setTypeFilter(event.target.value as "all" | "file" | "directory")
                 }
-                aria-label="find 类型"
+                aria-label={t("find.typeAria")}
               >
-                <option value="all">全部</option>
-                <option value="file">文件 (-type f)</option>
-                <option value="directory">目录 (-type d)</option>
+                <option value="all">{t("find.typeAll")}</option>
+                <option value="file">{t("find.typeFile")}</option>
+                <option value="directory">{t("find.typeDirectory")}</option>
               </select>
             </label>
             <label className="find-panel-field find-panel-field-inline">
-              <span>深度</span>
+              <span>{t("find.depth")}</span>
               <input
                 type="number"
                 min={1}
                 max={32}
                 value={maxDepth}
                 onChange={(event) => setMaxDepth(Number(event.target.value) || 8)}
-                aria-label="find 最大深度"
+                aria-label={t("find.depthAria")}
               />
             </label>
             <label className="find-panel-checkbox">
@@ -190,7 +192,7 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
                 checked={caseInsensitive}
                 onChange={(event) => setCaseInsensitive(event.target.checked)}
               />
-              <span>-iname 忽略大小写</span>
+              <span>{t("find.iname")}</span>
             </label>
           </div>
           <div className="find-panel-actions">
@@ -200,7 +202,7 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
               disabled={loading || !namePattern.trim()}
               onClick={handleRun}
             >
-              {loading ? "搜索中…" : "搜索"}
+              {loading ? t("find.running") : t("find.run")}
             </button>
             <span className="find-panel-meta">{resultSummary}</span>
           </div>
@@ -209,7 +211,7 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
 
         <div className="find-panel-results">
           {entries.length === 0 && !loading && lastRunAt != null ? (
-            <p className="find-panel-empty">未找到匹配文件</p>
+            <p className="find-panel-empty">{t("find.empty")}</p>
           ) : null}
           <ul className="find-panel-result-list">
             {entries.map((entry) => (
@@ -222,7 +224,7 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
                 >
                   <span className="find-panel-result-name">{entryLabel(entry)}</span>
                   <span className="find-panel-result-kind">
-                    {entry.kind === "directory" ? "目录" : "文件"}
+                    {entry.kind === "directory" ? t("find.kindDirectory") : t("find.kindFile")}
                   </span>
                   <span className="find-panel-result-size">
                     {formatSize(entry.size_bytes)}

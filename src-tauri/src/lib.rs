@@ -6,6 +6,7 @@ mod msys;
 mod find;
 mod commands;
 mod error;
+mod fs_archive;
 mod path_complete;
 mod path_size;
 mod passwd;
@@ -48,6 +49,7 @@ fn apply_window_icon(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg(target_os = "macos")]
 fn apply_macos_window_effects(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use std::time::Duration;
     use tauri::window::{Effect, EffectState, EffectsBuilder};
 
     window.set_effects(
@@ -57,7 +59,78 @@ fn apply_macos_window_effects(window: &tauri::WebviewWindow) -> tauri::Result<()
             .radius(10.0)
             .build(),
     )?;
+
+    // set_effects / Overlay only grows the titlebar chrome; it does not move the
+    // buttons down. Re-apply after effects settle so lights center in our 38px bar.
+    const X: f64 = 14.0;
+    const TITLEBAR_HEIGHT: f64 = 38.0;
+    inset_macos_traffic_lights(window, X, TITLEBAR_HEIGHT);
+
+    let delayed = window.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(120));
+        let window_for_inset = delayed.clone();
+        let _ = delayed.run_on_main_thread(move || {
+            inset_macos_traffic_lights(&window_for_inset, X, TITLEBAR_HEIGHT);
+        });
+    });
+
     Ok(())
+}
+
+/// Vertically center native traffic lights in a titlebar of `titlebar_height`.
+/// Cocoa y grows upward; button `origin.y` is from the bottom of the titlebar view.
+#[cfg(target_os = "macos")]
+fn inset_macos_traffic_lights(window: &tauri::WebviewWindow, x: f64, titlebar_height: f64) {
+    use objc2_app_kit::{NSWindow, NSWindowButton};
+    use objc2_foundation::NSPoint;
+
+    let Ok(ns_window_ptr) = window.ns_window() else {
+        return;
+    };
+    if ns_window_ptr.is_null() {
+        return;
+    }
+
+    // SAFETY: pointer from Tauri macOS private API for this live window.
+    unsafe {
+        let ns_window = &*(ns_window_ptr as *const NSWindow);
+        let Some(close) = ns_window.standardWindowButton(NSWindowButton::CloseButton) else {
+            return;
+        };
+        let Some(miniaturize) =
+            ns_window.standardWindowButton(NSWindowButton::MiniaturizeButton)
+        else {
+            return;
+        };
+        let Some(zoom) = ns_window.standardWindowButton(NSWindowButton::ZoomButton) else {
+            return;
+        };
+
+        let Some(button_superview) = close.superview() else {
+            return;
+        };
+        let Some(title_bar_container) = button_superview.superview() else {
+            return;
+        };
+
+        let close_rect = close.frame();
+        let button_height = close_rect.size.height;
+        let mut title_bar_rect = title_bar_container.frame();
+        title_bar_rect.size.height = titlebar_height;
+        title_bar_rect.origin.y = ns_window.frame().size.height - titlebar_height;
+        title_bar_container.setFrame(title_bar_rect);
+
+        let space_between = miniaturize.frame().origin.x - close_rect.origin.x;
+        let origin_y = ((titlebar_height - button_height) / 2.0).max(0.0);
+
+        for (index, button) in [close, miniaturize, zoom].into_iter().enumerate() {
+            button.setFrameOrigin(NSPoint {
+                x: x + (index as f64 * space_between),
+                y: origin_y,
+            });
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -100,6 +173,8 @@ pub fn run() {
             commands::rename_path,
             commands::delete_path,
             commands::move_path,
+            commands::compress_path,
+            commands::extract_archive,
             commands::insert_local_paths_command,
             commands::insert_terminal_command,
             commands::get_saved_connections,

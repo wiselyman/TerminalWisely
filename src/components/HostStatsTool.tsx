@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { SystemInfoIcon } from "./WorkspaceToolIcons";
 import { WorkspaceToolButton } from "./WorkspaceToolRail";
 
@@ -8,9 +9,10 @@ interface HostStatsToolProps {
 }
 
 export function HostStatsTool({ active, disabled, onClick }: HostStatsToolProps) {
+  const { t } = useTranslation("tools");
   return (
     <WorkspaceToolButton
-      label="系统信息"
+      label={t("hostStats.railLabel")}
       active={active}
       disabled={disabled}
       onClick={onClick}

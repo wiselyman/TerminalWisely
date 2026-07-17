@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface UnsupportedPreviewProps {
   filename: string;
   totalSize: number;
@@ -9,16 +11,17 @@ export function UnsupportedPreview({
   totalSize,
   onOpenExternal,
 }: UnsupportedPreviewProps) {
+  const { t } = useTranslation("preview");
   return (
     <div className="preview-empty">
-      <p>暂不支持在应用内预览此文件类型。</p>
+      <p>{t("unsupportedHint")}</p>
       <p className="preview-empty-meta">{filename}</p>
       {onOpenExternal ? (
         <button type="button" className="preview-action-btn" onClick={onOpenExternal}>
-          用系统默认程序打开
+          {t("openExternal")}
         </button>
       ) : null}
-      <p className="preview-empty-meta">大小：{formatBytes(totalSize)}</p>
+      <p className="preview-empty-meta">{t("sizeLine", { size: formatBytes(totalSize) })}</p>
     </div>
   );
 }

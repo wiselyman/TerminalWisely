@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 interface WorkspaceToolRailProps {
   children: ReactNode;
 }
 
 export function WorkspaceToolRail({ children }: WorkspaceToolRailProps) {
+  const { t } = useTranslation("shell");
   return (
-    <aside className="workspace-tool-rail" aria-label="工作区工具">
+    <aside className="workspace-tool-rail" aria-label={t("toolRailAria")}>
       <div className="workspace-tool-rail-tools">{children}</div>
     </aside>
   );
@@ -27,11 +29,12 @@ export function WorkspaceToolButton({
   onClick,
   children,
 }: WorkspaceToolButtonProps) {
+  const { t } = useTranslation("shell");
   return (
     <button
       type="button"
       className={`workspace-tool-btn${active ? " active" : ""}`}
-      title={disabled ? "请先打开一个终端页签" : label}
+      title={disabled ? t("toolNeedTab") : label}
       aria-label={label}
       aria-pressed={active}
       disabled={disabled}

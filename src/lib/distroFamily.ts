@@ -1,29 +1,5 @@
 import type { DistroFamily } from "../types";
 
-export const DISTRO_FAMILY_LABELS: Record<DistroFamily, string> = {
-  universal: "通用",
-  debian: "Debian 系",
-  rhel: "RHEL 系",
-  alpine: "Alpine",
-  arch: "Arch",
-  suse: "SUSE",
-};
-
-export const SUBCATEGORY_LABELS: Record<string, string> = {
-  all: "全部",
-  service: "服务",
-  journal: "日志",
-  disk: "磁盘",
-  process: "进程",
-  network: "网络",
-  package: "软件包",
-  file: "文件",
-  user: "用户",
-  cron: "计划任务",
-  kernel: "系统信息",
-  custom: "自定义",
-};
-
 export function osIdToDistroFamily(
   osId: string | null | undefined,
 ): DistroFamily | "unknown" {
@@ -65,16 +41,18 @@ export function commandMatchesDistro(
   return families.includes(family);
 }
 
-export function distroFilterHint(osId: string | null | undefined): string | null {
+export function distroFilterFamily(
+  osId: string | null | undefined,
+): DistroFamily | null {
   const family = osIdToDistroFamily(osId);
   if (family === "unknown") return null;
-  return `已按 ${DISTRO_FAMILY_LABELS[family]} 筛选`;
+  return family;
 }
 
-export function primaryDistroLabel(
+export function primaryDistroFamily(
   families: DistroFamily[],
-): string | null {
+): DistroFamily | null {
   const tagged = families.filter((f) => f !== "universal");
   if (tagged.length === 0) return null;
-  return DISTRO_FAMILY_LABELS[tagged[0]];
+  return tagged[0];
 }

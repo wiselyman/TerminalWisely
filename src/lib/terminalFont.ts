@@ -1,6 +1,8 @@
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
+import "@fontsource/jetbrains-mono/700.css";
 import "@fontsource/noto-sans-mono/400.css";
+import "@fontsource/noto-sans-mono/700.css";
 
 import { isWindowsHost } from "./hostOs";
 
@@ -47,9 +49,14 @@ export async function ensureTerminalFontsLoaded(): Promise<void> {
   }
 
   const px = `${TERMINAL_FONT_SIZE}px`;
-  const loads = BUNDLED_FAMILIES.map((family) =>
-    document.fonts.load(`${px} "${family}"`),
-  );
+  const loads = [
+    ...BUNDLED_FAMILIES.map((family) =>
+      document.fonts.load(`${px} "${family}"`),
+    ),
+    ...BUNDLED_FAMILIES.map((family) =>
+      document.fonts.load(`700 ${px} "${family}"`),
+    ),
+  ];
 
   try {
     await Promise.race([

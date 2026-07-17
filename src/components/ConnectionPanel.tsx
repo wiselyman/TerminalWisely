@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Modal } from "./Modal";
@@ -6,6 +7,7 @@ import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
 import { useToastStore } from "../stores/toastStore";
+import { formatAppError } from "../lib/formatAppError";
 import {
   getHostOsProfile,
   isWindowsHost,
@@ -73,6 +75,7 @@ export function ConnectionPanel({
   onToggleCollapse,
   onRegisterNewRemote,
 }: ConnectionPanelProps) {
+  const { t } = useTranslation(["connection", "shell"]);
   const fallbackLocal = getHostOsProfile();
   const [localShell, setLocalShell] = useState<{
     profile: HostOsProfile;
@@ -81,7 +84,9 @@ export function ConnectionPanel({
     git_bash_available: boolean;
   }>({
     profile: fallbackLocal,
-    title: isWindowsHost() ? "Git Bash 本地终端" : `${fallbackLocal.osName} 本地终端`,
+    title: isWindowsHost()
+      ? t("shell:gitBashLocal")
+      : t("shell:localTerminalTitle", { osName: fallbackLocal.osName }),
     backend: "git_bash",
     git_bash_available: false,
   });
@@ -186,10 +191,10 @@ export function ConnectionPanel({
           form,
           rememberPassword,
         );
-        useToastStore.getState().pushToast("书签已更新", true);
+        useToastStore.getState().pushToast(t("connection:toastBookmarkUpdated"), true);
         closeSshForm();
       } catch (err) {
-        useToastStore.getState().pushToast(String(err), false);
+        useToastStore.getState().pushToast(formatAppError(err), false);
       }
       return;
     }
@@ -257,31 +262,39 @@ export function ConnectionPanel({
 
   const sshFormModal = sshFormMode ? (
     <Modal
-      title={isEditing ? "编辑书签" : "SSH 连接"}
+      title={isEditing ? t("connection:modalTitleEdit") : t("connection:modalTitleConnect")}
       onClose={closeSshForm}
     >
       <form className="connection-form" onSubmit={(e) => void handleConnect(e)}>
         <label>
-          {isEditing ? "名称" : "名称（可选）"}
+          {isEditing ? t("connection:fieldName") : t("connection:fieldNameOptional")}
           <input
             required={isEditing}
             value={connectionName}
             onChange={(e) => setConnectionName(e.target.value)}
-            placeholder="生产服务器（留空则用 IP）"
+            placeholder={t("connection:namePlaceholder")}
+            lang="en"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
           />
         </label>
         <label>
-          主机
+          {t("connection:fieldHost")}
           <input
             required
             value={form.host}
             onChange={(e) => updateField("host", e.target.value)}
-            placeholder="192.168.1.10"
+            placeholder={t("connection:hostPlaceholder")}
             autoFocus
+            lang="en"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
           />
         </label>
         <label>
-          端口
+          {t("connection:fieldPort")}
           <input
             type="number"
             value={form.port}
@@ -289,37 +302,42 @@ export function ConnectionPanel({
           />
         </label>
         <label>
-          用户名
+          {t("connection:fieldUsername")}
           <input
             required
             value={form.username}
             onChange={(e) => updateField("username", e.target.value)}
-            placeholder="root"
+            placeholder={t("connection:usernamePlaceholder")}
+            lang="en"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            autoComplete="username"
           />
         </label>
         <label>
-          认证方式
+          {t("connection:fieldAuthMethod")}
           <select
             value={form.auth_method}
             onChange={(e) =>
               updateField("auth_method", e.target.value as AuthMethod)
             }
           >
-            <option value="password">密码</option>
-            <option value="privatekey">私钥</option>
+            <option value="password">{t("connection:authPassword")}</option>
+            <option value="privatekey">{t("connection:authPrivateKey")}</option>
           </select>
         </label>
         {form.auth_method === "password" ? (
           <>
             <label>
-              密码
+              {t("connection:fieldPassword")}
               <input
                 type="password"
                 value={form.password ?? ""}
                 onChange={(e) => updateField("password", e.target.value)}
                 placeholder={
                   editingSaved?.has_password
-                    ? "已保存，留空表示不修改"
+                    ? t("connection:passwordSavedPlaceholder")
                     : undefined
                 }
               />
@@ -331,23 +349,27 @@ export function ConnectionPanel({
                   checked={rememberPassword}
                   onChange={(e) => setRememberPassword(e.target.checked)}
                 />
-                记住密码
+                {t("connection:rememberPassword")}
               </label>
             )}
           </>
         ) : (
           <>
             <label>
-              私钥路径
+              {t("connection:fieldPrivateKeyPath")}
               <input
                 value={form.private_key_path ?? ""}
                 onChange={(e) =>
                   updateField("private_key_path", e.target.value)
                 }
+                lang="en"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </label>
             <label>
-              私钥口令（可选）
+              {t("connection:fieldPassphrase")}
               <input
                 type="password"
                 value={form.passphrase ?? ""}
@@ -357,9 +379,11 @@ export function ConnectionPanel({
           </>
         )}
         <div className="form-row">
-          <button type="submit">{isEditing ? "保存" : "连接"}</button>
+          <button type="submit">
+            {isEditing ? t("connection:submitSave") : t("connection:submitConnect")}
+          </button>
           <button type="button" onClick={closeSshForm}>
-            取消
+            {t("common:cancel")}
           </button>
         </div>
       </form>
@@ -367,13 +391,13 @@ export function ConnectionPanel({
   ) : null;
 
   const passwordModal = savedPasswordPrompt ? (
-    <Modal title="输入密码" onClose={closePasswordPrompt}>
+    <Modal title={t("connection:modalTitlePassword")} onClose={closePasswordPrompt}>
       <form className="connection-form" onSubmit={(e) => void submitSavedPassword(e)}>
         <p className="modal-hint">
           {savedPasswordPrompt.username}@{savedPasswordPrompt.host}
         </p>
         <label>
-          密码
+          {t("connection:fieldPassword")}
           <input
             type="password"
             value={savedPassword}
@@ -387,12 +411,12 @@ export function ConnectionPanel({
             checked={rememberSavedPassword}
             onChange={(e) => setRememberSavedPassword(e.target.checked)}
           />
-          记住密码
+          {t("connection:rememberPassword")}
         </label>
         <div className="form-row">
-          <button type="submit">连接</button>
+          <button type="submit">{t("connection:submitConnect")}</button>
           <button type="button" onClick={closePasswordPrompt}>
-            取消
+            {t("common:cancel")}
           </button>
         </div>
       </form>
@@ -427,8 +451,8 @@ export function ConnectionPanel({
         type="button"
         className="sidebar-toggle"
         onClick={onToggleCollapse}
-        aria-label={expanded ? "收起侧栏" : "展开侧栏"}
-        title={expanded ? "收起侧栏" : "展开侧栏"}
+        aria-label={expanded ? t("shell:collapseSidebar") : t("shell:expandSidebar")}
+        title={expanded ? t("shell:collapseSidebar") : t("shell:expandSidebar")}
       >
         <SidebarChevronIcon expanded={expanded} />
       </button>
@@ -453,8 +477,8 @@ export function ConnectionPanel({
       <button
         type="button"
         className="saved-item-action"
-        aria-label="编辑"
-        title="编辑"
+        aria-label={t("common:edit")}
+        title={t("common:edit")}
         onClick={() => openEditForm(saved)}
       >
         <svg
@@ -472,8 +496,8 @@ export function ConnectionPanel({
       <button
         type="button"
         className="saved-item-action saved-item-delete"
-        aria-label="删除"
-        title="删除"
+        aria-label={t("common:delete")}
+        title={t("common:delete")}
         onClick={() => void deleteSavedConnection(saved.id)}
       >
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
@@ -496,7 +520,7 @@ export function ConnectionPanel({
             <button
               type="button"
               className="rail-session rail-session-local"
-              aria-label="本地终端"
+              aria-label={t("common:localTerminal")}
               title={localShell.title}
               onClick={() => void createLocalSession(cols, rows)}
             >
@@ -539,20 +563,20 @@ export function ConnectionPanel({
 
         {isWindowsHost() && !localShell.git_bash_available ? (
           <p className="local-shell-hint-banner">
-            未检测到 Git Bash ·{" "}
+            {t("shell:gitBashMissingBanner")}{" "}
             <button
               type="button"
               className="link-button"
               onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
             >
-              安装 Git for Windows
+              {t("shell:installGitForWindows")}
             </button>
           </p>
         ) : null}
 
         <section className="saved-list">
           {savedConnections.length === 0 && (
-            <p className="empty-state">暂无 SSH 书签</p>
+            <p className="empty-state">{t("shell:emptyBookmarks")}</p>
           )}
           {savedConnections.map((saved) => savedItem(saved))}
         </section>

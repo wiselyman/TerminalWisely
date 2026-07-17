@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 interface CsvPreviewProps {
   text: string;
@@ -36,6 +37,7 @@ function parseCsv(text: string, maxRows = 500): string[][] {
 }
 
 export function CsvPreview({ text, filter = "" }: CsvPreviewProps) {
+  const { t } = useTranslation("preview");
   const rows = useMemo(() => parseCsv(text), [text]);
   const columns = rows[0]?.length ?? 0;
 
@@ -48,14 +50,14 @@ export function CsvPreview({ text, filter = "" }: CsvPreviewProps) {
   }, [filter, rows]);
 
   if (rows.length === 0) {
-    return <div className="preview-empty">CSV 内容为空</div>;
+    return <div className="preview-empty">{t("csvEmpty")}</div>;
   }
 
   return (
     <div className="preview-csv">
       <div className="preview-csv-toolbar">
         <span className="preview-csv-meta">
-          {filteredRows.length} / {rows.length} 行
+          {t("csvRowCount", { filtered: filteredRows.length, total: rows.length })}
         </span>
       </div>
       <div className="preview-csv-scroll">

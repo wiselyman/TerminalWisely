@@ -123,8 +123,12 @@ body,
   z-index: 2;
 }
 
-.app-shell.platform-macos .chrome-titlebar-macos-controls {
-  padding: 0 12px 0 14px;
+/* Reserve room for system traffic lights (titleBarStyle: Overlay). */
+.app-shell.platform-macos .chrome-titlebar-macos-traffic-spacer {
+  width: 72px;
+  min-width: 72px;
+  padding: 0;
+  pointer-events: none;
 }
 
 .chrome-titlebar-main {
@@ -163,6 +167,7 @@ body,
 
 .chrome-titlebar-main .tab-bar,
 .chrome-new-session,
+.locale-switcher,
 .chrome-titlebar-macos-controls,
 .window-controls,
 .sidebar-chrome-row .sidebar-toggle,
@@ -627,6 +632,8 @@ body,
   font-size: 0.85rem;
   line-height: 1.4;
   min-height: 38px;
+  /* Avoid WKWebView / IME auto-capitalizing hostnames and usernames. */
+  text-transform: none;
 }
 
 .connection-form select {
@@ -2974,7 +2981,18 @@ body.preview-float-resizing {
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  /* Ligatures / optimizeLegibility skew glyph widths vs the cell grid and
+     make selection highlights cut through characters mid-glyph. */
+  text-rendering: geometricPrecision;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.xterm .xterm-rows,
+.xterm .xterm-width-cache-measure-container,
+.xterm .xterm-char-measure-element {
+  font-variant-ligatures: none !important;
+  font-feature-settings: "liga" 0, "calt" 0 !important;
 }
 
 .xterm-viewport {
@@ -5302,5 +5320,59 @@ body.cmd-nav-panel-resizing {
   margin: 8px 0 0;
   color: #8b949e;
   font-size: 0.75rem;
+}
+
+.locale-switcher {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin: 0 4px 2px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.locale-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #9da7b3;
+  cursor: pointer;
+}
+.locale-switcher-trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6edf3;
+}
+.locale-switcher-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #161b22;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.locale-switcher-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #e6edf3;
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.locale-switcher-item:hover,
+.locale-switcher-item.active {
+  background: rgba(56, 139, 253, 0.15);
 }
 

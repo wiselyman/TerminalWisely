@@ -78,29 +78,36 @@ pub async fn write_remote_bytes_sudo(
     sudo_password: Option<&str>,
     data: &[u8],
 ) -> AppResult<()> {
-    let quoted = shell_quote_remote_path(remote_path);
-    let cmd = format!("sudo -S tee {quoted} > /dev/null");
+    let file_name = Path::new(remote_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("file");
+    let tmp_path = format!(
+        "/tmp/.tw-preview-{}-{}",
+        Uuid::new_v4().simple(),
+        file_name
+    );
 
-    if sudo_password.is_none() {
-        let no_pass_cmd = format!("sudo -n tee {quoted} > /dev/null");
-        if exec_command_with_stdin(handle, &no_pass_cmd, data, 0)
-            .await
-            .is_ok()
-        {
-            return Ok(());
-        }
-        return Err(sudo_required("保存", remote_path));
+    // Stage as the SSH user (always writable under /tmp), then install with sudo.
+    // Avoids `sudo tee` stdin races where EOF can arrive before ExitStatus and be
+    // mis-read as success.
+    sftp::write_remote_bytes(handle, &tmp_path, data).await?;
+
+    let quoted_tmp = shell_quote_remote_path(&tmp_path);
+    let quoted_dest = shell_quote_remote_path(remote_path);
+    let result = exec_remote_sudo(
+        handle,
+        &format!("cp -f {quoted_tmp} {quoted_dest} && rm -f {quoted_tmp}"),
+        sudo_password,
+        "保存",
+        remote_path,
+    )
+    .await;
+
+    if result.is_err() {
+        let _ = sftp::remove_remote_file(handle, &tmp_path).await;
     }
-
-    let mut stdin = sudo_password.unwrap().as_bytes().to_vec();
-    stdin.push(b'\n');
-    stdin.extend_from_slice(data);
-
-    match exec_command_with_stdin(handle, &cmd, &stdin, 0).await {
-        Ok(_) => Ok(()),
-        Err(err) if is_sudo_auth_failure(&err) => Err(sudo_required("保存", remote_path)),
-        Err(err) => Err(err),
-    }
+    result
 }
 
 pub async fn exec_remote_sudo(
@@ -202,13 +209,24 @@ async fn wait_stream_channel(
                 stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
             }
             ChannelMsg::ExitStatus { exit_status: code } => exit_status = Some(code),
-            ChannelMsg::Close | ChannelMsg::Eof => break,
+            ChannelMsg::Eof => {}
+            ChannelMsg::Close => break,
             _ => {}
         }
     }
 
     match exit_status {
-        Some(0) | None => Ok(()),
+        Some(0) => Ok(()),
+        None => {
+            let detail = stderr.trim();
+            if detail.is_empty() {
+                Err(AppError::msg("远程命令未返回退出状态"))
+            } else if is_sudo_auth_failure(&AppError::msg(detail)) {
+                Err(sudo_required(action, path_hint))
+            } else {
+                Err(AppError::msg(format!("远程命令失败: {detail}")))
+            }
+        }
         Some(_) if is_sudo_auth_failure(&AppError::msg(stderr.trim())) => {
             Err(sudo_required(action, path_hint))
         }

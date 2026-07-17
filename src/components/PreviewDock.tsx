@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { isPreviewTabDirty, previewTabLabel } from "../stores/previewTypes";
 import {
   usePreviewStore,
@@ -10,6 +11,7 @@ interface PreviewDockProps {
 }
 
 export function PreviewDock({ sessionId }: PreviewDockProps) {
+  const { t } = useTranslation("preview");
   const tabs = usePreviewTabsForSession(sessionId);
   const activeTabId = usePreviewStore((s) => s.activeTabId);
   const minimized = usePreviewStore((s) => s.minimized);
@@ -24,7 +26,7 @@ export function PreviewDock({ sessionId }: PreviewDockProps) {
     <div
       className={`preview-dock${minimized ? " minimized" : ""}`}
       role="tablist"
-      aria-label="当前连接已打开的文件"
+      aria-label={t("dockAria")}
     >
       <div className="preview-dock-tabs">
         {tabs.map((tab) => {
@@ -52,14 +54,14 @@ export function PreviewDock({ sessionId }: PreviewDockProps) {
                   {dirty ? <span className="preview-panel-dirty"> *</span> : null}
                 </span>
                 {tab.saving ? (
-                  <span className="preview-dock-tab-status">保存中</span>
+                  <span className="preview-dock-tab-status">{t("common:saving")}</span>
                 ) : null}
               </button>
               <button
                 type="button"
                 className="preview-dock-tab-close"
-                aria-label={`关闭 ${label}`}
-                title={`关闭 ${label}`}
+                aria-label={t("dockCloseAria", { label })}
+                title={t("dockCloseAria", { label })}
                 onClick={(event) => {
                   event.stopPropagation();
                   void closeTab(tab.id);
@@ -77,7 +79,7 @@ export function PreviewDock({ sessionId }: PreviewDockProps) {
           className="preview-dock-restore"
           onClick={restorePreview}
         >
-          展开编辑
+          {t("dockExpand")}
         </button>
       ) : null}
     </div>

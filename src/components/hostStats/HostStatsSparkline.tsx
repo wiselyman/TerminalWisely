@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface HostStatsSparklineProps {
   label: string;
   values: number[];
@@ -13,6 +15,7 @@ export function HostStatsSparkline({
   compact = false,
   formatValue = (value) => value.toFixed(1),
 }: HostStatsSparklineProps) {
+  const { t } = useTranslation("tools");
   const width = compact ? 200 : 160;
   const height = compact ? 28 : 36;
   const padding = 2;
@@ -21,7 +24,9 @@ export function HostStatsSparkline({
     return (
       <div className={`host-stats-sparkline${compact ? " host-stats-sparkline-compact" : ""}`}>
         {!compact ? <span className="host-stats-sparkline-label">{label}</span> : null}
-        <span className="host-stats-sparkline-empty">趋势采样中…</span>
+        <span className="host-stats-sparkline-empty">
+          {t("hostStats.sparklineSampling")}
+        </span>
       </div>
     );
   }

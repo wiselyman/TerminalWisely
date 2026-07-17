@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
+import { formatAppError } from "../lib/formatAppError";
 import {
   findSearchMatches,
   getMatchPosition,
@@ -37,6 +39,7 @@ interface PreviewPanelProps {
 }
 
 export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: PreviewPanelProps) {
+  const { t } = useTranslation("preview");
   const sessionTabs = usePreviewTabsForSession(sessionId);
   const activeTab = useActivePreviewTab(sessionId);
   const {
@@ -249,18 +252,18 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
     if (!data?.handle_id) return;
     void invoke("open_preview_handle", {
       request: { handle_id: data.handle_id },
-    }).catch((err) => pushToast(String(err), false));
+    }).catch((err) => pushToast(formatAppError(err), false));
   };
 
   const titleHint = useMemo(() => {
     if (!data) return undefined;
     const parts: string[] = [];
     if (data.resolved_path) parts.push(data.resolved_path);
-    if (dirty) parts.push("未保存");
-    if (data.truncated) parts.push("内容已截断");
-    if (data.uses_sudo) parts.push("sudo 读取");
+    if (dirty) parts.push(t("statusUnsaved"));
+    if (data.truncated) parts.push(t("statusTruncated"));
+    if (data.uses_sudo) parts.push(t("statusNeedsSudo"));
     return parts.length > 0 ? parts.join("\n") : undefined;
-  }, [data, dirty]);
+  }, [data, dirty, t]);
 
   if (sessionTabs.length === 0) return null;
 
@@ -283,13 +286,13 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
           className={`preview-float-window${maximized ? " maximized" : ""}`}
           style={maximized ? undefined : { width, height }}
           role="dialog"
-          aria-label="文件预览"
+          aria-label={t("panelAria")}
           onMouseDown={(event) => event.stopPropagation()}
         >
-    <aside className="preview-panel" aria-label="文件预览">
+    <aside className="preview-panel" aria-label={t("panelAria")}>
       <div className="preview-panel-head">
         <strong className="preview-panel-title" title={titleHint}>
-          {data?.filename ?? "预览"}
+          {data?.filename ?? t("fallbackTitle")}
           {dirty ? <span className="preview-panel-dirty"> *</span> : null}
         </strong>
 
@@ -298,8 +301,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             <button
               type="button"
               className={`preview-toolbar-icon${markdownMode === "source" ? " active" : ""}`}
-              title="源码"
-              aria-label="源码"
+              title={t("modeSource")}
+              aria-label={t("modeSource")}
               aria-pressed={markdownMode === "source"}
               onClick={() => setMarkdownMode("source")}
             >
@@ -308,8 +311,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             <button
               type="button"
               className={`preview-toolbar-icon${markdownMode === "preview" ? " active" : ""}`}
-              title="预览"
-              aria-label="预览"
+              title={t("modePreview")}
+              aria-label={t("modePreview")}
               aria-pressed={markdownMode === "preview"}
               onClick={() => setMarkdownMode("preview")}
             >
@@ -326,8 +329,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
                 className={`preview-head-search${!searchValid ? " preview-search-invalid" : ""}`}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder={searchRegex ? "正则…" : "搜索…"}
-                aria-label="搜索文件内容"
+                placeholder={searchRegex ? t("searchRegexPlaceholder") : t("searchPlaceholder")}
+                aria-label={t("searchAria")}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
@@ -339,8 +342,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
                 <button
                   type="button"
                   className={`preview-search-toggle${searchCaseSensitive ? " active" : ""}`}
-                  title="区分大小写"
-                  aria-label="区分大小写"
+                  title={t("matchCase")}
+                  aria-label={t("matchCase")}
                   aria-pressed={searchCaseSensitive}
                   onClick={() => setSearchCaseSensitive(!searchCaseSensitive)}
                 >
@@ -349,8 +352,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
                 <button
                   type="button"
                   className={`preview-search-toggle${searchWholeWord ? " active" : ""}`}
-                  title="整词匹配"
-                  aria-label="整词匹配"
+                  title={t("matchWord")}
+                  aria-label={t("matchWord")}
                   aria-pressed={searchWholeWord}
                   onClick={() => setSearchWholeWord(!searchWholeWord)}
                 >
@@ -359,16 +362,16 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
                 <button
                   type="button"
                   className={`preview-search-toggle${searchRegex ? " active" : ""}`}
-                  title="正则表达式"
-                  aria-label="正则表达式"
+                  title={t("useRegex")}
+                  aria-label={t("useRegex")}
                   aria-pressed={searchRegex}
                   onClick={() => setSearchRegex(!searchRegex)}
                 >
                   .*
                 </button>
-                <span className="preview-search-count" title="F3 下一个，Shift+F3 上一个">
+                <span className="preview-search-count" title={t("searchNavHint")}>
                   {!searchValid
-                    ? "无效"
+                    ? t("searchInvalid")
                     : matches.length > 0
                       ? `${activeMatchIndex + 1}/${matches.length}`
                       : searchQuery.trim()
@@ -381,7 +384,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               <button
                 type="button"
                 className="preview-icon-btn preview-toolbar-icon"
-                aria-label="上一个匹配"
+                aria-label={t("prevMatch")}
                 disabled={matches.length === 0}
                 onClick={() => goMatch(-1)}
               >
@@ -390,7 +393,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               <button
                 type="button"
                 className="preview-icon-btn preview-toolbar-icon"
-                aria-label="下一个匹配"
+                aria-label={t("nextMatch")}
                 disabled={matches.length === 0}
                 onClick={() => goMatch(1)}
               >
@@ -409,8 +412,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               type="button"
               className={`preview-toolbar-icon preview-toolbar-icon-primary${dirty ? " dirty" : ""}`}
               disabled={!dirty || saving}
-              title={saving ? "保存中…" : "保存 (Ctrl+S)"}
-              aria-label={saving ? "保存中" : "保存"}
+              title={saving ? t("saveTitleBusy") : t("saveTitle")}
+              aria-label={saving ? t("common:saving") : t("common:save")}
               onClick={() => void savePreview()}
             >
               <PreviewSaveIcon />
@@ -420,8 +423,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             <button
               type="button"
               className="preview-toolbar-icon"
-              title="系统打开"
-              aria-label="系统打开"
+              title={t("openInSystem")}
+              aria-label={t("openInSystem")}
               onClick={openExternal}
             >
               <PreviewExternalIcon />
@@ -430,8 +433,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
           <button
             type="button"
             className="preview-toolbar-icon"
-            title="最小化到标签栏"
-            aria-label="最小化"
+            title={t("minimizeToDock")}
+            aria-label={t("common:minimize")}
             onClick={minimizePreview}
           >
             <PreviewMinimizeIcon />
@@ -439,8 +442,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
           <button
             type="button"
             className="preview-toolbar-icon"
-            title={maximized ? "还原" : "最大化"}
-            aria-label={maximized ? "还原" : "最大化"}
+            title={maximized ? t("common:restore") : t("common:maximize")}
+            aria-label={maximized ? t("common:restore") : t("common:maximize")}
             onClick={toggleMaximize}
           >
             {maximized ? <PreviewRestoreIcon /> : <PreviewMaximizeIcon />}
@@ -448,8 +451,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
           <button
             type="button"
             className="preview-toolbar-icon"
-            title="关闭当前文件 (Esc)"
-            aria-label="关闭"
+            title={t("closeFileTitle")}
+            aria-label={t("common:close")}
             onClick={() => void closePreview()}
           >
             <PreviewCloseIcon />
@@ -458,10 +461,11 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
       </div>
 
       <div className="preview-panel-body">
-        {loading ? <div className="preview-empty">正在打开文件…</div> : null}
+        {loading ? <div className="preview-empty">{t("opening")}</div> : null}
         {!loading && error ? <div className="preview-empty">{error}</div> : null}
         {!loading && !error && data?.kind === "text" ? (
           <EditableTextPreview
+            tabId={activeTab.id}
             text={displayContent}
             extension={data.extension}
             query={searchQuery}
@@ -473,6 +477,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
         ) : null}
         {!loading && !error && data?.kind === "markdown" ? (
           <MarkdownPreview
+            tabId={activeTab.id}
             text={displayContent}
             extension={data.extension}
             mode={markdownMode}
@@ -485,6 +490,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
         ) : null}
         {!loading && !error && data?.kind === "html" ? (
           <HtmlPreview
+            tabId={activeTab.id}
             text={displayContent}
             extension={data.extension}
             mode={markdownMode}
@@ -497,6 +503,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
         ) : null}
         {!loading && !error && data?.kind === "csv" ? (
           <EditableTextPreview
+            tabId={activeTab.id}
             text={displayContent}
             extension={data.extension}
             query={searchQuery}
@@ -535,7 +542,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
       <PreviewDock sessionId={sessionId} />
       {sudoPrompt ? (
         <div className="preview-sudo-layer">
-          <Modal title="需要 sudo 权限" onClose={closeSudoPrompt}>
+          <Modal title={t("sudoModalTitle")} onClose={closeSudoPrompt}>
             <form
               className="connection-form"
               onSubmit={(event) => {
@@ -544,12 +551,11 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               }}
             >
               <p className="modal-hint">
-                {sudoPrompt.action === "open" ? "读取" : "保存"}系统文件需要管理员权限。
-                请输入当前 SSH 用户在服务器上的 sudo 密码。
+                {sudoPrompt.action === "open" ? t("sudoHintOpen") : t("sudoHintSave")}
               </p>
               <p className="modal-hint preview-panel-path">{sudoPrompt.path}</p>
               <label>
-                sudo 密码
+                {t("sudoPasswordLabel")}
                 <input
                   type="password"
                   value={sudoPassword}
@@ -559,10 +565,10 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               </label>
               <div className="form-row">
                 <button type="submit" disabled={loading || saving}>
-                  {loading || saving ? "处理中…" : "确认"}
+                  {loading || saving ? t("common:processing") : t("common:confirm")}
                 </button>
                 <button type="button" onClick={closeSudoPrompt}>
-                  取消
+                  {t("common:cancel")}
                 </button>
               </div>
             </form>

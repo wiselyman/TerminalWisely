@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   CHMOD_PRESETS,
   bitsToOctal,
+  chmodPresetHint,
+  chmodPresetLabel,
   describeChmodMode,
   findPresetByMode,
   isValidChmodMode,
@@ -14,26 +17,30 @@ interface ChmodModeInputProps {
   onChange: (value: string) => void;
 }
 
-const ROWS: { key: keyof ChmodBits; label: string }[] = [
-  { key: "owner", label: "所有者" },
-  { key: "group", label: "用户组" },
-  { key: "other", label: "其他人" },
+const ROW_KEYS: { key: keyof ChmodBits; labelKey: string }[] = [
+  { key: "owner", labelKey: "chmod.owner" },
+  { key: "group", labelKey: "chmod.group" },
+  { key: "other", labelKey: "chmod.other" },
 ];
 
-const COLS: { key: "r" | "w" | "x"; label: string }[] = [
-  { key: "r", label: "读" },
-  { key: "w", label: "写" },
-  { key: "x", label: "执行" },
+const COL_KEYS: { key: "r" | "w" | "x"; labelKey: string }[] = [
+  { key: "r", labelKey: "chmod.read" },
+  { key: "w", labelKey: "chmod.write" },
+  { key: "x", labelKey: "chmod.execute" },
 ];
 
 const DEFAULT_BITS = octalToBits("644")!;
 
 export function ChmodModeInput({ value, onChange }: ChmodModeInputProps) {
+  const { t, i18n } = useTranslation("commands");
   const [custom, setCustom] = useState(false);
 
   const bits = useMemo(() => octalToBits(value) ?? DEFAULT_BITS, [value]);
   const preset = useMemo(() => findPresetByMode(value), [value]);
-  const description = useMemo(() => describeChmodMode(value), [value]);
+  const description = useMemo(
+    () => describeChmodMode(t, value),
+    [t, value, i18n.language],
+  );
 
   const selectPreset = (mode: string) => {
     setCustom(false);
@@ -59,7 +66,7 @@ export function ChmodModeInput({ value, onChange }: ChmodModeInputProps) {
   return (
     <div className="chmod-mode-input">
       <div className="chmod-mode-presets">
-        <span className="chmod-mode-section-label">常用场景</span>
+        <span className="chmod-mode-section-label">{t("chmod.sectionPresets")}</span>
         <div className="chmod-mode-preset-grid">
           {CHMOD_PRESETS.map((item) => (
             <button
@@ -68,29 +75,29 @@ export function ChmodModeInput({ value, onChange }: ChmodModeInputProps) {
               className={`chmod-mode-preset${!custom && preset?.id === item.id ? " active" : ""}`}
               onClick={() => selectPreset(item.mode)}
             >
-              <span className="chmod-mode-preset-label">{item.label}</span>
-              <span className="chmod-mode-preset-hint">{item.hint}</span>
+              <span className="chmod-mode-preset-label">{chmodPresetLabel(t, item)}</span>
+              <span className="chmod-mode-preset-hint">{chmodPresetHint(t, item)}</span>
             </button>
           ))}
         </div>
       </div>
 
       <div className="chmod-mode-grid-wrap">
-        <span className="chmod-mode-section-label">细调权限</span>
+        <span className="chmod-mode-section-label">{t("chmod.sectionAdjust")}</span>
         <table className="chmod-mode-grid" role="grid">
           <thead>
             <tr>
               <th />
-              {COLS.map((col) => (
-                <th key={col.key}>{col.label}</th>
+              {COL_KEYS.map((col) => (
+                <th key={col.key}>{t(col.labelKey)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {ROWS.map((row) => (
+            {ROW_KEYS.map((row) => (
               <tr key={row.key}>
-                <th scope="row">{row.label}</th>
-                {COLS.map((col) => (
+                <th scope="row">{t(row.labelKey)}</th>
+                {COL_KEYS.map((col) => (
                   <td key={col.key}>
                     <label className="chmod-mode-check">
                       <input
@@ -111,7 +118,7 @@ export function ChmodModeInput({ value, onChange }: ChmodModeInputProps) {
       <div className="chmod-mode-summary">
         <p className="chmod-mode-summary-text">{description}</p>
         <label className="chmod-mode-custom">
-          <span>数字代码（高级）</span>
+          <span>{t("chmod.advancedLabel")}</span>
           <input
             type="text"
             inputMode="numeric"
@@ -122,9 +129,7 @@ export function ChmodModeInput({ value, onChange }: ChmodModeInputProps) {
             onChange={(event) => onCustomInput(event.target.value)}
           />
         </label>
-        <p className="chmod-mode-footnote">
-          数字由「读=4、写=2、执行=1」相加而成，一般选上面场景即可，无需记忆。
-        </p>
+        <p className="chmod-mode-footnote">{t("chmod.footnote")}</p>
       </div>
     </div>
   );

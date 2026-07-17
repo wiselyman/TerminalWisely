@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { LoggedInUser } from "../../types";
 
 interface HostStatsUserListProps {
@@ -9,11 +10,12 @@ function formatUserMeta(user: LoggedInUser): string {
 }
 
 export function HostStatsUserList({ users }: HostStatsUserListProps) {
+  const { t } = useTranslation("tools");
   return (
     <section className="host-stats-section host-stats-users-compact">
-      <h3 className="host-stats-section-title">登录用户</h3>
+      <h3 className="host-stats-section-title">{t("hostStats.loggedInUsers")}</h3>
       {users.length === 0 ? (
-        <p className="host-stats-empty">无登录用户</p>
+        <p className="host-stats-empty">{t("hostStats.noLoggedInUsers")}</p>
       ) : (
         <ul className="host-stats-user-list">
           {users.map((user, index) => (

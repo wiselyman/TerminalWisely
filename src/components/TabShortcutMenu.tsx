@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import {
   isSyntheticTerminalMouseEvent,
   armChromeClickSuppress,
@@ -24,6 +25,7 @@ import {
   useDirectoryShortcutStore,
 } from "../stores/directoryShortcutStore";
 import { useToastStore } from "../stores/toastStore";
+import { formatAppError } from "../lib/formatAppError";
 import type {
   DirectoryShortcut,
   DirectoryShortcutScope,
@@ -168,28 +170,29 @@ function ShortcutForm({
   onScopeChange,
   onSubmit,
 }: ShortcutFormProps) {
+  const { t } = useTranslation("shell");
   return (
     <form className="tab-shortcut-form tab-shortcut-form-only" onSubmit={onSubmit}>
       <label className="tab-shortcut-field">
-        <span>目录</span>
+        <span>{t("shortcutPathLabel")}</span>
         <input
           type="text"
           value={path}
-          placeholder="如 ~/projects 或 /var/log"
+          placeholder={t("shortcutPathPlaceholder")}
           onChange={(event) => onPathChange(event.target.value)}
           autoFocus
         />
       </label>
       <label className="tab-shortcut-field">
-        <span>适用</span>
+        <span>{t("shortcutScopeLabel")}</span>
         <select
           value={scope}
           onChange={(event) =>
             onScopeChange(event.target.value as DirectoryShortcutScope)
           }
         >
-          <option value="server">当前服务器</option>
-          <option value="all">全部服务器</option>
+          <option value="server">{t("shortcutScopeServer")}</option>
+          <option value="all">{t("shortcutScopeAll")}</option>
         </select>
       </label>
       <button type="submit" className="tab-shortcut-save">
@@ -205,6 +208,7 @@ export function TabDirectoryShortcuts({
   serverId,
   onActivateTab,
 }: TabDirectoryShortcutsProps) {
+  const { t } = useTranslation(["shell", "common"]);
   const shortcuts = useTabShortcuts(tabKind, serverId);
   const addShortcut = useDirectoryShortcutStore((s) => s.addShortcut);
   const updateShortcut = useDirectoryShortcutStore((s) => s.updateShortcut);
@@ -234,7 +238,7 @@ export function TabDirectoryShortcuts({
     void invoke("enter_directory", {
       request: { session_id: sessionId, path: targetPath },
     }).catch((err) => {
-      pushToast(String(err), false);
+      pushToast(formatAppError(err), false);
     });
   };
 
@@ -242,13 +246,13 @@ export function TabDirectoryShortcuts({
     event.preventDefault();
     const trimmedPath = path.trim();
     if (!trimmedPath) {
-      pushToast("请输入目录路径", false);
+      pushToast(t("toastNeedPath", { ns: "shell" }), false);
       return;
     }
     addShortcut(trimmedPath, scope, serverId);
     setPath("");
     addMenu.close();
-    pushToast("已添加快捷目录", true);
+    pushToast(t("toastShortcutAdded", { ns: "shell" }), true);
   };
 
   const openEditMenu = (
@@ -275,18 +279,21 @@ export function TabDirectoryShortcuts({
     if (!editingShortcut) return;
     const trimmedPath = editPath.trim();
     if (!trimmedPath) {
-      pushToast("请输入目录路径", false);
+      pushToast(t("toastNeedPath", { ns: "shell" }), false);
       return;
     }
     updateShortcut(editingShortcut.id, trimmedPath, editScope, serverId);
     closeEditMenu();
-    pushToast("已更新快捷目录", true);
+    pushToast(t("toastShortcutUpdated", { ns: "shell" }), true);
   };
 
   const handleConfirmDelete = () => {
     if (!editingShortcut) return;
     removeShortcut(editingShortcut.id);
-    pushToast(`已移除 ${editingShortcut.path}`, true);
+    pushToast(
+      t("toastShortcutRemoved", { ns: "shell", path: editingShortcut.path }),
+      true,
+    );
     closeEditMenu();
   };
 
@@ -305,7 +312,7 @@ export function TabDirectoryShortcuts({
                 } as CSSProperties
               }
               title={`${shortcutPathLabel(item.path)} — ${item.path}`}
-              aria-label={`进入 ${item.path}`}
+              aria-label={t("enterShortcutAria", { ns: "shell", path: item.path })}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
@@ -324,8 +331,8 @@ export function TabDirectoryShortcuts({
           ref={addMenu.anchorRef}
           type="button"
           className="tab-shortcut-add"
-          title="添加快捷目录"
-          aria-label="添加快捷目录"
+          title={t("addShortcut", { ns: "shell" })}
+          aria-label={t("addShortcut", { ns: "shell" })}
           aria-expanded={addMenu.open}
           aria-haspopup="dialog"
           onMouseDown={(event) => event.stopPropagation()}
@@ -338,17 +345,19 @@ export function TabDirectoryShortcuts({
         </button>
         {addMenu.renderMenu(
           <>
-            <div className="tab-shortcut-menu-header">添加快捷目录</div>
+            <div className="tab-shortcut-menu-header">
+              {t("addShortcut", { ns: "shell" })}
+            </div>
             <ShortcutForm
               path={path}
               scope={scope}
-              submitLabel="添加"
+              submitLabel={t("add", { ns: "common" })}
               onPathChange={setPath}
               onScopeChange={setScope}
               onSubmit={handleAddSubmit}
             />
           </>,
-          "添加快捷目录",
+          t("addShortcut", { ns: "shell" }),
         )}
       </span>
 
@@ -356,13 +365,17 @@ export function TabDirectoryShortcuts({
         editingShortcut ? (
           <>
             <div className="tab-shortcut-menu-header">
-              {confirmDelete ? "确认删除" : "编辑快捷目录"}
+              {confirmDelete
+                ? t("confirmDeleteShortcut", { ns: "shell" })
+                : t("editShortcut", { ns: "shell" })}
             </div>
             {confirmDelete ? (
               <div className="tab-shortcut-confirm">
                 <p className="tab-shortcut-confirm-text">
-                  确定删除快捷目录
-                  <code>{editingShortcut.path}</code>？
+                  {t("deleteShortcutConfirm", {
+                    ns: "shell",
+                    path: editingShortcut.path,
+                  })}
                 </p>
                 <div className="tab-shortcut-confirm-actions">
                   <button
@@ -370,14 +383,14 @@ export function TabDirectoryShortcuts({
                     className="tab-shortcut-confirm-cancel"
                     onClick={() => setConfirmDelete(false)}
                   >
-                    取消
+                    {t("cancel", { ns: "common" })}
                   </button>
                   <button
                     type="button"
                     className="tab-shortcut-confirm-delete"
                     onClick={handleConfirmDelete}
                   >
-                    删除
+                    {t("delete", { ns: "common" })}
                   </button>
                 </div>
               </div>
@@ -386,7 +399,7 @@ export function TabDirectoryShortcuts({
                 <ShortcutForm
                   path={editPath}
                   scope={editScope}
-                  submitLabel="保存"
+                  submitLabel={t("save", { ns: "common" })}
                   onPathChange={setEditPath}
                   onScopeChange={setEditScope}
                   onSubmit={handleEditSubmit}
@@ -396,13 +409,13 @@ export function TabDirectoryShortcuts({
                   className="tab-shortcut-delete"
                   onClick={() => setConfirmDelete(true)}
                 >
-                  删除快捷目录
+                  {t("deleteShortcutAction", { ns: "shell" })}
                 </button>
               </>
             )}
           </>
         ) : null,
-        "编辑快捷目录",
+        t("editShortcut", { ns: "shell" }),
       )}
     </>
   );

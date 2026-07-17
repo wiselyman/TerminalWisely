@@ -11,6 +11,7 @@ interface MarkdownPreviewProps {
   activeMatchIndex: number;
   searchOptions?: SearchOptions;
   editable?: boolean;
+  tabId?: string;
   onChange?: (value: string) => void;
 }
 
@@ -22,6 +23,7 @@ export function MarkdownPreview({
   activeMatchIndex,
   searchOptions,
   editable = false,
+  tabId,
   onChange,
 }: MarkdownPreviewProps) {
   const html = useMemo(() => {
@@ -32,6 +34,7 @@ export function MarkdownPreview({
   if (mode === "source") {
     return (
       <EditableTextPreview
+        tabId={tabId}
         text={text}
         extension={extension}
         query={query}

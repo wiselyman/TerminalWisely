@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface SearchableSelectProps {
   value: string;
@@ -19,6 +20,7 @@ export function SearchableSelect({
   placeholder,
   disabled = false,
 }: SearchableSelectProps) {
+  const { t } = useTranslation("commands");
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -102,12 +104,12 @@ export function SearchableSelect({
       {showDropdown ? (
         <ul id={listId} className="searchable-select-list" role="listbox">
           {loading ? (
-            <li className="searchable-select-hint">正在加载服务列表…</li>
+            <li className="searchable-select-hint">{t("select.loadingServices")}</li>
           ) : filtered.length === 0 ? (
             <li className="searchable-select-hint">
               {options.length === 0
-                ? "未获取到服务列表，可直接输入"
-                : "无匹配项，可直接输入"}
+                ? t("select.noServicesTypeToEnter")
+                : t("select.noServicesMatchTypeToEnter")}
             </li>
           ) : (
             filtered.map((option, index) => (

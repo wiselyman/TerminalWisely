@@ -40,7 +40,7 @@ pub fn resolve() -> AppResult<ResolvedLocalShell> {
     #[cfg(windows)]
     {
         let shell = crate::msys::detect_git_bash().ok_or_else(|| {
-            AppError::msg("未检测到 Git Bash，请先安装 Git for Windows")
+            AppError::code("ERR_GIT_BASH_REQUIRED")
         })?;
         return build_git_bash(&shell);
     }

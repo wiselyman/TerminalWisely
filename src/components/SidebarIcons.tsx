@@ -110,8 +110,10 @@ export function BookmarkIcon() {
   );
 }
 
+export type SidebarActionKind = "local" | "ssh" | "bookmark";
+
 interface SidebarActionIconProps {
-  kind: "local" | "ssh" | "bookmark";
+  kind: SidebarActionKind;
   label: string;
 }
 

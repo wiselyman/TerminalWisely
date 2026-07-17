@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface PdfPreviewProps {
@@ -6,6 +7,7 @@ interface PdfPreviewProps {
 }
 
 export function PdfPreview({ path }: PdfPreviewProps) {
+  const { t } = useTranslation("preview");
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -13,7 +15,7 @@ export function PdfPreview({ path }: PdfPreviewProps) {
   }, [path]);
 
   if (!src) {
-    return <div className="preview-empty">加载 PDF 中…</div>;
+    return <div className="preview-empty">{t("loadingPdf")}</div>;
   }
 
   return (

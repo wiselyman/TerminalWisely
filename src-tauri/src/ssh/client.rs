@@ -105,11 +105,11 @@ async fn connect_ssh_transport(host: &str, port: u16) -> AppResult<client::Handl
         {
             Ok(Ok(handle)) => return Ok(handle),
             Ok(Err(err)) => last_err = Some(err.into()),
-            Err(_) => last_err = Some(AppError::msg("连接服务器超时，请检查网络或地址")),
+            Err(_) => last_err = Some(AppError::code("ERR_SSH_TIMEOUT")),
         }
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::msg("无法连接服务器")))
+    Err(last_err.unwrap_or_else(|| AppError::code("ERR_SSH_REFUSED")))
 }
 
 async fn authenticate_handle(
@@ -122,7 +122,7 @@ async fn authenticate_handle(
                 .password
                 .as_ref()
                 .filter(|p| !p.is_empty())
-                .ok_or_else(|| AppError::msg("请输入密码"))?;
+                .ok_or_else(|| AppError::code("ERR_PASSWORD_REQUIRED"))?;
             handle
                 .authenticate_password(&request.username, password)
                 .await?
@@ -141,7 +141,7 @@ async fn authenticate_handle(
     };
 
     if !auth_ok {
-        return Err(AppError::msg("密码错误或认证失败"));
+        return Err(AppError::code("ERR_SSH_AUTH"));
     }
     Ok(())
 }
@@ -197,13 +197,23 @@ pub async fn exec_command_with_stdin(
             Some(ChannelMsg::ExitStatus { exit_status: code }) => {
                 exit_status = Some(code);
             }
-            Some(ChannelMsg::Close | ChannelMsg::Eof) | None => break,
+            // EOF only means stdout closed; ExitStatus may still follow. Wait for Close.
+            Some(ChannelMsg::Eof) => {}
+            Some(ChannelMsg::Close) | None => break,
             _ => {}
         }
     }
 
     match exit_status {
-        Some(0) | None => Ok(stdout),
+        Some(0) => Ok(stdout),
+        None => {
+            let detail = stderr.trim();
+            if detail.is_empty() {
+                Err(AppError::msg("远程命令未返回退出状态"))
+            } else {
+                Err(AppError::msg(format!("远程命令失败: {detail}")))
+            }
+        }
         Some(code) => {
             let detail = stderr.trim();
             if detail.is_empty() {
@@ -235,6 +245,7 @@ pub async fn exec_command(
         .map_err(AppError::from)?;
 
     let mut stdout = String::new();
+    let mut stderr = String::new();
     let mut exit_status: Option<u32> = None;
     let mut channel = channel;
 
@@ -244,20 +255,37 @@ pub async fn exec_command(
                 stdout.push_str(&String::from_utf8_lossy(data.as_ref()));
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
-                stdout.push_str(&String::from_utf8_lossy(data.as_ref()));
+                stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
             }
             Some(ChannelMsg::ExitStatus { exit_status: code }) => {
                 exit_status = Some(code);
             }
-            Some(ChannelMsg::Close | ChannelMsg::Eof) | None => break,
+            Some(ChannelMsg::Eof) => {}
+            Some(ChannelMsg::Close) | None => break,
             _ => {}
         }
     }
 
     match exit_status {
-        Some(0) | None => Ok(stdout),
+        Some(0) => Ok(stdout),
+        None => {
+            let detail = if !stderr.trim().is_empty() {
+                stderr.trim()
+            } else {
+                stdout.trim()
+            };
+            if detail.is_empty() {
+                Err(AppError::msg("远程命令未返回退出状态"))
+            } else {
+                Err(AppError::msg(format!("远程命令失败: {detail}")))
+            }
+        }
         Some(code) => {
-            let detail = stdout.trim();
+            let detail = if !stderr.trim().is_empty() {
+                stderr.trim()
+            } else {
+                stdout.trim()
+            };
             if detail.is_empty() {
                 Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
             } else {
@@ -442,7 +470,7 @@ impl SshSession {
         SessionManager::emit_terminal_message(
             &app,
             &self.info.id,
-            "正在重新连接…",
+            "TW_STATUS:RECONNECTING",
         );
 
         let _ = self.shutdown_tx.send(true);
@@ -505,11 +533,11 @@ impl SshSession {
 
     pub fn write_input(&self, data: &str) -> AppResult<()> {
         if self.shell_dead.load(Ordering::SeqCst) {
-            return Err(AppError::msg("SSH 连接已断开。按 Enter 重新连接。"));
+            return Err(AppError::code("ERR_SSH_DISCONNECTED"));
         }
         self.input_tx
             .send(data.as_bytes().to_vec())
-            .map_err(|_| AppError::msg("SSH 连接已断开。按 Enter 重新连接。"))
+            .map_err(|_| AppError::code("ERR_SSH_DISCONNECTED"))
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> AppResult<()> {
@@ -948,7 +976,7 @@ async fn run_shell_loop(
                 crate::session::SessionManager::emit_terminal_message(
                     &app,
                     &session_id,
-                    "SSH 连接已断开。按 Enter 重新连接。",
+                    "TW_STATUS:DISCONNECTED",
                 );
                 break;
             }
@@ -991,7 +1019,7 @@ async fn run_shell_loop(
             crate::session::SessionManager::emit_terminal_message(
                 &app,
                 &session_id,
-                "远程 Shell 已断开，正在重新连接…",
+                "TW_STATUS:SHELL_RECONNECTING",
             );
             sleep(Duration::from_millis(300)).await;
             continue;

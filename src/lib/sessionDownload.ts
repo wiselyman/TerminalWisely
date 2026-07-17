@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import i18n from "../i18n";
 import { invokeWithSudoRetry } from "./invokeWithSudoRetry";
 import { createTransferId } from "./transferId";
 import { useSessionStore } from "../stores/sessionStore";
@@ -38,7 +39,7 @@ export async function downloadRemotePath(
             sudo_password: sudoPassword ?? null,
           },
         }),
-      { action: "下载", path: remotePath },
+      { action: i18n.t("tools:transfer.directionDownload"), path: remotePath },
     );
   } catch (err) {
     useSessionStore.getState().removeTransfer(transferId);

@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { formatSizeBytes, formatSizeHuman } from "../lib/formatSize";
 import type { PathSizeResult } from "../types";
 
@@ -19,7 +20,8 @@ export function PathSizeDialog({
   error,
   onClose,
 }: PathSizeDialogProps) {
-  const title = pathKind === "directory" ? "文件夹大小" : "文件大小";
+  const { t } = useTranslation("terminal");
+  const title = pathKind === "directory" ? t("pathSizeDirTitle") : t("pathSizeFileTitle");
   const pathLabel = path.length > 72 ? `…${path.slice(-69)}` : path;
 
   const dialog = (
@@ -48,7 +50,7 @@ export function PathSizeDialog({
         {loading ? (
           <div className="path-size-body path-size-loading">
             <div className="path-size-spinner" aria-hidden="true" />
-            <p>正在计算大小…</p>
+            <p>{t("pathSizeCalculating")}</p>
           </div>
         ) : error ? (
           <p className="path-size-error">{error}</p>
@@ -66,7 +68,7 @@ export function PathSizeDialog({
             disabled={loading}
             onClick={onClose}
           >
-            关闭
+            {t("common:close")}
           </button>
         </div>
       </div>

@@ -297,6 +297,7 @@ pub async fn transfer_remote_via_server_scp<F>(
     to_request: &SshConnectRequest,
     to_path: &str,
     file_size: u64,
+    recursive: bool,
     cancel: Option<Arc<AtomicBool>>,
     mut on_progress: F,
 ) -> AppResult<()>
@@ -312,9 +313,11 @@ where
     } else {
         auth.cleanup.clone()
     };
+    // Directory copies need -r; for files -r is harmless.
+    let recursive_flag = if recursive { "-r " } else { "" };
     let scp_cmd = format!(
-        "{}scp {} {} {}; ec=$?; {}; exit $ec",
-        auth.prefix, auth.scp_args, quoted_from, dest_target, cleanup,
+        "{}scp {}{} {} {}; ec=$?; {}; exit $ec",
+        auth.prefix, recursive_flag, auth.scp_args, quoted_from, dest_target, cleanup,
     );
 
     let total = file_size.max(1);
@@ -327,6 +330,8 @@ where
     let mut at_full_since: Option<Instant> = None;
     let mut progress_tick = interval_at(Instant::now(), PROGRESS_EMIT_INTERVAL);
     progress_tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    // Dest-size progress only works for single files; directories stay exit-status driven.
+    let track_dest_size = !recursive && progress_handle.is_some();
 
     loop {
         tokio::select! {
@@ -357,7 +362,7 @@ where
                     Some(_) => {}
                 }
             }
-            _ = progress_tick.tick(), if progress_handle.is_some() => {
+            _ = progress_tick.tick(), if track_dest_size => {
                 check_cancel(cancel.as_deref())?;
                 if let Some(handle) = progress_handle {
                     if let Some(size) = remote_file_size(handle, to_path).await {
@@ -379,7 +384,8 @@ where
         if exit_status.is_some() {
             break;
         }
-        if at_full_since.is_some_and(|since| since.elapsed() >= Duration::from_secs(2))
+        if track_dest_size
+            && at_full_since.is_some_and(|since| since.elapsed() >= Duration::from_secs(2))
             && last_reported >= total
         {
             break;
@@ -398,6 +404,9 @@ where
     check_cancel(cancel.as_deref())?;
 
     let dest_complete = async {
+        if recursive {
+            return false;
+        }
         if let Some(handle) = progress_handle {
             if let Some(size) = remote_file_size(handle, to_path).await {
                 return size >= total;

@@ -1,4 +1,5 @@
 import { useMemo, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   formatBytes,
   formatUptime,
@@ -25,6 +26,7 @@ export function HostStatsPanel({
   osId,
   osName,
 }: HostStatsPanelProps) {
+  const { t } = useTranslation("tools");
   const {
     width,
     setWidth,
@@ -84,19 +86,19 @@ export function HostStatsPanel({
           className="host-stats-resizer"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整服务器资源面板宽度"
+          aria-label={t("hostStats.resizeAria")}
           onMouseDown={startResize}
         />
         <div className="host-stats-head">
           <div className="host-stats-title-wrap">
-            <h2 className="host-stats-title">服务器资源</h2>
+            <h2 className="host-stats-title">{t("hostStats.title")}</h2>
             <p className="host-stats-session">{sessionTitle}</p>
           </div>
         </div>
 
         <div className="host-stats-body">
           {loading && !snapshot ? (
-            <p className="host-stats-empty">正在采集…</p>
+            <p className="host-stats-empty">{t("hostStats.collecting")}</p>
           ) : null}
           {error ? <p className="host-stats-error">{error}</p> : null}
 
@@ -115,29 +117,29 @@ export function HostStatsPanel({
                 </div>
                 <dl className="host-stats-info-grid">
                   <div>
-                    <dt>内核</dt>
+                    <dt>{t("hostStats.kernel")}</dt>
                     <dd>{snapshot.kernel_version ?? "—"}</dd>
                   </div>
                   <div>
-                    <dt>架构</dt>
+                    <dt>{t("hostStats.arch")}</dt>
                     <dd>{snapshot.arch}</dd>
                   </div>
                   <div>
-                    <dt>时区</dt>
+                    <dt>{t("hostStats.timezone")}</dt>
                     <dd>{snapshot.timezone ?? "—"}</dd>
                   </div>
                   <div>
-                    <dt>运行时间</dt>
+                    <dt>{t("hostStats.uptime")}</dt>
                     <dd>{formatUptime(snapshot.uptime_secs)}</dd>
                   </div>
                   <div>
-                    <dt>负载</dt>
+                    <dt>{t("hostStats.load")}</dt>
                     <dd>
                       {snapshot.load_avg.map((value) => value.toFixed(2)).join(" / ")}
                     </dd>
                   </div>
                   <div>
-                    <dt>进程数</dt>
+                    <dt>{t("hostStats.processCount")}</dt>
                     <dd>{snapshot.process_count}</dd>
                   </div>
                 </dl>
@@ -146,13 +148,13 @@ export function HostStatsPanel({
               <div className="host-stats-metrics-block">
                 <div className="host-stats-metrics-top">
                   <HostStatsMetricCard
-                    label="CPU"
+                    label={t("hostStats.cpu")}
                     value={snapshot.cpu_usage_percent}
-                    detail={`${snapshot.cpu_core_count} 核`}
+                    detail={t("hostStats.cpuCores", { n: snapshot.cpu_core_count })}
                     values={cpuHistory}
                   />
                   <HostStatsMetricCard
-                    label="内存"
+                    label={t("hostStats.memory")}
                     value={memPercent}
                     detail={
                       snapshot.swap_total_bytes > 0
@@ -178,12 +180,14 @@ export function HostStatsPanel({
               <HostStatsUserList users={snapshot.logged_in_users} />
 
               <section className="host-stats-section">
-                <h3 className="host-stats-section-title">磁盘</h3>
+                <h3 className="host-stats-section-title">{t("hostStats.disk")}</h3>
                 <HostStatsDiskList disks={snapshot.disks} />
               </section>
 
               {lastUpdatedLabel ? (
-                <p className="host-stats-updated">更新于 {lastUpdatedLabel}</p>
+                <p className="host-stats-updated">
+                  {t("common:updatedAt", { time: lastUpdatedLabel })}
+                </p>
               ) : null}
             </>
           ) : null}

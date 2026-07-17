@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  registerPreviewEditorFlush,
+  unregisterPreviewEditorFlush,
+} from "../../lib/previewEditorFlush";
 import { findSearchMatches, type SearchOptions } from "../../lib/previewSearch";
 import { PreviewSourceLayer } from "./PreviewSourceLayer";
 import { TextPreview } from "./TextPreview";
+
+const STORE_SYNC_MS = 120;
 
 interface EditableTextPreviewProps {
   text: string;
@@ -10,6 +17,7 @@ interface EditableTextPreviewProps {
   activeMatchIndex: number;
   searchOptions?: SearchOptions;
   editable?: boolean;
+  tabId?: string;
   onChange?: (value: string) => void;
 }
 
@@ -20,13 +28,74 @@ export function EditableTextPreview({
   activeMatchIndex,
   searchOptions,
   editable = false,
+  tabId,
   onChange,
 }: EditableTextPreviewProps) {
+  const { t } = useTranslation("preview");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLPreElement>(null);
+  const draftRef = useRef(text);
+  const syncTimerRef = useRef<number | null>(null);
+  const [draft, setDraft] = useState(text);
+  const displayText = editable ? draft : text;
+
+  const flushDraft = useCallback(() => {
+    if (syncTimerRef.current !== null) {
+      window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+      onChange?.(draftRef.current);
+    }
+    return draftRef.current;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (text === draftRef.current) return;
+    draftRef.current = text;
+    setDraft(text);
+  }, [text]);
+
+  useEffect(() => {
+    if (!editable || !tabId) return;
+    registerPreviewEditorFlush(tabId, flushDraft);
+    return () => unregisterPreviewEditorFlush(tabId);
+  }, [editable, tabId, flushDraft]);
+
+  useEffect(
+    () => () => {
+      if (syncTimerRef.current !== null) {
+        window.clearTimeout(syncTimerRef.current);
+        onChange?.(draftRef.current);
+      }
+    },
+    [onChange],
+  );
+
+  const scheduleStoreSync = useCallback(
+    (value: string) => {
+      draftRef.current = value;
+      if (syncTimerRef.current !== null) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+      syncTimerRef.current = window.setTimeout(() => {
+        syncTimerRef.current = null;
+        onChange?.(draftRef.current);
+      }, STORE_SYNC_MS);
+    },
+    [onChange],
+  );
+
+  const handleChange = useCallback(
+    (value: string) => {
+      draftRef.current = value;
+      setDraft(value);
+      scheduleStoreSync(value);
+    },
+    [scheduleStoreSync],
+  );
+
   const matches = useMemo(
-    () => findSearchMatches(text, query, searchOptions),
-    [text, query, searchOptions],
+    () => findSearchMatches(displayText, query, searchOptions),
+    [displayText, query, searchOptions],
   );
 
   const syncScroll = useCallback(() => {
@@ -47,7 +116,7 @@ export function EditableTextPreview({
 
     const lineHeight =
       Number.parseInt(getComputedStyle(textarea).lineHeight, 10) || 20;
-    const before = text.slice(0, match.start);
+    const before = displayText.slice(0, match.start);
     const line = before.split("\n").length - 1;
     const scrollTop = Math.max(
       0,
@@ -59,11 +128,11 @@ export function EditableTextPreview({
     if (document.activeElement === textarea) {
       textarea.setSelectionRange(match.start, match.end);
     }
-  }, [activeMatchIndex, editable, matches, query, text]);
+  }, [activeMatchIndex, displayText, editable, matches, query]);
 
   useEffect(() => {
     syncScroll();
-  }, [syncScroll, text, query, activeMatchIndex, extension]);
+  }, [syncScroll, displayText, query, activeMatchIndex, extension]);
 
   if (!editable) {
     return (
@@ -85,7 +154,7 @@ export function EditableTextPreview({
         aria-hidden="true"
       >
         <PreviewSourceLayer
-          text={text}
+          text={displayText}
           extension={extension}
           query={query}
           activeMatchIndex={activeMatchIndex}
@@ -95,11 +164,12 @@ export function EditableTextPreview({
       <textarea
         ref={textareaRef}
         className="preview-text-editor preview-text-editor-overlay"
-        value={text}
-        onChange={(event) => onChange?.(event.target.value)}
+        value={displayText}
+        onChange={(event) => handleChange(event.target.value)}
+        onBlur={flushDraft}
         onScroll={syncScroll}
         spellCheck={false}
-        aria-label="编辑文件内容"
+        aria-label={t("editContentAria")}
       />
     </div>
   );

@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 export interface ChmodBits {
   owner: { r: boolean; w: boolean; x: boolean };
   group: { r: boolean; w: boolean; x: boolean };
@@ -6,49 +8,25 @@ export interface ChmodBits {
 
 export interface ChmodPreset {
   id: string;
-  label: string;
   mode: string;
-  hint: string;
 }
 
 export const CHMOD_PRESETS: ChmodPreset[] = [
-  {
-    id: "file",
-    label: "普通文件",
-    mode: "644",
-    hint: "自己可读写，其他人只能查看（网页、文档常用）",
-  },
-  {
-    id: "script",
-    label: "脚本 / 程序",
-    mode: "755",
-    hint: "自己可改，所有人可运行（shell 脚本、可执行文件）",
-  },
-  {
-    id: "private-file",
-    label: "私密文件",
-    mode: "600",
-    hint: "只有自己能读写（密钥、配置文件）",
-  },
-  {
-    id: "private-dir",
-    label: "私密目录",
-    mode: "700",
-    hint: "只有自己能进入和操作（个人目录）",
-  },
-  {
-    id: "shared",
-    label: "团队协作",
-    mode: "664",
-    hint: "自己与同组可改，其他人只能查看",
-  },
-  {
-    id: "public-dir",
-    label: "公共目录",
-    mode: "775",
-    hint: "自己与同组可改，其他人可进入查看",
-  },
+  { id: "file", mode: "644" },
+  { id: "script", mode: "755" },
+  { id: "private-file", mode: "600" },
+  { id: "private-dir", mode: "700" },
+  { id: "shared", mode: "664" },
+  { id: "public-dir", mode: "775" },
 ];
+
+export function chmodPresetLabel(t: TFunction, preset: ChmodPreset): string {
+  return t(`commands:chmod.presets.${preset.id}.label`);
+}
+
+export function chmodPresetHint(t: TFunction, preset: ChmodPreset): string {
+  return t(`commands:chmod.presets.${preset.id}.hint`);
+}
 
 const TRIPLET = /^[0-7]{3}$/;
 
@@ -83,18 +61,27 @@ export function bitsToOctal(bits: ChmodBits): string {
   return `${bitsToDigit(bits.owner)}${bitsToDigit(bits.group)}${bitsToDigit(bits.other)}`;
 }
 
-function describeTriplet(bits: { r: boolean; w: boolean; x: boolean }): string {
+function describeTriplet(
+  t: TFunction,
+  bits: { r: boolean; w: boolean; x: boolean },
+): string {
   const parts: string[] = [];
-  if (bits.r) parts.push("读");
-  if (bits.w) parts.push("写");
-  if (bits.x) parts.push("执行");
-  return parts.length > 0 ? parts.join("、") : "无权限";
+  if (bits.r) parts.push(t("commands:chmod.read"));
+  if (bits.w) parts.push(t("commands:chmod.write"));
+  if (bits.x) parts.push(t("commands:chmod.execute"));
+  return parts.length > 0
+    ? parts.join(t("commands:chmod.listSeparator"))
+    : t("commands:chmod.noPermission");
 }
 
-export function describeChmodMode(mode: string): string {
+export function describeChmodMode(t: TFunction, mode: string): string {
   const bits = octalToBits(mode);
-  if (!bits) return "请从上方选择场景，或勾选细调权限";
-  return `所有者：${describeTriplet(bits.owner)}；用户组：${describeTriplet(bits.group)}；其他人：${describeTriplet(bits.other)}`;
+  if (!bits) return t("commands:chmod.chooseHint");
+  return t("commands:chmod.summary", {
+    owner: describeTriplet(t, bits.owner),
+    group: describeTriplet(t, bits.group),
+    other: describeTriplet(t, bits.other),
+  });
 }
 
 export function findPresetByMode(mode: string): ChmodPreset | undefined {

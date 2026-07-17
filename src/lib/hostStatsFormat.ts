@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 export function formatBytes(bytes: number, decimals = 1) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(decimals)} KB`;
@@ -15,9 +17,13 @@ export function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (days > 0) return `${days} 天 ${hours} 小时`;
-  if (hours > 0) return `${hours} 小时 ${minutes} 分钟`;
-  return `${minutes} 分钟`;
+  if (days > 0) {
+    return i18n.t("tools:hostStats.uptimeDaysHours", { days, hours });
+  }
+  if (hours > 0) {
+    return i18n.t("tools:hostStats.uptimeHoursMinutes", { hours, minutes });
+  }
+  return i18n.t("tools:hostStats.uptimeMinutes", { minutes });
 }
 
 export function percentUsed(used: number, total: number) {

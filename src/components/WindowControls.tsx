@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "../lib/isTauri";
 
@@ -59,6 +60,7 @@ function CloseIcon() {
 }
 
 export function WindowControls({ layout }: WindowControlsProps) {
+  const { t } = useTranslation("common");
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -92,21 +94,21 @@ export function WindowControls({ layout }: WindowControlsProps) {
         <button
           type="button"
           className="wc-macos wc-close"
-          aria-label="关闭"
+          aria-label={t("close")}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void appWindow.close()}
         />
         <button
           type="button"
           className="wc-macos wc-minimize"
-          aria-label="最小化"
+          aria-label={t("minimize")}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void appWindow.minimize()}
         />
         <button
           type="button"
           className="wc-macos wc-maximize"
-          aria-label={maximized ? "还原" : "最大化"}
+          aria-label={maximized ? t("restore") : t("maximize")}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void appWindow.toggleMaximize()}
         />
@@ -119,7 +121,7 @@ export function WindowControls({ layout }: WindowControlsProps) {
       <button
         type="button"
         className="wc-win wc-minimize"
-        aria-label="最小化"
+        aria-label={t("minimize")}
         onClick={() => void appWindow.minimize()}
       >
         <MinimizeIcon />
@@ -127,7 +129,7 @@ export function WindowControls({ layout }: WindowControlsProps) {
       <button
         type="button"
         className="wc-win wc-maximize"
-        aria-label={maximized ? "还原" : "最大化"}
+        aria-label={maximized ? t("restore") : t("maximize")}
         onClick={() => void appWindow.toggleMaximize()}
       >
         <MaximizeIcon restored={maximized} />
@@ -135,7 +137,7 @@ export function WindowControls({ layout }: WindowControlsProps) {
       <button
         type="button"
         className="wc-win wc-close"
-        aria-label="关闭"
+        aria-label={t("close")}
         onClick={() => void appWindow.close()}
       >
         <CloseIcon />

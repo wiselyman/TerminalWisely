@@ -10,6 +10,7 @@ interface HtmlPreviewProps {
   activeMatchIndex: number;
   searchOptions?: SearchOptions;
   editable?: boolean;
+  tabId?: string;
   onChange?: (value: string) => void;
 }
 
@@ -21,6 +22,7 @@ export function HtmlPreview({
   activeMatchIndex,
   searchOptions,
   editable = false,
+  tabId,
   onChange,
 }: HtmlPreviewProps) {
   const srcDoc = useMemo(() => {
@@ -31,6 +33,7 @@ export function HtmlPreview({
   if (mode === "source") {
     return (
       <EditableTextPreview
+        tabId={tabId}
         text={text}
         extension={extension}
         query={query}

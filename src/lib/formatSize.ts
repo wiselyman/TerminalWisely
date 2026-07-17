@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 const KB = 1024;
 const MB = KB * 1024;
 const GB = MB * 1024;
@@ -13,5 +15,8 @@ export function formatSizeHuman(sizeBytes: number): string {
 }
 
 export function formatSizeBytes(sizeBytes: number): string {
-  return `${sizeBytes.toLocaleString("zh-CN")} 字节`;
+  const locale = i18n.language === "zh-CN" ? "zh-CN" : "en-US";
+  return i18n.t("common:bytes", {
+    count: sizeBytes.toLocaleString(locale),
+  });
 }

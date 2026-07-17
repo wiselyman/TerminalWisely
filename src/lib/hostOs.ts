@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 export interface HostOsProfile {
   osId: string;
   osName: string;
@@ -28,7 +30,7 @@ export function getHostOsProfile(): HostOsProfile {
 }
 
 export function localTerminalTitle(profile: HostOsProfile = getHostOsProfile()): string {
-  return `${profile.osName} 本地终端`;
+  return i18n.t("shell:localTerminalTitle", { osName: profile.osName });
 }
 
 export function localShellInfoToProfile(info: LocalShellInfo): HostOsProfile {
@@ -36,7 +38,9 @@ export function localShellInfoToProfile(info: LocalShellInfo): HostOsProfile {
 }
 
 export function localShellBackendLabel(backend: LocalShellBackend): string {
-  return backend === "git_bash" ? "Git Bash" : "Local Shell";
+  return backend === "git_bash"
+    ? i18n.t("shell:backendGitBash")
+    : i18n.t("shell:backendLocalShell");
 }
 
 export function isWindowsHost(): boolean {

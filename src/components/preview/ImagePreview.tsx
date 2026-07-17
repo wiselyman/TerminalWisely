@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
 interface ImagePreviewProps {
@@ -6,6 +7,7 @@ interface ImagePreviewProps {
 }
 
 export function ImagePreview({ path }: ImagePreviewProps) {
+  const { t } = useTranslation("preview");
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +30,7 @@ export function ImagePreview({ path }: ImagePreviewProps) {
   }
 
   if (!src) {
-    return <div className="preview-empty">加载图片中…</div>;
+    return <div className="preview-empty">{t("loadingImage")}</div>;
   }
 
   return (

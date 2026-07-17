@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { formatBytes, formatRate } from "../../lib/hostStatsFormat";
 
 interface HostStatsNetworkCardProps {
@@ -11,24 +12,28 @@ export function HostStatsNetworkCard({
   totalRxBytes,
   totalTxBytes,
 }: HostStatsNetworkCardProps) {
+  const { t } = useTranslation("tools");
   return (
     <div className="host-stats-network-card">
       <div className="host-stats-network-head">
-        <p className="host-stats-network-card-label">网络</p>
+        <p className="host-stats-network-card-label">{t("hostStats.network")}</p>
         <div className="host-stats-network-stats">
           <span className="host-stats-network-rate">
             <span className="host-stats-network-dir">↓</span>
-            {networkRates ? formatRate(networkRates.rxBps) : "采样中…"}
+            {networkRates ? formatRate(networkRates.rxBps) : t("hostStats.sampling")}
           </span>
           <span className="host-stats-network-divider" aria-hidden="true">
             ·
           </span>
           <span className="host-stats-network-rate">
             <span className="host-stats-network-dir">↑</span>
-            {networkRates ? formatRate(networkRates.txBps) : "采样中…"}
+            {networkRates ? formatRate(networkRates.txBps) : t("hostStats.sampling")}
           </span>
           <span className="host-stats-network-total">
-            累计 {formatBytes(totalRxBytes)} / {formatBytes(totalTxBytes)}
+            {t("hostStats.total", {
+              a: formatBytes(totalRxBytes),
+              b: formatBytes(totalTxBytes),
+            })}
           </span>
         </div>
       </div>

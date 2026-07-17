@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { TaskManagerIcon } from "./WorkspaceToolIcons";
 import { WorkspaceToolButton } from "./WorkspaceToolRail";
 
@@ -12,9 +13,10 @@ export function TaskManagerTool({
   disabled,
   onClick,
 }: TaskManagerToolProps) {
+  const { t } = useTranslation("tools");
   return (
     <WorkspaceToolButton
-      label="进程管理"
+      label={t("taskManager.railLabel")}
       active={active}
       disabled={disabled}
       onClick={onClick}

@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 const MB = 1024 * 1024;
 
 export function formatMegabytes(bytes: number): string {
@@ -13,11 +15,11 @@ export function formatSpeedMbps(bytesPerSecond: number): string {
 export function formatTransferMethod(method?: string | null): string | null {
   switch (method) {
     case "scp":
-      return "SCP 源机直传";
+      return i18n.t("tools:transfer.methodScp");
     case "stream":
-      return "流式中转";
+      return i18n.t("tools:transfer.methodStream");
     case "sftp":
-      return "SFTP 中转";
+      return i18n.t("tools:transfer.methodSftp");
     default:
       return null;
   }
@@ -26,11 +28,11 @@ export function formatTransferMethod(method?: string | null): string | null {
 export function formatTransferDirection(direction: string): string {
   switch (direction) {
     case "upload":
-      return "上传";
+      return i18n.t("tools:transfer.directionUpload");
     case "download":
-      return "下载";
+      return i18n.t("tools:transfer.directionDownload");
     case "send":
-      return "跨服发送";
+      return i18n.t("tools:transfer.directionSend");
     default:
       return direction;
   }

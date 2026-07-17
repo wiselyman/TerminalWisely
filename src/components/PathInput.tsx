@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   fetchPathCompletions,
   longestCommonPrefix,
@@ -19,6 +20,7 @@ export function PathInput({
   placeholder,
   disabled = false,
 }: PathInputProps) {
+  const { t } = useTranslation("commands");
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -132,7 +134,7 @@ export function PathInput({
         aria-controls={listId}
         aria-autocomplete="list"
         value={value}
-        placeholder={placeholder ?? "输入路径，按 Tab 补全"}
+        placeholder={placeholder ?? t("run.placeholderPath")}
         disabled={disabled}
         onChange={(event) => {
           onChange(event.target.value);
@@ -144,9 +146,9 @@ export function PathInput({
       {open ? (
         <ul id={listId} className="searchable-select-list" role="listbox">
           {loading ? (
-            <li className="searchable-select-hint">正在读取目录…</li>
+            <li className="searchable-select-hint">{t("select.pathLoadingDir")}</li>
           ) : suggestions.length === 0 ? (
-            <li className="searchable-select-hint">无匹配路径</li>
+            <li className="searchable-select-hint">{t("select.pathNoMatches")}</li>
           ) : (
             suggestions.map((path, index) => (
               <li key={path}>
@@ -168,7 +170,7 @@ export function PathInput({
         </ul>
       ) : null}
       {!open && !loading ? (
-        <span className="path-input-hint">Tab 补全 · 再按 Tab 显示候选</span>
+        <span className="path-input-hint">{t("select.pathTabHint")}</span>
       ) : null}
     </div>
   );

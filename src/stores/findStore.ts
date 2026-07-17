@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import i18n from "../i18n";
+import { formatAppError } from "../lib/formatAppError";
 import type { FindFileEntry, FindFilesResult, FindTypeFilter } from "../types";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useTaskManagerStore } from "./taskManagerStore";
@@ -252,7 +254,7 @@ export const useFindStore = create<FindState>((set, get) => ({
     const state = get();
     const namePattern = state.namePattern.trim();
     if (!namePattern) {
-      set({ error: "请输入文件名模式", activeSessionId: sessionId });
+      set({ error: i18n.t("errors:findPatternEmpty"), activeSessionId: sessionId });
       return;
     }
 
@@ -282,7 +284,7 @@ export const useFindStore = create<FindState>((set, get) => ({
     } catch (err) {
       set({
         loading: false,
-        error: String(err),
+        error: formatAppError(err),
         entries: [],
         truncated: false,
       });

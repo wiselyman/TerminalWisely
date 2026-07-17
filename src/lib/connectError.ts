@@ -1,31 +1,28 @@
+import i18n from "../i18n";
+import { formatAppError } from "./formatAppError";
+
 function extractMessage(err: unknown): string {
   if (typeof err === "string") return err;
   if (err instanceof Error) return err.message;
-  return "连接失败";
+  return "";
 }
+
+/** Backend/ssh2 errors sometimes surface in English before reaching AppError. */
+const ENGLISH_PATTERNS: Array<{ match: RegExp; key: string }> = [
+  { match: /authentication/i, key: "errors:authFailed" },
+  { match: /password is required/i, key: "errors:passwordRequired" },
+  { match: /connection refused|actively refused/i, key: "errors:connectionRefused" },
+  { match: /timed out|timeout/i, key: "errors:connectionTimeout" },
+  { match: /no route to host|network is unreachable/i, key: "errors:networkUnreachable" },
+];
 
 export function formatConnectError(err: unknown): string {
   const message = extractMessage(err);
+  if (!message) return i18n.t("errors:connectFailed");
 
-  if (
-    message.includes("SSH authentication failed") ||
-    message.includes("密码错误或认证失败") ||
-    /authentication/i.test(message)
-  ) {
-    return "密码错误或认证失败，请检查后重试";
-  }
-  if (message.includes("Password is required") || message.includes("请输入密码")) {
-    return "请输入密码";
-  }
-  if (/connection refused|actively refused/i.test(message)) {
-    return "无法连接到服务器，请检查主机和端口";
-  }
-  if (/timed out|timeout/i.test(message)) {
-    return "连接超时，请检查网络或服务器地址";
-  }
-  if (/no route to host|network is unreachable/i.test(message)) {
-    return "网络不可达，请检查网络连接";
+  for (const { match, key } of ENGLISH_PATTERNS) {
+    if (match.test(message)) return i18n.t(key);
   }
 
-  return message;
+  return formatAppError(message);
 }

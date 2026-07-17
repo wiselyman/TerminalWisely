@@ -152,7 +152,7 @@ pub async fn write_remote_bytes(
         .write_all(data)
         .await
         .map_err(AppError::from)?;
-    remote_file.shutdown().await.ok();
+    remote_file.shutdown().await.map_err(AppError::from)?;
     Ok(())
 }
 
@@ -396,7 +396,7 @@ where
 
     let metadata = from_sftp.metadata(from_path.to_string()).await?;
     if metadata.file_type() == FileType::Dir {
-        return Err(AppError::msg("请选择文件，不能发送目录"));
+        return Err(AppError::code("ERR_CANNOT_SEND_DIRECTORY"));
     }
     let total = metadata.size.unwrap_or(0);
 

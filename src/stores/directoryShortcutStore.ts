@@ -12,7 +12,7 @@ function createShortcutId(): string {
 
 function migrateScope(value: unknown): DirectoryShortcutScope {
   if (value === "server") return "server";
-  // legacy: all / ssh → 全部服务器; local → 当前本机
+  // legacy: all/ssh -> "all servers"; local -> "this server"
   if (value === "local") return "server";
   return "all";
 }

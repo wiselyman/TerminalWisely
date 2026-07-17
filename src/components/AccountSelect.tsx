@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { UnixGroupEntry, UnixUserEntry } from "../types";
 
 interface AccountSelectProps {
@@ -92,6 +93,7 @@ export function AccountSelect({
   disabled = false,
   optional = false,
 }: AccountSelectProps) {
+  const { t } = useTranslation("commands");
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -136,10 +138,10 @@ export function AccountSelect({
   const displayPlaceholder =
     placeholder ??
     (kind === "user"
-      ? "搜索或选择用户"
+      ? t("run.placeholderUser")
       : optional
-        ? "保持不变（只改属主）"
-        : "搜索或选择用户组");
+        ? t("run.placeholderKeepGroup")
+        : t("run.placeholderUser"));
 
   useEffect(() => {
     if (!open) return;
@@ -233,7 +235,9 @@ export function AccountSelect({
       {showDropdown ? (
         <ul id={listId} className="searchable-select-list" role="listbox">
           {loading ? (
-            <li className="searchable-select-hint">正在加载用户列表…</li>
+            <li className="searchable-select-hint">
+              {kind === "user" ? t("select.loadingUsers") : t("select.loadingGroups")}
+            </li>
           ) : kind === "group" && optional ? (
             <>
               <li>
@@ -247,14 +251,14 @@ export function AccountSelect({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => pickValue("")}
                 >
-                  保持不变（只改属主）
+                  {t("run.placeholderKeepGroup")}
                 </button>
               </li>
               {filteredGroups.length === 0 ? (
                 <li className="searchable-select-hint">
                   {groups.length === 0
-                    ? "未获取到用户组列表，可直接输入组名"
-                    : "无匹配项，可直接输入组名"}
+                    ? t("select.noGroupsTypeToEnter")
+                    : t("select.noGroupsMatchTypeToEnter")}
                 </li>
               ) : (
                 filteredGroups.map((group, index) => (
@@ -280,8 +284,8 @@ export function AccountSelect({
             filteredUsers.length === 0 ? (
               <li className="searchable-select-hint">
                 {users.length === 0
-                  ? "未获取到用户列表，可直接输入用户名"
-                  : "无匹配项，可直接输入用户名"}
+                  ? t("select.noUsersTypeToEnter")
+                  : t("select.noUsersMatchTypeToEnter")}
               </li>
             ) : (
               filteredUsers.map((user, index) => (
@@ -310,8 +314,8 @@ export function AccountSelect({
           ) : filteredGroups.length === 0 ? (
             <li className="searchable-select-hint">
               {groups.length === 0
-                ? "未获取到用户组列表，可直接输入组名"
-                : "无匹配项，可直接输入组名"}
+                ? t("select.noGroupsTypeToEnter")
+                : t("select.noGroupsMatchTypeToEnter")}
             </li>
           ) : (
             filteredGroups.map((group, index) => (

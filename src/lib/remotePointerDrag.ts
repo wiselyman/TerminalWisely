@@ -1,3 +1,4 @@
+import i18n from "../i18n";
 import { formatRemoteDragLabel } from "./dragVisual";
 
 const DRAG_THRESHOLD_PX = 4;
@@ -93,7 +94,7 @@ function createDragUi(remotePath: string, startX: number, startY: number) {
   title.textContent = formatRemoteDragLabel(remotePath);
 
   const subtitle = document.createElement("span");
-  subtitle.textContent = `${fileName} · 拖到上方 SSH 标签`;
+  subtitle.textContent = i18n.t("terminal:dragToTabHint", { fileName });
 
   textWrap.appendChild(title);
   textWrap.appendChild(subtitle);

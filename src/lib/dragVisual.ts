@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 export function attachDragGhost(
   event: DragEvent,
   label: string,
@@ -21,5 +23,5 @@ export function dropEffectForKind(kind: "remote" | "local"): DataTransfer["dropE
 
 export function formatRemoteDragLabel(path: string): string {
   const name = path.split("/").pop() || path;
-  return `发送 ${name}`;
+  return i18n.t("terminal:dragSendLabel", { name });
 }

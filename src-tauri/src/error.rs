@@ -36,6 +36,11 @@ impl AppError {
         Self::Message(message.into())
     }
 
+    /// Stable error code for frontend i18n (`ERR_*`). Prefer over Chinese prose.
+    pub fn code(code: &'static str) -> Self {
+        Self::Message(code.to_string())
+    }
+
     pub fn is_cancelled(&self) -> bool {
         crate::transfer::is_cancelled(self)
     }

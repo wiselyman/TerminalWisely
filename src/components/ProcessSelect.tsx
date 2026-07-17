@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ProcessEntry } from "../types";
 
 interface ProcessSelectProps {
@@ -36,6 +37,7 @@ export function ProcessSelect({
   disabled = false,
   pick = "pid",
 }: ProcessSelectProps) {
+  const { t } = useTranslation("commands");
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -118,7 +120,7 @@ export function ProcessSelect({
         value={inputValue}
         placeholder={
           placeholder ??
-          (pick === "name" ? "搜索或输入进程名" : "搜索进程名或输入 PID")
+          (pick === "name" ? t("run.placeholderProcessName") : t("run.placeholderProcessPid"))
         }
         disabled={disabled}
         onFocus={() => {
@@ -146,12 +148,12 @@ export function ProcessSelect({
       {showDropdown ? (
         <ul id={listId} className="searchable-select-list" role="listbox">
           {loading ? (
-            <li className="searchable-select-hint">正在加载进程列表…</li>
+            <li className="searchable-select-hint">{t("select.loadingProcesses")}</li>
           ) : filtered.length === 0 ? (
             <li className="searchable-select-hint">
               {processes.length === 0
-                ? "未获取到进程列表，可直接输入 PID"
-                : "无匹配项，可直接输入 PID"}
+                ? t("select.noProcessesTypeToEnter")
+                : t("select.noProcessesMatchTypeToEnter")}
             </li>
           ) : (
             filtered.map((process, index) => (

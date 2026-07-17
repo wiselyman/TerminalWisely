@@ -1,14 +1,16 @@
+import i18n from "../i18n";
+import { formatAppError } from "./formatAppError";
+
 function extractMessage(err: unknown): string {
   if (typeof err === "string") return err;
   if (err instanceof Error) return err.message;
-  return "传输失败";
+  return "";
 }
 
 export function formatTransferError(err: unknown): string {
-  let message = extractMessage(err).trim();
-  message = message.replace(
-    /Permission denied:\s*Permission denied/gi,
-    "Permission denied",
-  );
-  return message;
+  const message = extractMessage(err);
+  if (!message) return i18n.t("errors:transferFailed");
+
+  const formatted = formatAppError(message);
+  return formatted.replace(/Permission denied:\s*Permission denied/gi, "Permission denied");
 }

@@ -5,13 +5,15 @@ import type { PreviewOpenResult } from "../types";
 import { useHostStatsStore } from "./hostStatsStore";
 import {
   createPreviewTab,
-  isPreviewTabDirty,
   previewTabId,
   previewTabsForSession,
   type PreviewTab,
 } from "./previewTypes";
 import { useTaskManagerStore } from "./taskManagerStore";
 import { useToastStore } from "./toastStore";
+import { flushPreviewEditor } from "../lib/previewEditorFlush";
+import { formatAppError } from "../lib/formatAppError";
+import i18n from "../i18n";
 
 const PREVIEW_WIDTH_KEY = "terminal-wisely.preview-width";
 const PREVIEW_HEIGHT_KEY = "terminal-wisely.preview-height";
@@ -291,7 +293,7 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
   submitSudoPassword: async () => {
     const { sudoPrompt, sudoPassword } = get();
     if (!sudoPrompt || !sudoPassword.trim()) {
-      useToastStore.getState().pushToast("请输入 sudo 密码", false);
+      useToastStore.getState().pushToast(i18n.t("preview:toastNeedSudoPassword"), false);
       return;
     }
 
@@ -381,10 +383,11 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
         });
         return;
       }
+      const formatted = formatAppError(err);
       set((state) => ({
-        tabs: updateTab(state.tabs, id, { loading: false, error: message }),
+        tabs: updateTab(state.tabs, id, { loading: false, error: formatted }),
       }));
-      useToastStore.getState().pushToast(message, false);
+      useToastStore.getState().pushToast(formatted, false);
     }
   },
 
@@ -393,7 +396,9 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
     const tab = getActiveTab(state);
     if (!tab?.data?.handle_id || !tab.data.editable || tab.saving) return;
 
-    const content = tab.editedContent ?? tab.data.text_content ?? "";
+    const flushed = flushPreviewEditor(tab.id);
+    const content =
+      flushed ?? tab.editedContent ?? tab.data.text_content ?? "";
     set((current) => ({
       tabs: updateTab(current.tabs, tab.id, { saving: true }),
       sudoPrompt: null,
@@ -417,7 +422,7 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
         sudoPrompt: null,
         sudoPassword: "",
       }));
-      useToastStore.getState().pushToast("已保存", true);
+      useToastStore.getState().pushToast(i18n.t("preview:toastSaved"), true);
     } catch (err) {
       const message = String(err);
       if (isSudoRequiredError(message)) {
@@ -436,7 +441,7 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
       set((current) => ({
         tabs: updateTab(current.tabs, tab.id, { saving: false }),
       }));
-      useToastStore.getState().pushToast(message, false);
+      useToastStore.getState().pushToast(formatAppError(err), false);
     }
   },
 
@@ -445,9 +450,15 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
     const tab = state.tabs.find((item) => item.id === tabId);
     if (!tab) return;
 
-    if (isPreviewTabDirty(tab)) {
+    const flushed = flushPreviewEditor(tabId);
+    const effectiveContent =
+      flushed ?? tab.editedContent ?? tab.data?.text_content ?? "";
+    const saved = tab.data?.text_content ?? "";
+    if (effectiveContent !== saved) {
       const label = tab.data?.filename ?? tab.path;
-      const confirmed = window.confirm(`关闭「${label}」？未保存的更改将丢失。`);
+      const confirmed = window.confirm(
+        i18n.t("preview:confirmCloseDirty", { label }),
+      );
       if (!confirmed) return;
     }
 

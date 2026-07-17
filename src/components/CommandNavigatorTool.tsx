@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { CommandNavigatorIcon } from "./WorkspaceToolIcons";
 import { WorkspaceToolButton } from "./WorkspaceToolRail";
 
@@ -12,9 +13,10 @@ export function CommandNavigatorTool({
   disabled,
   onClick,
 }: CommandNavigatorToolProps) {
+  const { t } = useTranslation("tools");
   return (
     <WorkspaceToolButton
-      label="命令行向导"
+      label={t("commandNav.railLabel")}
       active={active}
       disabled={disabled}
       onClick={onClick}

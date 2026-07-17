@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { isSyntheticTerminalMouseEvent } from "../lib/terminalSelectionDrag";
 
 interface TabContextMenuProps {
@@ -31,6 +32,7 @@ export function TabContextMenu({
   onCloseLeft,
   onCloseRight,
 }: TabContextMenuProps) {
+  const { t } = useTranslation("shell");
   const menuRef = useRef<HTMLDivElement>(null);
   const openedAtRef = useRef(0);
 
@@ -81,7 +83,7 @@ export function TabContextMenu({
       ref={menuRef}
       className="tab-shortcut-menu tab-context-menu"
       role="menu"
-      aria-label="页签操作"
+      aria-label={t("tabContextMenuAria")}
       style={{
         top: y + 6,
         left: clampMenuLeft(x),
@@ -98,7 +100,7 @@ export function TabContextMenu({
           onClose();
         }}
       >
-        关闭
+        {t("closeTab")}
       </button>
       <button
         type="button"
@@ -110,7 +112,7 @@ export function TabContextMenu({
           onClose();
         }}
       >
-        关闭其他
+        {t("closeOthers")}
       </button>
       <button
         type="button"
@@ -122,7 +124,7 @@ export function TabContextMenu({
           onClose();
         }}
       >
-        关闭左侧
+        {t("closeLeft")}
       </button>
       <button
         type="button"
@@ -134,7 +136,7 @@ export function TabContextMenu({
           onClose();
         }}
       >
-        关闭右侧
+        {t("closeRight")}
       </button>
     </div>,
     document.body,

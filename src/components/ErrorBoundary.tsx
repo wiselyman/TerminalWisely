@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import i18n from "../i18n";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -26,7 +27,7 @@ export class ErrorBoundary extends Component<
     if (this.state.error) {
       return (
         <div className="app-fatal-error">
-          <h1>界面渲染出错</h1>
+          <h1>{i18n.t("errors:renderCrashTitle")}</h1>
           <p>{this.state.error.message}</p>
           <button
             type="button"
@@ -35,7 +36,7 @@ export class ErrorBoundary extends Component<
               window.location.reload();
             }}
           >
-            重新加载
+            {i18n.t("errors:reload")}
           </button>
         </div>
       );

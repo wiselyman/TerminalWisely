@@ -1,6 +1,13 @@
+import i18n from "../i18n";
 import { commandMatchesDistro } from "./distroFamily";
 import { isValidChmodMode } from "./chmodMode";
 import { isValidPort } from "./commonPorts";
+import {
+  localizeCategory,
+  localizeCommandDescription,
+  localizeCommandTitle,
+  localizeParamLabel,
+} from "./localizeCommand";
 import type { CommandParam, CommandTemplate, SessionKind } from "../types";
 
 const PARAM_PATTERN = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
@@ -13,30 +20,31 @@ export function parseParamNames(template: string): string[] {
   return [...names];
 }
 
+// Fallback text if `commands:param.<name>` is missing; localizeParamLabel() resolves the real label.
 const DEFAULT_PARAM_LABELS: Record<string, string> = {
-  service: "服务名",
-  package: "软件包名",
-  pattern: "搜索关键词",
-  path: "路径",
-  port: "端口",
-  pid: "进程 ID",
-  signal: "信号",
-  lines: "行数",
-  since: "开始时间",
-  until: "结束时间",
-  size: "大小阈值",
-  depth: "目录深度",
-  count: "条数",
-  host: "主机",
+  service: "Service",
+  package: "Package",
+  pattern: "Pattern",
+  path: "Path",
+  port: "Port",
+  pid: "PID",
+  signal: "Signal",
+  lines: "Lines",
+  since: "Since",
+  until: "Until",
+  size: "Size",
+  depth: "Depth",
+  count: "Count",
+  host: "Host",
   url: "URL",
-  key: "参数名",
-  name: "文件名",
-  iface: "网卡",
-  filter: "过滤表达式",
-  mode: "权限模式",
-  owner: "用户",
-  group: "用户组",
-  ext: "扩展名",
+  key: "Key",
+  name: "Name",
+  iface: "Interface",
+  filter: "Filter",
+  mode: "Mode",
+  owner: "Owner",
+  group: "Group",
+  ext: "Extension",
 };
 
 export function buildParamsFromTemplate(
@@ -100,13 +108,15 @@ export function validateParamValues(
     if (param.required === false) continue;
     const value = values[param.name]?.trim() ?? "";
     if (!value) {
-      return `请填写${param.label}`;
+      return i18n.t("commands:validation.fieldRequired", {
+        label: localizeParamLabel(param.name, param.label),
+      });
     }
     if (param.inputKind === "chmod-mode" && !isValidChmodMode(value)) {
-      return "请选择权限场景或填写有效的三位数字权限";
+      return i18n.t("commands:validation.chmodInvalid");
     }
     if (param.inputKind === "port" && value && !isValidPort(value)) {
-      return "请填写 1–65535 之间的有效端口号";
+      return i18n.t("commands:validation.portInvalid");
     }
   }
   return null;
@@ -177,8 +187,22 @@ export function filterCommands(
       return false;
     }
     if (!q) return true;
-    const haystack =
-      `${cmd.title} ${cmd.description ?? ""} ${cmd.template}`.toLowerCase();
+    // Search both source (often zh) and localized UI strings so EN locale works.
+    const localizedTitle = localizeCommandTitle(cmd);
+    const localizedDescription = localizeCommandDescription(cmd) ?? "";
+    const localizedCategory = localizeCategory(cmd.subcategory);
+    const haystack = [
+      localizedTitle,
+      localizedDescription,
+      localizedCategory,
+      cmd.title,
+      cmd.description ?? "",
+      cmd.template,
+      cmd.subcategory,
+      cmd.id,
+    ]
+      .join(" ")
+      .toLowerCase();
     return haystack.includes(q);
   });
 }

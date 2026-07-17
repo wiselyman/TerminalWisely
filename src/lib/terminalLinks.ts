@@ -100,9 +100,14 @@ function tokenizeLine(text: string): LineToken[] {
       while (index < text.length && text[index] !== quote) {
         index += 1;
       }
-      const value = text.slice(valueStart, index);
+      let value = text.slice(valueStart, index);
       const valueEnd = index;
       if (index < text.length) {
+        index += 1;
+      }
+      // GNU `ls -F` puts classify chars outside shell quotes: 'My Folder'/
+      if (value && index < text.length && "/@*=|>".includes(text[index])) {
+        value += text[index];
         index += 1;
       }
       if (value) {
@@ -259,7 +264,11 @@ function isListEntryToken(token: string): boolean {
   if (normalized.includes("/") || normalized.includes(":")) return false;
   if (normalized.includes("->")) return false;
   if (hasFilenameExtension(normalized)) return true;
-  if (/^[\w.\u0080-\uFFFF-]+$/u.test(normalized) && normalized.length <= 255) {
+  // Spaces / punctuation appear when GNU ls shell-quotes names like 'My Folder'.
+  if (
+    /^[\w.\u0080-\uFFFF][\w.\s\u0080-\uFFFF()[\]{},+!~'-]*$/u.test(normalized) &&
+    normalized.length <= 255
+  ) {
     return true;
   }
   return false;

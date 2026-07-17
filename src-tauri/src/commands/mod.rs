@@ -393,6 +393,36 @@ pub async fn move_path(
 }
 
 #[tauri::command]
+pub async fn compress_path(
+    request: FsPathRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions
+        .compress_path(
+            &request.session_id,
+            &request.path,
+            request.sudo_password.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn extract_archive(
+    request: FsPathRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions
+        .extract_archive(
+            &request.session_id,
+            &request.path,
+            request.sudo_password.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn insert_local_paths_command(
     request: InsertLocalPathsRequest,
     sessions: State<'_, SessionManager>,

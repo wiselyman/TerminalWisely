@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import i18n from "../i18n";
+import { formatAppError } from "../lib/formatAppError";
 import type { ProcessEntry, ProcessListResult, SessionKind } from "../types";
 import type { ProcessSortKey, SortDirection } from "../components/TaskManagerTable";
 import { closeCommandNavigator } from "./commandNavigatorStore";
@@ -126,13 +128,13 @@ async function listProcesses(sessionId: string, mode: ProcessListMode) {
 function friendlyProcessError(err: unknown): string {
   const message = String(err);
   if (
-    /channel send error|SSH 连接已断开|connection reset|broken pipe|Session not found/i.test(
+    /channel send error|SSH 连接已断开|ERR_SSH_DISCONNECTED|connection reset|broken pipe|Session not found/i.test(
       message,
     )
   ) {
-    return "连接已断开，无法刷新进程列表";
+    return i18n.t("tools:taskManager.disconnectedError");
   }
-  return message;
+  return formatAppError(err);
 }
 
 interface TaskManagerState {
@@ -229,7 +231,7 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
           loading: false,
           syncing: false,
           portsLoading: false,
-          error: "连接已断开，无法刷新进程列表",
+          error: i18n.t("tools:taskManager.disconnectedError"),
         });
       }
       return;
@@ -396,11 +398,13 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
       await invoke("kill_process", {
         request: { session_id: sessionId, pid, force },
       });
-      useToastStore.getState().pushToast(`已结束进程 ${name} (${pid})`, true);
+      useToastStore
+        .getState()
+        .pushToast(i18n.t("tools:taskManager.killedToast", { name, pid }), true);
     } catch (err) {
       unmarkKilled(sessionId, pid);
       void get().fetchProcesses(sessionId, { refresh: "full" });
-      useToastStore.getState().pushToast(String(err), false);
+      useToastStore.getState().pushToast(formatAppError(err), false);
     }
   },
 }));

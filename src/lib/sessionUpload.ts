@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import i18n from "../i18n";
 import { invokeWithSudoRetry } from "./invokeWithSudoRetry";
 import { createTransferId } from "./transferId";
 import { useSessionStore } from "../stores/sessionStore";
@@ -10,7 +11,7 @@ function uploadLabel(localPaths: string[]): string {
     const parts = path.split(/[/\\]/);
     return parts[parts.length - 1] || path;
   }
-  return `${localPaths.length} 个文件`;
+  return i18n.t("tools:transfer.filesCount", { count: localPaths.length });
 }
 
 export async function uploadLocalPathsToSession(
@@ -40,7 +41,7 @@ export async function uploadLocalPathsToSession(
             sudo_password: sudoPassword ?? null,
           },
         }),
-      { action: "上传" },
+      { action: i18n.t("tools:transfer.directionUpload") },
     );
   } catch (err) {
     useSessionStore.getState().removeTransfer(transferId);

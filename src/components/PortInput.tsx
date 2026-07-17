@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   describePort,
   groupPortPresets,
@@ -11,11 +12,12 @@ interface PortInputProps {
 }
 
 export function PortInput({ value, onChange, optional = false }: PortInputProps) {
+  const { t, i18n } = useTranslation("commands");
   const [custom, setCustom] = useState(false);
   const groups = useMemo(() => groupPortPresets(), []);
   const description = useMemo(
-    () => describePort(value, optional),
-    [optional, value],
+    () => describePort(t, value, optional),
+    [optional, t, value, i18n.language],
   );
 
   const selectPort = (port: string) => {
@@ -25,10 +27,10 @@ export function PortInput({ value, onChange, optional = false }: PortInputProps)
 
   return (
     <div className="port-input">
-      <span className="search-keyword-section-label">常见端口</span>
-      {groups.map(({ group, items }) => (
-        <div key={group} className="search-keyword-group">
-          <span className="search-keyword-group-label">{group}</span>
+      <span className="search-keyword-section-label">{t("ports.sectionCommon")}</span>
+      {groups.map(({ groupKey, items }) => (
+        <div key={groupKey} className="search-keyword-group">
+          <span className="search-keyword-group-label">{t(`ports.group.${groupKey}`)}</span>
           <div className="search-keyword-preset-grid">
             {items.map((item) => (
               <button
@@ -42,7 +44,9 @@ export function PortInput({ value, onChange, optional = false }: PortInputProps)
                 <span className="search-keyword-preset-label">
                   {item.label} ({item.port})
                 </span>
-                <span className="search-keyword-preset-hint">{item.hint}</span>
+                <span className="search-keyword-preset-hint">
+                  {t(`ports.hint.${item.hintKey}`)}
+                </span>
               </button>
             ))}
           </div>
@@ -51,13 +55,13 @@ export function PortInput({ value, onChange, optional = false }: PortInputProps)
       <div className="search-keyword-summary">
         <p className="search-keyword-summary-text">{description}</p>
         <label className="search-keyword-custom">
-          <span>{optional ? "或输入端口号（可留空）" : "或输入端口号"}</span>
+          <span>{optional ? t("ports.orEnterOptional") : t("ports.orEnter")}</span>
           <input
             type="text"
             inputMode="numeric"
             maxLength={5}
             value={value}
-            placeholder={optional ? "留空=全部" : "8080"}
+            placeholder={optional ? t("ports.placeholderOptional") : "8080"}
             onChange={(event) => {
               setCustom(true);
               onChange(event.target.value.replace(/\D/g, "").slice(0, 5));

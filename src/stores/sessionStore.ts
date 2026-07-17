@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import i18n from "../i18n";
+import { formatAppError } from "../lib/formatAppError";
 import { formatConnectError } from "../lib/connectError";
 import {
   getHostOsProfile,
@@ -8,7 +10,7 @@ import {
   localTerminalTitle,
   type LocalShellInfo,
 } from "../lib/hostOs";
-import { GIT_BASH_INSTALL_HINT } from "../lib/localShellPreference";
+import { gitBashInstallHint } from "../lib/localShellPreference";
 import { uniqueTabTitle } from "../lib/tabTitle";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
@@ -429,7 +431,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     if (isWindowsHost() && !shellInfo?.git_bash_available) {
-      useToastStore.getState().pushToast(GIT_BASH_INSTALL_HINT, false);
+      useToastStore.getState().pushToast(gitBashInstallHint(), false);
       return;
     }
 
@@ -559,12 +561,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (!cancelled) {
         useToastStore
           .getState()
-          .pushToast("当前没有可取消的传输任务", false);
+          .pushToast(i18n.t("errors:noTransferToCancel"), false);
         return;
       }
       get().removeTransfer(transferId);
     } catch (err) {
-      useToastStore.getState().pushToast(String(err), false);
+      useToastStore.getState().pushToast(formatAppError(err), false);
     }
   },
 
@@ -623,7 +625,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     remoteDir,
   ) => {
     if (fromSessionId === toSessionId) {
-      useToastStore.getState().pushToast("不能发送到同一个 SSH 会话", false);
+      useToastStore
+        .getState()
+        .pushToast(i18n.t("shell:toastCannotSendSameSession"), false);
       return;
     }
 
@@ -631,7 +635,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     useToastStore
       .getState()
       .pushToast(
-        targetTab ? `正在发送到 ${targetTab.title}…` : "正在发送…",
+        targetTab
+          ? i18n.t("shell:toastSendingTo", { title: targetTab.title })
+          : i18n.t("shell:toastSending"),
         true,
       );
 

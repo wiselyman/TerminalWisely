@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { FindInFilesIcon } from "./WorkspaceToolIcons";
 import { WorkspaceToolButton } from "./WorkspaceToolRail";
 
@@ -8,9 +9,10 @@ interface FindToolProps {
 }
 
 export function FindTool({ active, disabled, onClick }: FindToolProps) {
+  const { t } = useTranslation("tools");
   return (
     <WorkspaceToolButton
-      label="在文件中查找"
+      label={t("find.railLabel")}
       active={active}
       disabled={disabled}
       onClick={onClick}

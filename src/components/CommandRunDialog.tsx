@@ -1,9 +1,15 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   initialParamValues,
   resolveCommandText,
   validateParamValues,
 } from "../lib/commandTemplate";
+import {
+  localizeCommandDescription,
+  localizeCommandTitle,
+  localizeParamLabel,
+} from "../lib/localizeCommand";
 import type { CommandTemplate } from "../types";
 import { useProcessList } from "../hooks/useProcessList";
 import { usePasswdAccounts } from "../hooks/usePasswdAccounts";
@@ -25,6 +31,7 @@ interface CommandRunDialogProps {
 }
 
 export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) {
+  const { t } = useTranslation("commands");
   const closeRunDialog = useCommandNavigatorStore((s) => s.closeRunDialog);
   const insertCommand = useCommandNavigatorStore((s) => s.insertCommand);
   const pushToast = useToastStore((s) => s.pushToast);
@@ -86,23 +93,23 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
     }
   };
 
+  const description = localizeCommandDescription(command);
+
   return (
-    <Modal title={command.title} onClose={closeRunDialog}>
-      {command.description ? (
-        <p className="cmd-run-desc">{command.description}</p>
-      ) : null}
+    <Modal title={localizeCommandTitle(command)} onClose={closeRunDialog}>
+      {description ? <p className="cmd-run-desc">{description}</p> : null}
 
       {command.params.length > 0 ? (
         <div className="cmd-run-fields">
           {command.params.map((param) => (
             <label key={param.name} className="cmd-run-field">
-              <span>{param.label}</span>
+              <span>{localizeParamLabel(param.name, param.label)}</span>
               {param.inputKind === "systemd-unit" ? (
                 <SearchableSelect
                   value={values[param.name] ?? ""}
                   options={units}
                   loading={unitsLoading}
-                  placeholder={param.placeholder ?? "搜索或输入服务名"}
+                  placeholder={param.placeholder ?? t("run.placeholderService")}
                   onChange={(next) =>
                     setValues((current) => ({
                       ...current,
@@ -114,7 +121,7 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
                 <PathInput
                   sessionId={sessionId}
                   value={values[param.name] ?? ""}
-                  placeholder={param.placeholder ?? "输入路径，按 Tab 补全"}
+                  placeholder={param.placeholder ?? t("run.placeholderPath")}
                   onChange={(next) =>
                     setValues((current) => ({
                       ...current,
@@ -127,7 +134,7 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
                   value={values[param.name] ?? ""}
                   processes={processes}
                   loading={processesLoading}
-                  placeholder={param.placeholder ?? "搜索进程名或输入 PID"}
+                  placeholder={param.placeholder ?? t("run.placeholderProcessPid")}
                   onChange={(next) =>
                     setValues((current) => ({
                       ...current,
@@ -141,7 +148,7 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
                   value={values[param.name] ?? ""}
                   processes={processes}
                   loading={processesLoading}
-                  placeholder={param.placeholder ?? "搜索或输入进程名"}
+                  placeholder={param.placeholder ?? t("run.placeholderProcessName")}
                   onChange={(next) =>
                     setValues((current) => ({
                       ...current,
@@ -166,7 +173,7 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
                   users={accounts.users}
                   groups={accounts.groups}
                   loading={accountsLoading}
-                  placeholder="搜索或选择用户"
+                  placeholder={t("run.placeholderUser")}
                   onChange={(next) =>
                     setValues((current) => ({
                       ...current,
@@ -182,7 +189,7 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
                   groups={accounts.groups}
                   loading={accountsLoading}
                   optional={param.required === false}
-                  placeholder="保持不变（只改属主）"
+                  placeholder={t("run.placeholderKeepGroup")}
                   onChange={(next) =>
                     setValues((current) => ({
                       ...current,
@@ -231,13 +238,13 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
       ) : null}
 
       <div className="cmd-run-preview">
-        <span className="cmd-run-preview-label">将插入</span>
+        <span className="cmd-run-preview-label">{t("run.previewLabel")}</span>
         <code>{preview}</code>
       </div>
 
       <div className="cmd-run-actions">
         <button type="button" className="preview-action-btn" onClick={closeRunDialog}>
-          取消
+          {t("common:cancel")}
         </button>
         <button
           type="button"
@@ -245,7 +252,7 @@ export function CommandRunDialog({ sessionId, command }: CommandRunDialogProps) 
           disabled={submitting}
           onClick={() => void handleSubmit()}
         >
-          插入终端
+          {t("run.insertToTerminal")}
         </button>
       </div>
     </Modal>

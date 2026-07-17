@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { isSyntheticTerminalMouseEvent } from "../lib/terminalSelectionDrag";
+import { isExtractableArchivePath } from "../lib/archivePath";
 
 interface TerminalLinkContextMenuProps {
   x: number;
   y: number;
   pathKind: "file" | "directory";
+  path: string;
   onClose: () => void;
   onCopyName: () => void;
   onCopyPath: () => void;
@@ -16,6 +19,8 @@ interface TerminalLinkContextMenuProps {
   onRename: () => void;
   onDelete: () => void;
   onMove: () => void;
+  onCompress: () => void;
+  onExtract?: () => void;
 }
 
 const MENU_WIDTH = 220;
@@ -38,6 +43,7 @@ export function TerminalLinkContextMenu({
   x,
   y,
   pathKind,
+  path,
   onClose,
   onCopyName,
   onCopyPath,
@@ -48,11 +54,241 @@ export function TerminalLinkContextMenu({
   onRename,
   onDelete,
   onMove,
+  onCompress,
+  onExtract,
 }: TerminalLinkContextMenuProps) {
+  const { t } = useTranslation("terminal");
   const menuRef = useRef<HTMLDivElement>(null);
   const openedAtRef = useRef(0);
   const [position, setPosition] = useState(() =>
-    computeMenuPosition(x, y, 280),
+    computeMenuPosition(x, y, 320),
+  );
+  const showExtract =
+    pathKind === "file" &&
+    !!onExtract &&
+    isExtractableArchivePath(path);
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const next = computeMenuPosition(x, y, el.offsetHeight);
+    setPosition((prev) =>
+      prev.top === next.top && prev.left === next.left ? prev : next,
+    );
+  }, [x, y]);
+
+  useEffect(() => {
+    openedAtRef.current = performance.now();
+
+    const isNearOpenPoint = (event: MouseEvent) =>
+      Math.hypot(event.clientX - x, event.clientY - y) <= 8;
+
+    const onDismiss = (event: MouseEvent) => {
+      if (isSyntheticTerminalMouseEvent(event)) return;
+      if (event.button !== 0) return;
+      const elapsed = performance.now() - openedAtRef.current;
+      if (elapsed < 900 && isNearOpenPoint(event)) return;
+      if (menuRef.current?.contains(event.target as Node)) return;
+      onClose();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    let disposed = false;
+    const timer = window.setTimeout(() => {
+      if (disposed) return;
+      document.addEventListener("mousedown", onDismiss, true);
+      document.addEventListener("click", onDismiss, true);
+      document.addEventListener("keydown", onKeyDown);
+    }, 0);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("mousedown", onDismiss, true);
+      document.removeEventListener("click", onDismiss, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose, x, y]);
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="terminal-fs-context-menu tab-context-menu"
+      role="menu"
+      aria-label={t("fsMenuAria")}
+      style={{
+        top: position.top,
+        left: position.left,
+        width: MENU_WIDTH,
+      }}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onCopyName();
+          onClose();
+        }}
+      >
+        {t("copyName")}
+      </button>
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onCopyPath();
+          onClose();
+        }}
+      >
+        {t("copyPath")}
+      </button>
+      <div className="tab-context-menu-separator" role="separator" />
+      {onDownload ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onDownload();
+            onClose();
+          }}
+        >
+          {pathKind === "directory" ? t("downloadFolder") : t("downloadFile")}
+        </button>
+      ) : null}
+      {onSendToRemote ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onSendToRemote();
+            onClose();
+          }}
+        >
+          {t("sendToRemote")}
+        </button>
+      ) : null}
+      {onDownload || onSendToRemote ? (
+        <div className="tab-context-menu-separator" role="separator" />
+      ) : null}
+      {pathKind === "file" ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onPreview();
+            onClose();
+          }}
+        >
+          {t("editAndPreview")}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onCompress();
+          onClose();
+        }}
+      >
+        {t("compress")}
+      </button>
+      {showExtract ? (
+        <button
+          type="button"
+          className="tab-context-menu-item"
+          role="menuitem"
+          onClick={() => {
+            onExtract();
+            onClose();
+          }}
+        >
+          {t("extract")}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onRename();
+          onClose();
+        }}
+      >
+        {t("rename")}
+      </button>
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onDelete();
+          onClose();
+        }}
+      >
+        {t("delete")}
+      </button>
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onMove();
+          onClose();
+        }}
+      >
+        {t("moveToDir")}
+      </button>
+      <div className="tab-context-menu-separator" role="separator" />
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        onClick={() => {
+          onViewSize();
+          onClose();
+        }}
+      >
+        {t("viewSize")}
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
+interface TerminalBlankContextMenuProps {
+  x: number;
+  y: number;
+  showUpload: boolean;
+  onClose: () => void;
+  onUpload?: () => void;
+  onPaste: () => void;
+}
+
+export function TerminalBlankContextMenu({
+  x,
+  y,
+  showUpload,
+  onClose,
+  onUpload,
+  onPaste,
+}: TerminalBlankContextMenuProps) {
+  const { t } = useTranslation("terminal");
+  const menuRef = useRef<HTMLDivElement>(null);
+  const openedAtRef = useRef(0);
+  const [position, setPosition] = useState(() =>
+    computeMenuPosition(x, y, 120),
   );
 
   useLayoutEffect(() => {
@@ -107,7 +343,7 @@ export function TerminalLinkContextMenu({
       ref={menuRef}
       className="terminal-fs-context-menu tab-context-menu"
       role="menu"
-      aria-label="文件操作"
+      aria-label={t("blankMenuAria")}
       style={{
         top: position.top,
         left: position.left,
@@ -115,69 +351,17 @@ export function TerminalLinkContextMenu({
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <button
-        type="button"
-        className="tab-context-menu-item"
-        role="menuitem"
-        onClick={() => {
-          onCopyName();
-          onClose();
-        }}
-      >
-        复制文件名称
-      </button>
-      <button
-        type="button"
-        className="tab-context-menu-item"
-        role="menuitem"
-        onClick={() => {
-          onCopyPath();
-          onClose();
-        }}
-      >
-        复制文件路径
-      </button>
-      <div className="tab-context-menu-separator" role="separator" />
-      {onDownload ? (
+      {showUpload && onUpload ? (
         <button
           type="button"
           className="tab-context-menu-item"
           role="menuitem"
           onClick={() => {
-            onDownload();
+            onUpload();
             onClose();
           }}
         >
-          {pathKind === "directory" ? "下载文件夹" : "下载文件"}
-        </button>
-      ) : null}
-      {onSendToRemote ? (
-        <button
-          type="button"
-          className="tab-context-menu-item"
-          role="menuitem"
-          onClick={() => {
-            onSendToRemote();
-            onClose();
-          }}
-        >
-          发送到其他服务器
-        </button>
-      ) : null}
-      {onDownload || onSendToRemote ? (
-        <div className="tab-context-menu-separator" role="separator" />
-      ) : null}
-      {pathKind === "file" ? (
-        <button
-          type="button"
-          className="tab-context-menu-item"
-          role="menuitem"
-          onClick={() => {
-            onPreview();
-            onClose();
-          }}
-        >
-          编辑和预览
+          {t("upload")}
         </button>
       ) : null}
       <button
@@ -185,45 +369,11 @@ export function TerminalLinkContextMenu({
         className="tab-context-menu-item"
         role="menuitem"
         onClick={() => {
-          onRename();
+          onPaste();
           onClose();
         }}
       >
-        重命名
-      </button>
-      <button
-        type="button"
-        className="tab-context-menu-item"
-        role="menuitem"
-        onClick={() => {
-          onDelete();
-          onClose();
-        }}
-      >
-        删除
-      </button>
-      <button
-        type="button"
-        className="tab-context-menu-item"
-        role="menuitem"
-        onClick={() => {
-          onMove();
-          onClose();
-        }}
-      >
-        移动到目录
-      </button>
-      <div className="tab-context-menu-separator" role="separator" />
-      <button
-        type="button"
-        className="tab-context-menu-item"
-        role="menuitem"
-        onClick={() => {
-          onViewSize();
-          onClose();
-        }}
-      >
-        查看大小
+        {t("paste")}
       </button>
     </div>,
     document.body,

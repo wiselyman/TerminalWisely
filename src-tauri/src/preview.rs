@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::preview_sudo;
 use crate::session::SessionManager;
+use crate::shell::shell_quote_remote_path;
 use crate::ssh::client;
 use crate::ssh::client::ClientHandler;
 use crate::ssh::sftp;
@@ -61,14 +62,15 @@ impl PreviewManager {
             .await
             .get(handle_id)
             .cloned()
-            .ok_or_else(|| AppError::msg("预览已关闭"))?;
+            .ok_or_else(|| AppError::code("ERR_PREVIEW_CLOSED"))?;
 
         if !is_editable_kind(&entry.kind) {
-            return Err(AppError::msg("此文件类型不支持编辑"));
+            return Err(AppError::code("ERR_PREVIEW_NOT_EDITABLE"));
         }
 
         let session_kind = sessions.session_kind(&entry.session_id).await?;
         let bytes = content.as_bytes();
+        let mut used_sudo = entry.uses_sudo;
 
         match session_kind {
             SessionKind::Local => {
@@ -76,7 +78,7 @@ impl PreviewManager {
                     .await
                     .unwrap_or(false)
                 {
-                    entry.local_path
+                    entry.local_path.clone()
                 } else {
                     sessions
                         .local_resolve_host_path(&entry.session_id, &entry.source_path)
@@ -86,7 +88,7 @@ impl PreviewManager {
             }
             SessionKind::Ssh => {
                 let ssh = sessions.ssh_snapshot(&entry.session_id).await?;
-                if entry.uses_sudo {
+                if used_sudo {
                     preview_sudo::write_remote_bytes_sudo(
                         &ssh.handle(),
                         &entry.source_path,
@@ -97,8 +99,30 @@ impl PreviewManager {
                 } else {
                     let conn =
                         client::open_transfer_connection(&ssh.connect_request(), None).await?;
-                    sftp::write_remote_bytes(&conn.handle(), &entry.source_path, bytes).await?;
+                    match sftp::write_remote_bytes(&conn.handle(), &entry.source_path, bytes)
+                        .await
+                    {
+                        Ok(()) => {}
+                        // Readable but not writable (e.g. /etc/docker/daemon.json): escalate.
+                        Err(err) if preview_sudo::is_permission_denied(&err) => {
+                            preview_sudo::write_remote_bytes_sudo(
+                                &ssh.handle(),
+                                &entry.source_path,
+                                sudo_password.as_deref(),
+                                bytes,
+                            )
+                            .await?;
+                            used_sudo = true;
+                        }
+                        Err(err) => return Err(err),
+                    }
                 }
+            }
+        }
+
+        if used_sudo && !entry.uses_sudo {
+            if let Some(stored) = self.entries.lock().await.get_mut(handle_id) {
+                stored.uses_sudo = true;
             }
         }
 
@@ -125,7 +149,7 @@ impl PreviewManager {
             total_size,
             false,
             content,
-            entry.uses_sudo,
+            used_sudo,
         ))
     }
 
@@ -141,7 +165,7 @@ impl PreviewManager {
             .await
             .get(handle_id)
             .cloned()
-            .ok_or_else(|| AppError::msg("预览已关闭"))?;
+            .ok_or_else(|| AppError::code("ERR_PREVIEW_CLOSED"))?;
 
         let open_path = if tokio::fs::try_exists(&entry.local_path)
             .await
@@ -209,7 +233,7 @@ impl PreviewManager {
         };
 
         if is_dir {
-            return Err(AppError::msg("这是目录，请单击进入目录"));
+            return Err(AppError::code("ERR_PREVIEW_IS_DIRECTORY"));
         }
 
         let resolved_str = path_to_display(&resolved);
@@ -236,14 +260,22 @@ impl PreviewManager {
                         (text, truncated, false)
                     }
                     SessionKind::Ssh => {
-                        read_remote_text(
+                        let (text, truncated, mut uses_sudo) = read_remote_text(
                             sessions,
                             &session_id,
                             &resolved_str,
                             total_size,
                             sudo_password,
                         )
-                        .await?
+                        .await?;
+                        // File may be world-readable but root-only writable.
+                        if !uses_sudo {
+                            let ssh = sessions.ssh_snapshot(&session_id).await?;
+                            if !remote_is_writable(&ssh.handle(), &resolved_str).await {
+                                uses_sudo = true;
+                            }
+                        }
+                        (text, truncated, uses_sudo)
                     }
                 };
 
@@ -315,7 +347,7 @@ impl PreviewManager {
             }
             _ => {
                 if total_size > 50 * 1024 * 1024 {
-                    return Err(AppError::msg("文件过大，暂不支持预览"));
+                    return Err(AppError::code("ERR_PREVIEW_TOO_LARGE"));
                 }
                 let cache_path = materialize_for_preview(
                     app,
@@ -461,6 +493,16 @@ async fn read_local_text(path: &Path, total_size: u64) -> AppResult<(String, boo
     Ok((decode_text_bytes(&bytes), truncated))
 }
 
+async fn remote_is_writable(
+    handle: &Arc<Mutex<russh::client::Handle<ClientHandler>>>,
+    remote_path: &str,
+) -> bool {
+    let quoted = shell_quote_remote_path(remote_path);
+    client::exec_command(handle, &format!("test -w {quoted}"))
+        .await
+        .is_ok()
+}
+
 async fn probe_ssh_file(
     handle: &Arc<Mutex<russh::client::Handle<ClientHandler>>>,
     path: &str,
@@ -472,7 +514,7 @@ async fn probe_ssh_file(
         (Ok(is_dir), Ok(size)) => Ok((is_dir, size)),
         (Err(err), _) | (_, Err(err)) if preview_sudo::is_permission_denied(&err) => {
             if path.ends_with('/') {
-                return Err(AppError::msg("这是目录，请单击进入目录"));
+                return Err(AppError::code("ERR_PREVIEW_IS_DIRECTORY"));
             }
             Ok((false, 0))
         }

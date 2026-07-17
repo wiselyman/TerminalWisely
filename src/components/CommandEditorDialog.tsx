@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { buildParamsFromTemplate } from "../lib/commandTemplate";
-import { DISTRO_FAMILY_LABELS, SUBCATEGORY_LABELS } from "../lib/distroFamily";
+import { localizeCategory, localizeDistroFamily } from "../lib/localizeCommand";
 import type {
   CommandShortcutScope,
   CommandSubcategory,
@@ -48,6 +49,7 @@ function createEmptyCommand(): CommandTemplate {
 }
 
 export function CommandEditorDialog({ serverId }: { serverId: string }) {
+  const { t } = useTranslation("commands");
   const editorTarget = useCommandNavigatorStore((s) => s.editorTarget);
   const closeEditor = useCommandNavigatorStore((s) => s.closeEditor);
   const saveCustomCommand = useCommandNavigatorStore((s) => s.saveCustomCommand);
@@ -79,11 +81,11 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
     const title = draft.title.trim();
     const template = draft.template.trim();
     if (!title) {
-      pushToast("请填写命令名称", false);
+      pushToast(t("editor.toastNeedTitle"), false);
       return;
     }
     if (!template) {
-      pushToast("请填写命令模板", false);
+      pushToast(t("editor.toastNeedTemplate"), false);
       return;
     }
     saveCustomCommand({
@@ -97,11 +99,11 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
 
   return (
     <Modal
-      title={editorTarget ? "编辑命令" : "添加命令"}
+      title={editorTarget ? t("editor.titleEdit") : t("editor.titleAdd")}
       onClose={closeEditor}
     >
       <label className="cmd-run-field">
-        <span>名称</span>
+        <span>{t("editor.fieldName")}</span>
         <input
           type="text"
           value={draft.title}
@@ -112,7 +114,7 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
       </label>
 
       <label className="cmd-run-field">
-        <span>分类</span>
+        <span>{t("editor.fieldCategory")}</span>
         <select
           value={draft.subcategory}
           onChange={(event) =>
@@ -124,19 +126,19 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
         >
           {SUBCATEGORIES.map((key) => (
             <option key={key} value={key}>
-              {SUBCATEGORY_LABELS[key]}
+              {localizeCategory(key)}
             </option>
           ))}
         </select>
       </label>
 
       <label className="cmd-run-field">
-        <span>模板</span>
+        <span>{t("editor.fieldTemplate")}</span>
         <textarea
           className="cmd-editor-template"
           rows={3}
           value={draft.template}
-          placeholder="例如：systemctl status {service}"
+          placeholder={t("editor.templatePlaceholder")}
           onChange={(event) =>
             setDraft((current) => ({ ...current, template: event.target.value }))
           }
@@ -144,7 +146,7 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
       </label>
 
       <div className="cmd-editor-distros">
-        <span>适用发行版</span>
+        <span>{t("editor.fieldDistros")}</span>
         <div className="cmd-editor-distros-list">
           {DISTRO_OPTIONS.map((family) => (
             <label key={family} className="cmd-editor-distro-chip">
@@ -153,14 +155,14 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
                 checked={draft.distroFamilies.includes(family)}
                 onChange={() => toggleDistro(family)}
               />
-              {DISTRO_FAMILY_LABELS[family]}
+              {localizeDistroFamily(family)}
             </label>
           ))}
         </div>
       </div>
 
       <label className="cmd-run-field">
-        <span>说明（可选）</span>
+        <span>{t("editor.fieldDescription")}</span>
         <input
           type="text"
           value={draft.description ?? ""}
@@ -171,7 +173,7 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
       </label>
 
       <label className="cmd-run-field">
-        <span>作用域</span>
+        <span>{t("editor.fieldScope")}</span>
         <select
           value={draft.scope}
           onChange={(event) =>
@@ -181,27 +183,29 @@ export function CommandEditorDialog({ serverId }: { serverId: string }) {
             }))
           }
         >
-          <option value="all">全部会话</option>
-          <option value="server">当前服务器（保存时绑定）</option>
+          <option value="all">{t("editor.scopeAll")}</option>
+          <option value="server">{t("editor.scopeServer")}</option>
         </select>
       </label>
 
       {previewParams.length > 0 ? (
         <p className="cmd-editor-param-hint">
-          参数：{previewParams.map((param) => param.name).join("、")}
+          {t("editor.paramHint", {
+            names: previewParams.map((param) => param.name).join(", "),
+          })}
         </p>
       ) : null}
 
       <div className="cmd-run-actions">
         <button type="button" className="preview-action-btn" onClick={closeEditor}>
-          取消
+          {t("common:cancel")}
         </button>
         <button
           type="button"
           className="preview-action-btn preview-action-btn-primary"
           onClick={handleSave}
         >
-          保存
+          {t("common:save")}
         </button>
       </div>
     </Modal>

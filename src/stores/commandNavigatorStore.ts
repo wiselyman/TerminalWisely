@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
+import i18n from "../i18n";
 import { BUILTIN_COMMANDS } from "../content/defaultCommands";
 import {
   buildParamsFromTemplate,
@@ -249,7 +250,9 @@ export const useCommandNavigatorStore = create<CommandNavigatorState>(
 
     insertCommand: async (sessionId, command) => {
       if (useSessionStore.getState().disconnectedSessionIds.has(sessionId)) {
-        useToastStore.getState().pushToast("连接已断开，请先重连", false);
+        useToastStore
+          .getState()
+          .pushToast(i18n.t("tools:commandNav.toastDisconnected"), false);
         return;
       }
 

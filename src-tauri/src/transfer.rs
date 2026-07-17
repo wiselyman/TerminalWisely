@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
-pub const CANCELLED_MSG: &str = "传输已取消";
+pub const CANCELLED_MSG: &str = "ERR_TRANSFER_CANCELLED";
 
 struct ActiveTransfer {
     cancel: Arc<AtomicBool>,

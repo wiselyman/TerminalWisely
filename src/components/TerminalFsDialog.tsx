@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { isSudoRequiredError } from "../stores/previewStore";
 import { useToastStore } from "../stores/toastStore";
+import { formatAppError } from "../lib/formatAppError";
 import { PathInput } from "./PathInput";
 
 export type TerminalFsDialogMode = "rename" | "delete" | "move";
@@ -26,6 +28,7 @@ export function TerminalFsDialog({
   pathKind,
   onClose,
 }: TerminalFsDialogProps) {
+  const { t } = useTranslation("terminal");
   const pushToast = useToastStore((s) => s.pushToast);
   const [pending, setPending] = useState(false);
   const [newName, setNewName] = useState(basename(path));
@@ -41,7 +44,7 @@ export function TerminalFsDialog({
 
   const handleConfirm = async () => {
     if (needsSudo && !sudoPassword.trim()) {
-      pushToast("请输入 sudo 密码", false);
+      pushToast(t("toastNeedSudoPassword"), false);
       return;
     }
 
@@ -52,7 +55,7 @@ export function TerminalFsDialog({
       if (mode === "rename") {
         const trimmed = newName.trim();
         if (!trimmed) {
-          pushToast("请输入新名称", false);
+          pushToast(t("toastNeedNewName"), false);
           return;
         }
         await invoke("rename_path", {
@@ -63,16 +66,16 @@ export function TerminalFsDialog({
             sudo_password,
           },
         });
-        pushToast("已重命名", true);
+        pushToast(t("toastRenamed"), true);
       } else if (mode === "delete") {
         await invoke("delete_path", {
           request: { session_id: sessionId, path, sudo_password },
         });
-        pushToast("已删除", true);
+        pushToast(t("toastDeleted"), true);
       } else {
         const trimmed = destDir.trim();
         if (!trimmed) {
-          pushToast("请输入目标目录", false);
+          pushToast(t("toastNeedDestDir"), false);
           return;
         }
         await invoke("move_path", {
@@ -83,7 +86,7 @@ export function TerminalFsDialog({
             sudo_password,
           },
         });
-        pushToast("已移动", true);
+        pushToast(t("toastMoved"), true);
       }
       await refreshListing();
       onClose();
@@ -92,7 +95,7 @@ export function TerminalFsDialog({
       if (isSudoRequiredError(message)) {
         setNeedsSudo(true);
       } else {
-        pushToast(message, false);
+        pushToast(formatAppError(err), false);
       }
     } finally {
       setPending(false);
@@ -100,7 +103,7 @@ export function TerminalFsDialog({
   };
 
   const title =
-    mode === "rename" ? "重命名" : mode === "delete" ? "删除" : "移动到目录";
+    mode === "rename" ? t("rename") : mode === "delete" ? t("delete") : t("moveToDir");
 
   const pathLabel = path.length > 56 ? `…${path.slice(-53)}` : path;
 
@@ -128,11 +131,9 @@ export function TerminalFsDialog({
 
         {needsSudo ? (
           <>
-            <p className="modal-hint">
-              此操作需要管理员权限。请输入当前 SSH 用户在服务器上的 sudo 密码。
-            </p>
+            <p className="modal-hint">{t("fsDialogSudoHint")}</p>
             <label className="terminal-fs-field">
-              <span>sudo 密码</span>
+              <span>{t("sudoPassword")}</span>
               <input
                 type="password"
                 value={sudoPassword}
@@ -152,7 +153,7 @@ export function TerminalFsDialog({
 
         {!needsSudo && mode === "rename" ? (
           <label className="terminal-fs-field">
-            <span>新名称</span>
+            <span>{t("newName")}</span>
             <input
               type="text"
               value={newName}
@@ -172,19 +173,19 @@ export function TerminalFsDialog({
         {!needsSudo && mode === "delete" ? (
           <p className="terminal-fs-confirm">
             {pathKind === "directory"
-              ? "确定要删除此目录及其全部内容吗？此操作不可撤销。"
-              : "确定要删除此文件吗？此操作不可撤销。"}
+              ? t("deleteDirConfirm")
+              : t("deleteFileConfirm")}
           </p>
         ) : null}
 
         {!needsSudo && mode === "move" ? (
           <label className="terminal-fs-field">
-            <span>目标目录</span>
+            <span>{t("destDir")}</span>
             <PathInput
               sessionId={sessionId}
               value={destDir}
               disabled={pending}
-              placeholder="输入目标目录路径"
+              placeholder={t("destDirPlaceholder")}
               onChange={setDestDir}
             />
           </label>
@@ -198,7 +199,7 @@ export function TerminalFsDialog({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={onClose}
           >
-            取消
+            {t("common:cancel")}
           </button>
           <button
             type="button"
@@ -207,7 +208,11 @@ export function TerminalFsDialog({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={() => void handleConfirm()}
           >
-            {pending ? "处理中…" : needsSudo ? "使用 sudo 确认" : "确认"}
+            {pending
+              ? t("common:processing")
+              : needsSudo
+                ? t("confirmWithSudo")
+                : t("common:confirm")}
           </button>
         </div>
       </div>

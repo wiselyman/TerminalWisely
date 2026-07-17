@@ -2,14 +2,14 @@ import { buildLineColumnMap, stripAnsi } from "./terminalLinks";
 
 export function parsePromptCwd(line: string): string | null {
   const plain = stripAnsi(line).trim();
-  // SSH / bash: user@host:~/path$
-  const colonMatch = plain.match(/:(~(?:\/[^\s$#%]*)?|\/[^\s$#%]*)[\s$#%]/);
+  // SSH / bash: user@host:~/path$ — path may contain spaces (e.g. Chinese folder names).
+  const colonMatch = plain.match(/:(~(?:\/[^$#%]*)?|\/[^$#%]*)[\s$#%]/);
   if (colonMatch?.[1]) {
     return colonMatch[1];
   }
   // zsh: ~/path %  or  /abs/path %
   const zshMatch = plain.match(
-    /(?:^|\s)(~(?:\/[^\s%#]*)?|\/[^\s%#]*)\s*[%#](?:\s|$)/,
+    /(?:^|\s)(~(?:\/[^%#]*)?|\/[^%#]*)\s*[%#](?:\s|$)/,
   );
   if (zshMatch?.[1]) {
     return zshMatch[1];
@@ -58,7 +58,7 @@ export function unquoteShellWord(word: string): string {
     return result.slice(1, -1);
   }
 
-  // cd ~/'下载' or /'My Dir' — strip quotes around individual path segments
+  // e.g. cd ~/'downloads' or /'My Dir' — strip quotes around individual path segments
   result = result.replace(/\/'([^']*)'/g, "/$1");
   result = result.replace(/\/"([^"]*)"/g, "/$1");
   result = result.replace(/^~\/'([^']*)'/, "~/$1");
@@ -69,8 +69,14 @@ export function unquoteShellWord(word: string): string {
 
 function isLikelyShellPromptLine(line: string): boolean {
   const trimmed = stripAnsi(line).trim();
-  if (/:(~(?:\/[^\s$#%]*)?|\/[^\s$#%]*)\s*[$#%]/.test(trimmed)) return true;
-  if (/[@:][^$#%\s]+[$#%]/.test(trimmed)) return true;
+  // Allow spaces in cwd so prompts like `user@host:/data/My Folder$` still count.
+  // (Previously `[^\s$#%]*` stopped at the first space, so `ls` output under such
+  // directories was not recognized as linkable.)
+  if (/:(~(?:\/[^$#%]*)?|\/[^$#%]*)\s*[$#%]/.test(trimmed)) return true;
+  if (/(?:^|\s)(~(?:\/[^%#]*)?|\/[^%#]*)\s*[%#](?:\s|$)/.test(trimmed)) {
+    return true;
+  }
+  if (/[@:][^$#%]+[$#%]/.test(trimmed)) return true;
   return false;
 }
 
@@ -82,21 +88,121 @@ function isLsCommand(command: string): boolean {
   return false;
 }
 
+/** True when a buffer line itself is (or continues) an ls invocation. */
+function isLsCommandLine(line: string): boolean {
+  const trimmed = stripAnsi(line).trim();
+  if (!trimmed) return false;
+  if (isLsCommand(trimmed)) return true;
+  // Wrapped fragment, e.g. `...dir' && ls -F` on its own buffer row.
+  if (/(?:^|&&|;)\s*ls(?:\s|$)/.test(trimmed)) return true;
+  return false;
+}
+
 function extractCommandLine(line: string): string {
   const plain = stripAnsi(line).trim();
   const afterPrompt = plain.match(
-    /:(~(?:\/[^\s$#%]*)?|\/[^\s$#%]*)\s*[$#%]\s*(.+)$/,
+    /:(~(?:\/[^$#%]*)?|\/[^$#%]*)\s*[$#%]\s*(.*)$/,
   );
   if (afterPrompt?.[2]?.trim()) {
     return afterPrompt[2].trim();
   }
   const zshMatch = plain.match(
-    /(?:^|\s)(~(?:\/[^\s%#]*)?|\/[^\s%#]*)\s*[%#]\s*(.+)$/,
+    /(?:^|\s)(~(?:\/[^%#]*)?|\/[^%#]*)\s*[%#]\s*(.*)$/,
   );
   if (zshMatch?.[2]?.trim()) {
     return zshMatch[2].trim();
   }
   return "";
+}
+
+/**
+ * Join a prompt line's command with wrapped continuation rows beneath it.
+ * Long `cd '…' && ls -F` lines commonly wrap before `ls`, which used to hide links.
+ */
+function extractCommandFromPromptRegion(
+  getLinePlain: (lineNumber: number) => string | null,
+  promptLineNumber: number,
+  stopBeforeLine: number,
+): string {
+  const promptText = getLinePlain(promptLineNumber) ?? "";
+  let cmd = extractCommandLine(promptText);
+
+  for (let j = promptLineNumber + 1; j < stopBeforeLine; j += 1) {
+    const cont = getLinePlain(j);
+    if (cont == null) continue;
+    const trimmed = stripAnsi(cont).trim();
+    if (!trimmed) continue;
+    if (isLikelyShellPromptLine(cont)) break;
+
+    if (commandLooksIncomplete(cmd) || isLsCommandLine(cont)) {
+      cmd = joinCommandWrap(cmd, trimmed);
+      continue;
+    }
+
+    // Command already looks complete — don't swallow ls listing rows.
+    if (looksLikeLsListingLine(trimmed)) break;
+
+    // Still joining a wrapped `cd …` that hasn't reached `&& ls` yet.
+    if (!isLsCommand(cmd) && /^\s*cd\b/i.test(cmd)) {
+      cmd = joinCommandWrap(cmd, trimmed);
+      continue;
+    }
+
+    break;
+  }
+
+  return cmd.trim();
+}
+
+/** Soft-wrapped buffer rows abut; don't insert spaces into paths like `希望学`+`网课`. */
+function joinCommandWrap(cmd: string, next: string): string {
+  if (!cmd) return next;
+  if (commandLooksIncomplete(cmd)) {
+    return cmd + next;
+  }
+  return `${cmd} ${next}`;
+}
+
+function commandLooksIncomplete(cmd: string): boolean {
+  const trimmed = cmd.trim();
+  if (!trimmed) return true;
+  const singles = (trimmed.match(/'/g) ?? []).length;
+  if (singles % 2 === 1) return true;
+  const doubles = (trimmed.match(/"/g) ?? []).length;
+  if (doubles % 2 === 1) return true;
+  if (/&&\s*$/.test(trimmed) || /\|\s*$/.test(trimmed) || /;\s*$/.test(trimmed)) {
+    return true;
+  }
+  if (/\bcd\s*$/i.test(trimmed)) return true;
+  return false;
+}
+
+function looksLikeLsListingLine(trimmed: string): boolean {
+  if (!trimmed) return false;
+  if (/[;&|]/.test(trimmed)) return false;
+  if (
+    /^(?:cd|ls|echo|cat|vim?|nvim|mkdir|rm|mv|cp|touch|chmod|chown|pwd|export|source)\b/.test(
+      trimmed,
+    )
+  ) {
+    return false;
+  }
+  // Shell-quoted entry from GNU ls
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+  ) {
+    return true;
+  }
+  // Classify suffixes from `ls -F`
+  if (/\/$/.test(trimmed) || /[@*=|>]$/.test(trimmed)) {
+    return true;
+  }
+  // Multi-column short names: `初一/  初三/  初二/`
+  if (/^\S+(?:\s+\S+){0,20}$/.test(trimmed) && !trimmed.includes("=")) {
+    return true;
+  }
+  return false;
 }
 
 /** True when this buffer line is output from a recent `ls` (not login text, prompts, etc.). */
@@ -118,17 +224,21 @@ export function isLineInLsOutput(
     if (!plain) continue;
 
     if (isLikelyShellPromptLine(plain)) {
-      const cmd = extractCommandLine(plain);
+      const cmd = extractCommandFromPromptRegion(getLinePlain, i, lineNumber);
       return isLsCommand(cmd);
+    }
+
+    // Command wrapped onto its own row (no prompt prefix on this buffer line).
+    if (isLsCommandLine(plain)) {
+      return true;
     }
   }
 
   return false;
 }
 
-function parseCdLsTarget(line: string): string | null {
-  const command = extractCommandLine(line);
-  const match = command.match(/^cd\s+(.+?)\s*(?:&&|;)\s*ls\b/i);
+function parseCdLsTargetFromCommand(command: string): string | null {
+  const match = command.trim().match(/^cd\s+(.+?)\s*(?:&&|;)\s*ls\b/i);
   if (!match) {
     return null;
   }
@@ -143,7 +253,7 @@ function resolveCdTarget(target: string, promptCwd: string): string {
 }
 
 function parseCdTarget(command: string): string | null {
-  const cdOnly = command.match(/^cd\s+(.+)$/i);
+  const cdOnly = command.trim().match(/^cd\s+(.+)$/i);
   if (!cdOnly?.[1]) {
     return null;
   }
@@ -159,27 +269,26 @@ export function replayCwdAtLine(
   let cwd = initialCwd;
   for (let i = 1; i < beforeLine; i += 1) {
     const plain = getLinePlain(i);
-    if (!plain) {
+    if (!plain || !isLikelyShellPromptLine(plain)) {
       continue;
     }
 
-    const cdLs = parseCdLsTarget(plain);
+    const command = extractCommandFromPromptRegion(getLinePlain, i, beforeLine);
+    const cdLs = parseCdLsTargetFromCommand(command);
     if (cdLs) {
       cwd = resolveCdTarget(cdLs, cwd);
       continue;
     }
 
-    const cdTarget = parseCdTarget(extractCommandLine(plain));
+    const cdTarget = parseCdTarget(command);
     if (cdTarget) {
       cwd = resolveCdTarget(cdTarget, cwd);
       continue;
     }
 
-    if (isLikelyShellPromptLine(plain)) {
-      const promptCwd = parsePromptCwd(plain);
-      if (promptCwd) {
-        cwd = promptCwd;
-      }
+    const promptCwd = parsePromptCwd(plain);
+    if (promptCwd) {
+      cwd = promptCwd;
     }
   }
   return cwd;
@@ -192,19 +301,18 @@ function findListingParentFromCommands(
 ): string | null {
   for (let i = lineNumber - 1; i >= 1; i -= 1) {
     const plain = getLinePlain(i);
-    if (!plain) {
+    if (!plain || !isLikelyShellPromptLine(plain)) {
       continue;
     }
 
     const cwdBefore = replayCwdAtLine(getLinePlain, i, initialCwd);
-
-    const cdTarget = parseCdLsTarget(plain);
+    const command = extractCommandFromPromptRegion(getLinePlain, i, lineNumber);
+    const cdTarget = parseCdLsTargetFromCommand(command);
     if (cdTarget) {
       return resolveCdTarget(cdTarget, cwdBefore);
     }
 
-    const command = extractCommandLine(plain);
-    if (/^ls(\s|$)/.test(command)) {
+    if (/^ls(\s|$)/.test(command.trim())) {
       const promptCwd = parsePromptCwd(plain);
       return promptCwd ?? cwdBefore;
     }

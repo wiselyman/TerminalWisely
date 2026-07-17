@@ -1,4 +1,5 @@
 import { useMemo, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   TaskManagerTable,
 } from "./TaskManagerTable";
@@ -36,6 +37,7 @@ export function TaskManagerPanel({
   sessionId,
   sessionTitle,
 }: TaskManagerPanelProps) {
+  const { t } = useTranslation("tools");
   const {
     width,
     setWidth,
@@ -100,15 +102,17 @@ export function TaskManagerPanel({
           className="task-manager-resizer"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整任务管理器宽度"
+          aria-label={t("taskManager.resizeAria")}
           onMouseDown={startResize}
         />
         <div className="task-manager-head">
           <div className="task-manager-title-wrap">
-            <h2 className="task-manager-title">任务管理器</h2>
+            <h2 className="task-manager-title">{t("taskManager.title")}</h2>
             <p className="task-manager-session">{sessionTitle}</p>
             {lastUpdatedLabel ? (
-              <p className="task-manager-meta">更新于 {lastUpdatedLabel}</p>
+              <p className="task-manager-meta">
+                {t("common:updatedAt", { time: lastUpdatedLabel })}
+              </p>
             ) : null}
           </div>
         </div>
@@ -117,7 +121,7 @@ export function TaskManagerPanel({
           <input
             type="search"
             className="task-manager-search"
-            placeholder="按进程名或端口过滤…"
+            placeholder={t("taskManager.filterPlaceholder")}
             value={filterQuery}
             onChange={(event) => setFilterQuery(event.target.value)}
           />

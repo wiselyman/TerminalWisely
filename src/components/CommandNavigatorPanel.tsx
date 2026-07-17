@@ -1,11 +1,14 @@
 import { useMemo, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { BUILTIN_COMMANDS } from "../content/defaultCommands";
 import { filterCommands } from "../lib/commandTemplate";
+import { distroFilterFamily, primaryDistroFamily } from "../lib/distroFamily";
 import {
-  distroFilterHint,
-  primaryDistroLabel,
-  SUBCATEGORY_LABELS,
-} from "../lib/distroFamily";
+  localizeCategory,
+  localizeCommandDescription,
+  localizeCommandTitle,
+  localizeDistroFamily,
+} from "../lib/localizeCommand";
 import type { CommandTemplate } from "../types";
 import { useCommandNavigatorStore } from "../stores/commandNavigatorStore";
 import { useToastStore } from "../stores/toastStore";
@@ -43,6 +46,7 @@ export function CommandNavigatorPanel({
   tabKind,
   serverId,
 }: CommandNavigatorPanelProps) {
+  const { t, i18n } = useTranslation("tools");
   const {
     width,
     setWidth,
@@ -80,10 +84,16 @@ export function CommandNavigatorPanel({
       hiddenBuiltinIds,
       tabKind,
       serverId,
+      i18n.language,
     ],
   );
 
-  const distroHint = distroFilterHint(osId);
+  const filterFamily = distroFilterFamily(osId);
+  const distroHint = filterFamily
+    ? t("commandNav.distroFilterHint", {
+        family: localizeDistroFamily(filterFamily),
+      })
+    : null;
 
   const startResize = (event: ReactMouseEvent) => {
     event.preventDefault();
@@ -138,12 +148,12 @@ export function CommandNavigatorPanel({
           className="cmd-nav-panel-resizer"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整命令面板宽度"
+          aria-label={t("commandNav.resizeAria")}
           onMouseDown={startResize}
         />
         <div className="cmd-nav-panel-head">
           <div className="cmd-nav-panel-title-wrap">
-            <h2 className="cmd-nav-panel-title">命令</h2>
+            <h2 className="cmd-nav-panel-title">{t("commandNav.title")}</h2>
             <p className="cmd-nav-panel-session">
               {sessionTitle}
               {distroHint ? (
@@ -157,20 +167,23 @@ export function CommandNavigatorPanel({
           <input
             type="search"
             className="cmd-nav-search"
-            placeholder="搜索命令…"
+            placeholder={t("commandNav.searchPlaceholder")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <button
             type="button"
             className="cmd-nav-add-btn"
             onClick={() => openEditor()}
           >
-            + 添加命令
+            + {t("commandNav.addCommand")}
           </button>
         </div>
 
-        <div className="cmd-nav-tabs" role="tablist" aria-label="命令分类">
+        <div className="cmd-nav-tabs" role="tablist" aria-label={t("commandNav.tabsAria")}>
           {TAB_KEYS.map((key) => (
             <button
               key={key}
@@ -180,18 +193,19 @@ export function CommandNavigatorPanel({
               aria-selected={subcategory === key}
               onClick={() => setSubcategory(key)}
             >
-              {SUBCATEGORY_LABELS[key]}
+              {localizeCategory(key)}
             </button>
           ))}
         </div>
 
         <div className="cmd-nav-panel-body">
           {commands.length === 0 ? (
-            <p className="cmd-nav-empty">没有匹配的命令</p>
+            <p className="cmd-nav-empty">{t("commandNav.empty")}</p>
           ) : (
             <ul className="cmd-nav-list">
               {commands.map((command) => {
-                const distro = primaryDistroLabel(command.distroFamilies);
+                const distroFamily = primaryDistroFamily(command.distroFamilies);
+                const description = localizeCommandDescription(command);
                 return (
                   <li key={command.id} className="cmd-nav-item">
                     <button
@@ -199,15 +213,19 @@ export function CommandNavigatorPanel({
                       className="cmd-nav-item-main"
                       onClick={() => handleCommandAction(command, "run")}
                     >
-                      <span className="cmd-nav-item-title">{command.title}</span>
+                      <span className="cmd-nav-item-title">
+                        {localizeCommandTitle(command)}
+                      </span>
                       <code className="cmd-nav-item-template">{command.template}</code>
-                      {command.description ? (
-                        <span className="cmd-nav-item-desc">{command.description}</span>
+                      {description ? (
+                        <span className="cmd-nav-item-desc">{description}</span>
                       ) : null}
                     </button>
                     <div className="cmd-nav-item-meta">
-                      {distro ? (
-                        <span className="cmd-nav-distro-badge">{distro}</span>
+                      {distroFamily ? (
+                        <span className="cmd-nav-distro-badge">
+                          {localizeDistroFamily(distroFamily)}
+                        </span>
                       ) : null}
                       {!command.builtin ? (
                         <>
@@ -216,14 +234,14 @@ export function CommandNavigatorPanel({
                             className="cmd-nav-item-action"
                             onClick={() => handleCommandAction(command, "edit")}
                           >
-                            编辑
+                            {t("common:edit")}
                           </button>
                           <button
                             type="button"
                             className="cmd-nav-item-action"
                             onClick={() => handleCommandAction(command, "delete")}
                           >
-                            删除
+                            {t("common:delete")}
                           </button>
                         </>
                       ) : (
@@ -232,7 +250,7 @@ export function CommandNavigatorPanel({
                           className="cmd-nav-item-action"
                           onClick={() => handleCommandAction(command, "hide")}
                         >
-                          隐藏
+                          {t("common:hide")}
                         </button>
                       )}
                     </div>

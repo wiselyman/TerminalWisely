@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Terminal, type IDisposable } from "@xterm/xterm";
+import { useTranslation } from "react-i18next";
+import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
@@ -37,7 +38,6 @@ import {
 } from "../lib/terminalSelectionDrag";
 import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
 import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "../lib/terminalContext";
-import { mountLinkHoverUnderline } from "../lib/terminalLinkHover";
 import {
   clearUploadHighlights,
   scheduleUploadHighlight,
@@ -49,13 +49,16 @@ import { TERMINAL_FONT_SIZE, TERMINAL_LINE_HEIGHT, ensureTerminalFontsLoaded, ge
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { downloadRemotePath } from "../lib/sessionDownload";
 import { formatTransferError } from "../lib/transferError";
+import { formatAppError } from "../lib/formatAppError";
+import { localizeTerminalOutputChunk } from "../lib/localizeTerminalOutput";
 import { invokeWithSudoRetry } from "../lib/invokeWithSudoRetry";
-import { copyToClipboard } from "../lib/clipboard";
+import { copyToClipboard, readClipboardText } from "../lib/clipboard";
+import i18n from "../i18n";
 import { TERMINAL_FOCUS_EVENT } from "../stores/commandNavigatorStore";
 import { useToastStore } from "../stores/toastStore";
 import { TerminalStatusOverlay } from "./TerminalStatusOverlay";
 import { PathSizeDialog } from "./PathSizeDialog";
-import { TerminalLinkContextMenu } from "./TerminalLinkContextMenu";
+import { TerminalLinkContextMenu, TerminalBlankContextMenu } from "./TerminalLinkContextMenu";
 import {
   TerminalFsDialog,
   type TerminalFsDialogMode,
@@ -90,6 +93,7 @@ export function TerminalView({
   title,
   layoutRevision = "",
 }: TerminalViewProps) {
+  const { t } = useTranslation("terminal");
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -130,6 +134,10 @@ export function TerminalView({
     path: string;
     pathKind: "file" | "directory";
   } | null>(null);
+  const [blankContextMenu, setBlankContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [fsDialog, setFsDialog] = useState<{
     mode: TerminalFsDialogMode;
     path: string;
@@ -143,9 +151,11 @@ export function TerminalView({
     error: string | null;
   } | null>(null);
   const setFsContextMenuRef = useRef(setFsContextMenu);
+  const setBlankContextMenuRef = useRef(setBlankContextMenu);
   const setFsDialogRef = useRef(setFsDialog);
   const fsContextMenuProbeRef = useRef(0);
   setFsContextMenuRef.current = setFsContextMenu;
+  setBlankContextMenuRef.current = setBlankContextMenu;
   setFsDialogRef.current = setFsDialog;
   const dragDepthRef = useRef(0);
   const bootPendingRef = useRef(true);
@@ -304,13 +314,32 @@ export function TerminalView({
       if (kind !== "ssh" && kind !== "local") return;
 
       const cell = getTerminalMouseCell(terminal, screenElement, event);
-      if (!cell) return;
+      if (!cell) {
+        event.preventDefault();
+        event.stopPropagation();
+        setFsContextMenuRef.current(null);
+        setBlankContextMenuRef.current({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        return;
+      }
 
       const hit = findRemotePathAtCell(terminal, cell);
-      if (!hit) return;
+      if (!hit) {
+        event.preventDefault();
+        event.stopPropagation();
+        setFsContextMenuRef.current(null);
+        setBlankContextMenuRef.current({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        return;
+      }
 
       event.preventDefault();
       event.stopPropagation();
+      setBlankContextMenuRef.current(null);
 
       const now = Date.now();
       if (now - fsContextMenuProbeRef.current < 400) return;
@@ -411,11 +440,11 @@ export function TerminalView({
                 void startRemoteTransferRef
                   .current(sessionId, remotePath, toSessionId)
                   .catch((err) => {
-                    pushToastRef.current(String(err), false);
+                    pushToastRef.current(formatAppError(err), false);
                   });
               },
               onCancel: () => {
-                pushToastRef.current("请拖到其他 SSH 标签上再松开", false);
+                pushToastRef.current(i18n.t("terminal:dragDropOtherTabHint"), false);
               },
             });
           };
@@ -466,29 +495,12 @@ export function TerminalView({
                   path,
                 );
 
-              let hoverUnderline: IDisposable | undefined;
-
               return {
                 range: matchToXtermRange(map, line, start, end, bufferLineNumber),
                 text: path,
                 decorations: {
                   pointerCursor: true,
-                  underline: false,
-                },
-                hover: () => {
-                  hoverUnderline?.dispose();
-                  hoverUnderline = mountLinkHoverUnderline(
-                    terminal,
-                    bufferLineNumber,
-                    map,
-                    line,
-                    start,
-                    end,
-                  );
-                },
-                leave: () => {
-                  hoverUnderline?.dispose();
-                  hoverUnderline = undefined;
+                  underline: true,
                 },
                 activate: (event: MouseEvent, _uri: string) => {
                   if (!isPrimaryLinkActivate(event)) return;
@@ -514,16 +526,16 @@ export function TerminalView({
                             },
                           },
                         );
-                        if (probe === "file") {
+                        if (probe === "file" || probe === "directory") {
                           openSendToRef.current({
                             fromSessionId: sessionId,
                             remotePath: targetPath,
                           });
                         } else {
-                          pushToastRef.current("这是目录，请选择文件路径", false);
+                          pushToastRef.current(i18n.t("terminal:pathUnrecognized"), false);
                         }
                       } catch (err) {
-                        pushToastRef.current(String(err), false);
+                        pushToastRef.current(formatAppError(err), false);
                       }
                     })();
                     return;
@@ -571,7 +583,7 @@ export function TerminalView({
                         await openPreviewRef.current(sessionId, targetPath);
                       }
                     } catch (err) {
-                      pushToastRef.current(String(err), false);
+                      pushToastRef.current(formatAppError(err), false);
                     }
                   })();
                 },
@@ -607,6 +619,7 @@ export function TerminalView({
       void invoke("terminal_input", { sessionId, data }).catch((err) => {
         const message = String(err);
         if (
+          message.includes("ERR_SSH_DISCONNECTED") ||
           message.includes("按 Enter 重新连接") ||
           message.includes("终端连接已断开") ||
           message.includes("channel closed") ||
@@ -623,7 +636,7 @@ export function TerminalView({
 
     const buffered = pendingOutputRef.current.splice(0);
     for (const chunk of buffered) {
-      terminal.write(stripOsc8Hyperlinks(chunk));
+      terminal.write(stripOsc8Hyperlinks(localizeTerminalOutputChunk(chunk)));
     }
     if (buffered.some((chunk) => chunk.length > 0)) {
       markFirstOutput();
@@ -722,7 +735,9 @@ export function TerminalView({
             pendingOutputRef.current.push(payload.data);
             return;
           }
-          terminal.write(stripOsc8Hyperlinks(payload.data));
+          terminal.write(
+            stripOsc8Hyperlinks(localizeTerminalOutputChunk(payload.data)),
+          );
           if (payload.data.length > 0) {
             markFirstOutput();
           }
@@ -819,7 +834,7 @@ export function TerminalView({
             },
           });
         } catch (err) {
-          setStatusMessage(String(err));
+          setStatusMessage(formatAppError(err));
         }
       }
     };
@@ -879,7 +894,7 @@ export function TerminalView({
             },
           });
         } catch (err) {
-          setStatusMessage(String(err));
+          setStatusMessage(formatAppError(err));
         }
       }
     }).then((unlisten) => {
@@ -915,12 +930,12 @@ export function TerminalView({
   }, [active]);
 
   const dropHint =
-    kind === "ssh" ? "释放文件以上传到远程服务器" : "释放文件以插入路径";
+    kind === "ssh" ? t("dropHintUpload") : t("dropHintInsertPath");
 
   const bootMessage =
-    kind === "ssh" ? "正在建立会话…" : "正在启动终端…";
+    kind === "ssh" ? t("bootMessageSsh") : t("bootMessageLocal");
   const connectingMessage =
-    kind === "ssh" ? "正在连接服务器…" : "正在启动本地终端…";
+    kind === "ssh" ? t("connectingMessageSsh") : t("connectingMessageLocal");
 
   return (
     <div
@@ -959,23 +974,24 @@ export function TerminalView({
           x={fsContextMenu.x}
           y={fsContextMenu.y}
           pathKind={fsContextMenu.pathKind}
+          path={fsContextMenu.path}
           onClose={() => setFsContextMenu(null)}
           onCopyName={() => {
             void copyToClipboard(terminalPathBasename(fsContextMenu.path))
               .then(() => {
-                pushToast("已复制文件名称", true);
+                pushToast(t("toastCopiedName"), true);
               })
               .catch((err) => {
-                pushToast(String(err), false);
+                pushToast(formatAppError(err), false);
               });
           }}
           onCopyPath={() => {
             void copyToClipboard(fsContextMenu.path)
               .then(() => {
-                pushToast("已复制文件路径", true);
+                pushToast(t("toastCopiedPath"), true);
               })
               .catch((err) => {
-                pushToast(String(err), false);
+                pushToast(formatAppError(err), false);
               });
           }}
           onDownload={
@@ -991,7 +1007,7 @@ export function TerminalView({
               : undefined
           }
           onSendToRemote={
-            kind === "ssh" && fsContextMenu.pathKind === "file"
+            kind === "ssh"
               ? () => {
                   openSendTo({
                     fromSessionId: sessionId,
@@ -1003,6 +1019,52 @@ export function TerminalView({
           onPreview={() => {
             void openPreview(sessionId, fsContextMenu.path);
           }}
+          onCompress={() => {
+            const { path } = fsContextMenu;
+            pushToast(t("toastCompressing"), true);
+            void invokeWithSudoRetry(
+              (sudoPassword) =>
+                invoke("compress_path", {
+                  request: {
+                    session_id: sessionId,
+                    path,
+                    sudo_password: sudoPassword ?? null,
+                  },
+                }),
+              { action: t("compress"), path },
+            )
+              .then(() => {
+                pushToast(t("toastCompressed"), true);
+              })
+              .catch((err) => {
+                pushToast(formatAppError(err), false);
+              });
+          }}
+          onExtract={
+            fsContextMenu.pathKind === "file"
+              ? () => {
+                  const { path } = fsContextMenu;
+                  pushToast(t("toastExtracting"), true);
+                  void invokeWithSudoRetry(
+                    (sudoPassword) =>
+                      invoke("extract_archive", {
+                        request: {
+                          session_id: sessionId,
+                          path,
+                          sudo_password: sudoPassword ?? null,
+                        },
+                      }),
+                    { action: t("extract"), path },
+                  )
+                    .then(() => {
+                      pushToast(t("toastExtracted"), true);
+                    })
+                    .catch((err) => {
+                      pushToast(formatAppError(err), false);
+                    });
+                }
+              : undefined
+          }
           onViewSize={() => {
             const { path, pathKind } = fsContextMenu;
             setPathSizeDialog({
@@ -1023,7 +1085,7 @@ export function TerminalView({
                         sudo_password: sudoPassword ?? null,
                       },
                     }),
-                  { action: "查看大小", path },
+                  { action: t("sudoActionViewSize"), path },
                 );
                 setPathSizeDialog({
                   path,
@@ -1038,7 +1100,7 @@ export function TerminalView({
                   pathKind,
                   loading: false,
                   result: null,
-                  error: String(err),
+                  error: formatAppError(err),
                 });
               }
             })();
@@ -1063,6 +1125,66 @@ export function TerminalView({
               path: fsContextMenu.path,
               pathKind: fsContextMenu.pathKind,
             });
+          }}
+        />
+      ) : null}
+      {blankContextMenu && active ? (
+        <TerminalBlankContextMenu
+          x={blankContextMenu.x}
+          y={blankContextMenu.y}
+          showUpload={kind === "ssh"}
+          onClose={() => setBlankContextMenu(null)}
+          onUpload={
+            kind === "ssh"
+              ? () => {
+                  void (async () => {
+                    try {
+                      const { open } = await import("@tauri-apps/plugin-dialog");
+                      const selected = await open({
+                        multiple: true,
+                        title: t("uploadDialogTitle"),
+                      });
+                      if (selected == null) return;
+                      const paths = Array.isArray(selected)
+                        ? selected
+                        : [selected];
+                      if (paths.length === 0) return;
+                      const results = await uploadLocalPathsToSession(
+                        sessionId,
+                        paths,
+                      );
+                      pendingFilenamesRef.current = results.map(
+                        (item) => item.filename,
+                      );
+                      scheduleHighlight(pendingFilenamesRef.current);
+                    } catch (err) {
+                      pushToast(formatTransferError(err), false);
+                    }
+                  })();
+                }
+              : undefined
+          }
+          onPaste={() => {
+            void (async () => {
+              try {
+                const text = await readClipboardText();
+                if (!text) {
+                  pushToast(t("toastClipboardEmpty"), false);
+                  return;
+                }
+                const term = terminalRef.current;
+                if (term) {
+                  term.paste(text);
+                } else {
+                  await invoke("terminal_input", {
+                    sessionId,
+                    data: text,
+                  });
+                }
+              } catch (err) {
+                pushToast(formatAppError(err), false);
+              }
+            })();
           }}
         />
       ) : null}
