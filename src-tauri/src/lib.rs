@@ -4,6 +4,7 @@ mod local_shell;
 #[cfg(windows)]
 mod msys;
 mod find;
+mod ai_engineer;
 mod commands;
 mod error;
 mod fs_archive;
@@ -133,6 +134,45 @@ fn inset_macos_traffic_lights(window: &tauri::WebviewWindow, x: f64, titlebar_he
     }
 }
 
+fn fit_window_to_monitor(window: &tauri::WebviewWindow) {
+    const PREFERRED_W: f64 = 1400.0;
+    const PREFERRED_H: f64 = 860.0;
+
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    let Some(monitor) = monitor else {
+        let _ = window.set_size(tauri::LogicalSize::new(PREFERRED_W, PREFERRED_H));
+        let _ = window.center();
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    let work = monitor.work_area();
+    // Logical work-area size (excludes menu bar / dock).
+    let work_w = (work.size.width as f64 / scale).max(800.0);
+    let work_h = (work.size.height as f64 / scale).max(500.0);
+    let target_w = PREFERRED_W.min(work_w * 0.96).max(800.0);
+    let target_h = PREFERRED_H.min(work_h * 0.96).max(500.0);
+
+    let _ = window.set_size(tauri::LogicalSize::new(target_w, target_h));
+    center_window_on_work_area(window, &monitor);
+}
+
+fn center_window_on_work_area(window: &tauri::WebviewWindow, monitor: &tauri::Monitor) {
+    let Ok(outer) = window.outer_size() else {
+        let _ = window.center();
+        return;
+    };
+    let work = monitor.work_area();
+    let x = work.position.x + (work.size.width as i32 - outer.width as i32) / 2;
+    let y = work.position.y + (work.size.height as i32 - outer.height as i32) / 2;
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
@@ -151,6 +191,19 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
                 apply_macos_window_effects(&window)?;
+                fit_window_to_monitor(&window);
+                // macOS effects / undecorated chrome can shift position; re-center after settle.
+                #[cfg(target_os = "macos")]
+                {
+                    let delayed = window.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(160));
+                        let window_for_center = delayed.clone();
+                        let _ = delayed.run_on_main_thread(move || {
+                            fit_window_to_monitor(&window_for_center);
+                        });
+                    });
+                }
             }
             Ok(())
         })
@@ -201,6 +254,13 @@ pub fn run() {
             commands::find_files,
             commands::get_session_cwd,
             commands::get_host_stats,
+            commands::ensure_ai_sidecar,
+            commands::ai_sidecar_request,
+            commands::ai_sidecar_stream,
+            commands::get_ai_settings,
+            commands::save_ai_settings,
+            commands::ai_terminal_exec,
+            commands::ai_register_privilege_lease,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

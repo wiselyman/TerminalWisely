@@ -115,7 +115,7 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
         <div className="find-panel-head">
           <div className="find-panel-title-wrap">
             <h2 className="find-panel-title">{t("find.title")}</h2>
-            <p className="find-panel-session">{sessionTitle}</p>
+            <span className="find-panel-session">{sessionTitle}</span>
           </div>
         </div>
 

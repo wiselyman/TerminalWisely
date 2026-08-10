@@ -6,9 +6,10 @@ const LEGACY_WIDTH_KEYS = [
   "terminal-wisely.command-nav-width",
 ] as const;
 
-export const DEFAULT_WORKSPACE_PANEL_WIDTH = 400;
-export const MIN_WORKSPACE_PANEL_WIDTH = 320;
-export const MAX_WORKSPACE_PANEL_WIDTH = 720;
+/** Shared width for AI / Task Manager / Find / Host Stats side panels. */
+export const DEFAULT_WORKSPACE_PANEL_WIDTH = 520;
+export const MIN_WORKSPACE_PANEL_WIDTH = 420;
+export const MAX_WORKSPACE_PANEL_WIDTH = 960;
 
 type WidthListener = (width: number) => void;
 const listeners = new Set<WidthListener>();
@@ -33,8 +34,30 @@ function migrateLegacyWidth(): number | null {
 
 export function readWorkspacePanelWidth(): number {
   const stored = Number(localStorage.getItem(WORKSPACE_PANEL_WIDTH_KEY));
+  // One-shot: undo temporary panel widen (780/1200) from earlier mistaken defaults.
+  const restoredFlag = "terminal-wisely.workspace-panel-width-restored-v1";
+  if (
+    !localStorage.getItem(restoredFlag) &&
+    Number.isFinite(stored) &&
+    stored >= 780
+  ) {
+    localStorage.setItem(restoredFlag, "1");
+    localStorage.setItem(
+      WORKSPACE_PANEL_WIDTH_KEY,
+      String(DEFAULT_WORKSPACE_PANEL_WIDTH),
+    );
+    return DEFAULT_WORKSPACE_PANEL_WIDTH;
+  }
+  if (!localStorage.getItem(restoredFlag)) {
+    localStorage.setItem(restoredFlag, "1");
+  }
+
   if (Number.isFinite(stored) && stored > 0) {
-    return clampWorkspacePanelWidth(stored);
+    const next = clampWorkspacePanelWidth(stored);
+    if (next !== stored) {
+      localStorage.setItem(WORKSPACE_PANEL_WIDTH_KEY, String(next));
+    }
+    return next;
   }
 
   const migrated = migrateLegacyWidth();

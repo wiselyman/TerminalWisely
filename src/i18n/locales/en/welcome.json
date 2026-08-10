@@ -1,10 +1,14 @@
 {
   "sectionAria": "Product introduction",
-  "eyebrow": "Open-source desktop terminal",
+  "eyebrow": "v1.0 · Open-source desktop terminal",
   "productName": "TerminalWisely",
-  "tagline": "A desktop terminal built for day-to-day ops",
-  "summary": "Manage local Git Bash and SSH sessions in one window. Drag-and-drop upload, click to browse and preview, right-click download and cross-server send, Find, server metrics, Task Manager, and tab directory shortcuts — less switching between terminal and file manager.",
+  "tagline": "Fix Linux in plain language",
+  "summary": "Local shell and SSH in one window, plus AI Linux Engineer on the connected host: you describe the problem; the agent proposes commands. Reads run automatically; mutations need your approval. Drag-upload, click-preview, and cross-server send stay built in.",
   "quickStart": "Quick start",
+  "feature.aiEngineer.title": "AI Linux Engineer",
+  "feature.aiEngineer.desc": "Tell the connected host “disk is full”, “what owns port 8080”, or “nginx 502” in natural language. It inspects logs, ports, and services over your real SSH session. Risky commands ask for approval; firewall changes can use timed rollback.",
+  "feature.policySafe.title": "Policy & safety",
+  "feature.policySafe.desc": "The harness classifies commands by capability (R0–R4): auto-allow reads, approve mutations, deny catastrophes. Unknown scripts are strict. The model cannot bypass policy. API keys stay on-device; execution uses only your open sessions.",
   "feature.dragUpload.title": "Drag & drop upload",
   "feature.dragUpload.desc": "Drop files onto an SSH terminal or tab to upload via SFTP into the current remote directory.",
   "feature.clickBrowse.title": "Click to browse & preview",
@@ -23,10 +27,10 @@
   "feature.taskManager.desc": "View processes, ports, memory, and CPU for the active machine (local or SSH). Search, sort, and end processes after confirm.",
   "feature.commandNav.title": "Command guide",
   "feature.commandNav.desc": "Browse ops commands by service, logs, disk, network, and more. Fill parameters and insert into the terminal (does not auto-run).",
-  "step.local.iconLabel": "Git Bash local terminal",
-  "step.local.text": "First sidebar item opens a Git Bash local terminal (install Git for Windows on Windows).",
+  "step.local.iconLabel": "Local terminal",
+  "step.local.text": "Open a local shell from the sidebar (Git Bash recommended on Windows).",
   "step.ssh.iconLabel": "Remote SSH",
-  "step.ssh.text": "Use + on the tab bar or a sidebar bookmark to connect to a remote Linux host.",
-  "step.bookmark.iconLabel": "Bookmarks",
-  "step.bookmark.text": "Save frequent SSH hosts as bookmarks. Right-click ls paths to download, preview, or send elsewhere."
+  "step.ssh.text": "Connect to a Linux host; save it as a bookmark for next time.",
+  "step.bookmark.iconLabel": "AI Engineer",
+  "step.bookmark.text": "Open AI Engineer from the side rail, configure a model, then troubleshoot in natural language—approve mutations when prompted."
 }

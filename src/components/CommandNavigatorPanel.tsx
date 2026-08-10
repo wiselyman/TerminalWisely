@@ -154,12 +154,12 @@ export function CommandNavigatorPanel({
         <div className="cmd-nav-panel-head">
           <div className="cmd-nav-panel-title-wrap">
             <h2 className="cmd-nav-panel-title">{t("commandNav.title")}</h2>
-            <p className="cmd-nav-panel-session">
+            <span className="cmd-nav-panel-session">
               {sessionTitle}
               {distroHint ? (
                 <span className="cmd-nav-distro-hint"> · {distroHint}</span>
               ) : null}
-            </p>
+            </span>
           </div>
         </div>
 

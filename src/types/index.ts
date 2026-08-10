@@ -21,6 +21,7 @@ export interface SessionInfo {
   server_id?: string | null;
   os_id?: string | null;
   os_name?: string | null;
+  host_fingerprint?: string | null;
 }
 
 export interface SessionMetadataUpdatedPayload {

@@ -25,3 +25,12 @@ dist-ssr
 
 # Cursor IDE（本地 AI 规则与配置，不纳入版本库）
 .cursor/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+*.egg-info/
+.venv/
+venv/

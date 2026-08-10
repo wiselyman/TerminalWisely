@@ -23,7 +23,15 @@ use crate::types::{
 };
 use crate::types::{AuthMethod, InsertLocalPathsRequest};
 
-pub struct ClientHandler;
+pub struct ClientHandler {
+    fingerprint: Arc<std::sync::Mutex<Option<String>>>,
+}
+
+impl ClientHandler {
+    fn new(fingerprint: Arc<std::sync::Mutex<Option<String>>>) -> Self {
+        Self { fingerprint }
+    }
+}
 
 #[async_trait::async_trait]
 impl client::Handler for ClientHandler {
@@ -31,8 +39,13 @@ impl client::Handler for ClientHandler {
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &PublicKey,
+        server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
+        // Record fingerprint for TargetSessionIdentity; still auto-accept (TOFU later).
+        let fp = server_public_key.fingerprint();
+        if let Ok(mut guard) = self.fingerprint.lock() {
+            *guard = Some(fp);
+        }
         Ok(true)
     }
 }
@@ -73,10 +86,12 @@ const SSH_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(400);
 const SSH_CONNECT_MAX_ATTEMPTS: usize = 3;
 
 fn ssh_client_config() -> Arc<client::Config> {
+    // Keepalive-only traffic does not always reset russh's inactivity timer; for
+    // interactive terminals rely on keepalive and disable inactivity GC.
     Arc::new(client::Config {
-        inactivity_timeout: Some(Duration::from_secs(3600)),
-        keepalive_interval: Some(Duration::from_secs(30)),
-        keepalive_max: 3,
+        inactivity_timeout: None,
+        keepalive_interval: Some(Duration::from_secs(20)),
+        keepalive_max: 12, // ~4 min of missed replies before drop
         window_size: 16 * 1024 * 1024,
         maximum_packet_size: 64 * 1024,
         ..Default::default()
@@ -87,7 +102,10 @@ fn default_remote_home(username: &str) -> String {
     format!("/home/{username}")
 }
 
-async fn connect_ssh_transport(host: &str, port: u16) -> AppResult<client::Handle<ClientHandler>> {
+async fn connect_ssh_transport(
+    host: &str,
+    port: u16,
+) -> AppResult<(client::Handle<ClientHandler>, Option<String>)> {
     let config = ssh_client_config();
     let target = (host, port);
     let mut last_err: Option<AppError> = None;
@@ -97,13 +115,17 @@ async fn connect_ssh_transport(host: &str, port: u16) -> AppResult<client::Handl
             sleep(SSH_CONNECT_RETRY_DELAY).await;
         }
 
+        let fingerprint_slot = Arc::new(std::sync::Mutex::new(None));
         match timeout(
             SSH_CONNECT_TIMEOUT,
-            client::connect(config.clone(), target, ClientHandler),
+            client::connect(config.clone(), target, ClientHandler::new(fingerprint_slot.clone())),
         )
         .await
         {
-            Ok(Ok(handle)) => return Ok(handle),
+            Ok(Ok(handle)) => {
+                let fp = fingerprint_slot.lock().ok().and_then(|g| g.clone());
+                return Ok((handle, fp));
+            }
             Ok(Err(err)) => last_err = Some(err.into()),
             Err(_) => last_err = Some(AppError::code("ERR_SSH_TIMEOUT")),
         }
@@ -146,12 +168,14 @@ async fn authenticate_handle(
     Ok(())
 }
 
-pub async fn exec_command_with_stdin(
+/// Capture remote stdout/stderr/exit with stdin; non-zero exit is still Ok.
+/// AI tools need this: `apt-get remove` missing a package exits 100 after sudo auth.
+pub async fn exec_command_with_stdin_capture(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     command: &str,
     stdin_data: &[u8],
     max_stdout_bytes: usize,
-) -> AppResult<Vec<u8>> {
+) -> AppResult<(Vec<u8>, String, u32)> {
     use std::io::Cursor;
 
     let mut channel = {
@@ -205,32 +229,49 @@ pub async fn exec_command_with_stdin(
     }
 
     match exit_status {
-        Some(0) => Ok(stdout),
+        Some(code) => Ok((stdout, stderr, code)),
         None => {
-            let detail = stderr.trim();
+            let detail = if !stderr.trim().is_empty() {
+                stderr.trim()
+            } else {
+                ""
+            };
             if detail.is_empty() {
                 Err(AppError::msg("远程命令未返回退出状态"))
             } else {
                 Err(AppError::msg(format!("远程命令失败: {detail}")))
             }
         }
-        Some(code) => {
-            let detail = stderr.trim();
-            if detail.is_empty() {
-                Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
-            } else {
-                Err(AppError::msg(format!(
-                    "远程命令失败，退出码 {code}: {detail}"
-                )))
-            }
-        }
     }
 }
 
-pub async fn exec_command(
+pub async fn exec_command_with_stdin(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     command: &str,
-) -> AppResult<String> {
+    stdin_data: &[u8],
+    max_stdout_bytes: usize,
+) -> AppResult<Vec<u8>> {
+    let (stdout, stderr, code) =
+        exec_command_with_stdin_capture(handle, command, stdin_data, max_stdout_bytes).await?;
+    if code == 0 {
+        return Ok(stdout);
+    }
+    let detail = stderr.trim();
+    if detail.is_empty() {
+        Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
+    } else {
+        Err(AppError::msg(format!(
+            "远程命令失败，退出码 {code}: {detail}"
+        )))
+    }
+}
+
+/// Capture remote stdout/stderr/exit without treating non-zero as hard failure.
+/// AI tools need this: `grep` with no match exits 1 and is still a valid result.
+pub async fn exec_command_capture(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    command: &str,
+) -> AppResult<(String, String, u32)> {
     let channel = {
         let handle_guard = handle.lock().await;
         handle_guard
@@ -267,7 +308,7 @@ pub async fn exec_command(
     }
 
     match exit_status {
-        Some(0) => Ok(stdout),
+        Some(code) => Ok((stdout, stderr, code)),
         None => {
             let detail = if !stderr.trim().is_empty() {
                 stderr.trim()
@@ -280,20 +321,28 @@ pub async fn exec_command(
                 Err(AppError::msg(format!("远程命令失败: {detail}")))
             }
         }
-        Some(code) => {
-            let detail = if !stderr.trim().is_empty() {
-                stderr.trim()
-            } else {
-                stdout.trim()
-            };
-            if detail.is_empty() {
-                Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
-            } else {
-                Err(AppError::msg(format!(
-                    "远程命令失败，退出码 {code}: {detail}"
-                )))
-            }
-        }
+    }
+}
+
+pub async fn exec_command(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    command: &str,
+) -> AppResult<String> {
+    let (stdout, stderr, code) = exec_command_capture(handle, command).await?;
+    if code == 0 {
+        return Ok(stdout);
+    }
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim()
+    } else {
+        stdout.trim()
+    };
+    if detail.is_empty() {
+        Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
+    } else {
+        Err(AppError::msg(format!(
+            "远程命令失败，退出码 {code}: {detail}"
+        )))
     }
 }
 
@@ -308,7 +357,7 @@ pub async fn open_transfer_connection(
     check_cancel(cancel)?;
 
     let connect = async {
-        let mut handle = connect_ssh_transport(&request.host, request.port).await?;
+        let (mut handle, _fp) = connect_ssh_transport(&request.host, request.port).await?;
         authenticate_handle(&mut handle, request).await?;
         Ok::<_, AppError>(Arc::new(Mutex::new(handle)))
     };
@@ -344,7 +393,7 @@ impl SshSession {
         cols: u16,
         rows: u16,
     ) -> AppResult<(Self, Option<probe::ServerOsProfile>)> {
-        let mut handle =
+        let (mut handle, host_fingerprint) =
             connect_ssh_transport(&request.host, request.port).await?;
 
         authenticate_handle(&mut handle, &request).await?;
@@ -372,6 +421,7 @@ impl SshSession {
                 )),
                 os_id: None,
                 os_name: None,
+                host_fingerprint,
             },
             connect_request: request,
             handle: handle.clone(),
@@ -476,13 +526,14 @@ impl SshSession {
         let _ = self.shutdown_tx.send(true);
         sleep(Duration::from_millis(150)).await;
 
-        let mut handle = connect_ssh_transport(
+        let (mut handle, host_fingerprint) = connect_ssh_transport(
             &self.connect_request.host,
             self.connect_request.port,
         )
         .await?;
         authenticate_handle(&mut handle, &self.connect_request).await?;
         *self.handle.lock().await = handle;
+        self.info.host_fingerprint = host_fingerprint;
 
         self.spawn_shell_loop(
             app,

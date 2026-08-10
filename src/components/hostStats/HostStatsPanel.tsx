@@ -22,7 +22,7 @@ interface HostStatsPanelProps {
 }
 
 export function HostStatsPanel({
-  sessionTitle,
+  sessionTitle: _sessionTitle,
   osId,
   osName,
 }: HostStatsPanelProps) {
@@ -92,7 +92,6 @@ export function HostStatsPanel({
         <div className="host-stats-head">
           <div className="host-stats-title-wrap">
             <h2 className="host-stats-title">{t("hostStats.title")}</h2>
-            <p className="host-stats-session">{sessionTitle}</p>
           </div>
         </div>
 

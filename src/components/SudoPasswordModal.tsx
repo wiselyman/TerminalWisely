@@ -7,6 +7,7 @@ export function SudoPasswordModal() {
   const open = useSudoPromptStore((s) => s.open);
   const action = useSudoPromptStore((s) => s.action);
   const path = useSudoPromptStore((s) => s.path);
+  const command = useSudoPromptStore((s) => s.command);
   const password = useSudoPromptStore((s) => s.password);
   const pending = useSudoPromptStore((s) => s.pending);
   const setPassword = useSudoPromptStore((s) => s.setPassword);
@@ -14,6 +15,9 @@ export function SudoPasswordModal() {
   const cancel = useSudoPromptStore((s) => s.cancel);
 
   if (!open) return null;
+
+  const detail = (command || path).trim();
+  const isCommand = Boolean(command.trim()) || action === "执行" || action === "execute";
 
   return (
     <Modal title={t("sudoModalTitle")} onClose={cancel}>
@@ -24,8 +28,13 @@ export function SudoPasswordModal() {
           submit();
         }}
       >
-        <p className="modal-hint">{t("sudoModalHint", { action })}</p>
-        {path ? <p className="modal-hint preview-panel-path">{path}</p> : null}
+        <p className="modal-hint">
+          {isCommand ? t("sudoModalHintCommand", { action }) : t("sudoModalHint", { action })}
+        </p>
+        {detail ? (
+          <pre className="modal-hint preview-panel-path sudo-confirm-command">{detail}</pre>
+        ) : null}
+        <p className="modal-hint">{t("sudoModalConfirmNote")}</p>
         <label>
           {t("sudoPassword")}
           <input
@@ -38,7 +47,7 @@ export function SudoPasswordModal() {
         </label>
         <div className="form-row">
           <button type="submit" disabled={pending || !password.trim()}>
-            {pending ? t("common:processing") : t("common:confirm")}
+            {pending ? t("common:processing") : t("sudoModalConfirm")}
           </button>
           <button type="button" disabled={pending} onClick={cancel}>
             {t("common:cancel")}

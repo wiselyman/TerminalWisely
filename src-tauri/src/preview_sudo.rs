@@ -11,7 +11,10 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::shell::shell_quote_remote_path;
-use crate::ssh::client::{exec_command, exec_command_with_stdin, ClientHandler};
+use crate::ssh::client::{
+    exec_command, exec_command_capture, exec_command_with_stdin,
+    exec_command_with_stdin_capture, ClientHandler,
+};
 use crate::ssh::sftp;
 use crate::transfer::{check_cancel, ThrottledProgressBytes, CANCEL_POLL_MS};
 
@@ -29,16 +32,25 @@ pub fn is_permission_denied(err: &AppError) -> bool {
 
 pub fn sudo_required(action: &str, path: &str) -> AppError {
     AppError::msg(format!(
-        "{PREVIEW_SUDO_REQUIRED}: {action} `{path}` 需要 sudo 权限，请输入当前 SSH 用户的 sudo 密码"
+        "{PREVIEW_SUDO_REQUIRED}: {action} `{path}` 需要 sudo 权限，请确认命令并输入 sudo 密码"
     ))
 }
 
-fn is_sudo_auth_failure(err: &AppError) -> bool {
-    let msg = err.to_string().to_lowercase();
-    msg.contains("sorry, try again")
-        || msg.contains("incorrect password")
-        || msg.contains("a password is required")
+pub fn looks_like_sudo_password_needed(text: &str) -> bool {
+    let msg = text.to_lowercase();
+    msg.contains("a password is required")
+        || msg.contains("a terminal is required")
         || msg.contains("no tty present")
+        || msg.contains("no askpass")
+        || msg.contains("sorry, try again")
+        || msg.contains("incorrect password")
+        || msg.contains("authentication failure")
+        || msg.contains("需要密码")
+        || (msg.contains("密码") && msg.contains("sudo"))
+}
+
+fn is_sudo_auth_failure(err: &AppError) -> bool {
+    looks_like_sudo_password_needed(&err.to_string())
 }
 
 pub async fn read_remote_bytes_sudo(
@@ -143,25 +155,61 @@ pub async fn exec_remote_sudo_capture(
     action: &str,
     path_hint: &str,
 ) -> AppResult<String> {
+    let (stdout, stderr, code) =
+        exec_remote_sudo_ai_capture(handle, shell_command, sudo_password, action, path_hint)
+            .await?;
+    if code == 0 {
+        return Ok(stdout);
+    }
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim()
+    } else {
+        stdout.trim()
+    };
+    if detail.is_empty() {
+        Err(AppError::msg(format!("远程命令失败，退出码 {code}")))
+    } else {
+        Err(AppError::msg(format!(
+            "远程命令失败，退出码 {code}: {detail}"
+        )))
+    }
+}
+
+/// Auth failures ask for password; command failures return exit codes.
+pub async fn exec_remote_sudo_ai_capture(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    shell_command: &str,
+    sudo_password: Option<&str>,
+    action: &str,
+    path_hint: &str,
+) -> AppResult<(String, String, i32)> {
+    let quoted = shell_quote_remote_path(shell_command);
     if sudo_password.is_none() {
-        let no_pass = format!("sudo -n {shell_command}");
-        if let Ok(stdout) = exec_command(handle, &no_pass).await {
-            if !stdout.trim().is_empty() {
-                return Ok(stdout);
-            }
+        let no_pass = format!("sudo -n sh -c {quoted}");
+        let (stdout, stderr, code) = exec_command_capture(handle, &no_pass).await?;
+        let combined = format!("{stdout}\n{stderr}");
+        if looks_like_sudo_password_needed(&combined) {
+            return Err(sudo_required(action, path_hint));
         }
-        return Err(sudo_required(action, path_hint));
+        // sudo -n often exits 1 with empty streams when a password is required.
+        if code != 0 && stdout.trim().is_empty() && stderr.trim().is_empty() {
+            return Err(sudo_required(action, path_hint));
+        }
+        return Ok((stdout, stderr, code as i32));
     }
 
-    let cmd = format!("sudo -S {shell_command}");
+    let cmd = format!("sudo -S -p '' sh -c {quoted}");
     let mut stdin = sudo_password.unwrap().as_bytes().to_vec();
     stdin.push(b'\n');
 
-    match exec_command_with_stdin(handle, &cmd, &stdin, 4096).await {
-        Ok(bytes) => Ok(String::from_utf8_lossy(&bytes).to_string()),
-        Err(err) if is_sudo_auth_failure(&err) => Err(sudo_required(action, path_hint)),
-        Err(err) => Err(err),
+    let (bytes, stderr, code) =
+        exec_command_with_stdin_capture(handle, &cmd, &stdin, 512 * 1024).await?;
+    let stdout = String::from_utf8_lossy(&bytes).to_string();
+    let combined = format!("{stdout}\n{stderr}");
+    if looks_like_sudo_password_needed(&combined) {
+        return Err(sudo_required(action, path_hint));
     }
+    Ok((stdout, stderr, code as i32))
 }
 
 async fn read_stream_chunk<R: AsyncRead + Unpin>(

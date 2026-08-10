@@ -110,6 +110,10 @@ export function TerminalView({
   const openSendTo = useSessionStore((s) => s.openSendTo);
   const startRemoteTransfer = useSessionStore((s) => s.startRemoteTransfer);
   const setSessionDisconnected = useSessionStore((s) => s.setSessionDisconnected);
+  const reconnectSession = useSessionStore((s) => s.reconnectSession);
+  const isDisconnected = useSessionStore((s) =>
+    s.disconnectedSessionIds.has(sessionId),
+  );
   const openPreview = usePreviewStore((s) => s.openPreview);
   const pushToast = useToastStore((s) => s.pushToast);
   const openPreviewRef = useRef(openPreview);
@@ -128,6 +132,8 @@ export function TerminalView({
   const [isDragOver, setIsDragOver] = useState(false);
   const [bootOverlayVisible, setBootOverlayVisible] = useState(true);
   const [bootOverlayFading, setBootOverlayFading] = useState(false);
+  const [autoReconnecting, setAutoReconnecting] = useState(false);
+  const autoReconnectAttemptRef = useRef(0);
   const [fsContextMenu, setFsContextMenu] = useState<{
     x: number;
     y: number;
@@ -667,6 +673,50 @@ export function TerminalView({
   }, [isConnecting, kind, markFirstOutput, sessionId, setSessionDisconnected, syncSize]);
 
   useEffect(() => {
+    if (!isDisconnected || kind !== "ssh") {
+      autoReconnectAttemptRef.current = 0;
+      setAutoReconnecting(false);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const attempt = () => {
+      if (cancelled) return;
+      const n = autoReconnectAttemptRef.current;
+      if (n >= 5) {
+        setAutoReconnecting(false);
+        return;
+      }
+      autoReconnectAttemptRef.current = n + 1;
+      setAutoReconnecting(true);
+      const { cols, rows } = lastSizeRef.current;
+      void reconnectSession(
+        sessionId,
+        cols > 0 ? cols : 80,
+        rows > 0 ? rows : 24,
+        { silent: true },
+      ).then((ok) => {
+        if (cancelled) return;
+        if (ok) {
+          setAutoReconnecting(false);
+          autoReconnectAttemptRef.current = 0;
+          return;
+        }
+        const delay = Math.min(30_000, 1000 * 2 ** n);
+        timer = setTimeout(attempt, delay);
+      });
+    };
+
+    timer = setTimeout(attempt, 600);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isDisconnected, kind, reconnectSession, sessionId]);
+
+  useEffect(() => {
     const onFocusRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId: string }>).detail;
       if (detail?.sessionId !== sessionId || !activeRef.current) return;
@@ -960,6 +1010,31 @@ export function TerminalView({
           subtitle={title}
           fading={bootOverlayFading}
         />
+      ) : null}
+      {isDisconnected && kind === "ssh" && active && !isConnecting ? (
+        <div className="terminal-disconnect-banner" role="status">
+          <span>
+            {autoReconnecting
+              ? t("statusAutoReconnecting")
+              : t("statusDisconnected")}
+          </span>
+          {!autoReconnecting ? (
+            <button
+              type="button"
+              className="terminal-disconnect-banner-btn"
+              onClick={() => {
+                const { cols, rows } = lastSizeRef.current;
+                void reconnectSession(
+                  sessionId,
+                  cols > 0 ? cols : 80,
+                  rows > 0 ? rows : 24,
+                );
+              }}
+            >
+              {t("reconnectNow")}
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {isDragOver && active && (
         <div className="terminal-drop-overlay" aria-hidden="true">

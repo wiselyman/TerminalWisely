@@ -20,6 +20,9 @@ pub struct SessionInfo {
     pub os_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os_name: Option<String>,
+    /// SSH host key fingerprint (sha256) recorded at connect; empty for local.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

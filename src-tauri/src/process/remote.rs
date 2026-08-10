@@ -342,6 +342,91 @@ done < "$ps_file"
 printf ']\n'
 TW_LIST_EOF"#;
 
+// POSIX/BusyBox fallback for hosts without bash or GNU ps (OpenWrt / Dropbear).
+// Delivered via base64 | sh so Dropbear/`ash -c` never mangled heredoc/newlines.
+// Emits TSV records; JSON assembly happens in Rust.
+// cpu_percent is 0 (no cheap per-process CPU sampling without bash+GNU ps).
+const LIST_PROCESSES_BUSYBOX_B64: &str = concat!(
+    "cG9ydHNfdG1wPS90bXAvLnR3X3BvcnRzLiQkCm5ldHN0YXQgLXRsbnAgMj4vZGV2L251bGwgfCBh",
+    "d2sgJ3sKICBpZiAoJDAgIX4gL0xJU1RFTi8pIG5leHQ7CiAgbiA9IHNwbGl0KCQ0LCBhLCAiOiIp",
+    "OyBwb3J0ID0gYVtuXTsKICBpZiAocG9ydCAhfiAvXlswLTldKyQvKSBuZXh0OwogIG0gPSBzcGxp",
+    "dCgkTkYsIGIsICIvIik7CiAgaWYgKG0gPj0gMiAmJiBiWzFdIH4gL15bMC05XSskLykgcHJpbnQg",
+    "YlsxXSwgcG9ydDsKfScgPiAiJHBvcnRzX3RtcCIgMj4vZGV2L251bGwgfHwgOiA+ICIkcG9ydHNf",
+    "dG1wIgpwYWdlX3NpemU9JChnZXRjb25mIFBBR0VTSVpFIDI+L2Rldi9udWxsKQpjYXNlICIkcGFn",
+    "ZV9zaXplIiBpbiAnJ3wqWyEwLTldKikgcGFnZV9zaXplPTQwOTYgOzsgZXNhYwplY2hvIFRXUFJP",
+    "Q19CRUdJTgpmb3IgZCBpbiAvcHJvYy9bMC05XSo7IGRvCiAgcGlkPSR7ZCMvcHJvYy99CiAgWyAt",
+    "ciAiJGQvc3RhdG0iIF0gfHwgY29udGludWUKICBbIC1yICIkZC9zdGF0IiBdIHx8IGNvbnRpbnVl",
+    "CiAgY21kbGluZT0kKGNhdCAiJGQvY21kbGluZSIgMj4vZGV2L251bGwgfCB0ciAnXDAwMFwwMTFc",
+    "MDEyJyAnICAgJykKICBjb21tPSQoY2F0ICIkZC9jb21tIiAyPi9kZXYvbnVsbCB8IHRyICdcMDEx",
+    "XDAxMicgJyAgJykKICBbIC16ICIkY21kbGluZSIgXSAmJiBbIC16ICIkY29tbSIgXSAmJiBjb250",
+    "aW51ZQogICMgU2tpcCBrZXJuZWwgdGhyZWFkczogZW1wdHkgY21kbGluZSBhbmQgYnJhY2tldGVk",
+    "IGNvbW0gZnJvbSBzdGF0LgogIGlmIFsgLXogIiRjbWRsaW5lIiBdOyB0aGVuCiAgICBjYXNlICIk",
+    "Y29tbSIgaW4KICAgICAga3dvcmtlcip8a3NvZnRpcnFkKnxtaWdyYXRpb24qfHJjdV8qfGtzd2Fw",
+    "ZCp8a3RocmVhZGQpIGNvbnRpbnVlIDs7CiAgICBlc2FjCiAgZmkKICByc3NfcGFnZXM9JChhd2sg",
+    "J3twcmludCAkMn0nICIkZC9zdGF0bSIgMj4vZGV2L251bGwpCiAgY2FzZSAiJHJzc19wYWdlcyIg",
+    "aW4gJyd8KlshMC05XSopIGNvbnRpbnVlIDs7IGVzYWMKICBpZiBbIC1uICIkY29tbSIgXTsgdGhl",
+    "bgogICAgbmFtZT0kY29tbQogIGVsc2UKICAgIHN0YXRfbGluZT0kKGNhdCAiJGQvc3RhdCIgMj4v",
+    "ZGV2L251bGwpCiAgICBuYW1lPSR7c3RhdF9saW5lIyoofQogICAgbmFtZT0ke25hbWUlJSkqfQog",
+    "IGZpCiAgbmFtZT0kKHByaW50ZiAnJXMnICIkbmFtZSIgfCB0ciAnXDAxMVwwMTInICcgICcpCiAg",
+    "WyAteiAiJG5hbWUiIF0gJiYgY29udGludWUKICBbIC16ICIkY21kbGluZSIgXSAmJiBjbWRsaW5l",
+    "PSRuYW1lCiAgbWVtPSQoKHJzc19wYWdlcyAqIHBhZ2Vfc2l6ZSkpCiAgcG9ydHM9JChhd2sgLXYg",
+    "cD0iJHBpZCIgJyQxPT1wIHtwcmludCAkMn0nICIkcG9ydHNfdG1wIiAyPi9kZXYvbnVsbCB8IHNv",
+    "cnQgLXVuIDI+L2Rldi9udWxsIHwgdHIgJ1wwMTInICcsJykKICBwb3J0cz0ke3BvcnRzJSx9CiAg",
+    "cHJpbnRmICdUV1BST0NcdCVzXHQlc1x0JXNcdCVzXHQlc1xuJyAiJHBpZCIgIiRtZW0iICIkcG9y",
+    "dHMiICIkbmFtZSIgIiRjbWRsaW5lIgpkb25lCnJtIC1mICIkcG9ydHNfdG1wIiAyPi9kZXYvbnVs",
+    "bAplY2hvIFRXUFJPQ19FTkQK",
+);
+
+fn busybox_list_command() -> String {
+    // Prefer BusyBox `base64 -d`; fall back to GNU `--decode` / openssl.
+    format!(
+        "echo {b64} | (base64 -d 2>/dev/null || base64 --decode 2>/dev/null || openssl base64 -d -A 2>/dev/null) | sh",
+        b64 = LIST_PROCESSES_BUSYBOX_B64
+    )
+}
+
+fn parse_busybox_process_list(stdout: &str) -> AppResult<ProcessListResult> {
+    if !stdout.contains("TWPROC_BEGIN") {
+        return Err(AppError::msg(format!(
+            "busybox 进程采集无有效输出: {}",
+            stdout.trim().chars().take(200).collect::<String>()
+        )));
+    }
+    let mut processes = Vec::new();
+    for line in stdout.lines() {
+        let Some(rest) = line.strip_prefix("TWPROC\t") else {
+            continue;
+        };
+        let mut fields = rest.splitn(5, '\t');
+        let (Some(pid), Some(mem), Some(ports), Some(name), Some(cmdline)) = (
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+        ) else {
+            continue;
+        };
+        let Ok(pid) = pid.trim().parse::<u32>() else {
+            continue;
+        };
+        let memory_bytes = mem.trim().parse::<u64>().unwrap_or(0);
+        let ports: Vec<u16> = ports
+            .split(',')
+            .filter_map(|p| p.trim().parse::<u16>().ok())
+            .collect();
+        processes.push(ProcessEntry {
+            pid,
+            name: name.trim().to_string(),
+            command: Some(cmdline.trim().to_string()),
+            cpu_percent: 0.0,
+            memory_bytes,
+            ports,
+        });
+    }
+    Ok(normalize_processes(processes))
+}
+
 fn is_kernel_process(entry: &ProcessEntry) -> bool {
     if entry.name.starts_with('[') || entry.name.starts_with("kworker") {
         return true;
@@ -410,10 +495,47 @@ pub async fn list_processes(
         ProcessListMode::Ports => LIST_PROCESS_PORTS_SCRIPT,
         ProcessListMode::Full => LIST_PROCESSES_SCRIPT,
     };
-    let stdout = exec_command(&handle, script)
+    let allow_busybox_fallback = !matches!(mode, ProcessListMode::Ports);
+
+    match exec_command(&handle, script).await {
+        Ok(stdout) => {
+            let result = parse_process_list(&stdout, "解析远程进程列表失败")?;
+            // bash exists but GNU ps flags unsupported → empty list; retry via /proc.
+            if allow_busybox_fallback && result.processes.is_empty() {
+                match list_processes_busybox(&handle).await {
+                    Ok(fallback) if !fallback.processes.is_empty() => return Ok(fallback),
+                    Ok(_) => {}
+                    Err(fallback_err) => {
+                        // Prefer busybox error — more actionable on OpenWrt-class hosts.
+                        return Err(fallback_err);
+                    }
+                }
+            }
+            Ok(result)
+        }
+        // No bash on host (BusyBox/ash, e.g. OpenWrt) → POSIX fallback.
+        Err(err) => {
+            if !allow_busybox_fallback {
+                return Err(map_ssh_exec_error(err));
+            }
+            match list_processes_busybox(&handle).await {
+                Ok(result) => Ok(result),
+                Err(fallback_err) => Err(AppError::msg(format!(
+                    "{}; busybox fallback: {fallback_err}",
+                    map_ssh_exec_error(err)
+                ))),
+            }
+        }
+    }
+}
+
+async fn list_processes_busybox(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+) -> AppResult<ProcessListResult> {
+    let stdout = exec_command(handle, &busybox_list_command())
         .await
         .map_err(map_ssh_exec_error)?;
-    parse_process_list(&stdout, "解析远程进程列表失败")
+    parse_busybox_process_list(&stdout)
 }
 
 pub async fn kill_process(

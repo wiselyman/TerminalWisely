@@ -169,7 +169,10 @@ interface SessionState {
     sessionId: string,
     cols: number,
     rows: number,
-  ) => Promise<void>;
+    options?: { silent?: boolean },
+  ) => Promise<boolean>;
+  /** Restore FE tabs from Rust sessions still alive after webview reload. */
+  hydrateFromBackend: () => Promise<void>;
 }
 
 function mergeSessionOs(
@@ -572,13 +575,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   setStatusMessage: (message) => set({ statusMessage: message }),
 
-  setSessionDisconnected: (sessionId) =>
+  setSessionDisconnected: (sessionId) => {
     set((state) => {
       if (state.disconnectedSessionIds.has(sessionId)) return state;
       const disconnectedSessionIds = new Set(state.disconnectedSessionIds);
       disconnectedSessionIds.add(sessionId);
       return { disconnectedSessionIds };
-    }),
+    });
+  },
 
   clearSessionDisconnected: (sessionId) =>
     set((state) => {
@@ -588,12 +592,50 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       return { disconnectedSessionIds };
     }),
 
-  reconnectSession: async (sessionId, cols, rows) => {
+  reconnectSession: async (sessionId, cols, rows, options) => {
     try {
       await invoke("reconnect_ssh_session", { sessionId, cols, rows });
       get().clearSessionDisconnected(sessionId);
+      return true;
     } catch (err) {
-      useToastStore.getState().pushToast(formatConnectError(err), false);
+      if (!options?.silent) {
+        useToastStore.getState().pushToast(formatConnectError(err), false);
+      }
+      return false;
+    }
+  },
+
+  hydrateFromBackend: async () => {
+    try {
+      const sessions = await invoke<SessionInfo[]>("list_sessions");
+      if (!sessions.length) return;
+      set((state) => {
+        const existing = new Set(state.tabs.map((tab) => tab.id));
+        const missing = sessions.filter((session) => !existing.has(session.id));
+        if (missing.length === 0) return state;
+
+        const restored: TabSession[] = missing.map((session) => ({
+          ...session,
+          active: false,
+          connectionStatus: "ready" as const,
+        }));
+
+        // Webview reload wiped FE tabs but Rust sessions survived.
+        if (state.tabs.length === 0) {
+          const activeTabId = restored[restored.length - 1]?.id ?? null;
+          return {
+            tabs: restored.map((tab) => ({
+              ...tab,
+              active: tab.id === activeTabId,
+            })),
+            activeTabId,
+          };
+        }
+
+        return { tabs: [...state.tabs, ...restored] };
+      });
+    } catch {
+      // Backend unavailable during early boot — ignore.
     }
   },
 

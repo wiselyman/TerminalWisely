@@ -15,6 +15,9 @@ import { HostStatsTool } from "./components/HostStatsTool";
 import { CommandNavigatorPanel } from "./components/CommandNavigatorPanel";
 import { CommandNavigatorTool } from "./components/CommandNavigatorTool";
 import { TaskManagerTool } from "./components/TaskManagerTool";
+import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
+import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
+import { ensureSidecar } from "./lib/aiEngineer/api";
 import { WorkspaceToolRail } from "./components/WorkspaceToolRail";
 import { TaskManagerPanel } from "./components/TaskManagerPanel";
 import { TransferPanel } from "./components/TransferPanel";
@@ -39,6 +42,7 @@ import {
   requestSudoPassword,
 } from "./stores/sudoPromptStore";
 import { useSessionStore } from "./stores/sessionStore";
+import { useAiEngineerStore } from "./stores/aiEngineerStore";
 import { useHostStatsStore } from "./stores/hostStatsStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { useCommandNavigatorStore } from "./stores/commandNavigatorStore";
@@ -59,7 +63,7 @@ import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
 import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
 import "./App.css";
 
-const SIDEBAR_WIDTH = 260;
+const SIDEBAR_WIDTH = 320;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const SIDEBAR_STORAGE_KEY = "terminal-wisely.sidebar-collapsed";
 
@@ -107,6 +111,16 @@ function App() {
       >,
     [tabs],
   );
+
+  useEffect(() => {
+    void useSessionStore.getState().hydrateFromBackend();
+  }, []);
+
+  // Prewarm AI sidecar so the first panel open is not blocked on Python boot.
+  useEffect(() => {
+    void ensureSidecar().catch(() => undefined);
+  }, []);
+
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -227,6 +241,7 @@ function App() {
   const registerNewRemote = useCallback((open: () => void) => {
     openNewRemoteRef.current = open;
   }, []);
+  const aiEngineerOpen = useAiEngineerStore((s) => s.open);
   const taskManagerOpen = useTaskManagerStore((s) => s.open);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
   const findOpen = useFindStore((s) => s.open);
@@ -238,7 +253,11 @@ function App() {
   const commandNavOpen = useCommandNavigatorStore((s) => s.open);
   const workspacePanelWidth = useTaskManagerStore((s) => s.width);
   const workspacePanelOpen =
-    taskManagerOpen || findOpen || hostStatsOpen || commandNavOpen;
+    aiEngineerOpen ||
+    taskManagerOpen ||
+    findOpen ||
+    hostStatsOpen ||
+    commandNavOpen;
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -403,6 +422,7 @@ function App() {
 
     return () => window.clearInterval(timer);
   }, [activeTabId, findOpen, loadSessionCwd]);
+
 
   useEffect(() => {
     if (!hostStatsOpen || !activeTabId) return;
@@ -861,6 +881,15 @@ function App() {
       <ToastContainer />
       <SudoPasswordModal />
       <WorkspaceToolRail>
+        <AiEngineerTool
+          active={aiEngineerOpen}
+          disabled={!activeTabReady}
+          onClick={() => {
+            if (activeTabId) {
+              switchWorkspacePanel("aiEngineer", activeTabId, activeTabServerId);
+            }
+          }}
+        />
         <TaskManagerTool
           active={taskManagerOpen}
           disabled={!activeTabReady}
@@ -890,6 +919,9 @@ function App() {
           }}
         />
       </WorkspaceToolRail>
+      {activeTabId && aiEngineerOpen ? (
+        <AiEngineerPanel sessionId={activeTabId} serverId={activeTabServerId} />
+      ) : null}
       {activeTabId && taskManagerOpen ? (
         <TaskManagerPanel
           sessionId={activeTabId}

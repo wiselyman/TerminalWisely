@@ -1,10 +1,17 @@
 import { closeWorkspacePanels } from "../stores/workspacePanelSwitch";
 
-export function WorkspacePanelBackdrop() {
+type WorkspacePanelBackdropProps = {
+  /** When false, overlay is non-interactive (does not dismiss panels). Default true. */
+  dismissible?: boolean;
+};
+
+export function WorkspacePanelBackdrop({
+  dismissible = true,
+}: WorkspacePanelBackdropProps) {
   return (
     <div
-      className="workspace-tool-backdrop open"
-      onClick={closeWorkspacePanels}
+      className={`workspace-tool-backdrop${dismissible ? " open" : ""}`}
+      onClick={dismissible ? closeWorkspacePanels : undefined}
       aria-hidden="true"
     />
   );

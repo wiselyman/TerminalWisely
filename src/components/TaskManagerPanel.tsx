@@ -35,7 +35,7 @@ function matchesFilter(process: ProcessEntry, query: string) {
 
 export function TaskManagerPanel({
   sessionId,
-  sessionTitle,
+  sessionTitle: _sessionTitle,
 }: TaskManagerPanelProps) {
   const { t } = useTranslation("tools");
   const {
@@ -108,11 +108,10 @@ export function TaskManagerPanel({
         <div className="task-manager-head">
           <div className="task-manager-title-wrap">
             <h2 className="task-manager-title">{t("taskManager.title")}</h2>
-            <p className="task-manager-session">{sessionTitle}</p>
             {lastUpdatedLabel ? (
-              <p className="task-manager-meta">
+              <span className="task-manager-meta">
                 {t("common:updatedAt", { time: lastUpdatedLabel })}
-              </p>
+              </span>
             ) : null}
           </div>
         </div>

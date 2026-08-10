@@ -98,6 +98,7 @@ impl LocalSession {
             server_id: Some("local".to_string()),
             os_id: Some(resolved.info.os_id.clone()),
             os_name: Some(resolved.info.os_name.clone()),
+            host_fingerprint: None,
         };
 
         Ok(Self {

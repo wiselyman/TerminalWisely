@@ -1,24 +1,33 @@
 import { unstable_batchedUpdates } from "react-dom";
+import { useAiEngineerStore } from "./aiEngineerStore";
 import { useCommandNavigatorStore } from "./commandNavigatorStore";
 import { useFindStore } from "./findStore";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 
 export type WorkspacePanelId =
+  | "aiEngineer"
   | "taskManager"
   | "find"
   | "hostStats"
   | "commandNav";
 
+function closeOtherWorkspacePanels(except?: WorkspacePanelId) {
+  if (except !== "aiEngineer") useAiEngineerStore.getState().close();
+  if (except !== "taskManager") useTaskManagerStore.getState().close();
+  if (except !== "find") useFindStore.getState().close();
+  if (except !== "hostStats") useHostStatsStore.getState().close();
+  if (except !== "commandNav") useCommandNavigatorStore.getState().close();
+}
+
 function closeAllWorkspacePanels() {
-  useTaskManagerStore.getState().close();
-  useFindStore.getState().close();
-  useHostStatsStore.getState().close();
-  useCommandNavigatorStore.getState().close();
+  closeOtherWorkspacePanels();
 }
 
 function isPanelOpen(id: WorkspacePanelId): boolean {
   switch (id) {
+    case "aiEngineer":
+      return useAiEngineerStore.getState().open;
     case "taskManager":
       return useTaskManagerStore.getState().open;
     case "find":
@@ -30,8 +39,15 @@ function isPanelOpen(id: WorkspacePanelId): boolean {
   }
 }
 
-function openWorkspacePanel(id: WorkspacePanelId, sessionId: string) {
+function openWorkspacePanel(
+  id: WorkspacePanelId,
+  sessionId: string,
+  serverId?: string,
+) {
   switch (id) {
+    case "aiEngineer":
+      useAiEngineerStore.getState().openPanel(sessionId, serverId);
+      break;
     case "taskManager":
       useTaskManagerStore.setState({ open: true });
       break;
@@ -47,15 +63,28 @@ function openWorkspacePanel(id: WorkspacePanelId, sessionId: string) {
   }
 }
 
-/** Close any open workspace side panel (task manager, find, host stats, command nav). */
 export function closeWorkspacePanels() {
   closeAllWorkspacePanels();
 }
 
-/** Tab-like switch: click another tool opens it immediately; re-click active tool closes it. */
-export function switchWorkspacePanel(id: WorkspacePanelId, sessionId: string) {
+/** Bring AI panel to front without aborting a run (e.g. approval / ask-user). */
+export function revealAiEngineerPanel() {
+  unstable_batchedUpdates(() => {
+    closeOtherWorkspacePanels("aiEngineer");
+    useAiEngineerStore.setState({ open: true });
+  });
+}
+
+export function switchWorkspacePanel(
+  id: WorkspacePanelId,
+  sessionId: string,
+  serverId?: string,
+) {
   if (isPanelOpen(id)) {
     switch (id) {
+      case "aiEngineer":
+        useAiEngineerStore.getState().close();
+        break;
       case "taskManager":
         useTaskManagerStore.getState().close();
         break;
@@ -73,7 +102,7 @@ export function switchWorkspacePanel(id: WorkspacePanelId, sessionId: string) {
   }
 
   unstable_batchedUpdates(() => {
-    closeAllWorkspacePanels();
-    openWorkspacePanel(id, sessionId);
+    closeOtherWorkspacePanels(id);
+    openWorkspacePanel(id, sessionId, serverId);
   });
 }

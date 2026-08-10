@@ -4,6 +4,20 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [1.0.0] - 2026-08-10
+
+### Added
+- **AI Linux Engineer**：自然语言在已连接主机上排障（侧车 Agent、按主机会话、OpenAI 兼容 / 本地模型）
+- **能力策略引擎**：YAML 驱动的 argv/能力标签 → R0–R4；用户可 overrides；未知命令偏严
+- 网络危险变更的定时回滚包装；批准/询问 UI；流式与上下文压缩等配套能力
+- 发行包打入 `agent-sidecar`（app/policy/requirements）
+
+### Changed
+- README 与欢迎页主打 AI 排障与安全模型（v1.0 叙事）
+- 版本号 1.0.0
+
+> 归档说明：[`release-notes/v1.0.0.md`](./release-notes/v1.0.0.md)
+
 ## [0.9.0] - 2026-07-18
 
 ### Added

@@ -7,9 +7,9 @@ use crate::ssh::client::{exec_command, ClientHandler};
 use crate::types::HostStatsSnapshot;
 use russh::client;
 
-const HOST_STATS_SCRIPT: &str = r#"bash -s <<'TW_HOST_STATS_EOF'
-set -eo pipefail
-
+// POSIX sh script — must stay BusyBox/ash compatible (OpenWrt, embedded boxes):
+// no bash, no [[ ]], no process substitution, no `ps -eo`, no `df -B1`.
+const HOST_STATS_SCRIPT: &str = r#"sh -s <<'TW_HOST_STATS_EOF'
 read_os_release() {
   if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -29,7 +29,7 @@ calc_cpu_usage() {
   read -r _ user nice system idle iowait irq softirq steal rest < /proc/stat
   idle1=$((idle + iowait))
   total1=$((user + nice + system + idle + iowait + irq + softirq + steal))
-  sleep 0.2
+  sleep 0.2 2>/dev/null || sleep 1
   read -r _ user nice system idle iowait irq softirq steal rest < /proc/stat
   idle2=$((idle + iowait))
   total2=$((user + nice + system + idle + iowait + irq + softirq + steal))
@@ -72,26 +72,24 @@ read_loadavg() {
   read -r load1 load5 load15 _ < /proc/loadavg
 }
 
-read_uptime() {
-  read -r uptime _ < /proc/uptime
-  printf '%.0f' "$uptime"
-}
-
 json_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 read_os_release
-TW_HOSTNAME=$(hostname 2>/dev/null || echo unknown)
+TW_HOSTNAME=$(hostname 2>/dev/null || cat /proc/sys/kernel/hostname 2>/dev/null || echo unknown)
 TW_KERNEL=$(uname -r 2>/dev/null || echo unknown)
 TW_ARCH=$(uname -m 2>/dev/null || echo unknown)
 TW_TZ=$(date +%Z 2>/dev/null || echo unknown)
 TW_CPU_USAGE=$(calc_cpu_usage)
-TW_CPU_CORES=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+TW_CPU_USAGE=${TW_CPU_USAGE:-0}
+TW_CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)
+TW_CPU_CORES=${TW_CPU_CORES:-1}
 read_meminfo
 read_loadavg
-TW_UPTIME=$(read_uptime)
-TW_PROCS=$(ps -e --no-headers 2>/dev/null | wc -l | tr -d ' ')
+TW_UPTIME=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null || echo 0)
+TW_PROCS=$(ls -d /proc/[0-9]* 2>/dev/null | wc -l | tr -d ' ')
+TW_PROCS=${TW_PROCS:-0}
 
 printf '{'
 printf '"hostname":"%s",' "$(json_escape "$TW_HOSTNAME")"
@@ -115,57 +113,64 @@ printf '"uptime_secs":%s,' "$TW_UPTIME"
 printf '"process_count":%s,' "$TW_PROCS"
 
 printf '"logged_in_users":['
-first=1
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  set -- $line
-  user=$1
-  term=${2:-}
-  host=${3:-}
-  host=${host#(}
-  host=${host%)}
-  login=${4:-}
-  if [ -n "${5:-}" ]; then login="$login $5"; fi
-  if [ -n "${6:-}" ]; then login="$login $6"; fi
-  if [ "$first" -eq 0 ]; then printf ','; fi
-  printf '{"username":"%s",' "$(json_escape "$user")"
-  if [ -n "$term" ]; then printf '"terminal":"%s",' "$(json_escape "$term")"; else printf '"terminal":null,'; fi
-  if [ -n "$host" ]; then printf '"host":"%s",' "$(json_escape "$host")"; else printf '"host":null,'; fi
-  if [ -n "$login" ]; then printf '"login_time":"%s"}' "$(json_escape "$login")"; else printf '"login_time":null}'; fi
-  first=0
-done < <(who 2>/dev/null || true)
+who 2>/dev/null | {
+  first=1
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    set -- $line
+    user=$1
+    term=${2:-}
+    host=${3:-}
+    host=${host#(}
+    host=${host%)}
+    login=${4:-}
+    if [ -n "${5:-}" ]; then login="$login $5"; fi
+    if [ -n "${6:-}" ]; then login="$login $6"; fi
+    if [ "$first" -eq 0 ]; then printf ','; fi
+    printf '{"username":"%s",' "$(json_escape "$user")"
+    if [ -n "$term" ]; then printf '"terminal":"%s",' "$(json_escape "$term")"; else printf '"terminal":null,'; fi
+    if [ -n "$host" ]; then printf '"host":"%s",' "$(json_escape "$host")"; else printf '"host":null,'; fi
+    if [ -n "$login" ]; then printf '"login_time":"%s"}' "$(json_escape "$login")"; else printf '"login_time":null}'; fi
+    first=0
+  done
+}
 printf '],'
 
 printf '"disks":['
-first=1
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  set -- $line
-  fs=$1
-  total=$2
-  used=$3
-  mount=$6
-  if ! [[ "$total" =~ ^[0-9]+$ ]] || [ "$total" -le 0 ]; then continue; fi
-  if ! [[ "$used" =~ ^[0-9]+$ ]]; then continue; fi
-  if [ "$first" -eq 0 ]; then printf ','; fi
-  printf '{"mount_point":"%s","filesystem":"%s","total_bytes":%s,"used_bytes":%s}' \
-    "$(json_escape "$mount")" "$(json_escape "$fs")" "$total" "$used"
-  first=0
-done < <(df -B1 -P 2>/dev/null | tail -n +2)
+{ df -kP 2>/dev/null || df -k 2>/dev/null; } | tail -n +2 | {
+  first=1
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    set -- $line
+    fs=$1
+    total=$2
+    used=$3
+    mount=$6
+    case "$total" in ''|*[!0-9]*) continue ;; esac
+    case "$used" in ''|*[!0-9]*) continue ;; esac
+    if [ "$total" -le 0 ]; then continue; fi
+    if [ "$first" -eq 0 ]; then printf ','; fi
+    printf '{"mount_point":"%s","filesystem":"%s","total_bytes":%s,"used_bytes":%s}' \
+      "$(json_escape "$mount")" "$(json_escape "$fs")" "$((total * 1024))" "$((used * 1024))"
+    first=0
+  done
+}
 printf '],'
 
 printf '"networks":['
-first=1
-while IFS= read -r line; do
-  iface=$(echo "$line" | awk '{print $1}' | tr -d ':')
-  [ "$iface" = "lo" ] && continue
-  rx=$(echo "$line" | awk '{print $2}')
-  tx=$(echo "$line" | awk '{print $10}')
-  [ -z "$rx" ] && continue
-  if [ "$first" -eq 0 ]; then printf ','; fi
-  printf '{"name":"%s","rx_bytes":%s,"tx_bytes":%s}' "$(json_escape "$iface")" "$rx" "$tx"
-  first=0
-done < <(awk 'NR>2 {print}' /proc/net/dev 2>/dev/null)
+awk 'NR>2 {print}' /proc/net/dev 2>/dev/null | {
+  first=1
+  while IFS= read -r line; do
+    iface=$(echo "$line" | awk '{print $1}' | tr -d ':')
+    [ "$iface" = "lo" ] && continue
+    rx=$(echo "$line" | awk '{print $2}')
+    tx=$(echo "$line" | awk '{print $10}')
+    [ -z "$rx" ] && continue
+    if [ "$first" -eq 0 ]; then printf ','; fi
+    printf '{"name":"%s","rx_bytes":%s,"tx_bytes":%s}' "$(json_escape "$iface")" "$rx" "$tx"
+    first=0
+  done
+}
 printf '],'
 
 TW_DISK_READ_BYTES=0
@@ -173,12 +178,13 @@ TW_DISK_WRITE_BYTES=0
 while read -r major minor name rio rmerge rsect ruse wio wmerge wsect rest; do
   case "$name" in
     loop*|ram*|fd*) continue ;;
+    nvme*p*) continue ;;
+    [shv]d[a-z][0-9]*) continue ;;
+    xvd[a-z][0-9]*) continue ;;
+    mmcblk*p*) continue ;;
   esac
-  if [[ "$name" == nvme* ]] && [[ "$name" == *p* ]]; then continue; fi
-  if [[ "$name" =~ ^[shv]d[a-z][0-9]+$ ]]; then continue; fi
-  if [[ "$name" =~ ^xvd[a-z][0-9]+$ ]]; then continue; fi
-  if [[ "$name" == mmcblk* ]] && [[ "$name" == *p* ]]; then continue; fi
-  if ! [[ "$rsect" =~ ^[0-9]+$ ]] || ! [[ "$wsect" =~ ^[0-9]+$ ]]; then continue; fi
+  case "$rsect" in ''|*[!0-9]*) continue ;; esac
+  case "$wsect" in ''|*[!0-9]*) continue ;; esac
   TW_DISK_READ_BYTES=$((TW_DISK_READ_BYTES + rsect * 512))
   TW_DISK_WRITE_BYTES=$((TW_DISK_WRITE_BYTES + wsect * 512))
 done < /proc/diskstats 2>/dev/null

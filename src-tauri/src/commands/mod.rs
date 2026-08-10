@@ -790,3 +790,91 @@ pub async fn get_host_stats(
         .await
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn ensure_ai_sidecar(app: AppHandle) -> Result<crate::ai_engineer::SidecarInfo, String> {
+    crate::ai_engineer::ensure_sidecar(&app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_sidecar_request(
+    app: AppHandle,
+    request: crate::ai_engineer::SidecarHttpRequest,
+) -> Result<crate::ai_engineer::SidecarHttpResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ai_engineer::sidecar_http(&app, request).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn ai_sidecar_stream(
+    app: AppHandle,
+    session_id: String,
+    run_id: String,
+    cursor: u32,
+    on_event: tauri::ipc::Channel<serde_json::Value>,
+) -> Result<(), String> {
+    let path = format!(
+        "/v1/sessions/{}/stream?cursor={}&run_id={}",
+        urlencoding_path(&session_id),
+        cursor,
+        urlencoding_path(&run_id)
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ai_engineer::sidecar_sse_stream(&app, &path, |val| {
+            if on_event.send(val).is_err() {
+                return Ok(false);
+            }
+            Ok(true)
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn urlencoding_path(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+#[tauri::command]
+pub fn get_ai_settings(app: AppHandle) -> Result<crate::ai_engineer::AiSettingsView, String> {
+    crate::ai_engineer::get_ai_settings(&app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_ai_settings(
+    app: AppHandle,
+    update: crate::ai_engineer::AiSettingsUpdate,
+) -> Result<crate::ai_engineer::AiSettingsView, String> {
+    crate::ai_engineer::save_ai_settings(&app, update).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn ai_terminal_exec(
+    request: crate::ai_engineer::AiTerminalExecRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<crate::ai_engineer::AiTerminalExecResult, String> {
+    crate::ai_engineer::ai_terminal_exec(request, sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ai_register_privilege_lease(
+    request: crate::ai_engineer::RegisterLeaseRequest,
+) -> Result<crate::ai_engineer::RegisterLeaseResponse, String> {
+    crate::ai_engineer::register_privilege_lease(request).map_err(|e| e.to_string())
+}
+

@@ -21,6 +21,7 @@ use crate::types::{
     TransferRemoteRequest, UploadFileResult, UploadFilesRequest, AuthMethod,
 };
 
+
 pub enum SessionHandle {
     Local(LocalSession),
     Ssh(SshSession),
@@ -69,6 +70,7 @@ impl SessionManager {
             transfers: TransferRegistry::new(),
         }
     }
+
 
     pub async fn cancel_transfer(&self, transfer_id: &str) -> bool {
         self.transfers.cancel(transfer_id).await
@@ -192,6 +194,14 @@ impl SessionManager {
             .values()
             .map(|s| s.info())
             .collect()
+    }
+
+    pub async fn session_info(&self, session_id: &str) -> AppResult<SessionInfo> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        Ok(session.info())
     }
 
     pub async fn session_kind(&self, session_id: &str) -> AppResult<SessionKind> {
