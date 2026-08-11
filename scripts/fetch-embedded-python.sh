@@ -8,8 +8,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="${ROOT}/agent-sidecar/runtime"
-TAG="${PYTHON_STANDALONE_TAG:-20250317}"
-PY_VER="${PYTHON_STANDALONE_VERSION:-3.12.9}"
+TAG="${PYTHON_STANDALONE_TAG:-20260807}"
+PY_VER="${PYTHON_STANDALONE_VERSION:-3.12.13}"
 
 TARGET="${1:-}"
 if [[ -z "${TARGET}" ]]; then
