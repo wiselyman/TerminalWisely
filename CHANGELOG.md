@@ -4,30 +4,7 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
-## [1.0.3] - 2026-08-11
-
-### Fixed
-- Windows ARM64 release: do not execute cross-arch embedded python.exe during fetch (Exec format error on x64 runners)
-
-> 归档说明：[`release-notes/v1.0.3.md`](./release-notes/v1.0.3.md)
-
-## [1.0.2] - 2026-08-11
-
-### Fixed
-- Windows ARM64 release: bump embedded Python to python-build-standalone 20260807 / 3.12.13 (Win ARM asset was 404)
-
-> 归档说明：[`release-notes/v1.0.2.md`](./release-notes/v1.0.2.md)
-
-## [1.0.1] - 2026-08-11
-
-### Fixed
-- AI sidecar self-bootstrap: embed standalone Python in release builds; auto-create private venv and install deps on first launch (no customer `pip`)
-- Surface bootstrap progress in the AI panel
-- Fix DMG `/health` failure when system Python lacks uvicorn
-
-> 归档说明：[`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md)
-
-## [1.0.0] - 2026-08-10
+## [1.0.0] - 2026-08-11
 
 ### Added
 - **AI Linux Engineer**：自然语言在已连接主机上排障（侧车 Agent、按主机会话、OpenAI 兼容 / 本地模型）
@@ -37,7 +14,8 @@
 
 ### Changed
 - README 与欢迎页主打 AI 排障与安全模型（v1.0 叙事）
-- 版本号 1.0.0
+- 发行包内嵌独立 Python；首次打开 AI 自动建私有 venv 并安装依赖（用户无需 pip）
+- 启动过程在 AI 面板显示 bootstrap 进度
 
 > 归档说明：[`release-notes/v1.0.0.md`](./release-notes/v1.0.0.md)
 

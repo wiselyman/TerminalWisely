@@ -5202,7 +5202,7 @@ dependencies = [
 
 [[package]]
 name = "terminal-wisely"
-version = "1.0.3"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",

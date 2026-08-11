@@ -1,11 +1,26 @@
 **用自然语言修 Linux。** 跨平台桌面终端 + **AI Linux Engineer**。
 
-## 更新内容（v1.0.3）
+## 更新内容（v1.0.0）
 
-### 修复
-- Windows ARM64 发行：交叉打包时不再执行目标架构的 `python.exe` 做校验（此前 Exec format error）
-- 内嵌 Python 使用 python-build-standalone `20260807` / 3.12.13
+### 重磅：AI Linux Engineer
+- 在已连接的本地/SSH 主机上，用自然语言描述问题（磁盘满、端口占用、服务 502、Docker 占空间等）
+- 侧车 Agent 在真实终端会话中执行与验证；按主机隔离对话
+- 支持 OpenAI 兼容 API（含本地 vLLM / Ollama）
+- 运行中可停止或插话；变更命令 UI 精确批准
 
-### 继承
-- 发行包内嵌 Python；首次打开 AI 自动建私有环境（用户无需 pip）
+### 安全（Harness 说了算）
+- **能力策略引擎**：按 argv/能力标签定级 R0–R4（YAML：`agent-sidecar/policy/`，可用户覆盖）
+- 只读自动执行；变更需批准；灾难级拒绝；未知命令偏严
+- 防火墙/SSH 等网络危险变更：备份 + 定时回滚，降低锁死风险
+- API Key 本机存储；无绕过策略的静默提权通道
 
+### AI 引擎自理（开箱即用）
+- 发行包内嵌独立 Python（python-build-standalone 3.12.13）；首次打开 AI 自动创建私有环境并安装依赖，**用户无需手动 pip**
+- 启动过程在面板显示进度（准备环境 / 安装依赖 / 启动）
+- 首次启动 AI 可能需 1–3 分钟，请保持网络畅通；之后秒开
+
+### 终端与文件（继承并增强）
+- 拖拽上传、点击浏览/预览、右键下载与跨服、Find、任务管理、命令导航、资源监控等
+
+### 安装说明
+- 预编译包见本 Release Assets（Windows / macOS / Linux）
