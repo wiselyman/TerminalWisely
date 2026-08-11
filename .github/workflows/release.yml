@@ -27,7 +27,7 @@ jobs:
             linux_env: true
           - platform: ubuntu-22.04
             target: linux-x86_64-appimage
-            args: --bundles appimage
+            args: --bundles appimage --verbose
             rust_targets: ""
             linux_env: true
           # Linux — ARM64 (deb/rpm; AppImage on aarch64 is unreliable with linuxdeploy)
@@ -48,6 +48,9 @@ jobs:
             rust_targets: aarch64-pc-windows-msvc
 
     runs-on: ${{ matrix.platform }}
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.linux_env && '1' || '' }}
+      NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -161,8 +164,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.linux_env && '1' || '' }}
+          NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
+          TAURI_DEBUG: ${{ matrix.target == 'linux-x86_64-appimage' && '1' || '' }}
         with:
           tagName: v__VERSION__
           releaseName: TerminalWisely v__VERSION__

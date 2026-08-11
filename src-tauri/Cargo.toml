@@ -9,6 +9,9 @@ edition = "2021"
 name = "terminal_wisely_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[profile.release]
+strip = false
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
