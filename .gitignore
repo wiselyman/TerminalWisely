@@ -34,3 +34,9 @@ dist-ssr
 *.egg-info/
 .venv/
 venv/
+---
+
+# Embedded CPython fetched by CI / scripts/fetch-embedded-python.sh (not committed)
+agent-sidecar/runtime/**
+!agent-sidecar/runtime/.gitkeep
+!agent-sidecar/runtime/.gitignore

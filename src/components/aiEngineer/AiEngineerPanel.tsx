@@ -27,6 +27,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const setWidth = useAiEngineerStore((s) => s.setWidth);
   const ready = useAiEngineerStore((s) => s.ready);
   const starting = useAiEngineerStore((s) => s.starting);
+  const bootstrapStatus = useAiEngineerStore((s) => s.bootstrapStatus);
   const error = useAiEngineerStore((s) => s.error);
   const busy = useAiEngineerStore((s) => s.busy);
   const modelPhase = useAiEngineerStore((s) => s.modelPhase);
@@ -150,7 +151,11 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
           </div>
         </header>
         <div className="find-panel-body ai-engineer-body">
-          {starting ? <p className="find-panel-empty">{t("aiEngineer.starting")}</p> : null}
+          {starting ? (
+            <p className="find-panel-empty">
+              {bootstrapStatus || t("aiEngineer.starting")}
+            </p>
+          ) : null}
           {error ? (
             <div className="ai-engineer-startup-error">
               <p>{error}</p>

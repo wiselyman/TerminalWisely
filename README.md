@@ -99,13 +99,7 @@
 
 预编译安装包由 GitHub Actions 在打 tag 后自动构建，见 [Releases](https://github.com/wiselyman/TerminalWisely/releases)（Windows / macOS / Linux，含 x86_64 与 ARM64）。
 
-AI 侧车为 Python：发行包已打入 `agent-sidecar` 源码；本机需可用的 `python3`，并安装依赖：
-
-```bash
-pip install -r agent-sidecar/requirements.txt
-```
-
-（开发时在仓库根目录执行即可；打包路径由应用定位。）
+AI 侧车随应用分发，并内嵌独立 Python 运行时。首次打开「AI 工程师」时，应用会在本机数据目录**自动**创建私有环境并安装依赖（界面提示进度，无需用户执行 pip）。
 
 自行编译请参考 [BUILD.md](./BUILD.md)。版本变更见 [CHANGELOG.md](./CHANGELOG.md)。
 

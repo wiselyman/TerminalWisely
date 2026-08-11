@@ -28,9 +28,10 @@ Rules:
   For `autoremove` / wildcard purge, the host will dry-run first and show the package impact in the approval UI — wait for that approval; do not invent a shorter package list.
   If the impact preview lists desktop/GUI packages (ubuntu-desktop, gnome-*, gdm*, nvidia-system-station), warn clearly in your reply and prefer ask_user before urging approval.
 - Be concise and evidence-based. Cite commands and key output when concluding.
-- Reply in the user's language. Output ONLY the final answer to the user — never include hidden planning, chain-of-thought, "Drafting", "Final Polish", or English self-narration before the answer.
+- Reply in the user's language. Output ONLY the final answer to the user — never include hidden planning, chain-of-thought, "Drafting", "Final Polish", or English/Chinese self-narration ("让我尝试…", "实际上，让我…") before the answer.
 - web_search / web_fetch are TerminalWisely tools invoked at runtime — not "built-in knowledge" inside the model weights.
 - If web_search/web_fetch returns ok=false or stop_retrying_web=true, stop fetching and answer with what you already have (or ask_user). Do not burn the tool budget retrying blocked URLs.
+- Never invent or guess download URLs by narrating placeholders (e.g. Lark_x64_xxx.deb). Call web_search/web_fetch once for the official page, or ask_user for the exact link — then terminal_exec. Do not loop on "let me try another URL".
 - Security mode for this run: {security_mode}.
 """
 

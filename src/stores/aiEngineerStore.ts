@@ -138,6 +138,8 @@ type AiEngineerState = {
   chatScope: string | null;
   ready: boolean;
   starting: boolean;
+  /** First-launch bootstrap phase from Rust (`ai-sidecar-bootstrap`). */
+  bootstrapStatus: string | null;
   busy: boolean;
   /** Model-side phase while busy: thinking (CoT suppressed) or streaming answer. */
   modelPhase: "idle" | "thinking" | "streaming";
@@ -219,6 +221,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   chatScope: null,
   ready: false,
   starting: false,
+  bootstrapStatus: null,
   busy: false,
   modelPhase: "idle",
   error: null,
@@ -303,18 +306,44 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   setSettingsOpen: (v) => set({ settingsOpen: v }),
 
   ensureReady: async () => {
-    set({ starting: true, error: null });
+    set({ starting: true, error: null, bootstrapStatus: null });
+    let unlisten: (() => void) | undefined;
     try {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<{ phase?: string; detail?: string }>(
+          "ai-sidecar-bootstrap",
+          (ev) => {
+            const detail = ev.payload?.detail?.trim();
+            const phase = ev.payload?.phase?.trim();
+            set({
+              bootstrapStatus: detail || phase || null,
+            });
+          },
+        );
+      } catch {
+        /* non-Tauri */
+      }
       const settings = await getAiSettings();
       const sidecar = await ensureSidecar();
-      set({ settings, sidecar, ready: true, starting: false, error: null });
+      set({
+        settings,
+        sidecar,
+        ready: true,
+        starting: false,
+        error: null,
+        bootstrapStatus: null,
+      });
     } catch (err) {
       set({
         starting: false,
         ready: false,
         sidecar: null,
         error: formatAppError(err),
+        bootstrapStatus: null,
       });
+    } finally {
+      unlisten?.();
     }
   },
 

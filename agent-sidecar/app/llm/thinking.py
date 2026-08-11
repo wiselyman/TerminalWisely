@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 _OPEN_CLOSE = (
     ("think", "think"),
@@ -57,12 +58,64 @@ _COT_MARKERS = (
     "this is a security policy",
 )
 
+# Chinese "thinking out loud" that never calls tools (URL guessing loops, etc.).
+_ZH_PLAN_MARKERS = (
+    "让我尝试",
+    "实际上，让我",
+    "或者，我可以",
+    "或者让我尝试",
+    "根据之前的搜索结果",
+    "让我尝试一个常见",
+    "看看是否有下载链接",
+    "官方下载页面通常",
+    "下载链接可能类似于",
+    "我可以使用已知的",
+    "让我直接访问",
+    "或者，我可以使用",
+)
+
 _NUMBERED_PLAN_RE = re.compile(r"^\d+\.\s+\*\*[^*]+\*\*", re.MULTILINE)
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 
 def _cjk_count(text: str) -> int:
     return len(_CJK_RE.findall(text or ""))
+
+
+def is_repetition_loop(text: str | None) -> bool:
+    """True when the model is stuck repeating the same paragraph / window."""
+    raw = (text or "").strip()
+    if len(raw) < 240:
+        return False
+    paras = [p.strip() for p in re.split(r"\n{2,}", raw) if len(p.strip()) >= 40]
+    if len(paras) >= 3:
+        top_n = Counter(paras).most_common(1)[0][1]
+        if top_n >= 3:
+            return True
+    # Sliding window: same span appears ≥3 times (covers no-blank-line dumps).
+    for size in (48, 64, 96):
+        if len(raw) < size * 3:
+            continue
+        window = raw[:size]
+        if raw.count(window) >= 3:
+            return True
+        mid = raw[len(raw) // 3 : len(raw) // 3 + size]
+        if len(mid) == size and raw.count(mid) >= 3:
+            return True
+    return False
+
+
+def looks_like_zh_planning_narration(text: str | None) -> bool:
+    """Chinese self-talk / URL guessing without a real user-facing conclusion."""
+    raw = (text or "").strip()
+    if len(raw) < 80:
+        return False
+    hits = sum(1 for m in _ZH_PLAN_MARKERS if m in raw)
+    if hits >= 2:
+        return True
+    if hits >= 1 and is_repetition_loop(raw):
+        return True
+    return False
 
 
 def _looks_like_cot_block(text: str) -> bool:
@@ -75,6 +128,8 @@ def _looks_like_cot_block(text: str) -> bool:
     if re.match(r"^\d+\.\s+\*\*", low) and (
         "analyze" in low or "question" in low or "identify" in low or "goal" in low
     ):
+        return True
+    if looks_like_zh_planning_narration(text):
         return True
     return False
 
@@ -103,12 +158,10 @@ def _is_english_planning_dump(text: str) -> bool:
         return True
     if sum(1 for m in _COT_MARKERS if m in low) >= 2 and len(raw) > 800:
         return True
-    # Repeated self-debate loops ("Actually… Wait… Actually…").
     if low.count("actually,") >= 2 and low.count("let me try") >= 1:
         return True
     if _NUMBERED_PLAN_RE.search(raw) and ("identify the goal" in low or "the user" in low):
         return True
-    # Pathological loops like thousands of "Let's execute." paragraphs.
     if raw.count("\n\n") > 40 and ("let's execute" in low or "let's proceed" in low):
         return True
     return False
@@ -119,6 +172,9 @@ def sanitize_assistant_content(text: str | None) -> str:
     raw = text if isinstance(text, str) else ""
     cleaned = _THINK_TAG_RE.sub("", raw).strip()
     if not cleaned:
+        return ""
+
+    if is_repetition_loop(cleaned) or looks_like_zh_planning_narration(cleaned):
         return ""
 
     if _is_english_planning_dump(cleaned):
@@ -140,7 +196,6 @@ def sanitize_assistant_content(text: str | None) -> str:
         answer.append(part)
     if answer:
         return "\n\n".join(reversed(answer)).strip()
-    # Entire message was planning / CoT — do not show it as the reply.
     return ""
 
 
@@ -149,7 +204,6 @@ _TAG_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Full CoT openers we must never partially leak ("The" from "The user wants…").
 _COT_OPENERS = (
     "the user is asking",
     "the user wants",
@@ -167,6 +221,14 @@ _COT_OPENERS = (
     "let me try",
 )
 
+_ZH_STREAM_OPENERS = (
+    "让我尝试",
+    "实际上，让我",
+    "或者，我可以",
+    "或者让我尝试",
+    "根据之前的搜索结果",
+)
+
 
 def _could_become_cot_opener(text: str) -> bool:
     """True while `text` is still a prefix of (or starts) a known CoT opener."""
@@ -176,27 +238,40 @@ def _could_become_cot_opener(text: str) -> bool:
     for opener in _COT_OPENERS:
         if opener.startswith(low) or low.startswith(opener):
             return True
+    stripped = (text or "").lstrip()
+    for opener in _ZH_STREAM_OPENERS:
+        if opener.startswith(stripped) or stripped.startswith(opener):
+            return True
     return False
 
 
 class StreamContentFilter:
-    """Incremental filter: hide think-tags and English planning dumps while streaming."""
+    """Incremental filter: hide think-tags and planning dumps while streaming."""
 
     def __init__(self) -> None:
         self._raw = ""
         self._visible = ""
-        self._pending = ""  # incomplete tag prefix
-        self._hold = ""  # ambiguous start (e.g. "The") until CoT decision
+        self._pending = ""
+        self._hold = ""
         self._in_think = False
         self._suppress_cot = False
-        self._started = False  # True once we leave the hold/suppress gate
-        self.thinking = False  # True while inside think tags or cot suppress
+        self._started = False
+        self.thinking = False
+        self.loop_detected = False
 
     def feed(self, chunk: str) -> str:
         """Ingest a content delta; return newly visible text (may be empty)."""
         if not chunk:
             return ""
+        if self.loop_detected:
+            self._raw += chunk
+            return ""
         self._raw += chunk
+        if len(self._raw) > 400 and is_repetition_loop(self._raw):
+            self.loop_detected = True
+            self.thinking = True
+            self._suppress_cot = True
+            return ""
         text = self._pending + chunk
         self._pending = ""
         out: list[str] = []
@@ -247,19 +322,23 @@ class StreamContentFilter:
         visible_piece = "".join(x for x in out if x)
         if visible_piece:
             self._visible += visible_piece
+            if is_repetition_loop(self._visible):
+                self.loop_detected = True
+                self.thinking = True
+                return ""
         return visible_piece
 
     def _emit_plain(self, piece: str) -> str:
         if not piece:
             return ""
-        if self._suppress_cot:
+        if self._suppress_cot or self.loop_detected:
             self.thinking = True
             return ""
 
         if not self._started:
             self._hold += piece
             hold_low = self._hold.lstrip().lower()
-            # Decide CoT as soon as an opener fully matches.
+            hold_zh = self._hold.lstrip()
             for opener in _COT_OPENERS:
                 if hold_low.startswith(opener):
                     self._suppress_cot = True
@@ -267,11 +346,16 @@ class StreamContentFilter:
                     self._hold = ""
                     self._started = True
                     return ""
-            # Still could be "The" → "The user wants…" — keep holding.
+            for opener in _ZH_STREAM_OPENERS:
+                if hold_zh.startswith(opener):
+                    self._suppress_cot = True
+                    self.thinking = True
+                    self._hold = ""
+                    self._started = True
+                    return ""
             if _could_become_cot_opener(self._hold):
                 self.thinking = True
                 return ""
-            # Not a CoT opener — release held text as visible answer.
             released = self._hold
             self._hold = ""
             self._started = True
@@ -296,6 +380,8 @@ class StreamContentFilter:
 
     def finalize(self) -> str:
         """Flush pending bytes and return fully sanitized visible content."""
+        if self.loop_detected or self._suppress_cot:
+            return ""
         if self._pending and not self._in_think and not self._suppress_cot:
             if not self._started:
                 self._hold += self._pending
@@ -303,8 +389,12 @@ class StreamContentFilter:
                 self._visible += self._pending
         self._pending = ""
         if self._hold and not self._suppress_cot:
-            if not _could_become_cot_opener(self._hold) or not any(
-                self._hold.lstrip().lower().startswith(o) or o.startswith(self._hold.lstrip().lower())
+            zh = self._hold.lstrip()
+            if any(zh.startswith(o) for o in _ZH_STREAM_OPENERS):
+                self._hold = ""
+            elif not _could_become_cot_opener(self._hold) or not any(
+                self._hold.lstrip().lower().startswith(o)
+                or o.startswith(self._hold.lstrip().lower())
                 for o in _COT_OPENERS
             ):
                 self._visible += self._hold

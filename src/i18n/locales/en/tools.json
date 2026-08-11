@@ -90,7 +90,7 @@
   "transfer.methodSftp": "SFTP relay",
   "transfer.filesCount": "{{count}} files",
   "aiEngineer.railLabel": "AI Engineer",
-  "aiEngineer.starting": "Starting AI engine…",
+  "aiEngineer.starting": "Preparing AI engine…",
   "aiEngineer.retrySidecar": "Retry",
   "aiEngineer.hint": "Describe a Linux problem. AI uses the current connected session.",
   "aiEngineer.inputPlaceholder": "Describe the problem… (⌘/Ctrl+Enter to send)",

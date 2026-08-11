@@ -16,6 +16,7 @@ from app.harness.conclusion import build_conclusion
 from app.harness.network_guard import build_timed_rollback_plan, is_network_dangerous
 from app.harness.verify import (
     ACT_NUDGE,
+    LOOP_ABORT_MESSAGE,
     VERIFY_NUDGE,
     claim_success_without_evidence,
     should_nudge_verify,
@@ -173,14 +174,23 @@ class AgentLoop:
                             "verify_nudge", {"risk": self.run.last_mutation_risk}
                         )
                         continue
-                    # Thinking-only turn (CoT stripped to empty): force an action loop.
-                    if not content and not self.run.metadata.get("_act_nudged"):
+                    # Thinking-only / Chinese narration / repetition: force act or abort.
+                    planning_only = (not content) or bool(
+                        self.run.metadata.pop("_content_loop", None)
+                    )
+                    if planning_only and not self.run.metadata.get("_act_nudged"):
                         self.run.metadata["_act_nudged"] = True
                         self.run.messages.append(
                             {"role": "user", "content": ACT_NUDGE}
                         )
                         self.run.append_event("act_nudge", {})
                         continue
+                    if planning_only and self.run.metadata.get("_act_nudged"):
+                        self.run.append_event(
+                            "assistant_message", {"content": LOOP_ABORT_MESSAGE}
+                        )
+                        self._emit_conclusion(RunStatus.COMPLETED, LOOP_ABORT_MESSAGE)
+                        return
                     self._emit_conclusion(RunStatus.COMPLETED, content)
                     return
 
@@ -280,13 +290,18 @@ class AgentLoop:
                 max_context_tokens=paths.max_context_tokens(),
             ),
             tools=openai_tools(),
-            should_cancel=lambda: self.run.cancel_requested,
+            should_cancel=lambda: self.run.cancel_requested
+            or bool(self.run.metadata.get("_content_loop")),
         ):
             if self.run.cancel_requested:
                 break
             et = ev.get("type")
             if et == "content":
                 visible = filter_.feed(str(ev.get("text") or ""))
+                if filter_.loop_detected:
+                    self.run.metadata["_content_loop"] = True
+                    # Stop requesting more tokens; remaining chunks ignored via cancel.
+                    break
                 if filter_.thinking and not thinking_announced:
                     thinking_announced = True
                     self.run.append_event("status", {"phase": "thinking"})
@@ -306,6 +321,9 @@ class AgentLoop:
 
         flush_delta(force=True)
         content = filter_.finalize()
+        if filter_.loop_detected:
+            self.run.metadata["_content_loop"] = True
+            content = ""
         tool_calls = normalize_tool_calls(
             [tool_buckets[i] for i in sorted(tool_buckets.keys())]
         )

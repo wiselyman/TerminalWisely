@@ -90,7 +90,7 @@
   "transfer.methodSftp": "SFTP 中转",
   "transfer.filesCount": "{{count}} 个文件",
   "aiEngineer.railLabel": "AI 工程师",
-  "aiEngineer.starting": "正在启动 AI 引擎…",
+  "aiEngineer.starting": "正在准备 AI 引擎…",
   "aiEngineer.retrySidecar": "重试启动",
   "aiEngineer.hint": "描述 Linux 问题。AI 使用当前已连接的会话。",
   "aiEngineer.inputPlaceholder": "描述问题…（⌘/Ctrl+Enter 发送）",

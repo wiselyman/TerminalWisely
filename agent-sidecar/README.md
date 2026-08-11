@@ -35,12 +35,14 @@ Auth: `Authorization: Bearer $TW_AI_TOKEN` on all `/v1/*`.
 | `TW_AI_MAX_RUN_SECONDS` | Time budget (default 300) |
 | `TW_AI_LEASE_TTL_SECONDS` | PrivilegeLease TTL (default 120) |
 
-## Run
+## Run (dev)
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-runtime.txt   # or requirements.txt (+ pytest)
 TW_AI_TOKEN=dev-token uvicorn app.main:app --host 127.0.0.1 --port 8765
 ```
+
+Packaged apps auto-create a venv under the app data `ai-engineer/venv` on first AI launch if system Python lacks uvicorn.
 
 ## Tests
 

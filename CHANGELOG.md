@@ -4,6 +4,15 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [1.0.1] - 2026-08-11
+
+### Fixed
+- AI sidecar self-bootstrap: embed standalone Python in release builds; auto-create private venv and install deps on first launch (no customer `pip`)
+- Surface bootstrap progress in the AI panel
+- Fix DMG `/health` failure when system Python lacks uvicorn
+
+> 归档说明：[`release-notes/v1.0.1.md`](./release-notes/v1.0.1.md)
+
 ## [1.0.0] - 2026-08-10
 
 ### Added

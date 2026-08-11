@@ -50,3 +50,20 @@ def test_strips_single_block_user_wants_plan() -> None:
         "4.  **Execute**: call terminal tools next."
     )
     assert sanitize_assistant_content(raw) == ""
+
+
+def test_strips_zh_feishu_url_guess_loop() -> None:
+    from app.llm.thinking import is_repetition_loop, looks_like_zh_planning_narration
+
+    para = (
+        "让我尝试一个常见的版本。\n\n"
+        "实际上，让我尝试直接下载飞书的 deb 包。"
+        "飞书官方下载页面通常会有一个 API 返回下载链接。\n\n"
+        "或者，我可以使用已知的飞书下载 URL 格式。根据之前的搜索结果，"
+        "飞书 Linux 版本的下载链接可能类似于：\n"
+        "https://sf3-cn.feishucdn.com/obj/feishu-static/lark/Lark_x64_xxx.deb\n\n"
+    )
+    raw = para * 5
+    assert looks_like_zh_planning_narration(raw)
+    assert is_repetition_loop(raw)
+    assert sanitize_assistant_content(raw) == ""

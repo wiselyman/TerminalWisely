@@ -17,6 +17,12 @@ ACT_NUDGE = (
     "web_fetch) to make progress. Do not narrate a plan without acting."
 )
 
+LOOP_ABORT_MESSAGE = (
+    "模型陷入重复叙述（空转计划），已停止本轮。"
+    "请换一种说法，或直接提供确切下载链接 / 安装步骤；"
+    "也可让我改用 web_search 一次后根据结果执行。"
+)
+
 
 def should_nudge_verify(
     *,
