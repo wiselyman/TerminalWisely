@@ -4,6 +4,13 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
+## [1.0.3] - 2026-08-11
+
+### Fixed
+- Windows ARM64 release: do not execute cross-arch embedded python.exe during fetch (Exec format error on x64 runners)
+
+> 归档说明：[`release-notes/v1.0.3.md`](./release-notes/v1.0.3.md)
+
 ## [1.0.2] - 2026-08-11
 
 ### Fixed

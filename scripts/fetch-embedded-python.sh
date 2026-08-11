@@ -72,16 +72,29 @@ else
   exit 1
 fi
 
-if [[ -x "${DEST}/bin/python3" ]]; then
-  "${DEST}/bin/python3" -V
-elif [[ -x "${DEST}/python.exe" ]]; then
-  "${DEST}/python.exe" -V
-elif [[ -x "${DEST}/bin/python" ]]; then
-  "${DEST}/bin/python" -V
-else
+PY_BIN=""
+if [[ -f "${DEST}/bin/python3" ]]; then
+  PY_BIN="${DEST}/bin/python3"
+elif [[ -f "${DEST}/bin/python" ]]; then
+  PY_BIN="${DEST}/bin/python"
+elif [[ -f "${DEST}/python.exe" ]]; then
+  PY_BIN="${DEST}/python.exe"
+elif [[ -f "${DEST}/python3.exe" ]]; then
+  PY_BIN="${DEST}/python3.exe"
+fi
+
+if [[ -z "${PY_BIN}" ]]; then
   echo "python binary missing under ${DEST}" >&2
   find "${DEST}" -maxdepth 3 -type f | head -50 >&2
   exit 1
+fi
+
+# Cross-target packs (e.g. aarch64 python.exe on x64 Windows runner) cannot execute.
+# Existence is enough for bundling; version print is best-effort.
+if "${PY_BIN}" -V 2>/dev/null; then
+  :
+else
+  echo "Embedded Python present at ${PY_BIN} (not runnable on this host; OK for cross-arch bundle)"
 fi
 
 echo "Embedded Python ready at ${DEST}"
