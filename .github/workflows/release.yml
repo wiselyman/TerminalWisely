@@ -27,7 +27,7 @@ jobs:
             linux_env: true
           - platform: ubuntu-22.04
             target: linux-x86_64-appimage
-            args: --bundles appimage --verbose
+            args: --bundles appimage
             rust_targets: ""
             linux_env: true
           # Linux — ARM64 (deb/rpm; AppImage on aarch64 is unreliable with linuxdeploy)
@@ -166,7 +166,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.linux_env && '1' || '' }}
           NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
-          TAURI_DEBUG: ${{ matrix.target == 'linux-x86_64-appimage' && '1' || '' }}
         with:
           tagName: v__VERSION__
           releaseName: TerminalWisely v__VERSION__

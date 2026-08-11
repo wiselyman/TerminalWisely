@@ -89,6 +89,19 @@ if [[ -z "${PY_BIN}" ]]; then
   exit 1
 fi
 
+# Sidecar never needs Tk/Tcl GUI. Keep _tkinter and linuxdeploy will fail on
+# Ubuntu 22.04 CI looking for libtcl9.0.so (python-build-standalone links Tcl 9).
+find "${DEST}" \( \
+  -name '_tkinter*.so' -o \
+  -name '_tkinter*.pyd' -o \
+  -name 'libtcl*.so*' -o \
+  -name 'libtk*.so*' -o \
+  -path '*/tkinter/*' -o \
+  -path '*/idlelib/*' \
+\) -delete 2>/dev/null || true
+# Remove empty dirs left behind
+find "${DEST}" -type d \( -name 'tkinter' -o -name 'idlelib' \) -empty -delete 2>/dev/null || true
+
 # Cross-target packs (e.g. aarch64 python.exe on x64 Windows runner) cannot execute.
 # Existence is enough for bundling; version print is best-effort.
 if "${PY_BIN}" -V 2>/dev/null; then
