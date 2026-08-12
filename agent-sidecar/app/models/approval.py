@@ -58,6 +58,7 @@ class ActionApproval(BaseModel):
     identity: TargetSessionIdentity
     network_guard: bool = False
     summary: str = ""
+    intent: str = ""
 
 
 class ApprovalDecisionRequest(BaseModel):
@@ -67,6 +68,7 @@ class ApprovalDecisionRequest(BaseModel):
     approved: bool
     note: str | None = None
     confirm_text: str | None = None
+    remember_read_binaries: list[str] = Field(default_factory=list)
 
 
 class UserContextRequest(BaseModel):

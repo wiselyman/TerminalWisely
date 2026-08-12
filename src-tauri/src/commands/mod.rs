@@ -871,10 +871,11 @@ pub fn save_ai_settings(
 
 #[tauri::command]
 pub async fn ai_terminal_exec(
+    app: tauri::AppHandle,
     request: crate::ai_engineer::AiTerminalExecRequest,
     sessions: State<'_, SessionManager>,
 ) -> Result<crate::ai_engineer::AiTerminalExecResult, String> {
-    crate::ai_engineer::ai_terminal_exec(request, sessions)
+    crate::ai_engineer::ai_terminal_exec(request, app, sessions)
         .await
         .map_err(|e| e.to_string())
 }

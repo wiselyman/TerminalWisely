@@ -19,6 +19,14 @@ def test_readonly_lsof_allowed():
     assert d.risk == RiskLevel.R0
 
 
+def test_readonly_whois_allowed():
+    d = CommandBroker().authorize(
+        'whois 2606:4700:78::90 | grep -i -E "country|netname|descr|org" | head -20'
+    )
+    assert d.action == PolicyAction.ALLOW
+    assert d.risk == RiskLevel.R0
+
+
 def test_mutation_rm_requires_approval_in_safe():
     eng = PolicyEngine()
     d = eng.decide("rm -rf /tmp/foo", security_mode=SecurityMode.SAFE)
@@ -265,3 +273,24 @@ def test_xargs_rm_still_requires_approval():
     d = eng.decide("find /tmp -name '*.bak' | xargs rm -f", security_mode=SecurityMode.SAFE)
     assert d.action == PolicyAction.REQUIRE_APPROVAL
     assert d.risk.value in {"R2", "R3", "R4"}
+
+
+def test_pip_list_is_readonly():
+    eng = PolicyEngine()
+    d = eng.decide("pip list 2>/dev/null | wc -l", security_mode=SecurityMode.SAFE)
+    assert d.risk == RiskLevel.R0
+    assert d.action == PolicyAction.ALLOW
+
+
+def test_pip_install_requires_approval():
+    eng = PolicyEngine()
+    d = eng.decide("pip install requests", security_mode=SecurityMode.SAFE)
+    assert d.action == PolicyAction.REQUIRE_APPROVAL
+    assert d.risk == RiskLevel.R2
+
+
+def test_snap_list_is_readonly():
+    eng = PolicyEngine()
+    d = eng.decide('snap list 2>/dev/null || echo "snap not available"', security_mode=SecurityMode.SAFE)
+    assert d.risk == RiskLevel.R0
+    assert d.action == PolicyAction.ALLOW

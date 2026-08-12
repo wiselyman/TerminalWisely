@@ -24,7 +24,20 @@ import { revealAiEngineerPanel } from "./workspacePanelSwitch";
 export type ChatLine =
   | { id: string; kind: "user"; content: string }
   | { id: string; kind: "assistant"; content: string; streaming?: boolean }
-  | { id: string; kind: "tool"; name: string; detail?: string; ok?: boolean }
+  | {
+      id: string;
+      kind: "tool";
+      name: string;
+      callId?: string;
+      intent?: string;
+      detail?: string;
+      status?: "running" | "done" | "failed" | "denied";
+      output?: string;
+      startedAt?: number;
+      finishedAt?: number;
+      exitCode?: number;
+      ok?: boolean;
+    }
   | { id: string; kind: "error"; content: string }
   | {
       id: string;
@@ -41,7 +54,9 @@ export type ChatLine =
       command: string;
       risk: string;
       reason: string;
+      intent?: string;
       impactPreview?: string;
+      rememberableBinaries?: string[];
       networkGuard?: boolean;
       dualConfirm?: boolean;
       confirmPhrase?: string;
@@ -52,6 +67,25 @@ export type ChatLine =
 
 const CHAT_HISTORY_KEY = "tw.aiEngineer.chatByScope.v1";
 const MAX_LINES_PER_SCOPE = 200;
+const MAX_TOOL_OUTPUT_CHARS = 32 * 1024;
+
+function appendToolOutputText(prev: string | undefined, chunk: string): string {
+  let next = (prev ?? "") + chunk;
+  if (next.length > MAX_TOOL_OUTPUT_CHARS) {
+    next = `…\n${next.slice(-MAX_TOOL_OUTPUT_CHARS)}`;
+  }
+  return next;
+}
+
+function slimToolLineForPersist(line: Extract<ChatLine, { kind: "tool" }>): ChatLine {
+  const status = line.status === "running" ? "done" : line.status;
+  return {
+    ...line,
+    status,
+    output: line.output?.slice(-4000),
+    finishedAt: line.finishedAt ?? (status ? Date.now() : undefined),
+  };
+}
 
 function loadPersistedChats(): Record<string, ChatLine[]> {
   try {
@@ -91,6 +125,9 @@ function savePersistedChats(byScope: Record<string, ChatLine[]>) {
           if (line.kind === "assistant") {
             return { id: line.id, kind: "assistant" as const, content: line.content };
           }
+          if (line.kind === "tool") {
+            return slimToolLineForPersist(line);
+          }
           return line;
         })
         .slice(-MAX_LINES_PER_SCOPE);
@@ -110,7 +147,12 @@ type PendingApproval = {
   approvalId: string;
   dualConfirm: boolean;
   confirmPhrase: string;
-  resolve: (v: { approved: boolean; confirm_text?: string }) => void;
+  rememberableBinaries: string[];
+  resolve: (v: {
+    approved: boolean;
+    confirm_text?: string;
+    remember_read_binaries?: string[];
+  }) => void;
 };
 
 /** Isolate chat UI by host; fall back to terminal session when no server id. */
@@ -172,7 +214,7 @@ type AiEngineerState = {
   }) => Promise<void>;
   stopActiveRun: () => void;
   resolveAsk: (selected: string[], freeText?: string) => void;
-  resolveApproval: (approved: boolean, confirmText?: string) => void;
+  resolveApproval: (approved: boolean, confirmText?: string, rememberRead?: boolean) => void;
 };
 
 function abortActiveRun(
@@ -425,10 +467,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
   },
 
-  resolveApproval: (approved, confirmText) => {
+  resolveApproval: (approved, confirmText, rememberRead) => {
     const pending = get().pendingApproval;
     if (!pending) return;
-    pending.resolve({ approved, confirm_text: confirmText });
+    pending.resolve({
+      approved,
+      confirm_text: confirmText,
+      remember_read_binaries:
+        approved && rememberRead ? pending.rememberableBinaries : [],
+    });
     const { chatScope, messages, messagesByScope } = get();
     const nextMessages = messages.map((line) =>
       line.kind === "approval" && line.approvalId === pending.approvalId
@@ -505,6 +552,41 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       set({ messages, messagesByScope });
     };
 
+    const patchToolLineByCallId = (
+      callId: string,
+      patch: Partial<Extract<ChatLine, { kind: "tool" }>>,
+    ) => {
+      const cur = get();
+      if (cur.chatScope !== runScope) return;
+      const idx = cur.messages.findIndex(
+        (line) => line.kind === "tool" && line.callId === callId,
+      );
+      if (idx < 0) return;
+      const prev = cur.messages[idx];
+      if (prev.kind !== "tool") return;
+      const messages = [...cur.messages];
+      messages[idx] = { ...prev, ...patch };
+      replaceMessagesIfSameScope(messages);
+    };
+
+    const appendToolOutputByCallId = (callId: string, chunk: string) => {
+      if (!chunk) return;
+      const cur = get();
+      if (cur.chatScope !== runScope) return;
+      const idx = cur.messages.findIndex(
+        (line) => line.kind === "tool" && line.callId === callId,
+      );
+      if (idx < 0) return;
+      const prev = cur.messages[idx];
+      if (prev.kind !== "tool") return;
+      const messages = [...cur.messages];
+      messages[idx] = {
+        ...prev,
+        output: appendToolOutputText(prev.output, chunk),
+      };
+      replaceMessagesIfSameScope(messages);
+    };
+
     try {
       const sidecar = await ensureSidecar();
       set({ sidecar, ready: true });
@@ -551,6 +633,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 approvalId: ev.approval_id,
                 dualConfirm: Boolean(ev.dual_confirm),
                 confirmPhrase: ev.confirm_phrase || ev.command,
+                rememberableBinaries: ev.rememberable_binaries ?? [],
                 resolve,
               },
             });
@@ -562,13 +645,47 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               command: ev.command,
               risk: ev.risk,
               reason: ev.reason,
+              intent: ev.intent,
               impactPreview: ev.impact_preview,
+              rememberableBinaries: ev.rememberable_binaries,
               networkGuard: ev.network_guard,
               dualConfirm: Boolean(ev.dual_confirm),
               confirmPhrase: ev.confirm_phrase || ev.command,
               execCommand: ev.exec_command,
             });
           }),
+        onToolExec: {
+          onOutput: ({ callId, chunk }) => appendToolOutputByCallId(callId, chunk),
+          onStart: ({ callId, command, intent }) => {
+            patchToolLineByCallId(callId, {
+              detail: command,
+              intent,
+              status: "running",
+              startedAt: Date.now(),
+            });
+          },
+          onDone: ({ callId, ok, exitCode, error, stdout, stderr }) => {
+            const cur = get();
+            const existing = cur.messages.find(
+              (line): line is Extract<ChatLine, { kind: "tool" }> =>
+                line.kind === "tool" && line.callId === callId,
+            );
+            const fallbackOut = [stdout, stderr].filter(Boolean).join("");
+            let output = existing?.output;
+            if (!output?.trim() && fallbackOut.trim()) {
+              output = appendToolOutputText(undefined, fallbackOut);
+            } else if (error && !ok) {
+              output = appendToolOutputText(output, error);
+            }
+            patchToolLineByCallId(callId, {
+              status: ok ? "done" : "failed",
+              ok,
+              exitCode: exitCode ?? undefined,
+              finishedAt: Date.now(),
+              ...(output !== existing?.output ? { output } : {}),
+            });
+          },
+        },
         onEvent: (event: AgentUiEvent) => {
           if (get().chatScope !== runScope || activeRunScope !== runScope) {
             return;
@@ -645,6 +762,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 (event.arguments.url as string) ||
                 "",
             );
+            const intent =
+              typeof event.arguments.intent === "string" && event.arguments.intent.trim()
+                ? event.arguments.intent.trim()
+                : undefined;
+            const isExec =
+              event.name === "terminal_exec" || event.name === "ai_exec";
             // Finalize any in-flight streaming bubble before tool lines.
             const msgs = get().messages;
             const last = msgs[msgs.length - 1];
@@ -658,7 +781,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               id: nextId(),
               kind: "tool",
               name: event.name,
+              callId: event.call_id || undefined,
+              intent,
               detail,
+              status: event.denied
+                ? "denied"
+                : isExec && event.awaiting_host
+                  ? "running"
+                  : undefined,
+              startedAt: isExec && event.awaiting_host ? Date.now() : undefined,
               ok: event.denied ? false : undefined,
             });
           } else if (event.type === "error") {

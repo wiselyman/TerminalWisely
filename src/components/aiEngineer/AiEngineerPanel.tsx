@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import { AiEngineerSettings } from "./AiEngineerSettings";
 import { AiMarkdown } from "./AiMarkdown";
@@ -18,6 +19,109 @@ function scrollMessagesToEnd(el: HTMLElement) {
   } else {
     el.scrollTop = el.scrollHeight;
   }
+}
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  if (totalSec < 60) return `${totalSec}s`;
+  const min = Math.floor(totalSec / 60);
+  return `${min}m ${totalSec % 60}s`;
+}
+
+type ToolLine = Extract<
+  import("../../stores/aiEngineerStore").ChatLine,
+  { kind: "tool" }
+>;
+
+function ToolExecCard({
+  line,
+  t,
+}: {
+  line: ToolLine;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const outputRef = useRef<HTMLPreElement>(null);
+  const [, tick] = useState(0);
+  const running = line.status === "running";
+  const isExec = line.name === "terminal_exec" || line.name === "ai_exec";
+
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [running]);
+
+  useEffect(() => {
+    const el = outputRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [line.output, running]);
+
+  if (!isExec) {
+    return (
+      <div className="ai-engineer-line tool">
+        <span className="ai-engineer-tool-name">{line.name}</span>
+        {line.detail ? (
+          <code className="ai-engineer-tool-detail">{line.detail}</code>
+        ) : null}
+        {line.ok === false ? (
+          <span className="ai-engineer-tool-fail">denied</span>
+        ) : null}
+      </div>
+    );
+  }
+
+  const elapsedMs =
+    (running ? Date.now() : (line.finishedAt ?? Date.now())) -
+    (line.startedAt ?? Date.now());
+
+  const statusLabel =
+    line.status === "running"
+      ? t("aiEngineer.toolRunning")
+      : line.status === "done"
+        ? t("aiEngineer.toolDone")
+        : line.status === "failed"
+          ? t("aiEngineer.toolFailed")
+          : line.status === "denied"
+            ? t("aiEngineer.rejected")
+            : null;
+
+  return (
+    <div className="ai-engineer-exec-card">
+      <div className="ai-engineer-exec-head">
+        <div className="ai-engineer-exec-title">
+          {line.intent || line.detail || line.name}
+        </div>
+        {statusLabel ? (
+          <span className={`ai-engineer-exec-status is-${line.status ?? "idle"}`}>
+            {statusLabel}
+          </span>
+        ) : null}
+      </div>
+      {line.detail && line.intent ? (
+        <code className="ai-engineer-exec-command">{line.detail}</code>
+      ) : null}
+      {line.output || running ? (
+        <pre ref={outputRef} className="ai-engineer-exec-output">
+          {line.output ||
+            (running ? t("aiEngineer.toolWaitingOutput") : "")}
+        </pre>
+      ) : null}
+      <div className="ai-engineer-exec-foot">
+        {line.status === "done" || line.status === "failed" ? (
+          <>
+            {line.exitCode != null ? (
+              <span>
+                {t("aiEngineer.toolExitCode", { code: line.exitCode })}
+              </span>
+            ) : null}
+            <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
+          </>
+        ) : running ? (
+          <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function AiEngineerPanel({ sessionId, serverId }: Props) {
@@ -47,11 +151,18 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const messagesRef = useRef<HTMLDivElement>(null);
   const [confirmDraft, setConfirmDraft] = useState("");
   const [askDraft, setAskDraft] = useState("");
+  const [rememberRead, setRememberRead] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     bindContext(sessionId, serverId);
   }, [open, sessionId, serverId, bindContext]);
+
+  useEffect(() => {
+    if (!pendingApproval) {
+      setRememberRead(false);
+    }
+  }, [pendingApproval?.approvalId]);
 
   // Pin to latest message on open / history restore (before paint when possible).
   useLayoutEffect(() => {
@@ -172,17 +283,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                 ) : null}
                 {messages.map((line) => {
                   if (line.kind === "tool") {
-                    return (
-                      <div key={line.id} className="ai-engineer-line tool">
-                        <span className="ai-engineer-tool-name">{line.name}</span>
-                        {line.detail ? (
-                          <code className="ai-engineer-tool-detail">{line.detail}</code>
-                        ) : null}
-                        {line.ok === false ? (
-                          <span className="ai-engineer-tool-fail">denied</span>
-                        ) : null}
-                      </div>
-                    );
+                    return <ToolExecCard key={line.id} line={line} t={t} />;
                   }
                   if (line.kind === "ask") {
                     const askActive =
@@ -260,23 +361,53 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                         key={line.id}
                         className={`ai-engineer-approval${line.decision ? " is-resolved" : ""}`}
                       >
-                        <div className="ai-engineer-approval-title">
-                          {t("aiEngineer.approvalTitle")} [{line.risk}]
-                          {line.decision === "approved"
-                            ? ` · ${t("aiEngineer.approved")}`
-                            : null}
-                          {line.decision === "rejected"
-                            ? ` · ${t("aiEngineer.rejected")}`
-                            : null}
+                        <div className="ai-engineer-approval-head">
+                          <div className="ai-engineer-approval-title">
+                            {t("aiEngineer.approvalTitle")}
+                            {line.decision === "approved"
+                              ? ` · ${t("aiEngineer.approved")}`
+                              : null}
+                            {line.decision === "rejected"
+                              ? ` · ${t("aiEngineer.rejected")}`
+                              : null}
+                          </div>
+                          <span
+                            className="ai-engineer-approval-risk"
+                            title={line.risk}
+                          >
+                            {t(riskLabelKey(line.risk))}
+                          </span>
                         </div>
-                        <code className="ai-engineer-tool-detail">{line.command}</code>
+                        {line.intent ? (
+                          <section className="ai-engineer-approval-section ai-engineer-approval-section-intent">
+                            <span className="ai-engineer-approval-label">
+                              {t("aiEngineer.approvalIntentLabel")}
+                            </span>
+                            <p className="ai-engineer-approval-intent">{line.intent}</p>
+                          </section>
+                        ) : null}
+                        <section className="ai-engineer-approval-section ai-engineer-approval-section-command">
+                          <span className="ai-engineer-approval-label">
+                            {t("aiEngineer.approvalCommandLabel")}
+                          </span>
+                          <pre className="ai-engineer-approval-command">
+                            <code>{line.command}</code>
+                          </pre>
+                        </section>
                         {line.execCommand && line.execCommand !== line.command ? (
                           <p className="ai-engineer-approval-reason">
                             {t("aiEngineer.execWrapped")}
                             <code className="ai-engineer-tool-detail">{line.execCommand}</code>
                           </p>
                         ) : null}
-                        <p className="ai-engineer-approval-reason">{line.reason}</p>
+                        <section className="ai-engineer-approval-section ai-engineer-approval-section-meta">
+                          <span className="ai-engineer-approval-label">
+                            {t("aiEngineer.approvalPolicyLabel")}
+                          </span>
+                          <p className="ai-engineer-approval-reason">
+                            {t(riskDescKey(line.risk))}
+                          </p>
+                        </section>
                         {line.impactPreview ? (
                           <pre className="ai-engineer-impact-preview">{line.impactPreview}</pre>
                         ) : null}
@@ -297,14 +428,39 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                           </label>
                         ) : null}
                         {line.decision ? null : (
-                          <div className="ai-engineer-approval-actions">
+                          <div className="ai-engineer-approval-footer">
+                            {isActive &&
+                            line.rememberableBinaries &&
+                            line.rememberableBinaries.length > 0 ? (
+                              <label className="ai-engineer-remember-read">
+                                <span className="ai-engineer-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={rememberRead}
+                                    onChange={(e) => setRememberRead(e.target.checked)}
+                                  />
+                                  <span className="ai-engineer-check-box" aria-hidden />
+                                </span>
+                                <span className="ai-engineer-remember-read-text">
+                                  {t("aiEngineer.rememberReadOnly", {
+                                    tools: line.rememberableBinaries.join(", "),
+                                  })}
+                                </span>
+                              </label>
+                            ) : null}
+                            <div className="ai-engineer-approval-actions">
                             <button
                               type="button"
                               className="find-panel-run"
                               disabled={!canApprove}
                               onClick={() => {
-                                resolveApproval(true, dual ? confirmDraft.trim() : undefined);
+                                resolveApproval(
+                                  true,
+                                  dual ? confirmDraft.trim() : undefined,
+                                  rememberRead,
+                                );
                                 setConfirmDraft("");
+                                setRememberRead(false);
                               }}
                             >
                               {t("aiEngineer.approve")}
@@ -316,10 +472,12 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                               onClick={() => {
                                 resolveApproval(false);
                                 setConfirmDraft("");
+                                setRememberRead(false);
                               }}
                             >
                               {t("aiEngineer.reject")}
                             </button>
+                          </div>
                           </div>
                         )}
                       </div>

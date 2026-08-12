@@ -29,6 +29,15 @@ def openai_tools() -> list[dict[str, Any]]:
                             "type": "string",
                             "description": "Shell command to execute (prefer read-only).",
                         },
+                        "intent": {
+                            "type": "string",
+                            "description": (
+                                "One short sentence for the approval UI: what this command "
+                                "does and whether it changes the system. REQUIRED for R1+ "
+                                "commands. Use the SAME language as the user's messages "
+                                "(Chinese question → Chinese intent; English → English)."
+                            ),
+                        },
                         "timeout_seconds": {
                             "type": "number",
                             "description": "Optional timeout in seconds.",

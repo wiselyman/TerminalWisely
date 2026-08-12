@@ -23,6 +23,18 @@ use crate::types::{
 };
 use crate::types::{AuthMethod, InsertLocalPathsRequest};
 
+/// Optional per-chunk callback while reading an SSH exec channel (stdout/stderr).
+pub type ExecOutputCallback = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+fn emit_exec_chunk(on_output: Option<&ExecOutputCallback>, stream: &str, chunk: &str) {
+    if chunk.is_empty() {
+        return;
+    }
+    if let Some(cb) = on_output {
+        cb(stream, chunk);
+    }
+}
+
 pub struct ClientHandler {
     fingerprint: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -175,6 +187,7 @@ pub async fn exec_command_with_stdin_capture(
     command: &str,
     stdin_data: &[u8],
     max_stdout_bytes: usize,
+    on_output: Option<ExecOutputCallback>,
 ) -> AppResult<(Vec<u8>, String, u32)> {
     use std::io::Cursor;
 
@@ -206,6 +219,8 @@ pub async fn exec_command_with_stdin_capture(
     loop {
         match channel.wait().await {
             Some(ChannelMsg::Data { data }) => {
+                let text = String::from_utf8_lossy(data.as_ref());
+                emit_exec_chunk(on_output.as_ref(), "stdout", &text);
                 if max_stdout_bytes == 0 || stdout.len() < max_stdout_bytes {
                     let take = if max_stdout_bytes == 0 {
                         data.len()
@@ -216,7 +231,9 @@ pub async fn exec_command_with_stdin_capture(
                 }
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
-                stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
+                let text = String::from_utf8_lossy(data.as_ref());
+                emit_exec_chunk(on_output.as_ref(), "stderr", &text);
+                stderr.push_str(&text);
             }
             Some(ChannelMsg::ExitStatus { exit_status: code }) => {
                 exit_status = Some(code);
@@ -252,7 +269,7 @@ pub async fn exec_command_with_stdin(
     max_stdout_bytes: usize,
 ) -> AppResult<Vec<u8>> {
     let (stdout, stderr, code) =
-        exec_command_with_stdin_capture(handle, command, stdin_data, max_stdout_bytes).await?;
+        exec_command_with_stdin_capture(handle, command, stdin_data, max_stdout_bytes, None).await?;
     if code == 0 {
         return Ok(stdout);
     }
@@ -271,6 +288,7 @@ pub async fn exec_command_with_stdin(
 pub async fn exec_command_capture(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     command: &str,
+    on_output: Option<ExecOutputCallback>,
 ) -> AppResult<(String, String, u32)> {
     let channel = {
         let handle_guard = handle.lock().await;
@@ -293,10 +311,14 @@ pub async fn exec_command_capture(
     loop {
         match channel.wait().await {
             Some(ChannelMsg::Data { data }) => {
-                stdout.push_str(&String::from_utf8_lossy(data.as_ref()));
+                let text = String::from_utf8_lossy(data.as_ref());
+                emit_exec_chunk(on_output.as_ref(), "stdout", &text);
+                stdout.push_str(&text);
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
-                stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
+                let text = String::from_utf8_lossy(data.as_ref());
+                emit_exec_chunk(on_output.as_ref(), "stderr", &text);
+                stderr.push_str(&text);
             }
             Some(ChannelMsg::ExitStatus { exit_status: code }) => {
                 exit_status = Some(code);
@@ -328,7 +350,7 @@ pub async fn exec_command(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     command: &str,
 ) -> AppResult<String> {
-    let (stdout, stderr, code) = exec_command_capture(handle, command).await?;
+    let (stdout, stderr, code) = exec_command_capture(handle, command, None).await?;
     if code == 0 {
         return Ok(stdout);
     }

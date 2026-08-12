@@ -12,6 +12,7 @@
   "closeRight": "Close tabs to the right",
   "collapseSidebar": "Collapse sidebar",
   "expandSidebar": "Expand sidebar",
+  "resizeSidebar": "Resize sidebar",
   "localTerminalTitle": "{{osName}} local terminal",
   "localTerminalWithBackend": "{{title}} · {{backend}}",
   "gitBashLocal": "Git Bash local terminal",

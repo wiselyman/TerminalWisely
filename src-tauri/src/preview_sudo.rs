@@ -13,7 +13,7 @@ use crate::error::{AppError, AppResult};
 use crate::shell::shell_quote_remote_path;
 use crate::ssh::client::{
     exec_command, exec_command_capture, exec_command_with_stdin,
-    exec_command_with_stdin_capture, ClientHandler,
+    exec_command_with_stdin_capture, ClientHandler, ExecOutputCallback,
 };
 use crate::ssh::sftp;
 use crate::transfer::{check_cancel, ThrottledProgressBytes, CANCEL_POLL_MS};
@@ -156,7 +156,14 @@ pub async fn exec_remote_sudo_capture(
     path_hint: &str,
 ) -> AppResult<String> {
     let (stdout, stderr, code) =
-        exec_remote_sudo_ai_capture(handle, shell_command, sudo_password, action, path_hint)
+        exec_remote_sudo_ai_capture(
+            handle,
+            shell_command,
+            sudo_password,
+            action,
+            path_hint,
+            None,
+        )
             .await?;
     if code == 0 {
         return Ok(stdout);
@@ -182,11 +189,13 @@ pub async fn exec_remote_sudo_ai_capture(
     sudo_password: Option<&str>,
     action: &str,
     path_hint: &str,
+    on_output: Option<ExecOutputCallback>,
 ) -> AppResult<(String, String, i32)> {
     let quoted = shell_quote_remote_path(shell_command);
     if sudo_password.is_none() {
         let no_pass = format!("sudo -n sh -c {quoted}");
-        let (stdout, stderr, code) = exec_command_capture(handle, &no_pass).await?;
+        let (stdout, stderr, code) =
+            exec_command_capture(handle, &no_pass, on_output.clone()).await?;
         let combined = format!("{stdout}\n{stderr}");
         if looks_like_sudo_password_needed(&combined) {
             return Err(sudo_required(action, path_hint));
@@ -202,8 +211,14 @@ pub async fn exec_remote_sudo_ai_capture(
     let mut stdin = sudo_password.unwrap().as_bytes().to_vec();
     stdin.push(b'\n');
 
-    let (bytes, stderr, code) =
-        exec_command_with_stdin_capture(handle, &cmd, &stdin, 512 * 1024).await?;
+    let (bytes, stderr, code) = exec_command_with_stdin_capture(
+        handle,
+        &cmd,
+        &stdin,
+        512 * 1024,
+        on_output,
+    )
+    .await?;
     let stdout = String::from_utf8_lossy(&bytes).to_string();
     let combined = format!("{stdout}\n{stderr}");
     if looks_like_sudo_password_needed(&combined) {

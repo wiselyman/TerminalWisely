@@ -86,6 +86,7 @@ export async function sidecarFetch(
 export async function aiTerminalExec(opts: {
   sessionId: string;
   command: string;
+  callId?: string;
   sudo?: boolean;
   sudoPassword?: string;
   leaseId?: string;
@@ -102,6 +103,7 @@ export async function aiTerminalExec(opts: {
     request: {
       session_id: opts.sessionId,
       command: opts.command,
+      call_id: opts.callId ?? null,
       sudo: opts.sudo ?? false,
       sudo_password: opts.sudoPassword ?? null,
       lease_id: opts.leaseId ?? null,

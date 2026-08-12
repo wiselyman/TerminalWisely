@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../isTauri";
 import { sidecarFetch, type SidecarInfo } from "./api";
-import { executeToolCall, type ToolCallEvent } from "./toolBridge";
+import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
 
 export type AgentUiEvent =
   | { type: "assistant_message"; content: string }
@@ -32,7 +32,9 @@ export type AgentUiEvent =
       risk: string;
       reason: string;
       summary?: string;
+      intent?: string;
       impact_preview?: string;
+      rememberable_binaries?: string[];
       network_guard?: boolean;
       dual_confirm?: boolean;
       confirm_phrase?: string;
@@ -50,7 +52,7 @@ export type AskUserHandler = (event: Extract<AgentUiEvent, { type: "ask_user" }>
 
 export type ApprovalHandler = (
   event: Extract<AgentUiEvent, { type: "approval_needed" }>,
-) => Promise<{ approved: boolean; confirm_text?: string }>;
+) => Promise<{ approved: boolean; confirm_text?: string; remember_read_binaries?: string[] }>;
 
 type StreamEvent = {
   type: string;
@@ -88,8 +90,29 @@ async function handleProtocolEvent(opts: {
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
   onApproval: ApprovalHandler;
+  onToolExec?: ToolExecCallbacks & {
+    onStart?: (info: { callId: string; command: string; intent?: string }) => void;
+    onDone?: (info: {
+      callId: string;
+      ok: boolean;
+      exitCode?: number | null;
+      error?: string;
+      stdout?: string;
+      stderr?: string;
+    }) => void;
+  };
 }): Promise<"continue" | "terminal"> {
-  const { sidecar, sessionId, runId, ev, handled, onEvent, onAskUser, onApproval } = opts;
+  const {
+    sidecar,
+    sessionId,
+    runId,
+    ev,
+    handled,
+    onEvent,
+    onAskUser,
+    onApproval,
+    onToolExec,
+  } = opts;
   const p = ev.payload ?? {};
   const activeRunId = ev.run_id || runId;
 
@@ -128,7 +151,11 @@ async function handleProtocolEvent(opts: {
       risk: String(p.risk ?? ""),
       reason: String(p.reason ?? ""),
       summary: typeof p.summary === "string" ? p.summary : undefined,
+      intent: typeof p.intent === "string" ? p.intent : undefined,
       impact_preview: typeof p.impact_preview === "string" ? p.impact_preview : undefined,
+      rememberable_binaries: Array.isArray(p.rememberable_binaries)
+        ? (p.rememberable_binaries as string[]).filter((b) => typeof b === "string")
+        : undefined,
       network_guard: Boolean(p.network_guard),
       dual_confirm: Boolean(p.dual_confirm),
       confirm_phrase: typeof p.confirm_phrase === "string" ? p.confirm_phrase : undefined,
@@ -144,6 +171,7 @@ async function handleProtocolEvent(opts: {
         approval_id: approvalId,
         approved: decision.approved,
         confirm_text: decision.confirm_text ?? null,
+        remember_read_binaries: decision.remember_read_binaries ?? [],
       }),
     });
   } else if (ev.type === "tool_call") {
@@ -162,13 +190,30 @@ async function handleProtocolEvent(opts: {
     if (name === "terminal_exec" || name === "ai_exec") {
       if (!p.awaiting_host) return "continue";
       handled.add(callId);
-      const lease = (p.lease as ToolCallEvent["lease"]) || null;
-      const result = await executeToolCall(sessionId, {
-        call_id: callId,
-        name,
-        arguments: args,
-        requires_lease: Boolean(p.requires_lease),
-        lease,
+      const command = String(args.command ?? "").trim();
+      const intent =
+        typeof args.intent === "string" && args.intent.trim()
+          ? args.intent.trim()
+          : undefined;
+      onToolExec?.onStart?.({ callId, command, intent });
+      const result = await executeToolCall(
+        sessionId,
+        {
+          call_id: callId,
+          name,
+          arguments: args,
+          requires_lease: Boolean(p.requires_lease),
+          lease: (p.lease as ToolCallEvent["lease"]) || null,
+        },
+        { onOutput: onToolExec?.onOutput },
+      );
+      onToolExec?.onDone?.({
+        callId,
+        ok: result.ok !== false,
+        exitCode: typeof result.exit_code === "number" ? result.exit_code : null,
+        error: typeof result.error === "string" ? result.error : undefined,
+        stdout: typeof result.stdout === "string" ? result.stdout : undefined,
+        stderr: typeof result.stderr === "string" ? result.stderr : undefined,
       });
       await sidecarFetch(sidecar, "/v1/tool_result", {
         method: "POST",
@@ -235,9 +280,20 @@ async function runAgentChatViaStream(opts: {
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
   onApproval: ApprovalHandler;
+  onToolExec?: ToolExecCallbacks & {
+    onStart?: (info: { callId: string; command: string; intent?: string }) => void;
+    onDone?: (info: {
+      callId: string;
+      ok: boolean;
+      exitCode?: number | null;
+      error?: string;
+      stdout?: string;
+      stderr?: string;
+    }) => void;
+  };
   signal?: AbortSignal;
 }): Promise<void> {
-  const { sidecar, sessionId, runId, onEvent, onAskUser, onApproval, signal } = opts;
+  const { sidecar, sessionId, runId, onEvent, onAskUser, onApproval, onToolExec, signal } = opts;
   const handled = new Set<string>();
   // Serialize event handlers so tool/approval awaits don't race.
   let chain: Promise<void> = Promise.resolve();
@@ -263,6 +319,7 @@ async function runAgentChatViaStream(opts: {
             onEvent,
             onAskUser,
             onApproval,
+            onToolExec,
           });
           if (result === "terminal") {
             terminal = true;
@@ -299,9 +356,20 @@ async function runAgentChatViaPull(opts: {
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
   onApproval: ApprovalHandler;
+  onToolExec?: ToolExecCallbacks & {
+    onStart?: (info: { callId: string; command: string; intent?: string }) => void;
+    onDone?: (info: {
+      callId: string;
+      ok: boolean;
+      exitCode?: number | null;
+      error?: string;
+      stdout?: string;
+      stderr?: string;
+    }) => void;
+  };
   signal?: AbortSignal;
 }): Promise<void> {
-  const { sidecar, sessionId, runId, onEvent, onAskUser, onApproval, signal } = opts;
+  const { sidecar, sessionId, runId, onEvent, onAskUser, onApproval, onToolExec, signal } = opts;
   let cursor = 0;
   const handled = new Set<string>();
 
@@ -334,6 +402,7 @@ async function runAgentChatViaPull(opts: {
         onEvent,
         onAskUser,
         onApproval,
+        onToolExec,
       });
       if (result === "terminal") return;
     }
@@ -361,6 +430,17 @@ export async function runAgentChat(opts: {
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
   onApproval: ApprovalHandler;
+  onToolExec?: ToolExecCallbacks & {
+    onStart?: (info: { callId: string; command: string; intent?: string }) => void;
+    onDone?: (info: {
+      callId: string;
+      ok: boolean;
+      exitCode?: number | null;
+      error?: string;
+      stdout?: string;
+      stderr?: string;
+    }) => void;
+  };
   signal?: AbortSignal;
 }): Promise<{ runId: string }> {
   const {
@@ -373,6 +453,7 @@ export async function runAgentChat(opts: {
     onEvent,
     onAskUser,
     onApproval,
+    onToolExec,
     signal,
   } = opts;
 
@@ -403,6 +484,7 @@ export async function runAgentChat(opts: {
         onEvent,
         onAskUser,
         onApproval,
+        onToolExec,
         signal,
       });
       return { runId };
@@ -419,6 +501,7 @@ export async function runAgentChat(opts: {
     onEvent,
     onAskUser,
     onApproval,
+    onToolExec,
     signal,
   });
   return { runId };

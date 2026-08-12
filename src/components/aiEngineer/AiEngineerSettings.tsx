@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { RISK_CODES, riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
 
@@ -313,19 +314,48 @@ export function AiEngineerSettings() {
               </ul>
             )}
 
-            <label className="ai-engineer-settings-security">
-              {t("aiEngineer.settings.securityMode")}
-              <select
-                value={securityMode}
-                onChange={(e) => setSecurityMode(e.target.value)}
-              >
-                {SECURITY_MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
+            <section className="ai-engineer-settings-security-block">
+              <label className="ai-engineer-settings-security">
+                {t("aiEngineer.settings.securityMode")}
+                <select
+                  value={securityMode}
+                  onChange={(e) => setSecurityMode(e.target.value)}
+                >
+                  {SECURITY_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {t(`aiEngineer.settings.securityModeOption.${m}.label`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="ai-engineer-settings-security-hint">
+                {t(`aiEngineer.settings.securityModeOption.${securityMode}.desc`)}
+              </p>
+            </section>
+
+            <section
+              className="ai-engineer-settings-risk-guide"
+              aria-label={t("aiEngineer.settings.riskGuideTitle")}
+            >
+              <h4 className="ai-engineer-settings-risk-guide-title">
+                {t("aiEngineer.settings.riskGuideTitle")}
+              </h4>
+              <p className="ai-engineer-settings-risk-guide-intro">
+                {t("aiEngineer.settings.riskGuideIntro")}
+              </p>
+              <ul className="ai-engineer-settings-risk-list">
+                {RISK_CODES.map((code) => (
+                  <li key={code} className="ai-engineer-settings-risk-row">
+                    <span className="ai-engineer-settings-risk-badge" title={code}>
+                      {t(riskLabelKey(code))}
+                    </span>
+                    <span className="ai-engineer-settings-risk-text">
+                      {t(riskDescKey(code))}
+                    </span>
+                  </li>
                 ))}
-              </select>
-            </label>
+              </ul>
+            </section>
             <div className="ai-engineer-approval-actions">
               <button
                 type="button"

@@ -120,6 +120,11 @@ def lease_ttl_seconds() -> float:
     return float(os.environ.get("TW_AI_LEASE_TTL_SECONDS", "120"))
 
 
+def lease_exec_grace_seconds() -> float:
+    """Execution window after the user clicks Approve (independent of review wait)."""
+    return float(os.environ.get("TW_AI_LEASE_EXEC_GRACE_SECONDS", "120"))
+
+
 def policy_overrides_path() -> Path:
     """User-editable capability overrides (optional)."""
     return data_dir() / "policy" / "overrides.yaml"

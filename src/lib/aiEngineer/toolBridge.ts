@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { formatAppError } from "../formatAppError";
 import { invokeWithSudoRetry } from "../invokeWithSudoRetry";
 import { aiRegisterPrivilegeLease, aiTerminalExec } from "./api";
@@ -16,6 +17,20 @@ export type ToolCallEvent = {
   } | null;
 };
 
+export type ToolExecCallbacks = {
+  onOutput?: (info: {
+    callId: string;
+    stream: "stdout" | "stderr";
+    chunk: string;
+  }) => void;
+};
+
+type AiExecOutputPayload = {
+  call_id: string;
+  stream: string;
+  chunk: string;
+};
+
 function commandLooksLikeSudo(command: string): boolean {
   return /^\s*sudo\b/i.test(command);
 }
@@ -23,12 +38,25 @@ function commandLooksLikeSudo(command: string): boolean {
 export async function executeToolCall(
   sessionId: string,
   call: ToolCallEvent,
+  callbacks?: ToolExecCallbacks,
 ): Promise<Record<string, unknown>> {
   if (call.name === "terminal_exec" || call.name === "ai_exec") {
     const command = String(call.arguments.command ?? "").trim();
     if (!command) {
       return { ok: false, error: "empty command" };
     }
+    const unlisten =
+      callbacks?.onOutput && call.call_id
+        ? await listen<AiExecOutputPayload>("ai-exec-output", (event) => {
+            if (event.payload.call_id !== call.call_id) return;
+            const stream = event.payload.stream === "stderr" ? "stderr" : "stdout";
+            callbacks.onOutput?.({
+              callId: call.call_id,
+              stream,
+              chunk: event.payload.chunk,
+            });
+          })
+        : undefined;
     try {
       let leaseId: string | undefined;
       const requiresLease = Boolean(call.requires_lease || call.lease);
@@ -55,6 +83,7 @@ export async function executeToolCall(
           aiTerminalExec({
             sessionId,
             command,
+            callId: call.call_id,
             leaseId,
             requiresLease,
             // Backend also auto-detects leading `sudo`; flag helps retries after modal.
@@ -72,6 +101,8 @@ export async function executeToolCall(
       };
     } catch (err) {
       return { ok: false, error: formatAppError(err), _untrusted: true };
+    } finally {
+      await unlisten?.();
     }
   }
   return { ok: false, error: `unsupported host tool: ${call.name}` };

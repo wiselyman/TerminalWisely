@@ -60,11 +60,16 @@ import { WindowControls } from "./components/WindowControls";
 import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
 import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
 import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
+import {
+  SIDEBAR_COLLAPSED_STORAGE_KEY,
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  clampSidebarWidth,
+  loadSidebarWidth,
+} from "./lib/sidebarLayout";
 import "./App.css";
 
-const SIDEBAR_WIDTH = 320;
-const SIDEBAR_COLLAPSED_WIDTH = 56;
-const SIDEBAR_STORAGE_KEY = "terminal-wisely.sidebar-collapsed";
+const SIDEBAR_STORAGE_KEY = SIDEBAR_COLLAPSED_STORAGE_KEY;
 
 function App() {
   const { t } = useTranslation("shell");
@@ -232,6 +237,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1",
   );
+  const [sidebarExpandedWidth, setSidebarExpandedWidth] = useState(loadSidebarWidth);
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
@@ -258,16 +264,25 @@ function App() {
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
-    : SIDEBAR_WIDTH;
+    : sidebarExpandedWidth;
 
   const terminalLayoutRevision = useMemo(
-    () => String(sidebarCollapsed),
-    [sidebarCollapsed],
+    () => `${sidebarCollapsed}-${sidebarWidth}`,
+    [sidebarCollapsed, sidebarWidth],
   );
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!sidebarCollapsed) {
+      localStorage.setItem(
+        SIDEBAR_WIDTH_STORAGE_KEY,
+        String(clampSidebarWidth(sidebarExpandedWidth)),
+      );
+    }
+  }, [sidebarCollapsed, sidebarExpandedWidth]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -823,6 +838,8 @@ function App() {
           cols={terminalSize.cols}
           rows={terminalSize.rows}
           collapsed={sidebarCollapsed}
+          expandedWidth={sidebarExpandedWidth}
+          onExpandedWidthChange={setSidebarExpandedWidth}
           onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
           onRegisterNewRemote={registerNewRemote}
         />

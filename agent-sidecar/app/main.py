@@ -284,6 +284,7 @@ async def approval_decision(body: ApprovalDecisionRequest, _: AuthDep) -> dict[s
             "approved": body.approved,
             "note": body.note,
             "confirm_text": body.confirm_text,
+            "remember_read_binaries": body.remember_read_binaries,
         },
     )
     if not ok:

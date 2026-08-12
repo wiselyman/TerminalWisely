@@ -60,6 +60,7 @@ read_binaries:
   - dig
   - nslookup
   - host
+  - whois
   - curl
   - wget
   - journalctl
@@ -288,10 +289,37 @@ binaries:
     default: [pkg_mutate]
     subcommands:
       install: [pkg_mutate]
+      uninstall: [pkg_mutate]
+      list: [read]
+      show: [read]
+      freeze: [read]
+      check: [read]
+      search: [read]
+      help: [read]
   pip3:
     default: [pkg_mutate]
     subcommands:
       install: [pkg_mutate]
+      uninstall: [pkg_mutate]
+      list: [read]
+      show: [read]
+      freeze: [read]
+      check: [read]
+      search: [read]
+      help: [read]
+  snap:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+      remove: [pkg_mutate]
+      refresh: [pkg_mutate]
+      list: [read]
+      info: [read]
+      find: [read]
+      changes: [read]
+      services: [read]
+      version: [read]
+      help: [read]
   iptables:
     default: [net_mutate]
     list_flags: ["-L", "-S", "--list", "--list-rules"]

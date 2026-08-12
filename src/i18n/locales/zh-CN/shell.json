@@ -12,6 +12,7 @@
   "closeRight": "关闭右侧",
   "collapseSidebar": "收起侧栏",
   "expandSidebar": "展开侧栏",
+  "resizeSidebar": "调整侧栏宽度",
   "localTerminalTitle": "{{osName}} 本地终端",
   "localTerminalWithBackend": "{{title}} · {{backend}}",
   "gitBashLocal": "Git Bash 本地终端",

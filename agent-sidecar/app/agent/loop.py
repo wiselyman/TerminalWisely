@@ -21,11 +21,13 @@ from app.harness.verify import (
     claim_success_without_evidence,
     should_nudge_verify,
 )
+from app.harness.approval_intent import sanitize_approval_intent
 from app.harness.apt_impact import (
     build_apt_simulate_command,
     needs_package_impact_preview,
     summarize_apt_simulate,
 )
+from app.policy.user_overrides import add_read_binaries, rememberable_binaries
 from app.llm.gateway import ModelGateway, ModelGatewayError
 from app.llm.thinking import StreamContentFilter
 from app.llm.context import (
@@ -396,6 +398,9 @@ class AgentLoop:
 
     async def _terminal_exec(self, call_id: str, args: dict[str, Any]) -> None:
         command = str(args.get("command") or "").strip()
+        intent = sanitize_approval_intent(
+            str(args.get("intent") or "").strip(), self.run.messages
+        )
         decision = self.broker.authorize(command, security_mode=self.run.security_mode)
         lease: PrivilegeLease | None = None
         exec_command = command
@@ -482,6 +487,7 @@ class AgentLoop:
                 decision.risk,
                 decision.reason,
                 impact_preview=impact_preview,
+                intent=intent,
             )
             if not approved:
                 await self._add_tool_result(
@@ -598,6 +604,7 @@ class AgentLoop:
         reason: str,
         *,
         impact_preview: str | None = None,
+        intent: str = "",
     ) -> tuple[PrivilegeLease, str, dict[str, Any] | None] | None:
         approval_id = f"appr_{uuid.uuid4().hex[:12]}"
         lease_id = f"lease_{uuid.uuid4().hex[:12]}"
@@ -621,7 +628,7 @@ class AgentLoop:
             executions=0,
         )
         dual = self.run.security_mode == "production"
-        summary = f"[{risk.value}] {command}"
+        summary = intent or f"[{risk.value}] {command}"
         if impact_preview:
             summary = f"{summary}\n\n{impact_preview}"
         approval = ActionApproval(
@@ -636,6 +643,7 @@ class AgentLoop:
             identity=identity,
             network_guard=network,
             summary=summary,
+            intent=intent,
         )
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -658,6 +666,11 @@ class AgentLoop:
         }
         if impact_preview:
             event_payload["impact_preview"] = impact_preview
+        if intent:
+            event_payload["intent"] = intent
+        rememberable = rememberable_binaries(command)
+        if rememberable:
+            event_payload["rememberable_binaries"] = rememberable
         if rollback_plan is not None:
             event_payload["rollback_plan"] = rollback_plan
         self.run.append_event("approval_needed", event_payload)
@@ -686,13 +699,24 @@ class AgentLoop:
                 )
                 self.run.status = RunStatus.RUNNING
                 return None
-        if time.time() > lease.expires_at_epoch_s:
-            self.run.append_event(
-                "approval_decision",
-                {"approval_id": approval_id, "approved": False, "reason": "lease_expired"},
-            )
-            self.run.status = RunStatus.RUNNING
-            return None
+        # User may review for minutes — bind lease expiry to the Approve click,
+        # not to when the prompt was first shown.
+        lease = lease.model_copy(
+            update={"expires_at_epoch_s": time.time() + paths.lease_exec_grace_seconds()}
+        )
+        rememberable_set = set(rememberable_binaries(command))
+        remember = [
+            str(b).strip().lower()
+            for b in (decision.get("remember_read_binaries") or [])
+            if isinstance(b, str) and str(b).strip().lower() in rememberable_set
+        ]
+        if remember:
+            added = add_read_binaries(remember)
+            if added:
+                self.run.append_event(
+                    "policy_remember",
+                    {"binaries": added, "overrides_path": str(paths.policy_overrides_path())},
+                )
         self.run.append_event(
             "approval_decision",
             {

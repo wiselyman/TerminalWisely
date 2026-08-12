@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -17,11 +17,14 @@ import {
   type LocalShellInfo,
 } from "../lib/hostOs";
 import { GIT_FOR_WINDOWS_URL } from "../lib/localShellPreference";
+import { clampSidebarWidth } from "../lib/sidebarLayout";
 
 interface ConnectionPanelProps {
   cols: number;
   rows: number;
   collapsed: boolean;
+  expandedWidth: number;
+  onExpandedWidthChange: (width: number) => void;
   onToggleCollapse: () => void;
   onRegisterNewRemote?: (open: () => void) => void;
 }
@@ -68,10 +71,16 @@ function SidebarChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
+function formatSavedConnectionLabel(saved: SavedConnection): string {
+  return saved.port === 22 ? saved.host : `${saved.host}:${saved.port}`;
+}
+
 export function ConnectionPanel({
   cols,
   rows,
   collapsed,
+  expandedWidth,
+  onExpandedWidthChange,
   onToggleCollapse,
   onRegisterNewRemote,
 }: ConnectionPanelProps) {
@@ -178,6 +187,12 @@ export function ConnectionPanel({
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const autoCollapseAfterConnect = () => {
+    if (!collapsed) {
+      onToggleCollapse();
+    }
+  };
+
   const handleConnect = async (event: FormEvent) => {
     event.preventDefault();
     if (!sshFormMode) return;
@@ -219,6 +234,7 @@ export function ConnectionPanel({
         );
       }
       closeSshForm();
+      autoCollapseAfterConnect();
     } catch {
       // Error toast already shown; keep the form open.
     }
@@ -231,6 +247,7 @@ export function ConnectionPanel({
     }
     try {
       await connectSaved(saved.id, null, false, cols, rows);
+      autoCollapseAfterConnect();
     } catch {
       if (saved.auth_method === "password") {
         setSavedPasswordPrompt(saved);
@@ -251,6 +268,7 @@ export function ConnectionPanel({
         rows,
       );
       closePasswordPrompt();
+      autoCollapseAfterConnect();
     } catch {
       // Error toast already shown; keep the password dialog open.
     }
@@ -460,55 +478,87 @@ export function ConnectionPanel({
   );
 
   const savedItem = (saved: SavedConnection) => (
-    <div key={saved.id} className="saved-item">
+    <div
+      key={saved.id}
+      className="saved-item saved-item-compact"
+      title={`${saved.name} · ${saved.username}@${saved.host}:${saved.port}`}
+    >
       <button
         type="button"
         className="saved-item-main"
         onClick={() => void handleSavedConnect(saved)}
       >
         <ServerOsIcon osId={saved.os_id} osName={saved.os_name} size={16} showTitle={false} />
-        <span className="saved-item-text">
+        <span className="saved-item-text saved-item-text-compact">
           <strong>{saved.name}</strong>
-          <span>
-            {saved.username}@{saved.host}:{saved.port}
+          <span className="saved-item-sep" aria-hidden>
+            {" "}
+            ·{" "}
+          </span>
+          <span className="saved-item-host">
+            {formatSavedConnectionLabel(saved)}
           </span>
         </span>
       </button>
-      <button
-        type="button"
-        className="saved-item-action"
-        aria-label={t("common:edit")}
-        title={t("common:edit")}
-        onClick={() => openEditForm(saved)}
-      >
-        <svg
-          viewBox="0 0 16 16"
-          width="12"
-          height="12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          aria-hidden="true"
+      <div className="saved-item-actions">
+        <button
+          type="button"
+          className="saved-item-action"
+          aria-label={t("common:edit")}
+          title={t("common:edit")}
+          onClick={() => openEditForm(saved)}
         >
-          <path d="M11.5 2.5 13.5 4.5 5.5 12.5 3 13l.5-2.5 8-8Z" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className="saved-item-action saved-item-delete"
-        aria-label={t("common:delete")}
-        title={t("common:delete")}
-        onClick={() => void deleteSavedConnection(saved.id)}
-      >
-        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1h-.997a.58.58 0 0 0-.01 0H11Zm1.958 1H3.042l.853 10.66A1 1 0 0 0 4.885 15h6.23a1 1 0 0 0 .99-1.84l.853-10.66Z"
-          />
-        </svg>
-      </button>
+          <svg
+            viewBox="0 0 16 16"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            aria-hidden="true"
+          >
+            <path d="M11.5 2.5 13.5 4.5 5.5 12.5 3 13l.5-2.5 8-8Z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="saved-item-action saved-item-delete"
+          aria-label={t("common:delete")}
+          title={t("common:delete")}
+          onClick={() => void deleteSavedConnection(saved.id)}
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1h-.997a.58.58 0 0 0-.01 0H11Zm1.958 1H3.042l.853 10.66A1 1 0 0 0 4.885 15h6.23a1 1 0 0 0 .99-1.84l.853-10.66Z"
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   );
+
+  const startSidebarResize = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = expandedWidth;
+    document.body.classList.add("sidebar-resizing");
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      onExpandedWidthChange(
+        clampSidebarWidth(startWidth + (moveEvent.clientX - startX)),
+      );
+    };
+
+    const onMouseUp = () => {
+      document.body.classList.remove("sidebar-resizing");
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
 
   if (collapsed) {
     return (
@@ -558,31 +608,40 @@ export function ConnectionPanel({
 
   return (
     <>
-      <aside className="sidebar">
-        {sidebarChromeRow(true)}
+      <div className="sidebar-shell">
+        <aside className="sidebar">
+          {sidebarChromeRow(true)}
 
-        {isWindowsHost() && !localShell.git_bash_available ? (
-          <p className="local-shell-hint-banner">
-            {t("shell:gitBashMissingBanner")}{" "}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
-            >
-              {t("shell:installGitForWindows")}
-            </button>
-          </p>
-        ) : null}
+          {isWindowsHost() && !localShell.git_bash_available ? (
+            <p className="local-shell-hint-banner">
+              {t("shell:gitBashMissingBanner")}{" "}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
+              >
+                {t("shell:installGitForWindows")}
+              </button>
+            </p>
+          ) : null}
 
-        <section className="saved-list">
-          {savedConnections.length === 0 && (
-            <p className="empty-state">{t("shell:emptyBookmarks")}</p>
-          )}
-          {savedConnections.map((saved) => savedItem(saved))}
-        </section>
+          <section className="saved-list">
+            {savedConnections.length === 0 && (
+              <p className="empty-state">{t("shell:emptyBookmarks")}</p>
+            )}
+            {savedConnections.map((saved) => savedItem(saved))}
+          </section>
 
-        {statusMessage && <div className="status-bar">{statusMessage}</div>}
-      </aside>
+          {statusMessage && <div className="status-bar">{statusMessage}</div>}
+        </aside>
+        <div
+          className="sidebar-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("shell:resizeSidebar")}
+          onMouseDown={startSidebarResize}
+        />
+      </div>
       {sshFormModal}
       {passwordModal}
     </>

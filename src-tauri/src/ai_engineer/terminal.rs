@@ -1,20 +1,30 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::error::{AppError, AppResult};
 use crate::preview_sudo;
 use crate::session::SessionManager;
-use crate::ssh::client::exec_command_capture;
+use crate::ssh::client::{exec_command_capture, ExecOutputCallback};
 use crate::types::SessionKind;
 
 use super::leases::{assert_lease_ready, consume_lease};
 
 const MAX_STDOUT_CHARS: usize = 256 * 1024;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct AiExecOutputPayload {
+    pub call_id: String,
+    pub stream: String,
+    pub chunk: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AiTerminalExecRequest {
     pub session_id: String,
     pub command: String,
+    /// Sidecar tool_call id — enables live stdout/stderr events to the UI.
+    pub call_id: Option<String>,
     pub sudo: Option<bool>,
     pub sudo_password: Option<String>,
     /// When set, PrivilegeLease hard-gate: exact command + session + expiry + one-shot.
@@ -103,6 +113,7 @@ fn peel_leading_sudo(command: &str) -> (String, bool) {
 /// Never opens a second SSH login. Never scrapes the interactive PTY.
 pub async fn ai_terminal_exec(
     request: AiTerminalExecRequest,
+    app: AppHandle,
     sessions: State<'_, SessionManager>,
 ) -> AppResult<AiTerminalExecResult> {
     let command = request.command.trim().to_string();
@@ -136,6 +147,25 @@ pub async fn ai_terminal_exec(
         command.clone()
     };
 
+    let on_output: Option<ExecOutputCallback> = request
+        .call_id
+        .as_deref()
+        .filter(|id| !id.is_empty())
+        .map(|call_id| {
+            let app = app.clone();
+            let call_id = call_id.to_string();
+            Arc::new(move |stream: &str, chunk: &str| {
+                let _ = app.emit(
+                    "ai-exec-output",
+                    AiExecOutputPayload {
+                        call_id: call_id.clone(),
+                        stream: stream.to_string(),
+                        chunk: chunk.to_string(),
+                    },
+                );
+            }) as ExecOutputCallback
+        });
+
     let kind = sessions.session_kind(&request.session_id).await?;
     match kind {
         SessionKind::Ssh => {
@@ -149,11 +179,12 @@ pub async fn ai_terminal_exec(
                     request.sudo_password.as_deref(),
                     "执行",
                     &command,
+                    on_output.clone(),
                 )
                 .await?;
                 (o, e, c)
             } else {
-                let (o, e, c) = exec_command_capture(&handle, &command).await?;
+                let (o, e, c) = exec_command_capture(&handle, &command, on_output).await?;
                 (o, e, c as i32)
             };
             if let Some(lease_id) = lease_id.as_deref() {
