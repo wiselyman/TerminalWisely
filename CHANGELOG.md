@@ -4,7 +4,7 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
-## [1.0.0] - 2026-08-11
+## [1.0.0] - 2026-08-12
 
 ### Added
 - **AI Linux Engineer**：自然语言在已连接主机上排障（侧车 Agent、按主机会话、OpenAI 兼容 / 本地模型）
@@ -14,8 +14,12 @@
 
 ### Changed
 - README 与欢迎页主打 AI 排障与安全模型（v1.0 叙事）
-- 发行包内嵌独立 Python；首次打开 AI 自动建私有 venv 并安装依赖（用户无需 pip）
-- 启动过程在 AI 面板显示 bootstrap 进度
+- 发行包内嵌独立 Python；首次打开 AI 面板时自动建私有 venv 并安装依赖（用户无需 pip）
+- 启动过程在 AI 面板显示 bootstrap 进度；不阻塞主界面
+
+### Fixed
+- App launch no longer prewarms AI sidecar (first-install white screen / busy cursor)
+- False "idle narration" abort after valid diagnostic tool calls (ps/lscpu dumps)
 
 > 归档说明：[`release-notes/v1.0.0.md`](./release-notes/v1.0.0.md)
 

@@ -67,3 +67,24 @@ def test_strips_zh_feishu_url_guess_loop() -> None:
     assert looks_like_zh_planning_narration(raw)
     assert is_repetition_loop(raw)
     assert sanitize_assistant_content(raw) == ""
+
+
+def test_command_dump_is_not_a_repetition_loop() -> None:
+    from app.llm.thinking import is_repetition_loop, StreamContentFilter
+
+    raw = (
+        "lscpu | grep -E \"Model name|Architecture|CPU(s)|Thread|Core|Socket\"\n"
+        "free -h\n"
+        "df -h /\n"
+        "cat /etc/os-release | grep PRETTY_NAME\n"
+        "lscpu | grep -E \"Model name|Architecture|CPU(s)|Thread|Core|Socket\"\n"
+        "free -h\n"
+        "df -h /\n"
+        "cat /etc/os-release | grep PRETTY_NAME\n"
+        "ps aux --sort=-%mem | head -n 10\n"
+        "ps aux --sort=-%mem | head -n 10\n"
+    )
+    assert not is_repetition_loop(raw)
+    f = StreamContentFilter()
+    f.feed(raw)
+    assert not f.loop_detected

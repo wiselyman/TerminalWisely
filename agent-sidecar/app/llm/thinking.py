@@ -82,26 +82,54 @@ def _cjk_count(text: str) -> int:
     return len(_CJK_RE.findall(text or ""))
 
 
+_CMD_LINE_RE = re.compile(
+    r"(?:^|\n)\s*(?:sudo\s+)?(?:lscpu|free|df|ps|cat|head|tail|uname|lsblk|"
+    r"hostnamectl|uptime|whoami|id|ss|netstat|systemctl|journalctl|dmesg|"
+    r"apt(?:-get)?|dpkg|rpm|yum|dnf|which|type)\b",
+    re.IGNORECASE,
+)
+
+
 def is_repetition_loop(text: str | None) -> bool:
-    """True when the model is stuck repeating the same paragraph / window."""
+    """True when the model is stuck repeating the same *prose* paragraph.
+
+    Command dumps (``ps aux``, ``lscpu | grep …`` listed 4 times before
+    ``terminal_exec``) are not loops — they share short prefixes and would
+    false-positive a sliding-window count.
+    """
     raw = (text or "").strip()
     if len(raw) < 240:
+        return False
+    # Tool-call preambles: several diagnostic commands, little repeated prose.
+    cmd_hits = len(_CMD_LINE_RE.findall(raw))
+    if cmd_hits >= 2 and _cjk_count(raw) < 80:
         return False
     paras = [p.strip() for p in re.split(r"\n{2,}", raw) if len(p.strip()) >= 40]
     if len(paras) >= 3:
         top_n = Counter(paras).most_common(1)[0][1]
         if top_n >= 3:
             return True
-    # Sliding window: same span appears ≥3 times (covers no-blank-line dumps).
-    for size in (48, 64, 96):
+    # Same *prose* span ≥3 times. Skip windows that look like shell/JSON.
+    for size in (64, 96, 128):
         if len(raw) < size * 3:
             continue
-        window = raw[:size]
-        if raw.count(window) >= 3:
-            return True
-        mid = raw[len(raw) // 3 : len(raw) // 3 + size]
-        if len(mid) == size and raw.count(mid) >= 3:
-            return True
+        for start in (0, len(raw) // 3):
+            window = raw[start : start + size]
+            if len(window) < size:
+                continue
+            if _looks_like_commandish(window):
+                continue
+            if raw.count(window) >= 3:
+                return True
+    return False
+
+
+def _looks_like_commandish(window: str) -> bool:
+    low = window.lower()
+    if any(tok in low for tok in ("terminal_exec", "\"command\"", "| grep", "| head", "sudo ")):
+        return True
+    if _CMD_LINE_RE.search(window):
+        return True
     return False
 
 

@@ -17,7 +17,6 @@ import { CommandNavigatorTool } from "./components/CommandNavigatorTool";
 import { TaskManagerTool } from "./components/TaskManagerTool";
 import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
-import { ensureSidecar } from "./lib/aiEngineer/api";
 import { WorkspaceToolRail } from "./components/WorkspaceToolRail";
 import { TaskManagerPanel } from "./components/TaskManagerPanel";
 import { TransferPanel } from "./components/TransferPanel";
@@ -116,11 +115,9 @@ function App() {
     void useSessionStore.getState().hydrateFromBackend();
   }, []);
 
-  // Prewarm AI sidecar so the first panel open is not blocked on Python boot.
-  useEffect(() => {
-    void ensureSidecar().catch(() => undefined);
-  }, []);
-
+  // Do NOT prewarm AI sidecar here. First launch creates a private venv + pip
+  // install (1–3 min) and a sync ensure_ai_sidecar would starve other IPC —
+  // white window + busy cursor until done. Sidecar starts when the AI panel opens.
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;

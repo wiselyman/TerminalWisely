@@ -792,8 +792,16 @@ pub async fn get_host_stats(
 }
 
 #[tauri::command]
-pub fn ensure_ai_sidecar(app: AppHandle) -> Result<crate::ai_engineer::SidecarInfo, String> {
-    crate::ai_engineer::ensure_sidecar(&app).map_err(|e| e.to_string())
+pub async fn ensure_ai_sidecar(
+    app: AppHandle,
+) -> Result<crate::ai_engineer::SidecarInfo, String> {
+    // Heavy first-launch work (venv + pip) must not run as a sync command on the
+    // shared blocking path where it starves hydrate/UI invokes → white screen.
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ai_engineer::ensure_sidecar(&app).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
