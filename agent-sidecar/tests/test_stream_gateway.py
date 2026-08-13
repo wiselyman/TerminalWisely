@@ -84,6 +84,39 @@ def test_stream_filter_suppresses_english_plan_start() -> None:
     assert f.finalize() == ""
 
 
+def test_stream_filter_recovers_chinese_after_english_cot() -> None:
+    """Qwen often leaks 'Here's a thinking process' then a real Chinese answer."""
+    f = StreamContentFilter()
+    assert f.feed("Here's a thinking process:\n\nI will summarize disks.\n\n") == ""
+    assert f.thinking is True
+    visible = f.feed(
+        "这台服务器有 **3 块物理磁盘**：\n\n"
+        "1. **sda (14.8G)**：系统盘\n"
+        "2. **sdb (447.1G)**：数据盘\n"
+    )
+    assert "磁盘" in visible or "磁盘" in f.finalize()
+    final = f.finalize()
+    assert "Here's a thinking" not in final
+    assert "sda" in final
+    assert "磁盘" in final
+
+
+def test_stream_filter_does_not_wipe_visible_on_false_loop() -> None:
+    f = StreamContentFilter()
+    answer = (
+        "根据 lsblk，物理磁盘如下：\n\n"
+        "1. sda 14.8G 系统盘\n"
+        "2. sdb 447.1G RAID1\n"
+        "3. sdc 10.9T 数据盘\n\n"
+        "另外 /vol02 是 rclone 网络存储。"
+    )
+    assert f.feed(answer)
+    f.loop_detected = True  # simulate false positive mid-stream
+    final = f.finalize()
+    assert "sda" in final
+    assert "rclone" in final
+
+
 def test_stream_filter_does_not_leak_the_prefix() -> None:
     f = StreamContentFilter()
     assert f.feed("The") == ""

@@ -274,13 +274,19 @@ def _could_become_cot_opener(text: str) -> bool:
 
 
 class StreamContentFilter:
-    """Incremental filter: hide think-tags and planning dumps while streaming."""
+    """Incremental filter: hide think-tags and planning dumps while streaming.
+
+    Important for Qwen-style models that leak English CoT into ``content`` before
+    the real answer: suppress the opener, then **resume** when a user-facing
+    answer appears. Never permanently mute the whole turn.
+    """
 
     def __init__(self) -> None:
         self._raw = ""
         self._visible = ""
         self._pending = ""
         self._hold = ""
+        self._cot_buf = ""
         self._in_think = False
         self._suppress_cot = False
         self._started = False
@@ -291,11 +297,12 @@ class StreamContentFilter:
         """Ingest a content delta; return newly visible text (may be empty)."""
         if not chunk:
             return ""
-        if self.loop_detected:
-            self._raw += chunk
-            return ""
+        # Keep accumulating raw even after loop detection so finalize can recover.
         self._raw += chunk
-        if len(self._raw) > 400 and is_repetition_loop(self._raw):
+        if self.loop_detected:
+            return ""
+        # Prose-only repetition (URL-guess loops). Command dumps are excluded.
+        if len(self._raw) > 400 and is_repetition_loop(self._raw) and not self._visible:
             self.loop_detected = True
             self.thinking = True
             self._suppress_cot = True
@@ -350,18 +357,84 @@ class StreamContentFilter:
         visible_piece = "".join(x for x in out if x)
         if visible_piece:
             self._visible += visible_piece
-            if is_repetition_loop(self._visible):
+            # Only abort mid-stream if visible prose itself is a repetition loop
+            # AND we never saw tools-worthy content. Don't kill a finished answer.
+            if (
+                len(self._visible) > 400
+                and is_repetition_loop(self._visible)
+                and _cjk_count(self._visible) < 40
+            ):
                 self.loop_detected = True
                 self.thinking = True
                 return ""
         return visible_piece
 
+    def _release_answer_from_cot_buf(self) -> str:
+        """If suppressed buffer contains a real answer after CoT, resume streaming it.
+
+        Only release when we see substantial CJK (or a clearly non-planning block
+        that sanitize would keep). English mid-CoT sentences must stay suppressed.
+        """
+        buf = self._cot_buf
+        if not buf.strip():
+            return ""
+        parts = [p.strip() for p in re.split(r"\n{2,}", buf) if p.strip()]
+        if len(parts) >= 2:
+            for idx, part in enumerate(parts):
+                if _looks_like_cot_block(part):
+                    continue
+                # Require CJK so English planner sentences don't escape.
+                if _cjk_count(part) < 8:
+                    continue
+                if looks_like_zh_planning_narration(part):
+                    continue
+                self._suppress_cot = False
+                self.thinking = False
+                released = "\n\n".join(parts[idx:])
+                self._cot_buf = ""
+                return released
+        # Single block / incomplete: substantial CJK that isn't planning narration.
+        if (
+            _cjk_count(buf) >= 20
+            and not looks_like_zh_planning_narration(buf)
+            and not _is_english_planning_dump(buf)
+        ):
+            # Strip leading English CoT lines if present.
+            lines = buf.splitlines()
+            start = 0
+            for i, line in enumerate(lines):
+                low = line.strip().lower()
+                if not low:
+                    start = i + 1
+                    continue
+                if any(low.startswith(o) for o in _COT_OPENERS) or _looks_like_cot_block(
+                    line
+                ):
+                    start = i + 1
+                    continue
+                if _cjk_count(line) > 0:
+                    start = i
+                    break
+            tail = "\n".join(lines[start:]).strip()
+            if _cjk_count(tail) >= 12:
+                self._suppress_cot = False
+                self.thinking = False
+                self._cot_buf = ""
+                return tail
+        return ""
+
     def _emit_plain(self, piece: str) -> str:
         if not piece:
             return ""
-        if self._suppress_cot or self.loop_detected:
+        if self.loop_detected:
             self.thinking = True
             return ""
+
+        if self._suppress_cot:
+            self.thinking = True
+            self._cot_buf += piece
+            released = self._release_answer_from_cot_buf()
+            return self._scrub_loops(released) if released else ""
 
         if not self._started:
             self._hold += piece
@@ -371,16 +444,20 @@ class StreamContentFilter:
                 if hold_low.startswith(opener):
                     self._suppress_cot = True
                     self.thinking = True
+                    self._cot_buf = self._hold
                     self._hold = ""
                     self._started = True
-                    return ""
+                    released = self._release_answer_from_cot_buf()
+                    return self._scrub_loops(released) if released else ""
             for opener in _ZH_STREAM_OPENERS:
                 if hold_zh.startswith(opener):
                     self._suppress_cot = True
                     self.thinking = True
+                    self._cot_buf = self._hold
                     self._hold = ""
                     self._started = True
-                    return ""
+                    released = self._release_answer_from_cot_buf()
+                    return self._scrub_loops(released) if released else ""
             if _could_become_cot_opener(self._hold):
                 self.thinking = True
                 return ""
@@ -406,16 +483,24 @@ class StreamContentFilter:
     def raw(self) -> str:
         return self._raw
 
+    @property
+    def visible(self) -> str:
+        return self._visible
+
     def finalize(self) -> str:
-        """Flush pending bytes and return fully sanitized visible content."""
-        if self.loop_detected or self._suppress_cot:
-            return ""
-        if self._pending and not self._in_think and not self._suppress_cot:
-            if not self._started:
+        """Return user-facing content — recover answers even after CoT suppress."""
+        if self._pending and not self._in_think:
+            if self._suppress_cot:
+                self._cot_buf += self._pending
+            elif not self._started:
                 self._hold += self._pending
             else:
                 self._visible += self._pending
         self._pending = ""
+        if self._suppress_cot and self._cot_buf:
+            released = self._release_answer_from_cot_buf()
+            if released:
+                self._visible += released
         if self._hold and not self._suppress_cot:
             zh = self._hold.lstrip()
             if any(zh.startswith(o) for o in _ZH_STREAM_OPENERS):
@@ -427,4 +512,12 @@ class StreamContentFilter:
             ):
                 self._visible += self._hold
             self._hold = ""
-        return sanitize_assistant_content(self._raw)
+
+        cleaned = sanitize_assistant_content(self._raw)
+        if cleaned:
+            return cleaned
+        # Prefer already-streamed visible text over empty (avoids blinking cursor
+        # when a false loop flag wiped sanitize but UI already showed an answer).
+        if self._visible.strip():
+            return self._visible.strip()
+        return ""

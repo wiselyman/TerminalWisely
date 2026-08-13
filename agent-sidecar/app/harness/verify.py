@@ -17,6 +17,13 @@ ACT_NUDGE = (
     "web_fetch) to make progress. Do not narrate a plan without acting."
 )
 
+CONCLUDE_NUDGE = (
+    "[HARNESS] Tool results are already in this conversation. Do NOT re-plan or "
+    "repeat English/Chinese thinking. Write the final answer to the user now in "
+    "their language, using only the tool evidence. No more tools unless a fact "
+    "is still missing."
+)
+
 LOOP_ABORT_MESSAGE = (
     "模型陷入重复叙述（空转计划），已停止本轮。"
     "请换一种说法再试；若是安装类任务，也可直接提供确切下载链接 / 安装步骤，"

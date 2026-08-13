@@ -825,7 +825,37 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         activeRunId = null;
         activeRunScope = null;
         if (get().chatScope === runScope) {
-          set({ busy: false, modelPhase: "idle", pendingAsk: null, pendingApproval: null });
+          const msgs = get().messages;
+          let changed = false;
+          const next = msgs.map((line) => {
+            if (line.kind === "assistant" && line.streaming) {
+              changed = true;
+              return { id: line.id, kind: "assistant" as const, content: line.content };
+            }
+            return line;
+          });
+          if (changed) {
+            const messagesByScope = {
+              ...get().messagesByScope,
+              [runScope]: next,
+            };
+            savePersistedChats(messagesByScope);
+            set({
+              busy: false,
+              modelPhase: "idle",
+              pendingAsk: null,
+              pendingApproval: null,
+              messages: next,
+              messagesByScope,
+            });
+          } else {
+            set({
+              busy: false,
+              modelPhase: "idle",
+              pendingAsk: null,
+              pendingApproval: null,
+            });
+          }
         }
       }
     }
