@@ -190,7 +190,9 @@ export function AiEngineerSettings() {
   return (
     <div
       className="ai-engineer-settings-overlay"
-      onClick={() => setSettingsOpen(false)}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) setSettingsOpen(false);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Escape") setSettingsOpen(false);
       }}
@@ -198,6 +200,7 @@ export function AiEngineerSettings() {
     >
       <div
         className="ai-engineer-settings ai-engineer-settings-wide"
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

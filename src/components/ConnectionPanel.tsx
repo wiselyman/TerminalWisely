@@ -105,8 +105,8 @@ export function ConnectionPanel({
   const [savedPasswordPrompt, setSavedPasswordPrompt] =
     useState<SavedConnection | null>(null);
   const [savedPassword, setSavedPassword] = useState("");
-  const [rememberPassword, setRememberPassword] = useState(false);
-  const [rememberSavedPassword, setRememberSavedPassword] = useState(false);
+    const [rememberPassword, setRememberPassword] = useState(true);
+    const [rememberSavedPassword, setRememberSavedPassword] = useState(true);
 
   const {
     savedConnections,
@@ -171,13 +171,13 @@ export function ConnectionPanel({
     setSshFormMode(null);
     setForm(defaultRequest);
     setConnectionName("");
-    setRememberPassword(false);
+    setRememberPassword(true);
   };
 
   const closePasswordPrompt = () => {
     setSavedPasswordPrompt(null);
     setSavedPassword("");
-    setRememberSavedPassword(false);
+    setRememberSavedPassword(true);
   };
 
   const updateField = <K extends keyof SshConnectRequest>(
@@ -360,8 +360,7 @@ export function ConnectionPanel({
                 }
               />
             </label>
-            {(isEditing || connectionName.trim()) && (
-              <label className="checkbox-row">
+            <label className="checkbox-row">
                 <input
                   type="checkbox"
                   checked={rememberPassword}
@@ -369,7 +368,6 @@ export function ConnectionPanel({
                 />
                 {t("connection:rememberPassword")}
               </label>
-            )}
           </>
         ) : (
           <>

@@ -18,6 +18,7 @@ from app.harness.verify import (
     ACT_NUDGE,
     CONCLUDE_NUDGE,
     LOOP_ABORT_MESSAGE,
+    TRUNCATED_PLAN_NUDGE,
     VERIFY_NUDGE,
     claim_success_without_evidence,
     should_nudge_verify,
@@ -30,7 +31,11 @@ from app.harness.apt_impact import (
 )
 from app.policy.user_overrides import add_read_binaries, rememberable_binaries
 from app.llm.gateway import ModelGateway, ModelGatewayError
-from app.llm.thinking import StreamContentFilter
+from app.llm.thinking import (
+    StreamContentFilter,
+    looks_like_idle_plan_dump,
+    looks_like_truncated_plan,
+)
 from app.llm.context import (
     compact_messages_for_model,
     truncate_tool_payload,
@@ -159,6 +164,13 @@ class AgentLoop:
                 self.run.messages.append(hist_msg)
 
                 content = (assistant.get("content") or "").strip()
+                idle_dump = looks_like_idle_plan_dump(content) or bool(
+                    self.run.metadata.pop("_idle_plan", None)
+                )
+                truncated_plan = looks_like_truncated_plan(content)
+                # Don't paste a stalling plan dump into the chat as if it were the answer.
+                if idle_dump:
+                    content = ""
                 if content:
                     self.run.append_event("assistant_message", {"content": content})
 
@@ -187,6 +199,21 @@ class AgentLoop:
                     has_tool_evidence = any(
                         m.get("role") == "tool" for m in self.run.messages
                     )
+                    if (
+                        (truncated_plan or idle_dump)
+                        and not tool_calls
+                        and not self.run.metadata.get("_trunc_plan_nudged")
+                    ):
+                        self.run.metadata["_trunc_plan_nudged"] = True
+                        self.run.metadata["_act_nudged"] = True
+                        self.run.messages.append(
+                            {"role": "user", "content": TRUNCATED_PLAN_NUDGE}
+                        )
+                        self.run.append_event(
+                            "act_nudge",
+                            {"kind": "idle_plan" if idle_dump else "truncated_plan"},
+                        )
+                        continue
                     if planning_only and not self.run.metadata.get("_act_nudged"):
                         self.run.metadata["_act_nudged"] = True
                         nudge = CONCLUDE_NUDGE if has_tool_evidence else ACT_NUDGE
@@ -219,6 +246,7 @@ class AgentLoop:
                     self.run.metadata.pop("_act_nudged", None)
                     self.run.metadata.pop("_content_loop", None)
                     self.run.metadata.pop("_conclude_nudged", None)
+                    self.run.metadata.pop("_trunc_plan_nudged", None)
                     self._emit_conclusion(RunStatus.COMPLETED, content)
                     return
                 # Acting this turn: discard stale loop flags so a later
@@ -226,6 +254,7 @@ class AgentLoop:
                 self.run.metadata.pop("_content_loop", None)
                 self.run.metadata.pop("_act_nudged", None)
                 self.run.metadata.pop("_conclude_nudged", None)
+                self.run.metadata.pop("_trunc_plan_nudged", None)
 
                 pending_verify_nudge = False
                 for idx, tc in enumerate(tool_calls):
@@ -356,6 +385,8 @@ class AgentLoop:
         tool_calls = normalize_tool_calls(
             [tool_buckets[i] for i in sorted(tool_buckets.keys())]
         )
+        if looks_like_idle_plan_dump(filter_.raw) or looks_like_idle_plan_dump(content):
+            self.run.metadata["_idle_plan"] = True
         if filter_.loop_detected:
             if tool_calls:
                 # Command / tool dump misclassified as a loop — keep tools, drop flag.

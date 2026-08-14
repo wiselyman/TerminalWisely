@@ -225,3 +225,90 @@ async def test_cot_empty_after_tools_does_not_loop_abort() -> None:
     assert MSG not in texts
     assert run.status == RunStatus.COMPLETED
     assert any(e.type == "act_nudge" for e in run.events)
+
+
+class _IdlePlanThenToolModel:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("non-stream should not be used")
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+    ) -> Any:
+        self.calls += 1
+        if self.calls == 1:
+            block = (
+                "Wait, I'll just run the first command.\n\n"
+                "Intent: 检查 Ollama 服务配置 (Read-only)\n"
+                "Command: systemctl cat ollama && ls -l ~/lab/data\n\n"
+            )
+            yield {"type": "content", "text": "Let's do this step-by-step.\n\n" + block * 5}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        if self.calls == 2:
+            yield {
+                "type": "tool_call_delta",
+                "index": 0,
+                "id": "call_inspect_1",
+                "name": "terminal_exec",
+                "arguments": '{"command":"systemctl cat ollama"}',
+            }
+            yield {"type": "finished", "finish_reason": "tool_calls"}
+            return
+        yield {"type": "content", "text": "服务用户是 ollama，接下来会迁移模型目录。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_idle_plan_dump_forces_tool_call() -> None:
+    from app.agent.loop import deliver_tool_result
+    from app.harness.verify import LOOP_ABORT_MESSAGE as MSG
+
+    run = AgentRun(session_id="s4", run_id="r4")
+    model = _IdlePlanThenToolModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=30)
+
+    async def _feed() -> None:
+        for _ in range(200):
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("timed out waiting for WAITING_TOOL")
+        deliver_tool_result(
+            run,
+            run.pending_tool.call_id,
+            {
+                "ok": True,
+                "exit_code": 0,
+                "stdout": "# /lib/systemd/system/ollama.service\nUser=ollama\n",
+                "stderr": "",
+                "_untrusted": True,
+            },
+        )
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="做吧")
+    await feeder
+    texts = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert MSG not in texts
+    assert any(
+        e.type == "act_nudge" and e.payload.get("kind") == "idle_plan" for e in run.events
+    )
+    assert any(e.type == "tool_call" for e in run.events)

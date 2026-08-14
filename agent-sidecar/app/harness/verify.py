@@ -24,6 +24,12 @@ CONCLUDE_NUDGE = (
     "is still missing."
 )
 
+TRUNCATED_PLAN_NUDGE = (
+    "[HARNESS] You wrote a numbered plan (and may have stopped mid-step) but did "
+    "not call any tools. Do NOT continue writing Step N. Immediately call "
+    "terminal_exec for the next real command. Output ONLY tool calls this turn."
+)
+
 LOOP_ABORT_MESSAGE = (
     "模型陷入重复叙述（空转计划），已停止本轮。"
     "请换一种说法再试；若是安装类任务，也可直接提供确切下载链接 / 安装步骤，"

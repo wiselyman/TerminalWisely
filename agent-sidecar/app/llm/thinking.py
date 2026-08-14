@@ -75,6 +75,19 @@ _ZH_PLAN_MARKERS = (
 )
 
 _NUMBERED_PLAN_RE = re.compile(r"^\d+\.\s+\*\*[^*]+\*\*", re.MULTILINE)
+_STEP_HEADER_RE = re.compile(
+    r"(?:\*\*)?(?:Step|步骤)\s*\d+(?:\*\*)?",
+    re.IGNORECASE,
+)
+# Self-talk hedges while stalling instead of calling tools (any language/model).
+_WAFFLE_RE = re.compile(
+    r"(?:^|\n)\s*(?:wait,|let's (?:run|start|go|execute|do|check)|"
+    r"i'll (?:just )?run|i will (?:just )?(?:run|execute|check)|"
+    r"let's start with|then i will proceed|then answer|"
+    r"i'll run these)",
+    re.IGNORECASE,
+)
+_INTENT_LABEL_RE = re.compile(r"(?:^|\n)\s*(?:Intent|意图)\s*:", re.IGNORECASE)
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 
@@ -129,6 +142,50 @@ def _looks_like_commandish(window: str) -> bool:
     if any(tok in low for tok in ("terminal_exec", "\"command\"", "| grep", "| head", "sudo ")):
         return True
     if _CMD_LINE_RE.search(window):
+        return True
+    return False
+
+
+def looks_like_truncated_plan(text: str | None) -> bool:
+    """True when the model dumped a numbered plan and stopped mid-step, no tools."""
+    raw = (text or "").rstrip()
+    if len(raw) < 40:
+        return False
+    if not _STEP_HEADER_RE.search(raw):
+        return False
+    # Ends on a step header with nothing after it: "**Step 3" / "步骤 3："
+    last = raw.splitlines()[-1].strip() if raw.splitlines() else ""
+    if _STEP_HEADER_RE.fullmatch(last.rstrip(":：")) or _STEP_HEADER_RE.fullmatch(last):
+        return True
+    if raw.endswith(("**Step", "**步骤", "Step ", "步骤 ")):
+        return True
+    # Truncated markdown heading / bold
+    if raw.endswith(("**", "*")) and _STEP_HEADER_RE.search(raw[-80:]):
+        return True
+    return False
+
+
+def looks_like_idle_plan_dump(text: str | None) -> bool:
+    """True when the model is rewriting a plan in chat instead of calling tools.
+
+    Behavioral, not model-specific: hedges + repeated Intent/Command blocks.
+    A normal user-facing answer does not say Wait/Let's run a dozen times.
+    """
+    raw = text or ""
+    if len(raw) < 280:
+        return False
+    waffle = len(_WAFFLE_RE.findall(raw))
+    intents = len(_INTENT_LABEL_RE.findall(raw))
+    steps = len(_STEP_HEADER_RE.findall(raw))
+    lines = [ln.strip() for ln in raw.splitlines() if len(ln.strip()) >= 24]
+    repeated_line = Counter(lines).most_common(1)[0][1] if lines else 0
+    if waffle >= 4:
+        return True
+    if intents >= 3 and waffle >= 2:
+        return True
+    if repeated_line >= 4 and waffle >= 2:
+        return True
+    if steps >= 3 and waffle >= 3:
         return True
     return False
 
@@ -202,7 +259,11 @@ def sanitize_assistant_content(text: str | None) -> str:
     if not cleaned:
         return ""
 
-    if is_repetition_loop(cleaned) or looks_like_zh_planning_narration(cleaned):
+    if (
+        is_repetition_loop(cleaned)
+        or looks_like_zh_planning_narration(cleaned)
+        or looks_like_idle_plan_dump(cleaned)
+    ):
         return ""
 
     if _is_english_planning_dump(cleaned):
@@ -301,8 +362,10 @@ class StreamContentFilter:
         self._raw += chunk
         if self.loop_detected:
             return ""
-        # Prose-only repetition (URL-guess loops). Command dumps are excluded.
-        if len(self._raw) > 400 and is_repetition_loop(self._raw) and not self._visible:
+        if len(self._raw) > 280 and (
+            looks_like_idle_plan_dump(self._raw)
+            or (is_repetition_loop(self._raw) and not self._visible.strip())
+        ):
             self.loop_detected = True
             self.thinking = True
             self._suppress_cot = True
@@ -357,12 +420,8 @@ class StreamContentFilter:
         visible_piece = "".join(x for x in out if x)
         if visible_piece:
             self._visible += visible_piece
-            # Only abort mid-stream if visible prose itself is a repetition loop
-            # AND we never saw tools-worthy content. Don't kill a finished answer.
-            if (
-                len(self._visible) > 400
-                and is_repetition_loop(self._visible)
-                and _cjk_count(self._visible) < 40
+            if looks_like_idle_plan_dump(self._visible) or (
+                len(self._visible) > 400 and is_repetition_loop(self._visible)
             ):
                 self.loop_detected = True
                 self.thinking = True

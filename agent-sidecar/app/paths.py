@@ -112,8 +112,8 @@ def max_context_tokens() -> int:
 
 
 def max_output_tokens() -> int:
-    """Always request some generation budget so context-full prompts don't ask for 0."""
-    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS", "2048"))
+    """Generation budget. 2048 was too small for thinking models that leak CoT."""
+    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS", "8192"))
 
 
 def lease_ttl_seconds() -> float:

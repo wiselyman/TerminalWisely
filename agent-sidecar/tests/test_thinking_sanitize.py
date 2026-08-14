@@ -69,6 +69,51 @@ def test_strips_zh_feishu_url_guess_loop() -> None:
     assert sanitize_assistant_content(raw) == ""
 
 
+def test_looks_like_truncated_plan_step3() -> None:
+    from app.llm.thinking import looks_like_truncated_plan
+
+    raw = (
+        "Do not use `mv` until we check.\n\n"
+        "**Step 1: Check service file**\n"
+        "`systemctl cat ollama.service`\n\n"
+        "**Step 2: Check models**\n"
+        "`ls -lh /usr/share/ollama/.ollama/models`\n\n"
+        "**Step 3"
+    )
+    assert looks_like_truncated_plan(raw)
+    assert not looks_like_truncated_plan("这台机器是 Debian 12。")
+
+
+def test_looks_like_idle_plan_dump_repeated_intent() -> None:
+    from app.llm.thinking import looks_like_idle_plan_dump, sanitize_assistant_content
+
+    block = (
+        "Wait, I'll just run the first command.\n\n"
+        "Intent: 检查 Ollama 服务配置、当前用户主目录及模型目录内容 (Read-only)\n"
+        'Command: echo "HOME=$HOME" && systemctl cat ollama && ls -l ~/lab/data\n\n'
+    )
+    raw = "Let's do this step-by-step to be safe.\n\n" + block * 5
+    assert looks_like_idle_plan_dump(raw)
+    assert sanitize_assistant_content(raw) == ""
+    assert not looks_like_idle_plan_dump("这台机器是 Debian 12，内核 6.18。")
+
+
+def test_looks_like_idle_plan_dump_helm_repeat() -> None:
+    from app.llm.thinking import looks_like_idle_plan_dump, sanitize_assistant_content
+
+    block = (
+        "Let's check helm status.\n"
+        "which helm\n"
+        "helm version\n\n"
+        "I'll run these.\n"
+        "Then answer.\n\n"
+        "I will check helm status.\n"
+    )
+    raw = block * 6
+    assert looks_like_idle_plan_dump(raw)
+    assert sanitize_assistant_content(raw) == ""
+
+
 def test_command_dump_is_not_a_repetition_loop() -> None:
     from app.llm.thinking import is_repetition_loop, StreamContentFilter
 

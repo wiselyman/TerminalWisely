@@ -44,6 +44,22 @@ pub struct SidecarHttpResponse {
     pub content_type: String,
 }
 
+fn hide_windows_console(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = cmd;
+}
+
+fn python_command(python: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut cmd = Command::new(python);
+    hide_windows_console(&mut cmd);
+    cmd
+}
+
 fn state() -> &'static Mutex<Option<SidecarState>> {
     SIDECAR.get_or_init(|| Mutex::new(None))
 }
@@ -123,7 +139,7 @@ fn kill_orphan_sidecars(keep_pid: Option<u32>) {
 }
 
 fn python_has_runtime_deps(python: &str) -> bool {
-    Command::new(python)
+    python_command(python)
         .arg("-c")
         .arg("import uvicorn, fastapi, pydantic, httpx, yaml")
         .stdout(Stdio::null())
@@ -148,7 +164,7 @@ fn venv_python_path(venv_dir: &std::path::Path) -> PathBuf {
 
 fn find_system_python() -> Option<String> {
     for candidate in ["python3", "python"] {
-        if Command::new(candidate)
+        if python_command(candidate)
             .arg("-c")
             .arg("import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)")
             .stdout(Stdio::null())
@@ -261,7 +277,7 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
     if venv_dir.exists() {
         let _ = std::fs::remove_dir_all(&venv_dir);
     }
-    let status = Command::new(&bootstrap)
+    let status = python_command(&bootstrap)
         .args(["-m", "venv"])
         .arg(&venv_dir)
         .stdout(Stdio::null())
@@ -295,7 +311,7 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
         &format!("[sidecar] auto pip install -r {}", req.display()),
     );
 
-    let _ = Command::new(&venv_py)
+    let _ = python_command(&venv_py)
         .args([
             "-m",
             "pip",
@@ -309,7 +325,7 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
         .stderr(Stdio::null())
         .status();
 
-    let install = Command::new(&venv_py)
+    let install = python_command(&venv_py)
         .args(["-m", "pip", "install", "-r"])
         .arg(&req)
         .stdout(Stdio::piped())
@@ -390,7 +406,7 @@ pub fn restart_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
         .map_err(AppError::from)?;
     let log_err = log_file.try_clone().map_err(AppError::from)?;
 
-    let mut cmd = Command::new(&python);
+    let mut cmd = python_command(&python);
     cmd.current_dir(&sidecar_dir)
         .env("TW_AI_TOKEN", &token)
         .env("TW_AI_DATA_DIR", &data)
