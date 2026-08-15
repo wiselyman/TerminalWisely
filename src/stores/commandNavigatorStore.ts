@@ -12,6 +12,7 @@ import type {
   CommandSubcategory,
   CommandTemplate,
   DistroFamily,
+  SessionKind,
 } from "../types";
 import { useFindStore } from "./findStore";
 import { useHostStatsStore } from "./hostStatsStore";
@@ -42,7 +43,7 @@ function loadCustomCommands(): CommandTemplate[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    const commands = parsed
       .map((item): CommandTemplate | null => {
         if (!item || typeof item !== "object") return null;
         const record = item as Record<string, unknown>;
@@ -62,6 +63,10 @@ function loadCustomCommands(): CommandTemplate[] {
         const params = Array.isArray(record.params)
           ? (record.params as CommandParam[])
           : buildParamsFromTemplate(template);
+        const scope = (record.scope as CommandShortcutScope) ?? "all";
+        const server_id =
+          typeof record.server_id === "string" ? record.server_id : null;
+        if (server_id === "local") return null;
         return {
           id:
             typeof record.id === "string" && record.id
@@ -74,13 +79,14 @@ function loadCustomCommands(): CommandTemplate[] {
           distroFamilies,
           template,
           params,
-          scope: (record.scope as CommandShortcutScope) ?? "all",
-          server_id:
-            typeof record.server_id === "string" ? record.server_id : null,
+          scope,
+          server_id,
           builtin: false,
         };
       })
       .filter((item): item is CommandTemplate => item !== null);
+    persistCustomCommands(commands);
+    return commands;
   } catch {
     return [];
   }
@@ -139,7 +145,7 @@ interface CommandNavigatorState {
   hideBuiltinCommand: (id: string) => void;
   listCommands: (options: {
     osId: string | null | undefined;
-    tabKind: "local" | "ssh";
+    tabKind: SessionKind;
     serverId: string;
   }) => CommandTemplate[];
   insertCommand: (sessionId: string, command: string) => Promise<void>;

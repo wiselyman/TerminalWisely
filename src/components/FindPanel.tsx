@@ -6,6 +6,7 @@ import { useFindStore } from "../stores/findStore";
 import { usePreviewStore } from "../stores/previewStore";
 import { PathInput } from "./PathInput";
 import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
+import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
 
 interface FindPanelProps {
   sessionId: string;
@@ -117,6 +118,7 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
             <h2 className="find-panel-title">{t("find.title")}</h2>
             <span className="find-panel-session">{sessionTitle}</span>
           </div>
+          <WorkspacePanelHeadActions panelId="find" sessionId={sessionId} />
         </div>
 
         <div className="find-panel-toolbar">

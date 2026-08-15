@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -10,37 +9,6 @@ use crate::preview_sudo;
 use crate::shell::shell_quote_remote_path;
 use crate::ssh::client::{exec_command, ClientHandler};
 use crate::ssh::sftp;
-
-pub async fn local_path_size(path: &Path) -> AppResult<(bool, u64)> {
-    let meta = tokio::fs::metadata(path).await?;
-    if meta.is_file() {
-        return Ok((false, meta.len()));
-    }
-    if !meta.is_dir() {
-        return Err(AppError::msg("无法识别路径类型"));
-    }
-    Ok((true, local_dir_size(path).await?))
-}
-
-async fn local_dir_size(path: &Path) -> AppResult<u64> {
-    let mut total = 0u64;
-    let mut stack = vec![path.to_path_buf()];
-
-    while let Some(current) = stack.pop() {
-        let mut read_dir = tokio::fs::read_dir(&current).await?;
-        while let Some(entry) = read_dir.next_entry().await? {
-            let entry_path = entry.path();
-            let meta = entry.metadata().await?;
-            if meta.is_dir() {
-                stack.push(entry_path);
-            } else if meta.is_file() {
-                total = total.saturating_add(meta.len());
-            }
-        }
-    }
-
-    Ok(total)
-}
 
 async fn remote_du_bytes(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,

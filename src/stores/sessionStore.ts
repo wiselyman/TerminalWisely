@@ -3,14 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import i18n from "../i18n";
 import { formatAppError } from "../lib/formatAppError";
 import { formatConnectError } from "../lib/connectError";
-import {
-  getHostOsProfile,
-  isWindowsHost,
-  localShellInfoToProfile,
-  localTerminalTitle,
-  type LocalShellInfo,
-} from "../lib/hostOs";
-import { gitBashInstallHint } from "../lib/localShellPreference";
 import { uniqueTabTitle } from "../lib/tabTitle";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
@@ -140,7 +132,6 @@ interface SessionState {
   ) => Promise<void>;
   deleteSavedConnection: (id: string) => Promise<void>;
   removeDeviceHistory: (id: string) => Promise<void>;
-  createLocalSession: (cols: number, rows: number) => Promise<void>;
   createSshSession: (
     request: SshConnectRequest,
     cols: number,
@@ -423,41 +414,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   removeDeviceHistory: async (id) => {
     await invoke("remove_device_history", { id });
     await get().loadDeviceHistory();
-  },
-
-  createLocalSession: async (cols, rows) => {
-    let shellInfo: LocalShellInfo | null = null;
-    try {
-      shellInfo = await invoke<LocalShellInfo>("get_local_shell_info");
-    } catch {
-      shellInfo = null;
-    }
-
-    if (isWindowsHost() && !shellInfo?.git_bash_available) {
-      useToastStore.getState().pushToast(gitBashInstallHint(), false);
-      return;
-    }
-
-    const profile = shellInfo
-      ? localShellInfoToProfile(shellInfo)
-      : getHostOsProfile();
-    const pendingId = createPendingId();
-    get().addConnectingTab({
-      id: pendingId,
-      title: shellInfo?.title ?? localTerminalTitle(profile),
-      kind: "local",
-      os_id: profile.osId,
-      os_name: profile.osName,
-    });
-
-    try {
-      const info = await invoke<SessionInfo>("create_local_session", { cols, rows });
-      if (await discardSessionIfCancelled(pendingId, info.id)) return;
-      get().promoteConnectingTab(pendingId, info);
-    } catch (err) {
-      get().removeConnectingTab(pendingId);
-      notifyConnectError(err);
-    }
   },
 
   createSshSession: async (request, cols, rows) => {

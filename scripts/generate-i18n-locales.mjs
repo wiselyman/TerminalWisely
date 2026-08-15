@@ -34,7 +34,6 @@ const catalog = {
     directory: { zh: "目录", en: "Directory" },
     home: { zh: "Home", en: "Home" },
     ssh: { zh: "SSH", en: "SSH" },
-    localTerminal: { zh: "本地终端", en: "Local terminal" },
     updatedAt: { zh: "更新于 {{time}}", en: "Updated {{time}}" },
     language: { zh: "语言", en: "Language" },
     languageZh: { zh: "中文", en: "中文" },
@@ -57,25 +56,6 @@ const catalog = {
     closeRight: { zh: "关闭右侧", en: "Close tabs to the right" },
     collapseSidebar: { zh: "收起侧栏", en: "Collapse sidebar" },
     expandSidebar: { zh: "展开侧栏", en: "Expand sidebar" },
-    localTerminalTitle: {
-      zh: "{{osName}} 本地终端",
-      en: "{{osName}} local terminal",
-    },
-    localTerminalWithBackend: {
-      zh: "{{title}} · {{backend}}",
-      en: "{{title}} · {{backend}}",
-    },
-    gitBashLocal: { zh: "Git Bash 本地终端", en: "Git Bash local terminal" },
-    backendGitBash: { zh: "Git Bash", en: "Git Bash" },
-    backendLocalShell: { zh: "Local Shell", en: "Local Shell" },
-    gitBashMissingBanner: {
-      zh: "未检测到 Git Bash ·",
-      en: "Git Bash not found ·",
-    },
-    installGitForWindows: {
-      zh: "安装 Git for Windows",
-      en: "Install Git for Windows",
-    },
     emptyBookmarks: { zh: "暂无 SSH 书签", en: "No SSH bookmarks yet" },
     toolRailAria: { zh: "工作区工具", en: "Workspace tools" },
     toolNeedTab: {
@@ -262,14 +242,9 @@ const catalog = {
       en: "Drop files to insert path",
     },
     bootMessageSsh: { zh: "正在建立会话…", en: "Establishing session…" },
-    bootMessageLocal: { zh: "正在启动终端…", en: "Starting terminal…" },
     connectingMessageSsh: {
       zh: "正在连接服务器…",
       en: "Connecting to server…",
-    },
-    connectingMessageLocal: {
-      zh: "正在启动本地终端…",
-      en: "Starting local terminal…",
     },
     pathSizeDirTitle: { zh: "文件夹大小", en: "Folder size" },
     pathSizeFileTitle: { zh: "文件大小", en: "File size" },
@@ -433,7 +408,7 @@ const catalog = {
     "find.empty": { zh: "未找到匹配文件", en: "No matching files" },
     "find.kindFile": { zh: "文件", en: "File" },
     "find.kindDirectory": { zh: "目录", en: "Directory" },
-    "hostStats.railLabel": { zh: "系统信息", en: "System info" },
+    "hostStats.railLabel": { zh: "服务器资源", en: "Server resources" },
     "hostStats.title": { zh: "服务器资源", en: "Server resources" },
     "hostStats.resizeAria": {
       zh: "调整服务器资源面板宽度",
@@ -459,6 +434,29 @@ const catalog = {
       zh: "趋势采样中…",
       en: "Sampling trend…",
     },
+    "hostStats.statusError": {
+      zh: "资源采集失败",
+      en: "Stats unavailable",
+    },
+    "hostStats.statusCpu": { zh: "CPU {{value}}%", en: "CPU {{value}}%" },
+    "hostStats.statusMem": { zh: "Mem {{value}}%", en: "Mem {{value}}%" },
+    "hostStats.statusLoad": { zh: "Load {{value}}", en: "Load {{value}}" },
+    "hostStats.statusNet": {
+      zh: "↓{{down}} ↑{{up}}",
+      en: "↓{{down}} ↑{{up}}",
+    },
+    "hostStats.statusDiskIo": {
+      zh: "R {{read}} W {{write}}",
+      en: "R {{read}} W {{write}}",
+    },
+    "hostStats.statusDisk": {
+      zh: "{{mount}} {{value}}%",
+      en: "{{mount}} {{value}}%",
+    },
+    "hostStats.statusProcs": {
+      zh: "{{count}} procs",
+      en: "{{count}} procs",
+    },
     "hostStats.loggedInUsers": { zh: "登录用户", en: "Logged-in users" },
     "hostStats.noLoggedInUsers": { zh: "无登录用户", en: "No logged-in users" },
     "hostStats.noDisks": { zh: "暂无磁盘信息", en: "No disk info" },
@@ -478,11 +476,11 @@ const catalog = {
       zh: "累计 {{a}} / {{b}}",
       en: "Total {{a}} / {{b}}",
     },
-    "commandNav.railLabel": { zh: "命令行向导", en: "Command guide" },
-    "commandNav.title": { zh: "命令", en: "Commands" },
+    "commandNav.railLabel": { zh: "命令导航", en: "Command navigator" },
+    "commandNav.title": { zh: "命令导航", en: "Command navigator" },
     "commandNav.resizeAria": {
-      zh: "调整命令面板宽度",
-      en: "Resize command panel",
+      zh: "调整命令导航宽度",
+      en: "Resize command navigator",
     },
     "commandNav.searchPlaceholder": {
       zh: "搜索命令…",
@@ -519,8 +517,8 @@ const catalog = {
       en: "A desktop terminal built for day-to-day ops",
     },
     summary: {
-      zh: "在同一窗口里管理本地 Git Bash 与 SSH 会话。拖拽上传、点击浏览与预览、右键下载与跨服发送、Find 文件搜索、服务器资源监控、任务管理器，以及页签快捷目录，减少在终端与文件管理器之间来回切换。",
-      en: "Manage local Git Bash and SSH sessions in one window. Drag-and-drop upload, click to browse and preview, right-click download and cross-server send, Find, server metrics, Task Manager, and tab directory shortcuts — less switching between terminal and file manager.",
+      zh: "在同一窗口管理 SSH 会话，并用 AI Linux Engineer 在已连接主机上排障：你描述问题，AI 提出命令；只读自动执行，变更需你批准。拖拽上传、点击预览、跨服发送仍内置。",
+      en: "Manage SSH sessions in one window, plus AI Linux Engineer on the connected host: you describe the problem; the agent proposes commands. Reads run automatically; mutations need your approval. Drag-upload, click-preview, and cross-server send stay built in.",
     },
     quickStart: { zh: "快速开始", en: "Quick start" },
     "feature.dragUpload.title": { zh: "拖拽上传", en: "Drag & drop upload" },
@@ -562,39 +560,31 @@ const catalog = {
     },
     "feature.hostStats.title": { zh: "服务器资源", en: "Server resources" },
     "feature.hostStats.desc": {
-      zh: "贴边工具栏打开，查看当前页签机器的 CPU、内存、磁盘、网络与系统信息，图形化展示并自动刷新。",
-      en: "Open from the side rail to view CPU, memory, disk, network, and system info for the active tab, with charts and auto-refresh.",
+      zh: "活动 SSH 页签底部状态栏实时显示 CPU、内存、负载、网络、磁盘与进程数；悬停可看完整详情。",
+      en: "While an SSH tab is active, a bottom status bar shows CPU, memory, load, network, disk, and process count live; hover for full details.",
     },
     "feature.find.title": { zh: "Find 文件搜索", en: "Find files" },
     "feature.find.desc": {
-      zh: "右侧贴边工具栏打开，在当前页签对应环境执行 find；Windows 本地需 Git Bash。点击结果进入目录或预览。",
-      en: "Run find in the active tab’s environment from the side rail (Git Bash required on Windows local). Click results to enter or preview.",
+      zh: "右侧贴边工具栏打开，在当前 SSH 会话上执行 find。点击结果进入目录或预览。",
+      en: "Run find on the active SSH session from the side rail. Click results to enter or preview.",
     },
     "feature.taskManager.title": { zh: "任务管理器", en: "Task Manager" },
     "feature.taskManager.desc": {
-      zh: "右侧贴边工具栏打开，查看当前页签对应机器（本地或 SSH）的进程、端口、内存与 CPU，支持搜索排序与确认后结束进程。",
-      en: "View processes, ports, memory, and CPU for the active machine (local or SSH). Search, sort, and end processes after confirm.",
+      zh: "右侧贴边工具栏打开，查看当前 SSH 主机的进程、端口、内存与 CPU，支持搜索排序与确认后结束进程。",
+      en: "View processes, ports, memory, and CPU for the active SSH host. Search, sort, and end processes after confirm.",
     },
     "feature.commandNav.title": { zh: "命令导航", en: "Command guide" },
     "feature.commandNav.desc": {
       zh: "贴边工具栏打开系统运维命令库：按服务、日志、磁盘、网络等分类浏览；点击后填参数，一键插入当前终端（不自动执行）。",
       en: "Browse ops commands by service, logs, disk, network, and more. Fill parameters and insert into the terminal (does not auto-run).",
     },
-    "step.local.iconLabel": {
-      zh: "Git Bash 本地终端",
-      en: "Git Bash local terminal",
-    },
-    "step.local.text": {
-      zh: "侧栏书签第一项，点击打开 Git Bash 本地终端（Windows 需先安装 Git for Windows）。",
-      en: "First sidebar item opens a Git Bash local terminal (install Git for Windows on Windows).",
-    },
     "step.ssh.iconLabel": {
       zh: "Remote 远程 SSH",
       en: "Remote SSH",
     },
     "step.ssh.text": {
-      zh: "页签栏右侧 + 或侧栏书签连接远程 Linux 服务器。",
-      en: "Use + on the tab bar or a sidebar bookmark to connect to a remote Linux host.",
+      zh: "连接 Linux 主机；可保存为书签下次一键连。",
+      en: "Connect to a Linux host; save it as a bookmark for next time.",
     },
     "step.bookmark.iconLabel": { zh: "书签", en: "Bookmarks" },
     "step.bookmark.text": {
@@ -628,18 +618,6 @@ const catalog = {
     },
     transferFailed: { zh: "传输失败", en: "Transfer failed" },
     transferCancelled: { zh: "传输已取消", en: "Transfer cancelled" },
-    gitBashRequired: {
-      zh: "未检测到 Git Bash，请先安装 Git for Windows",
-      en: "Git Bash not found. Install Git for Windows first",
-    },
-    gitBashRequiredForFind: {
-      zh: "本地终端需要 Git Bash；请先安装 Git for Windows",
-      en: "Local find needs Git Bash. Install Git for Windows first",
-    },
-    localCannotReconnect: {
-      zh: "本地终端不支持重新连接",
-      en: "Local terminals cannot reconnect",
-    },
     sameSessionTransfer: {
       zh: "源和目标不能是同一个会话",
       en: "Source and target cannot be the same session",
@@ -758,10 +736,6 @@ const catalog = {
     ERR_SAME_SESSION: {
       zh: "源和目标不能是同一个会话",
       en: "Source and target cannot be the same session",
-    },
-    ERR_GIT_BASH_REQUIRED: {
-      zh: "未检测到 Git Bash，请先安装 Git for Windows",
-      en: "Git Bash not found. Install Git for Windows first",
     },
     ERR_PASSWORD_REQUIRED: {
       zh: "请输入密码",

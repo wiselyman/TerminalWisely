@@ -1,7 +1,5 @@
-mod local;
 mod remote;
 
-pub use local::list_passwd_accounts as list_local_passwd_accounts;
 pub use remote::list_passwd_accounts as list_remote_passwd_accounts;
 
 pub(crate) const LIST_PASSWD_ACCOUNTS_SCRIPT: &str = r#"bash -s <<'TW_PASSWD_EOF'

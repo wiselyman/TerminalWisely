@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionKind {
-    Local,
     Ssh,
 }
 
@@ -13,27 +12,16 @@ pub struct SessionInfo {
     pub title: String,
     pub kind: SessionKind,
     pub remote_home: Option<String>,
-    /// Stable server identity for shortcuts: `user@host:port` for SSH, `local` for local.
+    /// Stable server identity for shortcuts: `user@host:port`.
     #[serde(default)]
     pub server_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os_name: Option<String>,
-    /// SSH host key fingerprint (sha256) recorded at connect; empty for local.
+    /// SSH host key fingerprint (sha256) recorded at connect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_fingerprint: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LocalShellInfo {
-    /// `git_bash` or `native` (non-Windows)
-    pub backend: String,
-    pub os_id: String,
-    pub os_name: String,
-    pub title: String,
-    #[serde(default)]
-    pub git_bash_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

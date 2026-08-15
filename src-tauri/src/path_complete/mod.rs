@@ -1,7 +1,5 @@
-mod local;
 mod remote;
 
-pub use local::complete_local_path_from_partial;
 pub use remote::complete_remote_path_from_partial;
 
 const MAX_COMPLETIONS: usize = 80;

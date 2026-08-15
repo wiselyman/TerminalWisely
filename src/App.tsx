@@ -10,14 +10,12 @@ import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { FindPanel } from "./components/FindPanel";
 import { FindTool } from "./components/FindTool";
-import { HostStatsPanel } from "./components/hostStats/HostStatsPanel";
-import { HostStatsTool } from "./components/HostStatsTool";
+import { HostStatsStatusBar } from "./components/hostStats/HostStatsStatusBar";
 import { CommandNavigatorPanel } from "./components/CommandNavigatorPanel";
 import { CommandNavigatorTool } from "./components/CommandNavigatorTool";
 import { TaskManagerTool } from "./components/TaskManagerTool";
 import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
-import { WorkspaceToolRail } from "./components/WorkspaceToolRail";
 import { TaskManagerPanel } from "./components/TaskManagerPanel";
 import { TransferPanel } from "./components/TransferPanel";
 import { TerminalView } from "./components/TerminalView";
@@ -53,8 +51,12 @@ import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
 import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
 import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
-import { TabHomeIcon, ChromePlusIcon } from "./components/SidebarIcons";
-import { getHostOsProfile, getPlatformShellClass, isMacHost } from "./lib/hostOs";
+import {
+  TabHomeIcon,
+  ChromePlusIcon,
+  SidebarToggleIcon,
+} from "./components/SidebarIcons";
+import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
 import { isTauriRuntime } from "./lib/isTauri";
 import { WindowControls } from "./components/WindowControls";
 import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
@@ -73,7 +75,6 @@ const SIDEBAR_STORAGE_KEY = SIDEBAR_COLLAPSED_STORAGE_KEY;
 
 function App() {
   const { t } = useTranslation("shell");
-  const hostOs = getHostOsProfile();
   const platformClass = getPlatformShellClass();
   const macWindowChrome = isMacHost();
   const tauriDragRegion = isTauriRuntime() ? true : undefined;
@@ -238,6 +239,7 @@ function App() {
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1",
   );
   const [sidebarExpandedWidth, setSidebarExpandedWidth] = useState(loadSidebarWidth);
+  const [windowFullscreen, setWindowFullscreen] = useState(false);
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
@@ -250,17 +252,12 @@ function App() {
   const findOpen = useFindStore((s) => s.open);
   const openFind = useFindStore((s) => s.openFind);
   const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
-  const hostStatsOpen = useHostStatsStore((s) => s.open);
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
   const commandNavOpen = useCommandNavigatorStore((s) => s.open);
   const workspacePanelWidth = useTaskManagerStore((s) => s.width);
   const workspacePanelOpen =
-    aiEngineerOpen ||
-    taskManagerOpen ||
-    findOpen ||
-    hostStatsOpen ||
-    commandNavOpen;
+    aiEngineerOpen || taskManagerOpen || findOpen || commandNavOpen;
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -274,6 +271,30 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const win = getCurrentWindow();
+    let disposed = false;
+    const sync = () => {
+      void win.isFullscreen().then((fs) => {
+        if (!disposed) setWindowFullscreen(fs);
+      });
+    };
+    sync();
+    let unlisten: (() => void) | undefined;
+    void win.onResized(() => sync()).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    const onVis = () => sync();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      disposed = true;
+      unlisten?.();
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   useEffect(() => {
     if (!sidebarCollapsed) {
@@ -359,22 +380,10 @@ function App() {
     () => tabs.find((tab) => tab.id === activeTabId),
     [activeTabId, tabs],
   );
-  const hostStatsSnapshot = useHostStatsStore((s) => s.snapshot);
-  const activeSessionOs = useMemo(
-    () =>
-      resolveSessionOsProfile(
-        activeTab,
-        savedConnections,
-        hostOs,
-        hostStatsSnapshot?.os_name,
-      ),
-    [activeTab, savedConnections, hostOs, hostStatsSnapshot?.os_name],
-  );
   const activeTabReady =
     activeTab != null && (activeTab.connectionStatus ?? "ready") === "ready";
   const activeTabServerId =
-    activeTab?.server_id ??
-    (activeTab?.kind === "local" ? "local" : activeTabId ?? "");
+    activeTab?.server_id ?? activeTabId ?? "";
   const activeTabDisconnected = useSessionStore((state) =>
     activeTabId != null ? state.disconnectedSessionIds.has(activeTabId) : false,
   );
@@ -437,7 +446,10 @@ function App() {
 
 
   useEffect(() => {
-    if (!hostStatsOpen || !activeTabId) return;
+    if (!activeTabId || activeTabDisconnected) {
+      resetHostStats();
+      return;
+    }
 
     resetHostStats();
     void fetchHostStats(activeTabId, { initial: true });
@@ -446,7 +458,12 @@ function App() {
     }, 2000);
 
     return () => window.clearInterval(timer);
-  }, [activeTabId, fetchHostStats, hostStatsOpen, resetHostStats]);
+  }, [
+    activeTabDisconnected,
+    activeTabId,
+    fetchHostStats,
+    resetHostStats,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -571,7 +588,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${activeTabId && !activeTabDisconnected ? " has-host-stats-statusbar" : ""}`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -589,6 +606,19 @@ function App() {
               />
             ) : null}
             <div className="chrome-titlebar-main">
+              <button
+                type="button"
+                className="chrome-sidebar-toggle"
+                onClick={() => setSidebarCollapsed((value) => !value)}
+                aria-label={
+                  sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")
+                }
+                title={
+                  sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")
+                }
+              >
+                <SidebarToggleIcon />
+              </button>
               <div
                 className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
                 ref={tabBarRef}
@@ -626,7 +656,7 @@ function App() {
                 </div>
           {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
-            const tabOs = resolveSessionOsProfile(tab, savedConnections, hostOs);
+            const tabOs = resolveSessionOsProfile(tab, savedConnections);
             return (
             <div
               key={tab.id}
@@ -750,16 +780,12 @@ function App() {
               ) : null}
               <span
                 className={`tab-kind ${tab.kind}`}
-                title={
-                  tab.kind === "ssh"
-                    ? tabOs.osName ?? tabOs.osId ?? "SSH"
-                    : tabOs.osName ?? hostOs.osName
-                }
+                title={tabOs.osName ?? tabOs.osId ?? "SSH"}
               >
                 <ServerOsIcon
                   osId={tabOs.osId}
                   osName={tabOs.osName}
-                  size={14}
+                  size={16}
                   showTitle={false}
                 />
               </span>
@@ -788,10 +814,7 @@ function App() {
                   <TabDirectoryShortcuts
                     sessionId={tab.id}
                     tabKind={tab.kind}
-                    serverId={
-                      tab.server_id ??
-                      (tab.kind === "local" ? "local" : tab.title)
-                    }
+                    serverId={tab.server_id ?? tab.title}
                     onActivateTab={() => setActiveTab(tab.id)}
                   />
                 </span>
@@ -821,13 +844,56 @@ function App() {
               >
                 <ChromePlusIcon />
               </button>
-              <LocaleSwitcher />
 
           <div
             className="chrome-titlebar-drag"
             data-tauri-drag-region={tauriDragRegion ? "" : undefined}
             onDoubleClick={onTitlebarDoubleClick}
           />
+
+              <div className="chrome-titlebar-actions">
+                <AiEngineerTool
+                  active={aiEngineerOpen}
+                  disabled={!activeTabReady}
+                  onClick={() => {
+                    if (activeTabId) {
+                      switchWorkspacePanel(
+                        "aiEngineer",
+                        activeTabId,
+                        activeTabServerId,
+                      );
+                    }
+                  }}
+                />
+                <TaskManagerTool
+                  active={taskManagerOpen}
+                  disabled={!activeTabReady}
+                  onClick={() => {
+                    if (activeTabId) {
+                      switchWorkspacePanel("taskManager", activeTabId);
+                    }
+                  }}
+                />
+                <FindTool
+                  active={findOpen}
+                  disabled={!activeTabReady}
+                  onClick={() => {
+                    if (activeTabId) {
+                      switchWorkspacePanel("find", activeTabId);
+                    }
+                  }}
+                />
+                <CommandNavigatorTool
+                  active={commandNavOpen}
+                  disabled={!activeTabReady}
+                  onClick={() => {
+                    if (activeTabId) {
+                      switchWorkspacePanel("commandNav", activeTabId);
+                    }
+                  }}
+                />
+                <LocaleSwitcher />
+              </div>
 
           {!macWindowChrome ? <WindowControls layout="windows" /> : null}
             </div>
@@ -840,7 +906,7 @@ function App() {
           collapsed={sidebarCollapsed}
           expandedWidth={sidebarExpandedWidth}
           onExpandedWidthChange={setSidebarExpandedWidth}
-          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
+          onRequestCollapse={() => setSidebarCollapsed(true)}
           onRegisterNewRemote={registerNewRemote}
         />
 
@@ -894,45 +960,6 @@ function App() {
       ) : null}
       <ToastContainer />
       <SudoPasswordModal />
-      <WorkspaceToolRail>
-        <AiEngineerTool
-          active={aiEngineerOpen}
-          disabled={!activeTabReady}
-          onClick={() => {
-            if (activeTabId) {
-              switchWorkspacePanel("aiEngineer", activeTabId, activeTabServerId);
-            }
-          }}
-        />
-        <TaskManagerTool
-          active={taskManagerOpen}
-          disabled={!activeTabReady}
-          onClick={() => {
-            if (activeTabId) switchWorkspacePanel("taskManager", activeTabId);
-          }}
-        />
-        <FindTool
-          active={findOpen}
-          disabled={!activeTabReady}
-          onClick={() => {
-            if (activeTabId) switchWorkspacePanel("find", activeTabId);
-          }}
-        />
-        <HostStatsTool
-          active={hostStatsOpen}
-          disabled={!activeTabReady}
-          onClick={() => {
-            if (activeTabId) switchWorkspacePanel("hostStats", activeTabId);
-          }}
-        />
-        <CommandNavigatorTool
-          active={commandNavOpen}
-          disabled={!activeTabReady}
-          onClick={() => {
-            if (activeTabId) switchWorkspacePanel("commandNav", activeTabId);
-          }}
-        />
-      </WorkspaceToolRail>
       {activeTabId && aiEngineerOpen ? (
         <AiEngineerPanel sessionId={activeTabId} serverId={activeTabServerId} />
       ) : null}
@@ -948,14 +975,6 @@ function App() {
           sessionTitle={activeSessionTitle ?? activeTabId}
         />
       ) : null}
-      {activeTabId && hostStatsOpen ? (
-        <HostStatsPanel
-          sessionId={activeTabId}
-          sessionTitle={activeSessionTitle ?? activeTabId}
-          osId={activeSessionOs.osId}
-          osName={activeSessionOs.osName}
-        />
-      ) : null}
       {activeTabId && activeTab && commandNavOpen ? (
         <CommandNavigatorPanel
           sessionId={activeTabId}
@@ -964,6 +983,9 @@ function App() {
           tabKind={activeTab.kind}
           serverId={activeTabServerId}
         />
+      ) : null}
+      {activeTabId && !activeTabDisconnected ? (
+        <HostStatsStatusBar sessionId={activeTabId} />
       ) : null}
     </div>
   );

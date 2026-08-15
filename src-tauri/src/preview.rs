@@ -72,23 +72,25 @@ impl PreviewManager {
         let bytes = content.as_bytes();
         let mut used_sudo = entry.uses_sudo;
 
-        match session_kind {
-            SessionKind::Local => {
-                let path = if tokio::fs::try_exists(&entry.local_path)
-                    .await
-                    .unwrap_or(false)
-                {
-                    entry.local_path.clone()
-                } else {
-                    sessions
-                        .local_resolve_host_path(&entry.session_id, &entry.source_path)
-                        .await?
-                };
-                tokio::fs::write(&path, bytes).await?;
-            }
-            SessionKind::Ssh => {
-                let ssh = sessions.ssh_snapshot(&entry.session_id).await?;
-                if used_sudo {
+        let _ = session_kind;
+        let ssh = sessions.ssh_snapshot(&entry.session_id).await?;
+        if used_sudo {
+            preview_sudo::write_remote_bytes_sudo(
+                &ssh.handle(),
+                &entry.source_path,
+                sudo_password.as_deref(),
+                bytes,
+            )
+            .await?;
+        } else {
+            let conn =
+                client::open_transfer_connection(&ssh.connect_request(), None).await?;
+            match sftp::write_remote_bytes(&conn.handle(), &entry.source_path, bytes)
+                .await
+            {
+                Ok(()) => {}
+                // Readable but not writable (e.g. /etc/docker/daemon.json): escalate.
+                Err(err) if preview_sudo::is_permission_denied(&err) => {
                     preview_sudo::write_remote_bytes_sudo(
                         &ssh.handle(),
                         &entry.source_path,
@@ -96,27 +98,9 @@ impl PreviewManager {
                         bytes,
                     )
                     .await?;
-                } else {
-                    let conn =
-                        client::open_transfer_connection(&ssh.connect_request(), None).await?;
-                    match sftp::write_remote_bytes(&conn.handle(), &entry.source_path, bytes)
-                        .await
-                    {
-                        Ok(()) => {}
-                        // Readable but not writable (e.g. /etc/docker/daemon.json): escalate.
-                        Err(err) if preview_sudo::is_permission_denied(&err) => {
-                            preview_sudo::write_remote_bytes_sudo(
-                                &ssh.handle(),
-                                &entry.source_path,
-                                sudo_password.as_deref(),
-                                bytes,
-                            )
-                            .await?;
-                            used_sudo = true;
-                        }
-                        Err(err) => return Err(err),
-                    }
+                    used_sudo = true;
                 }
+                Err(err) => return Err(err),
             }
         }
 
@@ -174,30 +158,20 @@ impl PreviewManager {
             entry.local_path
         } else {
             let session_kind = sessions.session_kind(&entry.session_id).await?;
-            match session_kind {
-                SessionKind::Local => {
-                    return Err(AppError::msg(format!(
-                        "本地文件不存在: {}",
-                        entry.source_path
-                    )));
-                }
-                SessionKind::Ssh => {
-                    let cache_path = materialize_for_preview(
-                        app,
-                        sessions,
-                        session_kind,
-                        &entry.session_id,
-                        &entry.local_path,
-                        &entry.source_path,
-                        0,
-                    )
-                    .await?;
-                    if let Some(stored) = self.entries.lock().await.get_mut(handle_id) {
-                        stored.local_path = cache_path.clone();
-                    }
-                    cache_path
-                }
+            let cache_path = materialize_for_preview(
+                app,
+                sessions,
+                session_kind,
+                &entry.session_id,
+                &entry.local_path,
+                &entry.source_path,
+                0,
+            )
+            .await?;
+            if let Some(stored) = self.entries.lock().await.get_mut(handle_id) {
+                stored.local_path = cache_path.clone();
             }
+            cache_path
         };
 
         let path = path_to_display(&open_path);
@@ -215,21 +189,12 @@ impl PreviewManager {
         let session_id = request.session_id.clone();
         let kind = sessions.session_kind(&session_id).await?;
 
-        let (resolved, is_dir, total_size) = match kind {
-            SessionKind::Local => {
-                let path = sessions
-                    .local_resolve_host_path(&session_id, &request.path)
-                    .await?;
-                let metadata = tokio::fs::metadata(&path).await?;
-                (path, metadata.is_dir(), metadata.len())
-            }
-            SessionKind::Ssh => {
-                let ssh = sessions.ssh_snapshot(&session_id).await?;
-                let resolved = ssh.resolve_remote_path(&request.path).await?;
-                let (is_dir, total_size) =
-                    probe_ssh_file(&ssh.handle(), &resolved).await?;
-                (PathBuf::from(resolved), is_dir, total_size)
-            }
+        let (resolved, is_dir, total_size) = {
+            let ssh = sessions.ssh_snapshot(&session_id).await?;
+            let resolved = ssh.resolve_remote_path(&request.path).await?;
+            let (is_dir, total_size) =
+                probe_ssh_file(&ssh.handle(), &resolved).await?;
+            (PathBuf::from(resolved), is_dir, total_size)
         };
 
         if is_dir {
@@ -254,30 +219,21 @@ impl PreviewManager {
         match preview_kind.as_str() {
             "text" | "markdown" | "html" | "csv" => {
                 let sudo_password = request.sudo_password.as_deref();
-                let (text, truncated, uses_sudo) = match kind {
-                    SessionKind::Local => {
-                        let (text, truncated) = read_local_text(&resolved, total_size).await?;
-                        (text, truncated, false)
+                let (text, truncated, mut uses_sudo) = read_remote_text(
+                    sessions,
+                    &session_id,
+                    &resolved_str,
+                    total_size,
+                    sudo_password,
+                )
+                .await?;
+                // File may be world-readable but root-only writable.
+                if !uses_sudo {
+                    let ssh = sessions.ssh_snapshot(&session_id).await?;
+                    if !remote_is_writable(&ssh.handle(), &resolved_str).await {
+                        uses_sudo = true;
                     }
-                    SessionKind::Ssh => {
-                        let (text, truncated, mut uses_sudo) = read_remote_text(
-                            sessions,
-                            &session_id,
-                            &resolved_str,
-                            total_size,
-                            sudo_password,
-                        )
-                        .await?;
-                        // File may be world-readable but root-only writable.
-                        if !uses_sudo {
-                            let ssh = sessions.ssh_snapshot(&session_id).await?;
-                            if !remote_is_writable(&ssh.handle(), &resolved_str).await {
-                                uses_sudo = true;
-                            }
-                        }
-                        (text, truncated, uses_sudo)
-                    }
-                };
+                }
 
                 self.entries.lock().await.insert(
                     handle_id.clone(),
@@ -395,26 +351,12 @@ pub async fn probe_path(
     session_id: &str,
     path: &str,
 ) -> AppResult<String> {
-    let kind = sessions.session_kind(session_id).await?;
-    match kind {
-        SessionKind::Local => {
-            let path = sessions.local_resolve_host_path(session_id, path).await?;
-            let metadata = tokio::fs::metadata(&path).await?;
-            if metadata.is_dir() {
-                Ok("directory".to_string())
-            } else {
-                Ok("file".to_string())
-            }
-        }
-        SessionKind::Ssh => {
-            let ssh = sessions.ssh_snapshot(session_id).await?;
-            let resolved = ssh.resolve_remote_path(path).await?;
-            if sftp::is_remote_directory(&ssh.handle(), &resolved).await? {
-                Ok("directory".to_string())
-            } else {
-                Ok("file".to_string())
-            }
-        }
+    let ssh = sessions.ssh_snapshot(session_id).await?;
+    let resolved = ssh.resolve_remote_path(path).await?;
+    if sftp::is_remote_directory(&ssh.handle(), &resolved).await? {
+        Ok("directory".to_string())
+    } else {
+        Ok("file".to_string())
     }
 }
 
@@ -478,20 +420,6 @@ fn path_to_display(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-async fn read_local_text(path: &Path, total_size: u64) -> AppResult<(String, bool)> {
-    let truncated = total_size > MAX_TEXT_PREVIEW_BYTES;
-    let limit = total_size.min(MAX_TEXT_PREVIEW_BYTES) as usize;
-    let bytes = if truncated {
-        let mut file = tokio::fs::File::open(path).await?;
-        let mut buf = vec![0u8; limit];
-        use tokio::io::AsyncReadExt;
-        file.read_exact(&mut buf).await?;
-        buf
-    } else {
-        tokio::fs::read(path).await?
-    };
-    Ok((decode_text_bytes(&bytes), truncated))
-}
 
 async fn remote_is_writable(
     handle: &Arc<Mutex<russh::client::Handle<ClientHandler>>>,
@@ -579,22 +507,18 @@ async fn materialize_for_preview(
         .unwrap_or("preview.bin");
     let cache_path = cache_dir.join(file_name);
 
-    match kind {
-        SessionKind::Local => Ok(local_path.to_path_buf()),
-        SessionKind::Ssh => {
-            let ssh = sessions.ssh_snapshot(session_id).await?;
-            let conn = client::open_transfer_connection(&ssh.connect_request(), None).await?;
-            sftp::download_file(
-                &conn.handle(),
-                remote_path,
-                &cache_path,
-                None,
-                |_, _| {},
-            )
-            .await?;
-            Ok(cache_path)
-        }
-    }
+    let _ = kind;
+    let ssh = sessions.ssh_snapshot(session_id).await?;
+    let conn = client::open_transfer_connection(&ssh.connect_request(), None).await?;
+    sftp::download_file(
+        &conn.handle(),
+        remote_path,
+        &cache_path,
+        None,
+        |_, _| {},
+    )
+    .await?;
+    Ok(cache_path)
 }
 
 fn preview_cache_dir(app: &AppHandle, session_id: &str) -> AppResult<PathBuf> {

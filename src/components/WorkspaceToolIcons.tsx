@@ -1,54 +1,42 @@
 /**
- * Icons copied verbatim from Lucide v1.23.0 (ISC): https://lucide.dev/icons
- * Source: lucide-static package — paste SVG children only, do not hand-draw.
+ * Icons for workspace chrome. Paths from Lucide Static v0.468.0 (ISC) unless noted.
+ * Stroke kept at 1.5 for a finer Cursor-like weight (Lucide default is 2).
  */
 
 const iconProps = {
-  width: 18,
-  height: 18,
+  width: 16,
+  height: 16,
   fill: "none" as const,
   stroke: "currentColor",
-  strokeWidth: 2,
+  strokeWidth: 1.5,
   strokeLinecap: "round" as const,
   strokeLinejoin: "round" as const,
   "aria-hidden": true as const,
 };
 
-/** lucide: cpu — 进程管理 */
+/** lucide: table-properties — 任务/进程表 */
 export function TaskManagerIcon() {
   return (
     <svg viewBox="0 0 24 24" {...iconProps}>
-      <path d="M12 20v2" />
-      <path d="M12 2v2" />
-      <path d="M17 20v2" />
-      <path d="M17 2v2" />
-      <path d="M2 12h2" />
-      <path d="M2 17h2" />
-      <path d="M2 7h2" />
-      <path d="M20 12h2" />
-      <path d="M20 17h2" />
-      <path d="M20 7h2" />
-      <path d="M7 20v2" />
-      <path d="M7 2v2" />
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <rect x="8" y="8" width="8" height="8" rx="1" />
+      <path d="M15 3v18" />
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M21 9H3" />
+      <path d="M21 15H3" />
     </svg>
   );
 }
 
-/** lucide: file-search — 在文件中查找 */
+/** lucide: search — 查找 */
 export function FindInFilesIcon() {
   return (
     <svg viewBox="0 0 24 24" {...iconProps}>
-      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
-      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
-      <circle cx="11.5" cy="14.5" r="2.5" />
-      <path d="M13.3 16.3 15 18" />
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
     </svg>
   );
 }
 
-/** lucide: server — 系统信息 */
+/** lucide: server — 服务器资源 */
 export function SystemInfoIcon() {
   return (
     <svg viewBox="0 0 24 24" {...iconProps}>
@@ -60,27 +48,83 @@ export function SystemInfoIcon() {
   );
 }
 
-/** lucide: square-terminal — 命令行向导 */
+/** lucide: book-open — 命令导航（手册/向导，非终端） */
 export function CommandNavigatorIcon() {
   return (
     <svg viewBox="0 0 24 24" {...iconProps}>
-      <path d="m7 11 2-2-2-2" />
-      <path d="M11 13h4" />
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <path d="M12 7v14" />
+      <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
     </svg>
   );
 }
 
-/** lucide: bot — AI Linux Engineer */
+/** lucide: message-square — AI Agent */
 export function AiEngineerIcon() {
   return (
     <svg viewBox="0 0 24 24" {...iconProps}>
-      <path d="M12 8V4H8" />
-      <rect width="16" height="12" x="4" y="8" rx="2" />
-      <path d="M2 14h2" />
-      <path d="M20 14h2" />
-      <path d="M15 13v2" />
-      <path d="M9 13v2" />
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+/** lucide: plus — 新对话 */
+export function NewChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
+
+/** lucide: history — 历史会话 */
+export function ChatHistoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </svg>
+  );
+}
+
+/** lucide: pin — 钉住面板 */
+export function PinPanelIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <path d="M12 17v5" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+    </svg>
+  );
+}
+
+/**
+ * Cursor-style left sidebar toggle (fig.3): frame + filled left rail.
+ * Not a Lucide paste — matches Cursor’s panel affordance.
+ */
+export function PanelLeftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <rect
+        width="5"
+        height="14"
+        x="5.5"
+        y="5"
+        rx="0.5"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
+/** lucide: panel-right — 右侧面板收起（Cursor 同形） */
+export function PanelRightIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M15 3v18" />
     </svg>
   );
 }

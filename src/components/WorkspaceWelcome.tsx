@@ -15,8 +15,7 @@ const FEATURE_KEYS = [
   "commandNav",
 ] as const;
 
-const STEPS: Array<{ key: "local" | "ssh" | "bookmark"; icon: SidebarActionKind }> = [
-  { key: "local", icon: "local" },
+const STEPS: Array<{ key: "ssh" | "bookmark"; icon: SidebarActionKind }> = [
   { key: "ssh", icon: "ssh" },
   { key: "bookmark", icon: "bookmark" },
 ];

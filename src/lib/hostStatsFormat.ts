@@ -13,6 +13,21 @@ export function formatRate(bps: number) {
   return `${formatBytes(bps)}/s`;
 }
 
+/** Fixed-width rate for status bar (reduces layout jitter). */
+export function formatRateCompact(bps: number) {
+  const abs = Math.max(0, bps);
+  if (abs < 1024) {
+    return `${abs.toFixed(0).padStart(4, "\u2007")} B/s`;
+  }
+  if (abs < 1024 * 1024) {
+    return `${(abs / 1024).toFixed(1).padStart(5, "\u2007")}KB/s`;
+  }
+  if (abs < 1024 * 1024 * 1024) {
+    return `${(abs / (1024 * 1024)).toFixed(1).padStart(5, "\u2007")}MB/s`;
+  }
+  return `${(abs / (1024 * 1024 * 1024)).toFixed(1).padStart(5, "\u2007")}GB/s`;
+}
+
 export function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);

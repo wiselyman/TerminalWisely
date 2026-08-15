@@ -16,20 +16,50 @@ export function TabFolderIcon() {
   );
 }
 
+/** lucide: home — same 16/1.5 weight as SidebarToggleIcon */
 export function TabHomeIcon() {
   return (
     <svg
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.35"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M8 3 3.75 6.25V12.5H6.5V9.25h3V12.5h2.75V6.25L8 3z" />
+      <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+      <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  );
+}
+
+/** Cursor-style left sidebar toggle (title bar). */
+export function SidebarToggleIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <rect
+        width="5"
+        height="14"
+        x="5.5"
+        y="5"
+        rx="0.5"
+        fill="currentColor"
+        stroke="none"
+      />
     </svg>
   );
 }
@@ -43,31 +73,13 @@ export function ChromePlusIcon() {
       height="16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
       <path d="M5 12h14" />
       <path d="M12 5v14" />
-    </svg>
-  );
-}
-
-export function LocalTerminalIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8 3 3.75 6.25V12.5H6.5V9.25h3V12.5h2.75V6.25L8 3z" />
     </svg>
   );
 }
@@ -110,7 +122,7 @@ export function BookmarkIcon() {
   );
 }
 
-export type SidebarActionKind = "local" | "ssh" | "bookmark";
+export type SidebarActionKind = "ssh" | "bookmark";
 
 interface SidebarActionIconProps {
   kind: SidebarActionKind;
@@ -124,7 +136,6 @@ export function SidebarActionIcon({ kind, label }: SidebarActionIconProps) {
       aria-label={label}
       title={label}
     >
-      {kind === "local" && <LocalTerminalIcon />}
       {kind === "ssh" && <SshConnectIcon />}
       {kind === "bookmark" && <BookmarkIcon />}
     </span>

@@ -6,6 +6,7 @@ import {
 import type { ProcessEntry } from "../types";
 import { useTaskManagerStore } from "../stores/taskManagerStore";
 import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
+import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
 
 interface TaskManagerPanelProps {
   sessionId: string;
@@ -114,6 +115,10 @@ export function TaskManagerPanel({
               </span>
             ) : null}
           </div>
+          <WorkspacePanelHeadActions
+            panelId="taskManager"
+            sessionId={sessionId}
+          />
         </div>
 
         <div className="task-manager-toolbar">

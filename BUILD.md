@@ -8,7 +8,6 @@
 |------|------|
 | 前端 | React 19、TypeScript、Vite、xterm.js |
 | 后端 | Rust、Tauri 2、Tokio |
-| 本地 PTY | portable-pty |
 | SSH / SFTP | russh、russh-sftp |
 
 ## 环境要求
@@ -84,14 +83,14 @@ Release 默认直接发布（非 Draft），可在 [Releases](https://github.com
 
 CI 全绿只代表「能编出来」，以下需在**真实机器**上各测一遍（约 5 分钟/平台）：
 
-- [ ] 应用能启动，欢迎页/侧栏正常
-- [ ] 本地终端能输入命令并看到输出
+- [ ] 应用能启动，欢迎页/侧栏正常（无本地终端入口）；侧栏收起后工作区仍可见
 - [ ] SSH 能连接，执行 `ls`、`docker ps` 正常
-- [ ] 拖拽文件到 SSH 窗口能上传
-- [ ] 拖拽文件到 SSH 标签能上传到该会话
-- [ ] Ctrl/Cmd + 点击文件路径能下载
+- [ ] 拖拽本机文件到 SSH 窗口能上传
+- [ ] 拖拽本机文件到 SSH 标签能上传到该会话
+- [ ] Ctrl/Cmd + 点击文件路径能下载到本机
 - [ ] Shift + 点击文件路径能发送到另一 SSH 会话
 - [ ] Ctrl/Cmd + 拖动远程文件路径到另一 SSH 标签能跨服发送
+- [ ] AI 工程师可对已连接 SSH 会话执行 `terminal_exec`
 - [ ] 关闭再打开应用无崩溃
 
 | 平台 | 建议测试机 |

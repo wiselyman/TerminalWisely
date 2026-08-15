@@ -20,7 +20,6 @@
   "directory": "Directory",
   "home": "Home",
   "ssh": "SSH",
-  "localTerminal": "Local terminal",
   "updatedAt": "Updated {{time}}",
   "language": "Language",
   "languageZh": "中文",

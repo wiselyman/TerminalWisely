@@ -16,7 +16,6 @@ use crate::types::{
     FindFilesRequest, FindFilesResult,
     FsMoveRequest, FsPathRequest, FsRenameRequest,
     HostStatsRequest, HostStatsSnapshot,
-    LocalShellInfo,
     ProcessListResult, SavedConnectionView, SessionCwdRequest, SessionInfo, SessionMetadataUpdated,
     SshConnectRequest, SshConnectResult,
     TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
@@ -56,24 +55,6 @@ fn spawn_ssh_post_connect_tasks(
         }
         let _ = record_device_history(&app, &request);
     });
-}
-
-#[tauri::command]
-pub async fn create_local_session(
-    app: AppHandle,
-    cols: u16,
-    rows: u16,
-    sessions: State<'_, SessionManager>,
-) -> Result<SessionInfo, String> {
-    sessions
-        .create_local(app, cols, rows)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn get_local_shell_info() -> LocalShellInfo {
-    crate::host::local_shell_info()
 }
 
 #[tauri::command]

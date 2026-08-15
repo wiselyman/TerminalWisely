@@ -1,7 +1,7 @@
 # AI Engineer panel — Cursor-like UI
 
 Date: 2026-08-15  
-Status: draft for user review  
+Status: implemented (UI landed; smoke in app)  
 Scope: frontend shell + `aiEngineerStore` session model. No sidecar / PolicyEngine changes.
 
 ## Problem

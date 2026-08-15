@@ -1,8 +1,5 @@
 mod host;
 mod host_stats;
-mod local_shell;
-#[cfg(windows)]
-mod msys;
 mod find;
 mod ai_engineer;
 mod commands;
@@ -14,7 +11,6 @@ mod passwd;
 mod preview;
 mod preview_sudo;
 mod process;
-mod pty;
 mod session;
 mod shell;
 mod systemd;
@@ -208,8 +204,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::create_local_session,
-            commands::get_local_shell_info,
             commands::create_ssh_session,
             commands::terminal_input,
             commands::resize_terminal,

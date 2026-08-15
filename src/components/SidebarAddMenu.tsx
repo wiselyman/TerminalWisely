@@ -5,7 +5,7 @@ interface SidebarAddMenuProps {
   align?: "left" | "right";
 }
 
-/** Opens the remote SSH connection form (+). Local terminal is pinned in bookmarks. */
+/** Opens the remote SSH connection form (+). */
 export function SidebarAddMenu({
   onRemote,
   align = "left",

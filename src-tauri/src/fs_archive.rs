@@ -1,7 +1,4 @@
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 use crate::shell::shell_quote_remote_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,74 +62,6 @@ pub fn remote_extract_command(
     Ok(cmd)
 }
 
-pub async fn local_compress(
-    parent: &Path,
-    basename: &str,
-    archive_path: &Path,
-) -> AppResult<()> {
-    let archive = path_string(archive_path)?;
-    let parent_s = path_string(parent)?;
-    run_tar(&["czf", &archive, "-C", &parent_s, basename]).await
-}
-
-pub async fn local_extract(
-    kind: ArchiveKind,
-    archive_path: &Path,
-    parent: &Path,
-) -> AppResult<()> {
-    let archive = path_string(archive_path)?;
-    let parent_s = path_string(parent)?;
-    match kind {
-        ArchiveKind::TarGz => run_tar(&["xzf", &archive, "-C", &parent_s]).await,
-        ArchiveKind::TarBz2 => run_tar(&["xjf", &archive, "-C", &parent_s]).await,
-        ArchiveKind::TarXz => run_tar(&["xJf", &archive, "-C", &parent_s]).await,
-        ArchiveKind::Tar | ArchiveKind::Zip => {
-            // bsdtar (macOS / Windows tar.exe) extracts zip as well.
-            run_tar(&["xf", &archive, "-C", &parent_s]).await
-        }
-        ArchiveKind::Gzip => run_command("gzip", &["-dkf", &archive]).await,
-    }
-}
-
-fn path_string(path: &Path) -> AppResult<String> {
-    path.to_str()
-        .map(str::to_string)
-        .ok_or_else(|| AppError::msg("路径包含无效字符"))
-}
-
-async fn run_tar(args: &[&str]) -> AppResult<()> {
-    run_command("tar", args).await
-}
-
-async fn run_command(program: &str, args: &[&str]) -> AppResult<()> {
-    let output = tokio::process::Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .map_err(|err| AppError::msg(format!("无法执行 {program}: {err}")))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let detail = if !stderr.trim().is_empty() {
-        stderr.trim()
-    } else if !stdout.trim().is_empty() {
-        stdout.trim()
-    } else {
-        return Err(AppError::msg(format!(
-            "{program} 失败，退出码 {}",
-            output.status.code().unwrap_or(-1)
-        )));
-    };
-    Err(AppError::msg(detail.to_string()))
-}
-
 pub fn archive_output_path(parent: &str, basename: &str) -> String {
     let archive_name = format!("{basename}.tar.gz");
     if parent == "/" {
@@ -144,8 +73,4 @@ pub fn archive_output_path(parent: &str, basename: &str) -> String {
             archive_name
         )
     }
-}
-
-pub fn local_archive_output_path(parent: &Path, basename: &str) -> PathBuf {
-    parent.join(format!("{basename}.tar.gz"))
 }

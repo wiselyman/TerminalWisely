@@ -6,7 +6,6 @@ use crate::error::{AppError, AppResult};
 use crate::preview_sudo;
 use crate::session::SessionManager;
 use crate::ssh::client::{exec_command_capture, ExecOutputCallback};
-use crate::types::SessionKind;
 
 use super::leases::{assert_lease_ready, consume_lease};
 
@@ -166,43 +165,35 @@ pub async fn ai_terminal_exec(
             }) as ExecOutputCallback
         });
 
-    let kind = sessions.session_kind(&request.session_id).await?;
-    match kind {
-        SessionKind::Ssh => {
-            let snap = sessions.ssh_snapshot(&request.session_id).await?;
-            let handle = snap.handle();
-            let (stdout, stderr, code) = if use_sudo {
-                // Never run bare interactive `sudo` on an exec channel — it hangs.
-                let (o, e, c) = preview_sudo::exec_remote_sudo_ai_capture(
-                    &handle,
-                    &exec_body,
-                    request.sudo_password.as_deref(),
-                    "执行",
-                    &command,
-                    on_output.clone(),
-                )
-                .await?;
-                (o, e, c)
-            } else {
-                let (o, e, c) = exec_command_capture(&handle, &command, on_output).await?;
-                (o, e, c as i32)
-            };
-            if let Some(lease_id) = lease_id.as_deref() {
-                consume_lease(lease_id, &request.session_id, &command)?;
-            }
-            Ok(AiTerminalExecResult {
-                command,
-                stdout: truncate(stdout, MAX_STDOUT_CHARS),
-                stderr: truncate(stderr, 64 * 1024),
-                exit_code: code,
-                timed_out: false,
-                session_id: request.session_id,
-            })
-        }
-        SessionKind::Local => Err(AppError::msg(
-            "AI terminal_exec on local sessions is not enabled (SSH targets only)",
-        )),
+    let snap = sessions.ssh_snapshot(&request.session_id).await?;
+    let handle = snap.handle();
+    let (stdout, stderr, code) = if use_sudo {
+        // Never run bare interactive `sudo` on an exec channel — it hangs.
+        let (o, e, c) = preview_sudo::exec_remote_sudo_ai_capture(
+            &handle,
+            &exec_body,
+            request.sudo_password.as_deref(),
+            "执行",
+            &command,
+            on_output.clone(),
+        )
+        .await?;
+        (o, e, c)
+    } else {
+        let (o, e, c) = exec_command_capture(&handle, &command, on_output).await?;
+        (o, e, c as i32)
+    };
+    if let Some(lease_id) = lease_id.as_deref() {
+        consume_lease(lease_id, &request.session_id, &command)?;
     }
+    Ok(AiTerminalExecResult {
+        command,
+        stdout: truncate(stdout, MAX_STDOUT_CHARS),
+        stderr: truncate(stderr, 64 * 1024),
+        exit_code: code,
+        timed_out: false,
+        session_id: request.session_id,
+    })
 }
 
 #[cfg(test)]

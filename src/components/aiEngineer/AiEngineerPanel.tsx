@@ -1,10 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import { AiEngineerSettings } from "./AiEngineerSettings";
 import { AiMarkdown } from "./AiMarkdown";
 import { WorkspacePanelBackdrop } from "../WorkspacePanelBackdrop";
+import {
+  ChatHistoryIcon,
+  NewChatIcon,
+} from "../WorkspaceToolIcons";
+import { WorkspacePanelHeadActions } from "../WorkspacePanelHeadActions";
 
 type Props = {
   sessionId: string;
@@ -44,6 +49,12 @@ function ToolExecCard({
   const [, tick] = useState(0);
   const running = line.status === "running";
   const isExec = line.name === "terminal_exec" || line.name === "ai_exec";
+  const [expanded, setExpanded] = useState(running || line.status === undefined);
+
+  useEffect(() => {
+    if (running) setExpanded(true);
+    else if (line.status === "done" || line.status === "failed") setExpanded(false);
+  }, [running, line.status]);
 
   useEffect(() => {
     if (!running) return;
@@ -54,19 +65,21 @@ function ToolExecCard({
   useEffect(() => {
     const el = outputRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [line.output, running]);
+  }, [line.output, running, expanded]);
 
   if (!isExec) {
     return (
-      <div className="ai-engineer-line tool">
-        <span className="ai-engineer-tool-name">{line.name}</span>
+      <details className="ai-engineer-tool-row">
+        <summary>
+          <span className="ai-engineer-tool-name">{line.name}</span>
+          {line.ok === false ? (
+            <span className="ai-engineer-tool-fail">denied</span>
+          ) : null}
+        </summary>
         {line.detail ? (
           <code className="ai-engineer-tool-detail">{line.detail}</code>
         ) : null}
-        {line.ok === false ? (
-          <span className="ai-engineer-tool-fail">denied</span>
-        ) : null}
-      </div>
+      </details>
     );
   }
 
@@ -86,8 +99,12 @@ function ToolExecCard({
             : null;
 
   return (
-    <div className="ai-engineer-exec-card">
-      <div className="ai-engineer-exec-head">
+    <div className={`ai-engineer-exec-card${expanded ? "" : " is-collapsed"}`}>
+      <button
+        type="button"
+        className="ai-engineer-exec-head"
+        onClick={() => setExpanded((v) => !v)}
+      >
         <div className="ai-engineer-exec-title">
           {line.intent || line.detail || line.name}
         </div>
@@ -96,30 +113,41 @@ function ToolExecCard({
             {statusLabel}
           </span>
         ) : null}
-      </div>
-      {line.detail && line.intent ? (
-        <code className="ai-engineer-exec-command">{line.detail}</code>
-      ) : null}
-      {line.output || running ? (
-        <pre ref={outputRef} className="ai-engineer-exec-output">
-          {line.output ||
-            (running ? t("aiEngineer.toolWaitingOutput") : "")}
-        </pre>
-      ) : null}
-      <div className="ai-engineer-exec-foot">
-        {line.status === "done" || line.status === "failed" ? (
-          <>
-            {line.exitCode != null ? (
-              <span>
-                {t("aiEngineer.toolExitCode", { code: line.exitCode })}
-              </span>
+      </button>
+      {expanded ? (
+        <>
+          {line.detail && line.intent ? (
+            <code className="ai-engineer-exec-command">{line.detail}</code>
+          ) : null}
+          {line.output || running ? (
+            <pre ref={outputRef} className="ai-engineer-exec-output">
+              {line.output ||
+                (running ? t("aiEngineer.toolWaitingOutput") : "")}
+            </pre>
+          ) : null}
+          <div className="ai-engineer-exec-foot">
+            {line.status === "done" || line.status === "failed" ? (
+              <>
+                {line.exitCode != null ? (
+                  <span>
+                    {t("aiEngineer.toolExitCode", { code: line.exitCode })}
+                  </span>
+                ) : null}
+                <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
+              </>
+            ) : running ? (
+              <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
             ) : null}
-            <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
-          </>
-        ) : running ? (
+          </div>
+        </>
+      ) : (
+        <div className="ai-engineer-exec-foot">
+          {line.exitCode != null ? (
+            <span>{t("aiEngineer.toolExitCode", { code: line.exitCode })}</span>
+          ) : null}
           <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
-        ) : null}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -144,6 +172,14 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const bindContext = useAiEngineerStore((s) => s.bindContext);
   const settingsOpen = useAiEngineerStore((s) => s.settingsOpen);
   const setSettingsOpen = useAiEngineerStore((s) => s.setSettingsOpen);
+  const settings = useAiEngineerStore((s) => s.settings);
+  const saveSettings = useAiEngineerStore((s) => s.saveSettings);
+  const chatScope = useAiEngineerStore((s) => s.chatScope);
+  const activeThreadId = useAiEngineerStore((s) => s.activeThreadId);
+  const threadsByScope = useAiEngineerStore((s) => s.threadsByScope);
+  const createThread = useAiEngineerStore((s) => s.createThread);
+  const switchThread = useAiEngineerStore((s) => s.switchThread);
+  const deleteThread = useAiEngineerStore((s) => s.deleteThread);
   const pendingAsk = useAiEngineerStore((s) => s.pendingAsk);
   const resolveAsk = useAiEngineerStore((s) => s.resolveAsk);
   const pendingApproval = useAiEngineerStore((s) => s.pendingApproval);
@@ -152,6 +188,21 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const [confirmDraft, setConfirmDraft] = useState("");
   const [askDraft, setAskDraft] = useState("");
   const [rememberRead, setRememberRead] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+
+  const threads = useMemo(() => {
+    const list = chatScope ? threadsByScope[chatScope]?.threads ?? [] : [];
+    return [...list].sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [chatScope, threadsByScope]);
+
+  const threadTitle =
+    threads.find((th) => th.id === activeThreadId)?.title ||
+    t("aiEngineer.newChat");
+
+  const profiles = settings?.profiles ?? [];
+  const activeProfile =
+    profiles.find((p) => p.id === settings?.active_profile_id) ?? profiles[0];
 
   useEffect(() => {
     if (!open) return;
@@ -164,13 +215,25 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
     }
   }, [pendingApproval?.approvalId]);
 
+  useEffect(() => {
+    if (!historyOpen && !modelOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest(".ai-engineer-menu-wrap")) return;
+      setHistoryOpen(false);
+      setModelOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [historyOpen, modelOpen]);
+
   // Pin to latest message on open / history restore (before paint when possible).
   useLayoutEffect(() => {
     if (!open) return;
     const el = messagesRef.current;
     if (!el) return;
     scrollMessagesToEnd(el);
-  }, [open, messages.length, ready]);
+  }, [open, messages.length, ready, activeThreadId]);
 
   useEffect(() => {
     if (!open) return;
@@ -209,10 +272,12 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
     pendingAsk,
     pendingApproval,
     ready,
+    activeThreadId,
   ]);
 
   const submit = () => {
-    void sendMessage({ sessionId, serverId, interruptIfBusy: true });
+    if (busy) return;
+    void sendMessage({ sessionId, serverId });
   };
 
   if (!open) return null;
@@ -222,15 +287,20 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
       <WorkspacePanelBackdrop dismissible={!busy && !settingsOpen} />
       <aside className="ai-engineer-panel find-panel" style={{ width }} aria-label="AI Linux Engineer">
         <div
-          className="find-panel-resize"
+          className="find-panel-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("aiEngineer.resizeAria")}
           onMouseDown={(e) => {
             e.preventDefault();
             const startX = e.clientX;
             const startW = width;
+            document.body.classList.add("find-panel-resizing");
             const onMove = (ev: MouseEvent) => {
               setWidth(startW - (ev.clientX - startX));
             };
             const onUp = () => {
+              document.body.classList.remove("find-panel-resizing");
               window.removeEventListener("mousemove", onMove);
               window.removeEventListener("mouseup", onUp);
             };
@@ -239,26 +309,78 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
           }}
         />
         <header className="ai-engineer-head">
-          <h2 className="ai-engineer-title">AI Linux Engineer</h2>
+          <h2 className="ai-engineer-title" title={threadTitle}>
+            {threadTitle}
+          </h2>
           <div className="ai-engineer-head-actions">
-            {busy ? (
-              <button
-                type="button"
-                className="ai-engineer-stop ai-engineer-stop-header"
-                onClick={() => stopActiveRun()}
-              >
-                {t("aiEngineer.stop")}
-              </button>
-            ) : null}
             <button
               type="button"
               className="ai-engineer-icon-btn"
-              onClick={() => setSettingsOpen(true)}
-              aria-label={t("aiEngineer.settings.title")}
-              title={t("aiEngineer.settings.title")}
+              onClick={() => createThread()}
+              aria-label={t("aiEngineer.newChat")}
+              title={t("aiEngineer.newChat")}
             >
-              ⚙
+              <NewChatIcon />
             </button>
+            <div className="ai-engineer-menu-wrap">
+              <button
+                type="button"
+                className="ai-engineer-icon-btn"
+                aria-expanded={historyOpen}
+                aria-label={t("aiEngineer.history")}
+                title={t("aiEngineer.history")}
+                onClick={() => {
+                  setHistoryOpen((v) => !v);
+                  setModelOpen(false);
+                }}
+              >
+                <ChatHistoryIcon />
+              </button>
+              {historyOpen ? (
+                <div className="ai-engineer-menu" role="menu">
+                  {threads.length === 0 ? (
+                    <div className="ai-engineer-menu-empty">
+                      {t("aiEngineer.historyEmpty")}
+                    </div>
+                  ) : (
+                    threads.map((th) => (
+                      <div key={th.id} className="ai-engineer-menu-row">
+                        <button
+                          type="button"
+                          className={`ai-engineer-menu-item${th.id === activeThreadId ? " active" : ""}`}
+                          role="menuitem"
+                          onClick={() => {
+                            switchThread(th.id);
+                            setHistoryOpen(false);
+                          }}
+                        >
+                          {th.title || t("aiEngineer.newChat")}
+                        </button>
+                        <button
+                          type="button"
+                          className="ai-engineer-menu-delete"
+                          aria-label={t("aiEngineer.deleteChat")}
+                          title={t("aiEngineer.deleteChat")}
+                          onClick={() => {
+                            if (!window.confirm(t("aiEngineer.deleteChatConfirm"))) {
+                              return;
+                            }
+                            deleteThread(th.id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+            <WorkspacePanelHeadActions
+              panelId="aiEngineer"
+              sessionId={sessionId}
+              serverId={serverId}
+            />
           </div>
         </header>
         <div className="find-panel-body ai-engineer-body">
@@ -524,40 +646,96 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={
-                    busy
-                      ? t("aiEngineer.interruptPlaceholder")
-                      : t("aiEngineer.inputPlaceholder")
-                  }
-                  rows={2}
+                  placeholder={t("aiEngineer.inputPlaceholder")}
+                  rows={3}
                   disabled={!ready}
                   onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submit();
+                    }
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault();
                       submit();
                     }
                   }}
                 />
-                <div className="ai-engineer-composer-actions">
-                  {busy ? (
+                <div className="ai-engineer-composer-foot">
+                  <div className="ai-engineer-menu-wrap ai-engineer-model-wrap">
                     <button
                       type="button"
-                      className="ai-engineer-stop"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => stopActiveRun()}
+                      className="ai-engineer-model-btn"
+                      aria-label={t("aiEngineer.modelPicker")}
+                      aria-expanded={modelOpen}
+                      disabled={!ready}
+                      onClick={() => {
+                        setModelOpen((v) => !v);
+                        setHistoryOpen(false);
+                      }}
                     >
-                      {t("aiEngineer.stop")}
+                      {activeProfile
+                        ? `${activeProfile.name} · ${activeProfile.model}`
+                        : t("aiEngineer.noModels")}
+                      <span aria-hidden>▾</span>
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="find-panel-run"
-                    disabled={!ready || !input.trim()}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={submit}
-                  >
-                    {busy ? t("aiEngineer.interruptSend") : t("aiEngineer.send")}
-                  </button>
+                    {modelOpen ? (
+                      <div className="ai-engineer-menu ai-engineer-menu-up" role="menu">
+                        {profiles.length === 0 ? (
+                          <div className="ai-engineer-menu-empty">
+                            {t("aiEngineer.noModels")}
+                          </div>
+                        ) : (
+                          profiles.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className={`ai-engineer-menu-item${p.id === activeProfile?.id ? " active" : ""}`}
+                              role="menuitem"
+                              onClick={() => {
+                                void saveSettings({ active_profile_id: p.id });
+                                setModelOpen(false);
+                              }}
+                            >
+                              <span className="ai-engineer-model-name">{p.name}</span>
+                              <span className="ai-engineer-model-id">{p.model}</span>
+                            </button>
+                          ))
+                        )}
+                        <button
+                          type="button"
+                          className="ai-engineer-menu-item ai-engineer-menu-manage"
+                          role="menuitem"
+                          onClick={() => {
+                            setModelOpen(false);
+                            setSettingsOpen(true);
+                          }}
+                        >
+                          {t("aiEngineer.manageModels")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="ai-engineer-composer-actions">
+                    {busy ? (
+                      <button
+                        type="button"
+                        className="ai-engineer-stop"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => stopActiveRun()}
+                      >
+                        {t("aiEngineer.stop")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="ai-engineer-send"
+                      disabled={!ready || busy || !input.trim()}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={submit}
+                    >
+                      {t("aiEngineer.send")}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

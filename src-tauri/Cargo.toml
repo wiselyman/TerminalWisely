@@ -26,7 +26,6 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 thiserror = "2"
-portable-pty = "0.8"
 russh = "0.46"
 russh-keys = "0.46"
 russh-sftp = "2.0"

@@ -1,5 +1,3 @@
-use crate::local_shell;
-
 pub fn host_os_id() -> &'static str {
     #[cfg(windows)]
     {
@@ -36,8 +34,4 @@ pub fn host_os_name() -> &'static str {
     {
         "Linux"
     }
-}
-
-pub fn local_shell_info() -> crate::types::LocalShellInfo {
-    local_shell::local_shell_info()
 }

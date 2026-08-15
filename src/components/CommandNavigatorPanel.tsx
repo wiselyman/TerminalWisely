@@ -9,18 +9,19 @@ import {
   localizeCommandTitle,
   localizeDistroFamily,
 } from "../lib/localizeCommand";
-import type { CommandTemplate } from "../types";
+import type { CommandTemplate, SessionKind } from "../types";
 import { useCommandNavigatorStore } from "../stores/commandNavigatorStore";
 import { useToastStore } from "../stores/toastStore";
 import { CommandEditorDialog } from "./CommandEditorDialog";
 import { CommandRunDialog } from "./CommandRunDialog";
 import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
+import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
 
 interface CommandNavigatorPanelProps {
   sessionId: string;
   sessionTitle: string;
   osId?: string | null;
-  tabKind: "local" | "ssh";
+  tabKind: SessionKind;
   serverId: string;
 }
 
@@ -161,6 +162,11 @@ export function CommandNavigatorPanel({
               ) : null}
             </span>
           </div>
+          <WorkspacePanelHeadActions
+            panelId="commandNav"
+            sessionId={sessionId}
+            serverId={serverId}
+          />
         </div>
 
         <div className="cmd-nav-panel-toolbar">

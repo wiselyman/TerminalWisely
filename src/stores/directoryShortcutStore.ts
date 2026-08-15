@@ -12,7 +12,7 @@ function createShortcutId(): string {
 
 function migrateScope(value: unknown): DirectoryShortcutScope {
   if (value === "server") return "server";
-  // legacy: all/ssh -> "all servers"; local -> "this server"
+  // legacy: all/ssh -> "all servers"; local scope was "this server"
   if (value === "local") return "server";
   return "all";
 }
@@ -43,6 +43,8 @@ function loadShortcuts(): DirectoryShortcut[] {
         if (scope === "server" && !server_id && legacyScope === "local") {
           server_id = "local";
         }
+        // Drop shortcuts bound to the removed local terminal session.
+        if (server_id === "local") return null;
 
         return {
           id:
@@ -56,9 +58,7 @@ function loadShortcuts(): DirectoryShortcut[] {
       })
       .filter((item): item is DirectoryShortcut => item !== null);
 
-    if (shortcuts.length > 0) {
-      persistShortcuts(shortcuts);
-    }
+    persistShortcuts(shortcuts);
     return shortcuts;
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -68,14 +68,11 @@ function loadShortcuts(): DirectoryShortcut[] {
 
 export function isShortcutVisibleOnTab(
   shortcut: DirectoryShortcut,
-  tabKind: SessionKind,
+  _tabKind: SessionKind,
   serverId: string,
 ): boolean {
   if (shortcut.scope === "all") {
-    if (shortcut.server_id === "local") {
-      return tabKind === "local";
-    }
-    return tabKind === "ssh";
+    return true;
   }
   return shortcut.server_id === serverId;
 }

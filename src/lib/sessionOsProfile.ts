@@ -1,5 +1,4 @@
 import type { SavedConnection, TabSession } from "../types";
-import { getHostOsProfile, type HostOsProfile } from "./hostOs";
 import { inferOsIdFromName } from "./osLogos";
 
 export interface SessionOsDisplay {
@@ -41,7 +40,6 @@ function findSavedOs(
 export function resolveSessionOsProfile(
   tab: SessionOsSource | null | undefined,
   savedConnections: readonly SavedConnection[],
-  hostProfile: HostOsProfile = getHostOsProfile(),
   osNameHint?: string | null,
 ): SessionOsDisplay {
   if (!tab) {
@@ -53,10 +51,6 @@ export function resolveSessionOsProfile(
 
   if (tab.os_id) {
     return { osId: tab.os_id, osName: tab.os_name ?? osNameHint ?? null };
-  }
-
-  if (tab.kind === "local") {
-    return { osId: hostProfile.osId, osName: hostProfile.osName };
   }
 
   const fromSaved = findSavedOs(tab, savedConnections);

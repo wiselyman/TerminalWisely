@@ -147,7 +147,7 @@ export function commandVisibleOnTab(
 ): boolean {
   if (cmd.scope === "all") return true;
   if (cmd.scope === "server") {
-    if (cmd.server_id === "local") return tabKind === "local";
+    if (cmd.server_id === "local") return false;
     return tabKind === "ssh" && cmd.server_id === serverId;
   }
   return true;

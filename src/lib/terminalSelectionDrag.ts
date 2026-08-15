@@ -42,7 +42,7 @@ export function clearChromeClickSuppress(): void {
 function isInteractiveChromeTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return !!target.closest(
-    ".window-controls, .chrome-new-session, .sidebar-toggle, .sidebar-local-btn",
+    ".window-controls, .chrome-new-session, .chrome-sidebar-toggle, .chrome-titlebar-actions",
   );
 }
 

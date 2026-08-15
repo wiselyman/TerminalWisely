@@ -16,7 +16,10 @@ fn is_safe_unquoted_segment(segment: &str) -> bool {
 fn is_safe_unquoted_path(path: &str) -> bool {
     !path.is_empty()
         && !path.split('/').any(|segment| segment == "..")
-        && path.split('/').all(is_safe_unquoted_segment)
+        && path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .all(is_safe_unquoted_segment)
 }
 
 /// Shell word for `cd`: keep a leading `~` outside quotes so bash expands home.
@@ -201,87 +204,6 @@ pub fn path_for_display(home: &str, absolute: &str) -> String {
     }
 }
 
-#[cfg(windows)]
-pub fn windows_cd_and_list_command(shell: &str, path: &str) -> String {
-    let quoted = windows_path_argument(path);
-    if is_powershell(shell) {
-        format!("Set-Location {quoted}; Get-ChildItem\r")
-    } else {
-        format!("cd /d {quoted} && dir\r")
-    }
-}
-
-#[cfg(windows)]
-fn is_powershell(shell: &str) -> bool {
-    let lower = shell.to_lowercase();
-    lower.contains("powershell") || lower.contains("pwsh")
-}
-
-#[cfg(windows)]
-pub fn windows_path_argument(path: &str) -> String {
-    format!("\"{}\"", path.replace('"', ""))
-}
-
-pub fn resolve_local_path(
-    path: &str,
-    home: &str,
-    cwd: &str,
-) -> crate::error::AppResult<std::path::PathBuf> {
-    use std::path::{Path, PathBuf};
-
-    use crate::error::AppError;
-
-    let trimmed = path.trim().trim_end_matches(['/', '\\']);
-    if trimmed.is_empty() {
-        return Err(AppError::msg("路径为空"));
-    }
-
-    if uses_unix_path_semantics(home) {
-        return Ok(PathBuf::from(resolve_unix_path(home, cwd, trimmed)));
-    }
-
-    if trimmed.starts_with('~') {
-        return expand_tilde_path(home, trimmed);
-    }
-
-    if Path::new(trimmed).is_absolute() {
-        let candidate = PathBuf::from(trimmed);
-        if candidate.exists() {
-            return Ok(candidate);
-        }
-        return Err(AppError::msg(format!("路径不存在: {trimmed}")));
-    }
-
-    let joined = PathBuf::from(cwd).join(trimmed);
-    if joined.exists() {
-        return Ok(joined);
-    }
-    if let Ok(canonical) = joined.canonicalize() {
-        return Ok(canonical);
-    }
-
-    Err(AppError::msg(format!("路径不存在: {trimmed}")))
-}
-
-fn expand_tilde_path(home: &str, path: &str) -> crate::error::AppResult<std::path::PathBuf> {
-    use std::path::PathBuf;
-
-    use crate::error::AppError;
-
-    if path == "~" {
-        return Ok(PathBuf::from(home));
-    }
-    if path.starts_with("~/") || path.starts_with("~\\") {
-        let rest = path.trim_start_matches('~').trim_start_matches(['/', '\\']);
-        let candidate = PathBuf::from(home).join(rest);
-        if candidate.exists() {
-            return Ok(candidate);
-        }
-        return Err(AppError::msg(format!("路径不存在: {path}")));
-    }
-    Ok(PathBuf::from(path))
-}
-
 fn uses_unix_path_semantics(home: &str) -> bool {
     home.starts_with('/') && !home.starts_with("//")
 }
@@ -326,27 +248,6 @@ fn path_for_display_unix(home: &str, absolute: &str) -> String {
         return format!("~{}", &absolute[home.len()..]);
     }
     absolute.to_string()
-}
-
-/// Resolve a directory path for tab-completion (does not require the path to exist).
-pub fn resolve_directory_path(path: &str, home: &str, cwd: &str) -> String {
-    if path.trim().is_empty() {
-        return cwd.trim_end_matches('/').to_string();
-    }
-    let trimmed = path.trim().trim_end_matches(['/', '\\']);
-    if uses_unix_path_semantics(home) {
-        return resolve_unix_path(home, cwd, trimmed);
-    }
-
-    use std::path::{Path, PathBuf};
-    if Path::new(trimmed).is_absolute() {
-        trimmed.to_string()
-    } else {
-        PathBuf::from(cwd)
-            .join(trimmed)
-            .to_string_lossy()
-            .into_owned()
-    }
 }
 
 fn resolve_unix_path(home: &str, cwd: &str, path: &str) -> String {
@@ -431,21 +332,18 @@ mod tests {
     }
 
     #[test]
-    fn apply_cd_parent_windows_style() {
-        let mut cwd = r"C:\Users\alice\Documents".to_string();
-        apply_cd_target(&mut cwd, r"C:\Users\alice", "..");
-        assert_eq!(cwd, r"C:\Users\alice");
+    fn apply_cd_parent_unix() {
+        let mut cwd = "/home/alice/Documents".to_string();
+        apply_cd_target(&mut cwd, "/home/alice", "..");
+        assert_eq!(cwd, "/home/alice");
     }
 
     #[test]
     fn extract_cd_target_cmd_with_chain() {
         assert_eq!(
-            extract_cd_target(r#"cd /d "C:\Users\alice" && dir"#),
-            Some(r"C:\Users\alice".to_string())
+            extract_cd_target(r#"cd /var/log && ls"#),
+            Some("/var/log".to_string())
         );
-        assert_eq!(
-            extract_cd_target("cd %USERPROFILE%; dir"),
-            Some("~".to_string())
-        );
+        assert_eq!(extract_cd_target("cd ~; ls"), Some("~".to_string()));
     }
 }

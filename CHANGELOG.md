@@ -4,22 +4,27 @@
 
 发布前请同步更新本文件与 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)（后者会出现在 GitHub Release 描述顶部）。历史版本归档在 [`release-notes/`](./release-notes/) 目录。
 
-## [1.0.0] - 2026-08-12
+## [1.0.0] - 2026-08-15
 
 ### Added
-- **AI Linux Engineer**：自然语言在已连接主机上排障（侧车 Agent、按主机会话、OpenAI 兼容 / 本地模型）
+- **AI Linux Engineer**：自然语言在已连接 SSH 主机上排障（侧车 Agent、按主机会话、OpenAI 兼容 / 本地模型）
 - **能力策略引擎**：YAML 驱动的 argv/能力标签 → R0–R4；用户可 overrides；未知命令偏严
 - 网络危险变更的定时回滚包装；批准/询问 UI；流式与上下文压缩等配套能力
 - 发行包打入 `agent-sidecar`（app/policy/requirements）
+- Cursor 风格标题栏工具、AI 多会话历史 / 钉住面板、主机指标底栏状态条
 
 ### Changed
 - README 与欢迎页主打 AI 排障与安全模型（v1.0 叙事）
 - 发行包内嵌独立 Python；首次打开 AI 面板时自动建私有 venv 并安装依赖（用户无需 pip）
 - 启动过程在 AI 面板显示 bootstrap 进度；不阻塞主界面
+- **产品范围改为仅 SSH**（移除本机本地终端）
+- 侧栏可完全收起；标题栏更紧凑并对齐交通灯
 
 ### Fixed
 - App launch no longer prewarms AI sidecar (first-install white screen / busy cursor)
 - False "idle narration" abort after valid diagnostic tool calls (ps/lscpu dumps)
+- Sidebar fully collapsed no longer leaves a black workspace
+- Absolute remote `cd` paths like `/var/log` stay unquoted when safe
 
 > 归档说明：[`release-notes/v1.0.0.md`](./release-notes/v1.0.0.md)
 

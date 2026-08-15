@@ -1,7 +1,5 @@
-mod local;
 mod remote;
 
-pub use local::list_systemd_units as list_local_systemd_units;
 pub use remote::list_systemd_units as list_remote_systemd_units;
 
 pub(crate) const LIST_SYSTEMD_UNITS_SCRIPT: &str = r#"bash -s <<'TW_SYSTEMD_EOF'

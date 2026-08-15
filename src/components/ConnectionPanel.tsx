@@ -1,22 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { Modal } from "./Modal";
 import { ServerOsIcon } from "./ServerOsIcon";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
 import { useToastStore } from "../stores/toastStore";
 import { formatAppError } from "../lib/formatAppError";
-import {
-  getHostOsProfile,
-  isWindowsHost,
-  localShellInfoToProfile,
-  localShellBackendLabel,
-  type HostOsProfile,
-  type LocalShellInfo,
-} from "../lib/hostOs";
-import { GIT_FOR_WINDOWS_URL } from "../lib/localShellPreference";
 import { clampSidebarWidth } from "../lib/sidebarLayout";
 
 interface ConnectionPanelProps {
@@ -25,7 +14,8 @@ interface ConnectionPanelProps {
   collapsed: boolean;
   expandedWidth: number;
   onExpandedWidthChange: (width: number) => void;
-  onToggleCollapse: () => void;
+  /** Collapse sidebar after a successful connect (toggle lives in the title bar). */
+  onRequestCollapse?: () => void;
   onRegisterNewRemote?: (open: () => void) => void;
 }
 
@@ -43,34 +33,6 @@ type SshFormMode =
   | { kind: "create" }
   | { kind: "edit"; saved: SavedConnection };
 
-function SidebarChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {expanded ? (
-        <>
-          <path d="M10 4 6 8l4 4" />
-          <path d="M6 4 2 8l4 4" />
-        </>
-      ) : (
-        <>
-          <path d="M6 4l4 4-4 4" />
-          <path d="M10 4l4 4-4 4" />
-        </>
-      )}
-    </svg>
-  );
-}
-
 function formatSavedConnectionLabel(saved: SavedConnection): string {
   return saved.port === 22 ? saved.host : `${saved.host}:${saved.port}`;
 }
@@ -81,32 +43,18 @@ export function ConnectionPanel({
   collapsed,
   expandedWidth,
   onExpandedWidthChange,
-  onToggleCollapse,
+  onRequestCollapse,
   onRegisterNewRemote,
 }: ConnectionPanelProps) {
   const { t } = useTranslation(["connection", "shell"]);
-  const fallbackLocal = getHostOsProfile();
-  const [localShell, setLocalShell] = useState<{
-    profile: HostOsProfile;
-    title: string;
-    backend: LocalShellInfo["backend"];
-    git_bash_available: boolean;
-  }>({
-    profile: fallbackLocal,
-    title: isWindowsHost()
-      ? t("shell:gitBashLocal")
-      : t("shell:localTerminalTitle", { osName: fallbackLocal.osName }),
-    backend: "git_bash",
-    git_bash_available: false,
-  });
   const [sshFormMode, setSshFormMode] = useState<SshFormMode | null>(null);
   const [form, setForm] = useState<SshConnectRequest>(defaultRequest);
   const [connectionName, setConnectionName] = useState("");
   const [savedPasswordPrompt, setSavedPasswordPrompt] =
     useState<SavedConnection | null>(null);
   const [savedPassword, setSavedPassword] = useState("");
-    const [rememberPassword, setRememberPassword] = useState(true);
-    const [rememberSavedPassword, setRememberSavedPassword] = useState(true);
+  const [rememberPassword, setRememberPassword] = useState(true);
+  const [rememberSavedPassword, setRememberSavedPassword] = useState(true);
 
   const {
     savedConnections,
@@ -114,7 +62,6 @@ export function ConnectionPanel({
     saveConnection,
     updateSavedConnection,
     deleteSavedConnection,
-    createLocalSession,
     createSshSession,
     connectSaved,
     statusMessage,
@@ -123,23 +70,6 @@ export function ConnectionPanel({
   useEffect(() => {
     void loadSavedConnections();
   }, [loadSavedConnections]);
-
-  const refreshLocalShell = useCallback(() => {
-    void invoke<LocalShellInfo>("get_local_shell_info")
-      .then((info) => {
-        setLocalShell({
-          profile: localShellInfoToProfile(info),
-          title: info.title,
-          backend: info.backend,
-          git_bash_available: info.git_bash_available,
-        });
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    refreshLocalShell();
-  }, [refreshLocalShell]);
 
   const openCreateForm = useCallback(() => {
     setSshFormMode({ kind: "create" });
@@ -189,7 +119,7 @@ export function ConnectionPanel({
 
   const autoCollapseAfterConnect = () => {
     if (!collapsed) {
-      onToggleCollapse();
+      onRequestCollapse?.();
     }
   };
 
@@ -439,42 +369,6 @@ export function ConnectionPanel({
     </Modal>
   ) : null;
 
-  const localTerminalTitle = !isWindowsHost()
-    ? `${localShell.title} · ${localShellBackendLabel(localShell.backend)}`
-    : localShell.title;
-
-  const sidebarChromeRow = (expanded: boolean) => (
-    <div
-      className={`sidebar-chrome-row${expanded ? "" : " sidebar-chrome-row-collapsed"}`}
-    >
-      {expanded ? (
-        <button
-          type="button"
-          className="sidebar-local-btn sidebar-local-btn-icon"
-          onClick={() => void createLocalSession(cols, rows)}
-          aria-label={localTerminalTitle}
-          title={localTerminalTitle}
-        >
-          <ServerOsIcon
-            osId={localShell.profile.osId}
-            osName={localShell.profile.osName}
-            size={18}
-            showTitle={false}
-          />
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="sidebar-toggle"
-        onClick={onToggleCollapse}
-        aria-label={expanded ? t("shell:collapseSidebar") : t("shell:expandSidebar")}
-        title={expanded ? t("shell:collapseSidebar") : t("shell:expandSidebar")}
-      >
-        <SidebarChevronIcon expanded={expanded} />
-      </button>
-    </div>
-  );
-
   const savedItem = (saved: SavedConnection) => (
     <div
       key={saved.id}
@@ -561,43 +455,6 @@ export function ConnectionPanel({
   if (collapsed) {
     return (
       <>
-        <aside className="sidebar sidebar-collapsed">
-          {sidebarChromeRow(false)}
-
-          <div className="sidebar-rail-sessions">
-            <button
-              type="button"
-              className="rail-session rail-session-local"
-              aria-label={t("common:localTerminal")}
-              title={localShell.title}
-              onClick={() => void createLocalSession(cols, rows)}
-            >
-              <ServerOsIcon
-                osId={localShell.profile.osId}
-                osName={localShell.profile.osName}
-                size={18}
-                showTitle={false}
-              />
-            </button>
-            {savedConnections.map((saved) => (
-              <button
-                key={saved.id}
-                type="button"
-                className="rail-session"
-                aria-label={saved.name}
-                title={saved.name}
-                onClick={() => void handleSavedConnect(saved)}
-              >
-                <ServerOsIcon
-                  osId={saved.os_id}
-                  osName={saved.os_name}
-                  size={18}
-                  showTitle={false}
-                />
-              </button>
-            ))}
-          </div>
-        </aside>
         {sshFormModal}
         {passwordModal}
       </>
@@ -608,21 +465,6 @@ export function ConnectionPanel({
     <>
       <div className="sidebar-shell">
         <aside className="sidebar">
-          {sidebarChromeRow(true)}
-
-          {isWindowsHost() && !localShell.git_bash_available ? (
-            <p className="local-shell-hint-banner">
-              {t("shell:gitBashMissingBanner")}{" "}
-              <button
-                type="button"
-                className="link-button"
-                onClick={() => void openUrl(GIT_FOR_WINDOWS_URL)}
-              >
-                {t("shell:installGitForWindows")}
-              </button>
-            </p>
-          ) : null}
-
           <section className="saved-list">
             {savedConnections.length === 0 && (
               <p className="empty-state">{t("shell:emptyBookmarks")}</p>

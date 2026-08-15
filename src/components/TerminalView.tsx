@@ -106,7 +106,6 @@ export function TerminalView({
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const upsertTransfer = useSessionStore((s) => s.upsertTransfer);
   const removeTransfer = useSessionStore((s) => s.removeTransfer);
-  const setStatusMessage = useSessionStore((s) => s.setStatusMessage);
   const openSendTo = useSessionStore((s) => s.openSendTo);
   const startRemoteTransfer = useSessionStore((s) => s.startRemoteTransfer);
   const setSessionDisconnected = useSessionStore((s) => s.setSessionDisconnected);
@@ -317,7 +316,7 @@ export function TerminalView({
     const onHostContextMenu = (event: MouseEvent) => {
       armChromeClickSuppress(800);
 
-      if (kind !== "ssh" && kind !== "local") return;
+      if (kind !== "ssh") return;
 
       const cell = getTerminalMouseCell(terminal, screenElement, event);
       if (!cell) {
@@ -356,9 +355,7 @@ export function TerminalView({
           ? "directory"
           : "file";
         try {
-          const probe = await invoke<string>(
-            kind === "ssh" ? "probe_remote_path" : "probe_path",
-            {
+          const probe = await invoke<string>("probe_remote_path", {
               request: {
                 session_id: sessionId,
                 path: hit.path,
@@ -382,10 +379,10 @@ export function TerminalView({
 
     let cleanupRemoteDrag: (() => void) | undefined;
 
-    if (kind === "ssh" || kind === "local") {
+    if (kind === "ssh") {
       let suppressModifierActivate = false;
 
-      if (kind === "ssh" || kind === "local") {
+      if (kind === "ssh") {
         const handleRemoteMouseDown = (event: MouseEvent) => {
           if (!isRemoteDragModifier(event)) return;
           if (event.button !== 0) return;
@@ -523,15 +520,12 @@ export function TerminalView({
                   if (isShiftClick(event)) {
                     void (async () => {
                       try {
-                        const probe = await invoke<string>(
-                          kind === "ssh" ? "probe_remote_path" : "probe_path",
-                          {
-                            request: {
-                              session_id: sessionId,
-                              path: targetPath,
-                            },
+                        const probe = await invoke<string>("probe_remote_path", {
+                          request: {
+                            session_id: sessionId,
+                            path: targetPath,
                           },
-                        );
+                        });
                         if (probe === "file" || probe === "directory") {
                           openSendToRef.current({
                             fromSessionId: sessionId,
@@ -572,7 +566,7 @@ export function TerminalView({
 
                   void (async () => {
                     try {
-                      const probe = await invoke<string>("probe_path", {
+                      const probe = await invoke<string>("probe_remote_path", {
                         request: {
                           session_id: sessionId,
                           path: targetPath,
@@ -875,17 +869,6 @@ export function TerminalView({
         } catch (err) {
           pushToast(formatTransferError(err), false);
         }
-      } else {
-        try {
-          await invoke("insert_local_paths_command", {
-            request: {
-              session_id: sessionId,
-              local_paths: paths,
-            },
-          });
-        } catch (err) {
-          setStatusMessage(formatAppError(err));
-        }
       }
     };
 
@@ -894,7 +877,7 @@ export function TerminalView({
       if (!hasFiles(event)) return;
       event.preventDefault();
       if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = kind === "ssh" ? "copy" : "link";
+        event.dataTransfer.dropEffect = "copy";
       }
     };
 
@@ -935,17 +918,6 @@ export function TerminalView({
         } catch (err) {
           pushToast(formatTransferError(err), false);
         }
-      } else {
-        try {
-          await invoke("insert_local_paths_command", {
-            request: {
-              session_id: sessionId,
-              local_paths: paths,
-            },
-          });
-        } catch (err) {
-          setStatusMessage(formatAppError(err));
-        }
       }
     }).then((unlisten) => {
       if (dragDisposed) {
@@ -965,7 +937,7 @@ export function TerminalView({
       container?.removeEventListener("dragover", preventDefaults);
       container?.removeEventListener("drop", handleDrop);
     };
-  }, [active, isConnecting, kind, sessionId, pushToast, scheduleHighlight, setStatusMessage]);
+  }, [active, isConnecting, kind, sessionId, pushToast, scheduleHighlight]);
 
   useEffect(() => {
     if (!active || isConnecting) return;
@@ -979,13 +951,10 @@ export function TerminalView({
     }
   }, [active]);
 
-  const dropHint =
-    kind === "ssh" ? t("dropHintUpload") : t("dropHintInsertPath");
+  const dropHint = t("dropHintUpload");
 
-  const bootMessage =
-    kind === "ssh" ? t("bootMessageSsh") : t("bootMessageLocal");
-  const connectingMessage =
-    kind === "ssh" ? t("connectingMessageSsh") : t("connectingMessageLocal");
+  const bootMessage = t("bootMessageSsh");
+  const connectingMessage = t("connectingMessageSsh");
 
   return (
     <div
