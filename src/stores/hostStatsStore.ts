@@ -223,6 +223,11 @@ export const useHostStatsStore = create<HostStatsState>((set, get) => ({
         activeSessionId: sessionId,
       }));
     } catch (err) {
+      // Initial connect often races the shell — don't surface as a hard error.
+      if (initial) {
+        set({ loading: false, error: null, activeSessionId: sessionId });
+        return;
+      }
       set({
         loading: false,
         error: String(err),

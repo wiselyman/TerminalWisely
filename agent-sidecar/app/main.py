@@ -19,6 +19,7 @@ from app.agent.loop import (
 )
 from app.agent.prompts import build_system_prompt
 from app.llm.context import sanitize_history_item
+from app.llm.gateway import ModelGateway, ModelGatewayError
 from app.harness.backup import backup_commands, restore_command, validate_commands_for_path
 from app.harness.network_guard import build_timed_rollback_plan
 from app.memory.store import find_cases, save_verified_case
@@ -26,11 +27,14 @@ from app.models.agent import (
     CancelRunRequest,
     ChatStartRequest,
     ChatStartResponse,
+    ModelListRequest,
+    ModelListResponse,
     PullResponse,
     ToolResultRequest,
     UserAnswerRequest,
 )
 from app.models.approval import ApprovalDecisionRequest, TargetSessionIdentity, UserContextRequest
+from app.paths import resolve_openai_compat_base_url, validate_http_base_url
 from app.skills.loader import list_skills
 from app.state import STORE, RunStatus
 
@@ -350,6 +354,41 @@ async def memory_search(q: str, _: AuthDep, limit: int = Query(5, ge=1, le=20)) 
 async def memory_save(body: dict[str, Any], _: AuthDep) -> dict[str, Any]:
     row_id = save_verified_case(body)
     return {"ok": True, "id": row_id}
+
+
+@app.post("/v1/models/list", response_model=ModelListResponse)
+async def models_list(body: ModelListRequest, _: AuthDep) -> ModelListResponse:
+    """Refresh OpenAI-compatible model ids for a settings profile draft."""
+    base = resolve_openai_compat_base_url(
+        body.provider, body.base_url, body.ollama_base_url
+    )
+    if not base:
+        return ModelListResponse(
+            models=[],
+            error="Base URL is required for this provider (OpenAI-compatible gateway).",
+        )
+    url_err = validate_http_base_url(base)
+    if url_err:
+        return ModelListResponse(models=[], error=url_err)
+    gw = ModelGateway(
+        base_url=base,
+        api_key=body.api_key or "",
+        model="-",
+        timeout=20.0,
+    )
+    try:
+        models = await gw.list_models()
+        return ModelListResponse(models=models, error=None)
+    except ModelGatewayError as exc:
+        return ModelListResponse(models=[], error=str(exc))
+    except Exception as exc:  # noqa: BLE001 — always surface to settings UI
+        logger.exception("models list failed for %s", base)
+        return ModelListResponse(
+            models=[],
+            error=f"Model list failed ({type(exc).__name__}: {exc})",
+        )
+    finally:
+        await gw.aclose()
 
 
 @app.post("/v1/harness/backup_plan")

@@ -238,9 +238,21 @@ class ModelGateway:
         except ModelGatewayError:
             raise
         except httpx.HTTPError as exc:
-            logger.warning("stream failed (%s); falling back to non-stream", exc)
+            detail = str(exc).strip() or repr(exc)
+            logger.warning(
+                "stream failed (%s: %s) talking to %s; falling back to non-stream",
+                type(exc).__name__,
+                detail,
+                url,
+            )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("stream failed (%s); falling back to non-stream", exc)
+            detail = str(exc).strip() or repr(exc)
+            logger.warning(
+                "stream failed (%s: %s) talking to %s; falling back to non-stream",
+                type(exc).__name__,
+                detail,
+                url,
+            )
 
         # Fallback: one-shot completion → synthetic stream events.
         completion = await self.chat_completions(
@@ -292,6 +304,49 @@ class ModelGateway:
         out["content"] = sanitize_assistant_content(raw)
         return out
 
+    async def list_models(self) -> list[str]:
+        """GET {base}/models — OpenAI-compatible catalog for settings refresh."""
+        if not self.base_url:
+            raise ModelGatewayError(
+                "Base URL is empty. For Anthropic-compatible gateways, paste an OpenAI-compatible base URL."
+            )
+        url_err = paths.validate_http_base_url(self.base_url)
+        if url_err:
+            raise ModelGatewayError(url_err)
+        headers, _ = self._auth_headers_and_key()
+        url = f"{self.base_url.rstrip('/')}/models"
+        # Keep refresh snappy — bad hosts should fail fast for settings UX.
+        client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=6.0))
+        try:
+            resp = await client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            detail = str(exc).strip() or repr(exc)
+            raise ModelGatewayError(
+                f"Cannot reach {url} ({type(exc).__name__}: {detail}). "
+                "Check Base URL / network (VPN / Tailscale)."
+            ) from exc
+        finally:
+            await client.aclose()
+        if resp.status_code >= 400:
+            raise ModelGatewayError(
+                f"Model list failed HTTP {resp.status_code} from {url}: {resp.text[:400]}"
+            )
+        try:
+            data = resp.json()
+        except json.JSONDecodeError as exc:
+            raise ModelGatewayError(
+                f"Model list from {url} was not JSON (check Base URL). "
+                f"Body starts with: {resp.text[:160]!r}"
+            ) from exc
+        models = parse_openai_models_payload(data)
+        if not models:
+            raise ModelGatewayError(
+                f"No model ids in response from {url}. "
+                "Is this an OpenAI-compatible /v1 base? "
+                f"Payload keys: {sorted(data.keys()) if isinstance(data, dict) else type(data).__name__}"
+            )
+        return models
+
     @staticmethod
     def merge_tool_call_deltas(
         buckets: dict[int, dict[str, Any]],
@@ -312,3 +367,35 @@ class ModelGateway:
             fn["name"] = str(name)
         if arguments:
             fn["arguments"] = str(fn.get("arguments") or "") + str(arguments)
+
+
+def parse_openai_models_payload(data: Any) -> list[str]:
+    """Extract model ids from an OpenAI-compatible `/models` JSON body."""
+    seen: set[str] = set()
+    models: list[str] = []
+
+    def add(mid: str) -> None:
+        mid = mid.strip()
+        if mid and mid not in seen:
+            seen.add(mid)
+            models.append(mid)
+
+    if isinstance(data, dict):
+        items = data.get("data")
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    mid = item.get("id") or item.get("name")
+                    if isinstance(mid, str):
+                        add(mid)
+        # Ollama /api/tags shaped payload sometimes proxied
+        tags = data.get("models")
+        if isinstance(tags, list):
+            for item in tags:
+                if isinstance(item, dict):
+                    mid = item.get("name") or item.get("model") or item.get("id")
+                    if isinstance(mid, str):
+                        add(mid)
+                elif isinstance(item, str):
+                    add(item)
+    return models

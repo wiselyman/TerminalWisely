@@ -674,7 +674,9 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                       }}
                     >
                       {activeProfile
-                        ? `${activeProfile.name} · ${activeProfile.model}`
+                        ? activeProfile.name.trim() === activeProfile.model.trim()
+                          ? activeProfile.model
+                          : `${activeProfile.name} · ${activeProfile.model}`
                         : t("aiEngineer.noModels")}
                       <span aria-hidden>▾</span>
                     </button>

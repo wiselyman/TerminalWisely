@@ -20,6 +20,51 @@ def sqlite_path() -> Path:
     return data_dir() / "audit.sqlite3"
 
 
+def resolve_openai_compat_base_url(
+    provider: str,
+    base_url: str = "",
+    ollama_base_url: str = "",
+) -> str:
+    """Resolve chat/completions base for a settings profile (OpenAI-compatible only)."""
+    pid = (provider or "openai").strip().lower()
+    explicit = (base_url or "").strip().rstrip("/")
+    if pid == "ollama":
+        ollama = (ollama_base_url or "http://127.0.0.1:11434").strip().rstrip("/")
+        if not ollama:
+            ollama = "http://127.0.0.1:11434"
+        return ollama if ollama.endswith("/v1") else f"{ollama}/v1"
+    if explicit:
+        return explicit
+    if pid == "openai":
+        return "https://api.openai.com/v1"
+    if pid == "gemini":
+        return "https://generativelanguage.googleapis.com/v1beta/openai"
+    # anthropic (and others): require an OpenAI-compatible gateway base URL
+    return ""
+
+
+def validate_http_base_url(url: str) -> str | None:
+    """Return an error message if url is not a usable http(s) base, else None."""
+    raw = (url or "").strip()
+    if not raw:
+        return "Base URL is empty."
+    if "://" not in raw:
+        return "Base URL must start with http:// or https://"
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(raw)
+    except Exception:  # noqa: BLE001
+        return f"Invalid Base URL: {raw!r}"
+    if parsed.scheme not in {"http", "https"}:
+        return f"Base URL must start with http:// or https:// (got {parsed.scheme!r})."
+    if not parsed.hostname:
+        return "Base URL is missing a host name."
+    if parsed.hostname in {"example.com", "localhost.invalid"}:
+        return f"Base URL host looks like a placeholder: {parsed.hostname}"
+    return None
+
+
 def ai_provider() -> str:
     return os.environ.get("TW_AI_PROVIDER", "openai")
 
@@ -28,12 +73,11 @@ def ai_base_url() -> str:
     explicit = os.environ.get("TW_AI_BASE_URL", "").strip()
     if explicit:
         return explicit.rstrip("/")
-    if ai_provider().strip().lower() == "ollama":
-        ollama = os.environ.get("TW_AI_OLLAMA_BASE", "http://127.0.0.1:11434").strip().rstrip("/")
-        if not ollama:
-            ollama = "http://127.0.0.1:11434"
-        return ollama if ollama.endswith("/v1") else f"{ollama}/v1"
-    return "https://api.openai.com/v1"
+    return resolve_openai_compat_base_url(
+        ai_provider(),
+        "",
+        os.environ.get("TW_AI_OLLAMA_BASE", "http://127.0.0.1:11434"),
+    )
 
 
 def ai_api_key() -> str:

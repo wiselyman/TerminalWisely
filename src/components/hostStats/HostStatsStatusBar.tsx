@@ -75,19 +75,10 @@ export function HostStatsStatusBar({ sessionId }: Props) {
     return lines.filter(Boolean).join("\n");
   }, [forSession, t]);
 
-  if (error && !forSession) {
-    return (
-      <footer className="host-stats-statusbar" title={error}>
-        <span className="host-stats-statusbar-item is-critical">
-          {t("hostStats.statusError")}
-        </span>
-      </footer>
-    );
-  }
-
   if (!forSession) {
+    // First connect / still collecting — never flash "Stats unavailable".
     return (
-      <footer className="host-stats-statusbar" aria-busy={loading}>
+      <footer className="host-stats-statusbar" aria-busy={loading || !!error}>
         <span className="host-stats-statusbar-item is-muted">
           {t("hostStats.collecting")}
         </span>

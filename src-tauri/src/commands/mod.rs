@@ -851,6 +851,18 @@ pub fn save_ai_settings(
 }
 
 #[tauri::command]
+pub async fn ai_list_models(
+    app: AppHandle,
+    request: crate::ai_engineer::AiListModelsRequest,
+) -> Result<crate::ai_engineer::AiListModelsResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ai_engineer::list_ai_models(&app, request).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn ai_terminal_exec(
     app: tauri::AppHandle,
     request: crate::ai_engineer::AiTerminalExecRequest,

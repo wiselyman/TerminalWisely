@@ -219,6 +219,45 @@ function exists(rel) {
   else pass("migrate.no-ask-line", "ok");
 }
 
+// --- Model provider presets (OpenAI-compat only) ---
+{
+  const settings = read("src/components/aiEngineer/AiEngineerSettings.tsx");
+  for (const type of ["openai", "anthropic", "gemini", "ollama"]) {
+    if (settings.includes(`"${type}"`) || settings.includes(`'${type}'`)) {
+      pass(`provider.type.${type}`, type);
+    } else {
+      fail(`provider.type.${type}`, `missing ${type}`);
+    }
+  }
+  if (settings.includes("deepseek") && settings.includes('ProviderType = "openai" | "deepseek"')) {
+    fail("provider.no-deepseek-card", "legacy deepseek ProviderType still primary");
+  } else {
+    pass("provider.no-deepseek-card", "deepseek not a primary card");
+  }
+  if (settings.includes("listAiModels") && settings.includes("refreshModels")) {
+    pass("provider.refresh-models", "refresh models wired");
+  } else {
+    fail("provider.refresh-models", "missing listAiModels / refreshModels");
+  }
+  const gw = read("agent-sidecar/app/llm/gateway.py");
+  if (gw.includes("async def list_models") && gw.includes("parse_openai_models_payload")) {
+    pass("gateway.list-models", "ModelGateway.list_models");
+  } else {
+    fail("gateway.list-models", "missing list_models");
+  }
+  const css = read("src/App.css");
+  if (/terminal-view-inner[\s\S]*?padding:\s*8px/.test(css)) {
+    pass("ui.terminal-padding", "terminal inset padding");
+  } else {
+    fail("ui.terminal-padding", "missing terminal padding");
+  }
+  if (/\.ai-engineer-line\s*\{[\s\S]*?font-size:\s*0\.84rem/.test(css)) {
+    pass("ui.chat-font", "chat font ~0.84rem");
+  } else {
+    fail("ui.chat-font", "chat font not reduced");
+  }
+}
+
 // Interactive product items that need a live SSH session / human
 blocked(
   "manual.ssh-connect",

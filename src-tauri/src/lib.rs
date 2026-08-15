@@ -253,6 +253,7 @@ pub fn run() {
             commands::ai_sidecar_stream,
             commands::get_ai_settings,
             commands::save_ai_settings,
+            commands::ai_list_models,
             commands::ai_terminal_exec,
             commands::ai_register_privilege_lease,
         ])

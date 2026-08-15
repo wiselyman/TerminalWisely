@@ -9,7 +9,10 @@ mod sidecar;
 mod terminal;
 
 pub use leases::{register_privilege_lease, RegisterLeaseRequest, RegisterLeaseResponse};
-pub use secrets::{get_ai_settings, save_ai_settings, AiSettingsUpdate, AiSettingsView};
+pub use secrets::{
+    get_ai_settings, list_ai_models, save_ai_settings, AiListModelsRequest, AiListModelsResponse,
+    AiSettingsUpdate, AiSettingsView,
+};
 pub use sidecar::{
     ensure_sidecar, get_sidecar_info, sidecar_http, sidecar_sse_stream, SidecarHttpRequest,
     SidecarHttpResponse, SidecarInfo,

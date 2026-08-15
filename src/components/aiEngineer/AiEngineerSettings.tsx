@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RISK_CODES, riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
+import { listAiModels } from "../../lib/aiEngineer/api";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
 
 const SECURITY_MODES = ["observe", "safe", "autonomous", "production"] as const;
 
-type ProviderType = "openai" | "deepseek" | "ollama" | "custom";
+/** All types speak OpenAI-compatible HTTP via ModelGateway. */
+type ProviderType = "openai" | "anthropic" | "gemini" | "ollama";
 
 type View =
   | { kind: "list" }
@@ -18,31 +20,31 @@ const PROVIDER_PRESETS: Record<
   { name: string; provider: string; base_url: string; ollama_base_url: string; model: string }
 > = {
   openai: {
-    name: "OpenAI",
+    name: "OpenAI compatible",
     provider: "openai",
     base_url: "https://api.openai.com/v1",
     ollama_base_url: "",
-    model: "gpt-4o-mini",
+    model: "",
   },
-  deepseek: {
-    name: "DeepSeek",
-    provider: "deepseek",
-    base_url: "https://api.deepseek.com",
+  anthropic: {
+    name: "Anthropic compatible",
+    provider: "anthropic",
+    base_url: "",
     ollama_base_url: "",
-    model: "deepseek-chat",
+    model: "",
+  },
+  gemini: {
+    name: "Gemini",
+    provider: "gemini",
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+    ollama_base_url: "",
+    model: "",
   },
   ollama: {
     name: "Ollama",
     provider: "ollama",
     base_url: "",
     ollama_base_url: "http://127.0.0.1:11434",
-    model: "llama3.2",
-  },
-  custom: {
-    name: "Custom",
-    provider: "openai",
-    base_url: "",
-    ollama_base_url: "",
     model: "",
   },
 };
@@ -58,9 +60,13 @@ function inferType(p: AiModelProfile): ProviderType {
   const provider = (p.provider || "").toLowerCase();
   const base = (p.base_url || "").toLowerCase();
   if (provider === "ollama" || p.ollama_base_url) return "ollama";
-  if (provider === "deepseek" || base.includes("deepseek")) return "deepseek";
-  if (provider === "openai" || base.includes("openai.com")) return "openai";
-  return "custom";
+  if (provider === "anthropic" || base.includes("anthropic")) return "anthropic";
+  if (provider === "gemini" || base.includes("generativelanguage.googleapis")) return "gemini";
+  if (provider === "openai" || provider === "deepseek" || base.includes("openai.com")) {
+    return "openai";
+  }
+  // Legacy custom / unknown → OpenAI-compatible
+  return "openai";
 }
 
 function blankFromType(type: ProviderType): AiModelProfile {
@@ -76,6 +82,36 @@ function blankFromType(type: ProviderType): AiModelProfile {
   };
 }
 
+/** Client-side http(s) base URL check before refresh/save. */
+function validateHttpBaseUrl(raw: string, label: string): string | null {
+  const value = raw.trim();
+  if (!value) return `${label} is required`;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return `${label} is not a valid URL`;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return `${label} must start with http:// or https://`;
+  }
+  if (!parsed.hostname) return `${label} is missing a host`;
+  return null;
+}
+
+function profileEndpointError(
+  providerType: ProviderType,
+  profile: AiModelProfile,
+): string | null {
+  if (providerType === "ollama") {
+    return validateHttpBaseUrl(
+      profile.ollama_base_url || "http://127.0.0.1:11434",
+      "Ollama base URL",
+    );
+  }
+  return validateHttpBaseUrl(profile.base_url, "Base URL");
+}
+
 export function AiEngineerSettings() {
   const { t } = useTranslation("tools");
   const settings = useAiEngineerStore((s) => s.settings);
@@ -88,6 +124,9 @@ export function AiEngineerSettings() {
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [refreshingModels, setRefreshingModels] = useState(false);
+  const [modelHint, setModelHint] = useState<string | null>(null);
 
   useEffect(() => {
     void refreshSettings();
@@ -155,6 +194,12 @@ export function AiEngineerSettings() {
       setError(t("aiEngineer.settings.modelRequired"));
       return;
     }
+    const endpointErr = profileEndpointError(view.providerType, draft);
+    if (endpointErr) {
+      setError(endpointErr);
+      setModelHint(endpointErr);
+      return;
+    }
     const others = settings.profiles.filter((p) => p.id !== draft.id);
     const saved: AiModelProfile = {
       ...draft,
@@ -176,6 +221,56 @@ export function AiEngineerSettings() {
       active_profile_id: settings.active_profile_id,
       security_mode: securityMode,
     });
+  };
+
+  const onRefreshModels = async () => {
+    if (view.kind !== "edit") return;
+    const endpointErr = profileEndpointError(view.providerType, view.profile);
+    if (endpointErr) {
+      setError(endpointErr);
+      setModelHint(endpointErr);
+      setModelOptions([]);
+      return;
+    }
+    setRefreshingModels(true);
+    setModelHint(null);
+    setError(null);
+    try {
+      const result = await listAiModels({
+        provider: view.profile.provider,
+        base_url: view.profile.base_url,
+        ollama_base_url: view.profile.ollama_base_url,
+        profile_id: view.isNew ? null : view.profile.id,
+        api_key: apiKey || null,
+      });
+      if (result.error || result.models.length === 0) {
+        const msg =
+          result.error?.trim() ||
+          t("aiEngineer.settings.refreshEmpty");
+        setError(msg);
+        setModelHint(msg);
+        setModelOptions([]);
+        return;
+      }
+      setError(null);
+      setModelHint(
+        t("aiEngineer.settings.refreshOk", { count: result.models.length }),
+      );
+      setModelOptions(result.models);
+      if (result.models.length === 1 && !view.profile.model.trim()) {
+        setView({
+          ...view,
+          profile: { ...view.profile, model: result.models[0] },
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      setModelHint(msg);
+      setModelOptions([]);
+    } finally {
+      setRefreshingModels(false);
+    }
   };
 
   const title =
@@ -292,6 +387,8 @@ export function AiEngineerSettings() {
                           onClick={() => {
                             setApiKey("");
                             setError(null);
+                            setModelOptions(p.model ? [p.model] : []);
+                            setModelHint(null);
                             setView({
                               kind: "edit",
                               profile: { ...p },
@@ -386,6 +483,8 @@ export function AiEngineerSettings() {
                 onClick={() => {
                   setApiKey("");
                   setError(null);
+                  setModelOptions([]);
+                  setModelHint(null);
                   setView({
                     kind: "edit",
                     profile: blankFromType(type),
@@ -418,35 +517,6 @@ export function AiEngineerSettings() {
                 }
               />
             </label>
-            {view.providerType === "custom" ? (
-              <label>
-                {t("aiEngineer.settings.provider")}
-                <input
-                  value={view.profile.provider}
-                  onChange={(e) =>
-                    setView({
-                      ...view,
-                      profile: { ...view.profile, provider: e.target.value },
-                    })
-                  }
-                />
-              </label>
-            ) : null}
-            <label>
-              {t("aiEngineer.settings.model")}
-              <input
-                value={view.profile.model}
-                onChange={(e) =>
-                  setView({
-                    ...view,
-                    profile: { ...view.profile, model: e.target.value },
-                  })
-                }
-                placeholder={
-                  view.providerType === "ollama" ? "llama3.2" : "model id"
-                }
-              />
-            </label>
             {view.providerType === "ollama" ? (
               <label>
                 {t("aiEngineer.settings.ollamaBase")}
@@ -472,7 +542,13 @@ export function AiEngineerSettings() {
                       profile: { ...view.profile, base_url: e.target.value },
                     })
                   }
-                  placeholder="https://api.openai.com/v1"
+                  placeholder={
+                    view.providerType === "anthropic"
+                      ? "https://your-openai-compat-gateway/v1"
+                      : view.providerType === "gemini"
+                        ? "https://generativelanguage.googleapis.com/v1beta/openai"
+                        : "https://api.openai.com/v1"
+                  }
                 />
               </label>
             )}
@@ -491,6 +567,71 @@ export function AiEngineerSettings() {
                 />
               </label>
             ) : null}
+            <label>
+              {t("aiEngineer.settings.model")}
+              <div className="ai-engineer-model-field">
+                {modelOptions.length > 0 ? (
+                  <select
+                    value={
+                      modelOptions.includes(view.profile.model)
+                        ? view.profile.model
+                        : view.profile.model.trim()
+                          ? view.profile.model
+                          : ""
+                    }
+                    onChange={(e) =>
+                      setView({
+                        ...view,
+                        profile: { ...view.profile, model: e.target.value },
+                      })
+                    }
+                  >
+                    <option value="" disabled>
+                      {t("aiEngineer.settings.modelPick")}
+                    </option>
+                    {!modelOptions.includes(view.profile.model) &&
+                    view.profile.model.trim() ? (
+                      <option value={view.profile.model}>
+                        {view.profile.model}
+                      </option>
+                    ) : null}
+                    {modelOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={view.profile.model}
+                    onChange={(e) =>
+                      setView({
+                        ...view,
+                        profile: { ...view.profile, model: e.target.value },
+                      })
+                    }
+                    placeholder={t("aiEngineer.settings.modelPlaceholder")}
+                  />
+                )}
+                <button
+                  type="button"
+                  className="ai-engineer-text-btn"
+                  disabled={refreshingModels || saving}
+                  onClick={() => void onRefreshModels()}
+                >
+                  {refreshingModels
+                    ? t("aiEngineer.settings.refreshing")
+                    : t("aiEngineer.settings.refreshModels")}
+                </button>
+              </div>
+              {modelHint ? (
+                <span
+                  className={`ai-engineer-model-hint${error ? " is-error" : ""}`}
+                >
+                  {modelHint}
+                </span>
+              ) : null}
+            </label>
             <div className="ai-engineer-approval-actions">
               <button
                 type="button"

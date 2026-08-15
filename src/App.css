@@ -260,8 +260,9 @@ body,
 
 /* Reserve room for system traffic lights (titleBarStyle: Overlay). */
 .app-shell.platform-macos .chrome-titlebar-macos-traffic-spacer {
-  width: 72px;
-  min-width: 72px;
+  /* Native traffic lights sit ~78px; leave a clear gap before chrome controls. */
+  width: 78px;
+  min-width: 78px;
   padding: 0;
   pointer-events: none;
 }
@@ -325,7 +326,8 @@ body,
   align-self: center;
   width: var(--chrome-control-size);
   height: var(--chrome-control-size);
-  margin: 0 0 0 4px;
+  /* Equal gap to traffic-light spacer (left) and tab-strip divider (right). */
+  margin: 0 12px;
   padding: 0;
   border: none;
   border-radius: 5px;
@@ -341,7 +343,7 @@ body,
 
 /* Separate chrome controls from the tab strip (Home / sessions). */
 .chrome-titlebar-main > .tab-bar {
-  margin-left: 6px;
+  margin-left: 0;
   padding-left: 8px;
   border-left: 1px solid var(--tab-divider);
 }
@@ -3129,11 +3131,14 @@ body.preview-float-resizing {
   position: relative;
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px 8px 10px;
 }
 
 .tw-terminal-host {
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .tw-terminal-host .xterm {
@@ -5809,7 +5814,7 @@ body.cmd-nav-panel-resizing {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  z-index: 30;
+  z-index: 40;
   min-width: 220px;
   max-width: 320px;
   max-height: min(360px, 50vh);
@@ -5819,6 +5824,12 @@ body.cmd-nav-panel-resizing {
   border-radius: 10px;
   background: #161b22;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+/* Model picker sits on the left of the composer — open menu flush-left so it is not clipped. */
+.ai-engineer-model-wrap .ai-engineer-menu {
+  left: 0;
+  right: auto;
+  min-width: 248px;
 }
 .ai-engineer-menu-up {
   top: auto;
@@ -5839,12 +5850,13 @@ body.cmd-nav-panel-resizing {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  box-sizing: border-box;
   width: 100%;
   border: none;
   background: transparent;
   color: #e6edf3;
   text-align: left;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.86rem;
@@ -5868,8 +5880,21 @@ body.cmd-nav-panel-resizing {
   border-radius: 0 0 8px 8px;
   color: #79c0ff;
 }
-.ai-engineer-model-name { font-weight: 600; }
-.ai-engineer-model-id { font-size: 0.75rem; color: #8b949e; }
+.ai-engineer-model-name {
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-engineer-model-id {
+  font-size: 0.75rem;
+  color: #8b949e;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .workspace-panel-head-actions {
   display: flex;
   flex-shrink: 0;
@@ -5923,10 +5948,10 @@ body.cmd-nav-panel-resizing {
   scroll-padding-top: 12px;
 }
 .ai-engineer-line {
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 0.98rem;
-  line-height: 1.55;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  line-height: 1.45;
   color: #e6edf3;
 }
 .ai-engineer-line.user {
@@ -5951,7 +5976,7 @@ body.cmd-nav-panel-resizing {
   align-items: flex-start;
   flex-wrap: wrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   white-space: pre-wrap;
   background: #010409;
   border: 1px solid #30363d;
@@ -6099,11 +6124,14 @@ body.cmd-nav-panel-resizing {
   50% { opacity: 0; }
 }
 .ai-engineer-composer {
+  position: relative;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin: 10px 12px 12px;
   padding: 10px 12px 12px;
+  overflow: visible;
   border: 1px solid #30363d;
   border-radius: 14px;
   background: #161b22;
@@ -6115,11 +6143,11 @@ body.cmd-nav-panel-resizing {
   color: #8b949e;
 }
 .ai-engineer-composer textarea {
-  min-height: 72px;
+  min-height: 64px;
   resize: vertical;
-  font-size: 0.98rem;
-  line-height: 1.45;
-  padding: 8px 4px;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  padding: 6px 4px;
   border-radius: 0;
   border: none;
   background: transparent;
@@ -6361,21 +6389,21 @@ body.cmd-nav-panel-resizing {
   color: #e6edf3;
 }
 
-.ai-engineer-md { font-size: 0.98rem; line-height: 1.6; color: #e6edf3; }
+.ai-engineer-md { font-size: 0.84rem; line-height: 1.5; color: #e6edf3; }
 .ai-engineer-md > :first-child { margin-top: 0; }
 .ai-engineer-md > :last-child { margin-bottom: 0; }
-.ai-engineer-md p { margin: 0.55em 0; color: #e6edf3; }
+.ai-engineer-md p { margin: 0.45em 0; color: #e6edf3; }
 .ai-engineer-md h1, .ai-engineer-md h2, .ai-engineer-md h3, .ai-engineer-md h4 {
-  margin: 0.85em 0 0.45em;
+  margin: 0.7em 0 0.35em;
   line-height: 1.3;
   font-weight: 650;
   color: #f0f6fc;
 }
-.ai-engineer-md h1 { font-size: 1.2rem; }
-.ai-engineer-md h2 { font-size: 1.1rem; }
-.ai-engineer-md h3 { font-size: 1.02rem; }
-.ai-engineer-md ul, .ai-engineer-md ol { margin: 0.45em 0; padding-left: 1.35em; color: #e6edf3; }
-.ai-engineer-md li { margin: 0.25em 0; }
+.ai-engineer-md h1 { font-size: 1.05rem; }
+.ai-engineer-md h2 { font-size: 0.98rem; }
+.ai-engineer-md h3 { font-size: 0.92rem; }
+.ai-engineer-md ul, .ai-engineer-md ol { margin: 0.4em 0; padding-left: 1.25em; color: #e6edf3; }
+.ai-engineer-md li { margin: 0.2em 0; }
 .ai-engineer-md strong { color: #f0f6fc; }
 .ai-engineer-md code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -6387,14 +6415,14 @@ body.cmd-nav-panel-resizing {
   color: #ffa657;
 }
 .ai-engineer-md pre {
-  margin: 0.6em 0;
-  padding: 10px 12px;
+  margin: 0.5em 0;
+  padding: 8px 10px;
   overflow: auto;
   background: #010409;
   border: 1px solid #30363d;
   border-radius: 8px;
 }
-.ai-engineer-md pre code { border: none; background: transparent; padding: 0; font-size: 0.88em; color: #c9d1d9; }
+.ai-engineer-md pre code { border: none; background: transparent; padding: 0; font-size: 0.86em; color: #c9d1d9; }
 .ai-engineer-md a { color: #58a6ff; }
 .ai-engineer-md blockquote {
   margin: 0.55em 0;
@@ -6582,6 +6610,29 @@ body.cmd-nav-panel-resizing {
 .ai-engineer-type-card:hover { border-color:#388bfd; }
 .ai-engineer-type-card span { font-size:0.88rem; opacity:0.75; line-height:1.4; }
 .ai-engineer-settings-type-tag { margin:0; font-size:0.88rem; opacity:0.7; }
+.ai-engineer-model-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ai-engineer-model-field select,
+.ai-engineer-model-field input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.ai-engineer-model-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: #8b949e;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-engineer-model-hint.is-error {
+  color: #f85149;
+}
 @media (max-width: 520px) {
   .ai-engineer-type-grid { grid-template-columns:1fr; }
   .ai-engineer-profile-row { flex-direction:column; }

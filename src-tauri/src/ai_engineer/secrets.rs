@@ -177,3 +177,127 @@ pub fn load_settings_for_sidecar(app: &AppHandle) -> AppResult<SidecarEnvSetting
         },
     })
 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AiListModelsRequest {
+    pub provider: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub ollama_base_url: String,
+    #[serde(default)]
+    pub profile_id: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AiListModelsResponse {
+    pub models: Vec<String>,
+    pub error: Option<String>,
+}
+
+/// Resolve stored API key (if any) and ask sidecar ModelGateway to list models.
+pub fn list_ai_models(app: &AppHandle, request: AiListModelsRequest) -> AppResult<AiListModelsResponse> {
+    let mut api_key = request.api_key.unwrap_or_default();
+    if api_key.trim().is_empty() {
+        if let Some(id) = request.profile_id.as_ref().filter(|s| !s.is_empty()) {
+            let stored = load_stored(app)?;
+            if let Some(prev) = stored.profiles.iter().find(|p| &p.id == id) {
+                if let Some(k) = prev.api_key.as_ref().filter(|k| !k.is_empty()) {
+                    api_key = k.clone();
+                }
+            }
+        }
+    }
+    let body = serde_json::json!({
+        "provider": request.provider,
+        "base_url": request.base_url,
+        "ollama_base_url": request.ollama_base_url,
+        "api_key": api_key,
+    });
+    let resp = crate::ai_engineer::sidecar_http(
+        app,
+        crate::ai_engineer::SidecarHttpRequest {
+            method: "POST".into(),
+            path: "/v1/models/list".into(),
+            body: Some(body.to_string()),
+            timeout_ms: Some(30_000),
+        },
+    )?;
+    if resp.status == 0 || resp.status >= 400 {
+        let detail = extract_sidecar_error_detail(&resp.body)
+            .unwrap_or_else(|| resp.body.chars().take(400).collect::<String>());
+        return Ok(AiListModelsResponse {
+            models: vec![],
+            error: Some(format!(
+                "Model list failed (HTTP {}): {}",
+                resp.status,
+                if detail.is_empty() {
+                    "no response body".into()
+                } else {
+                    detail
+                }
+            )),
+        });
+    }
+    #[derive(Deserialize)]
+    struct Body {
+        #[serde(default)]
+        models: Vec<String>,
+        #[serde(default)]
+        error: Option<String>,
+    }
+    match serde_json::from_str::<Body>(&resp.body) {
+        Ok(b) => {
+            let error = if b.error.as_ref().map(|e| !e.is_empty()).unwrap_or(false) {
+                b.error
+            } else if b.models.is_empty() {
+                Some(
+                    "No models returned. Check Base URL / API key, then try Refresh again."
+                        .into(),
+                )
+            } else {
+                None
+            };
+            Ok(AiListModelsResponse {
+                models: if error.is_some() { vec![] } else { b.models },
+                error,
+            })
+        }
+        Err(e) => Ok(AiListModelsResponse {
+            models: vec![],
+            error: Some(format!(
+                "Bad models list response: {e}. Body: {}",
+                resp.body.chars().take(200).collect::<String>()
+            )),
+        }),
+    }
+}
+
+fn extract_sidecar_error_detail(body: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Detail {
+        detail: serde_json::Value,
+        #[serde(default)]
+        error: Option<String>,
+    }
+    if let Ok(v) = serde_json::from_str::<Detail>(body) {
+        if let Some(err) = v.error.filter(|s| !s.is_empty()) {
+            return Some(err);
+        }
+        match v.detail {
+            serde_json::Value::String(s) if !s.is_empty() => return Some(s),
+            other if !other.is_null() => return Some(other.to_string()),
+            _ => {}
+        }
+    }
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(err) = v.get("error").and_then(|x| x.as_str()) {
+            if !err.is_empty() {
+                return Some(err.to_string());
+            }
+        }
+    }
+    None
+}

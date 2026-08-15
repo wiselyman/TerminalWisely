@@ -80,3 +80,17 @@ class PullResponse(BaseModel):
 class CancelRunRequest(BaseModel):
     session_id: str
     run_id: str
+
+
+class ModelListRequest(BaseModel):
+    """OpenAI-compatible catalog refresh for one settings profile draft."""
+
+    provider: str = "openai"
+    base_url: str = ""
+    ollama_base_url: str = ""
+    api_key: str | None = None
+
+
+class ModelListResponse(BaseModel):
+    models: list[str] = Field(default_factory=list)
+    error: str | None = None

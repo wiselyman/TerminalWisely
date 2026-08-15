@@ -63,15 +63,12 @@ import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
 import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
 import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
 import {
-  SIDEBAR_COLLAPSED_STORAGE_KEY,
   SIDEBAR_COLLAPSED_WIDTH,
   SIDEBAR_WIDTH_STORAGE_KEY,
   clampSidebarWidth,
   loadSidebarWidth,
 } from "./lib/sidebarLayout";
 import "./App.css";
-
-const SIDEBAR_STORAGE_KEY = SIDEBAR_COLLAPSED_STORAGE_KEY;
 
 function App() {
   const { t } = useTranslation("shell");
@@ -235,9 +232,8 @@ function App() {
   const suppressTabClickUntilRef = useRef(0);
   const tabPointerButtonRef = useRef(0);
   const skipTabBarContextMenuRef = useRef(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1",
-  );
+  // Always open with the connection sidebar visible; collapse is session-only.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarExpandedWidth, setSidebarExpandedWidth] = useState(loadSidebarWidth);
   const [windowFullscreen, setWindowFullscreen] = useState(false);
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
@@ -267,10 +263,6 @@ function App() {
     () => `${sidebarCollapsed}-${sidebarWidth}`,
     [sidebarCollapsed, sidebarWidth],
   );
-
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
-  }, [sidebarCollapsed]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;

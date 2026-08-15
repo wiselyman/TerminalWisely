@@ -44,6 +44,25 @@ export async function saveAiSettings(
   return invoke<AiSettingsView>("save_ai_settings", { update });
 }
 
+export interface AiListModelsRequest {
+  provider: string;
+  base_url?: string;
+  ollama_base_url?: string;
+  profile_id?: string | null;
+  api_key?: string | null;
+}
+
+export interface AiListModelsResponse {
+  models: string[];
+  error?: string | null;
+}
+
+export async function listAiModels(
+  request: AiListModelsRequest,
+): Promise<AiListModelsResponse> {
+  return invoke<AiListModelsResponse>("ai_list_models", { request });
+}
+
 type SidecarHttpResult = {
   status: number;
   body: string;
