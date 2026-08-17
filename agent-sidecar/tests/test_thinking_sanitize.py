@@ -114,7 +114,46 @@ def test_looks_like_idle_plan_dump_helm_repeat() -> None:
     assert sanitize_assistant_content(raw) == ""
 
 
-def test_command_dump_is_not_a_repetition_loop() -> None:
+def test_response_echo_loop_keeps_first_answer() -> None:
+    from app.llm.thinking import (
+        StreamContentFilter,
+        extract_first_user_answer,
+        looks_like_response_echo_loop,
+        sanitize_assistant_content,
+    )
+
+    ans = (
+        "是的，**10.6.20.131** 目前有人使用。Ping 测试显示设备在线且响应正常"
+        "（延迟约 0.17ms）。MAC 地址是 `e8:61:1a:03:b1:8b`。"
+    )
+    raw = (
+        f"Response:\n{ans}\n\n"
+        "This is sufficient. I will output the response.\n\n"
+        "One detail: The user asked '10.6.20.131这个ip有人用吗'. "
+        "I will answer '是的，有人用'. I will output the response.\n\n"
+        f"Response:\n{ans}\n\n"
+        "I will output the response.\n\n"
+        "One last check: The user's query is '10.6.20.131这个ip有人用吗'. "
+        "I will answer '是的，有人用'. I will output the response.\n\n"
+        f"Response:\n{ans}\n"
+    )
+    assert looks_like_response_echo_loop(raw)
+    out = sanitize_assistant_content(raw)
+    assert "10.6.20.131" in out
+    assert out.count("10.6.20.131") == 1
+    assert "I will output" not in out
+    assert "Response:" not in out
+    assert extract_first_user_answer(raw).startswith("是的")
+
+    f = StreamContentFilter()
+    for i in range(0, len(raw), 37):
+        f.feed(raw[i : i + 37])
+    assert f.loop_detected
+    final = f.finalize()
+    assert "10.6.20.131" in final
+    assert final.count("目前有人使用") == 1
+    assert "I will output" not in final
+
     from app.llm.thinking import is_repetition_loop, StreamContentFilter
 
     raw = (

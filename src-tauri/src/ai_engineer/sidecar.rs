@@ -16,6 +16,8 @@ use crate::error::{AppError, AppResult};
 use super::secrets::load_settings_for_sidecar;
 
 static SIDECAR: OnceLock<Mutex<Option<SidecarState>>> = OnceLock::new();
+/// Serialize first-launch Python provisioning (Windows races corrupt venv copies).
+static PROVISION: OnceLock<Mutex<()>> = OnceLock::new();
 
 struct SidecarState {
     child: Child,
@@ -139,8 +141,15 @@ fn kill_orphan_sidecars(keep_pid: Option<u32>) {
 }
 
 fn python_has_runtime_deps(python: &str) -> bool {
-    python_command(python)
-        .arg("-c")
+    python_has_runtime_deps_with_path(python, None)
+}
+
+fn python_has_runtime_deps_with_path(python: &str, pythonpath: Option<&std::path::Path>) -> bool {
+    let mut cmd = python_command(python);
+    if let Some(path) = pythonpath {
+        cmd.env("PYTHONPATH", path_for_command(path));
+    }
+    cmd.arg("-c")
         .arg("import uvicorn, fastapi, pydantic, httpx, yaml")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -158,6 +167,90 @@ fn venv_python_path(venv_dir: &std::path::Path) -> PathBuf {
             py3
         } else {
             venv_dir.join("bin").join("python")
+        }
+    }
+}
+
+/// Windows Command + some Python tools choke on `\\?\` extended paths from canonicalize.
+fn path_for_command(path: &std::path::Path) -> String {
+    let raw = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        let stripped = raw
+            .strip_prefix(r"\\?\UNC\")
+            .map(|rest| format!(r"\\{rest}"))
+            .or_else(|| raw.strip_prefix(r"\\?\").map(|s| s.to_string()))
+            .unwrap_or_else(|| raw.into_owned());
+        return stripped;
+    }
+    #[cfg(not(windows))]
+    {
+        raw.into_owned()
+    }
+}
+
+fn site_packages_dir(data: &std::path::Path) -> PathBuf {
+    data.join("site-packages")
+}
+
+fn requirements_stamp_hash(req: &std::path::Path) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let bytes = std::fs::read(req).unwrap_or_default();
+    let mut h = DefaultHasher::new();
+    bytes.hash(&mut h);
+    format!("{:x}", h.finish())
+}
+
+/// Move aside then delete so a locked `python.exe` cannot block the next create.
+fn clear_dir_for_rebuild(dir: &std::path::Path, log_path: &std::path::Path) {
+    if !dir.exists() {
+        return;
+    }
+    let trash = dir.with_file_name(format!(
+        "{}.old.{}",
+        dir.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("pyenv"),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0)
+    ));
+    match std::fs::rename(dir, &trash) {
+        Ok(()) => {
+            append_log(
+                log_path,
+                &format!("[sidecar] moved old env aside → {}", trash.display()),
+            );
+            for attempt in 0..5 {
+                if std::fs::remove_dir_all(&trash).is_ok() {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(150 * (attempt + 1)));
+            }
+            append_log(
+                log_path,
+                &format!(
+                    "[sidecar] leftover (will retry later): {}",
+                    trash.display()
+                ),
+            );
+        }
+        Err(e) => {
+            append_log(
+                log_path,
+                &format!(
+                    "[sidecar] rename {} failed ({e}); trying remove_dir_all",
+                    dir.display()
+                ),
+            );
+            for attempt in 0..5 {
+                if std::fs::remove_dir_all(dir).is_ok() {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(200 * (attempt + 1)));
+            }
         }
     }
 }
@@ -216,37 +309,54 @@ fn requirements_file(sidecar_dir: &std::path::Path) -> PathBuf {
     }
 }
 
-/// App-managed Python: private venv ← bundled runtime ← system; auto-installs deps.
+/// App-managed Python: private site-packages (Windows) / venv (Unix) ← bundled ← system.
 /// End users never run pip.
 fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> AppResult<String> {
+    let _guard = PROVISION
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|e| AppError::msg(e.to_string()))?;
+
     let data = data_dir(app)?;
     let log_path = data.join("sidecar.log");
-    let venv_dir = data.join("venv");
-    let venv_py = venv_python_path(&venv_dir);
     let req = requirements_file(sidecar_dir);
     let stamp = data.join("venv.requirements.sha256");
-
-    let req_hash = {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let bytes = std::fs::read(&req).unwrap_or_default();
-        let mut h = DefaultHasher::new();
-        bytes.hash(&mut h);
-        format!("{:x}", h.finish())
-    };
+    let req_hash = requirements_stamp_hash(&req);
     let stamp_ok = std::fs::read_to_string(&stamp)
         .map(|s| s.trim() == req_hash)
         .unwrap_or(false);
 
     emit_bootstrap(app, "checking", "Checking AI runtime…");
 
-    if venv_py.is_file() && stamp_ok && python_has_runtime_deps(&venv_py.to_string_lossy()) {
-        emit_bootstrap(app, "ready", "AI runtime ready");
-        return Ok(venv_py.to_string_lossy().into_owned());
+    // Prefer a healthy private env from a previous launch.
+    if cfg!(windows) {
+        let site = site_packages_dir(&data);
+        let bootstrap_early = find_bundled_python(sidecar_dir)
+            .map(|p| path_for_command(&p))
+            .or_else(find_system_python);
+        if let Some(ref py) = bootstrap_early {
+            if stamp_ok
+                && site.is_dir()
+                && python_has_runtime_deps_with_path(py, Some(&site))
+            {
+                emit_bootstrap(app, "ready", "AI runtime ready");
+                return Ok(py.clone());
+            }
+        }
+    } else {
+        let venv_dir = data.join("venv");
+        let venv_py = venv_python_path(&venv_dir);
+        if venv_py.is_file()
+            && stamp_ok
+            && python_has_runtime_deps(&path_for_command(&venv_py))
+        {
+            emit_bootstrap(app, "ready", "AI runtime ready");
+            return Ok(path_for_command(&venv_py));
+        }
     }
 
     let bootstrap = find_bundled_python(sidecar_dir)
-        .map(|p| p.to_string_lossy().into_owned())
+        .map(|p| path_for_command(&p))
         .or_else(find_system_python)
         .ok_or_else(|| {
             AppError::msg(
@@ -255,29 +365,156 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
             )
         })?;
 
-    // Dev machines with system deps already installed — skip venv.
+    // Dev machines with system deps already installed — skip private env.
     if find_bundled_python(sidecar_dir).is_none() && python_has_runtime_deps(&bootstrap) {
         emit_bootstrap(app, "ready", "Using system Python with deps");
         return Ok(bootstrap);
     }
 
+    if cfg!(windows) {
+        ensure_windows_site_packages(app, &data, &log_path, &bootstrap, &req, &req_hash, &stamp)?;
+        return Ok(bootstrap);
+    }
+
+    ensure_unix_venv(app, &data, &log_path, &bootstrap, &req, &req_hash, &stamp)
+}
+
+/// Windows: install deps with `pip --target` so we never copy `python.exe` into Roaming
+/// (AV / file locks cause Errno 13 on `venv\Scripts\python.exe`).
+fn ensure_windows_site_packages(
+    app: &AppHandle,
+    data: &std::path::Path,
+    log_path: &std::path::Path,
+    bootstrap: &str,
+    req: &std::path::Path,
+    req_hash: &str,
+    stamp: &std::path::Path,
+) -> AppResult<()> {
+    let site = site_packages_dir(data);
     emit_bootstrap(
         app,
         "creating_venv",
         "Preparing private AI Python environment…",
     );
     append_log(
-        &log_path,
+        log_path,
+        &format!(
+            "[sidecar] provisioning site-packages with {bootstrap} → {}",
+            site.display()
+        ),
+    );
+
+    // Drop broken classic venv left by older builds (locks Scripts\\python.exe).
+    let legacy_venv = data.join("venv");
+    if legacy_venv.exists() {
+        clear_dir_for_rebuild(&legacy_venv, log_path);
+    }
+    clear_dir_for_rebuild(&site, log_path);
+    std::fs::create_dir_all(&site).map_err(AppError::from)?;
+
+    emit_bootstrap(
+        app,
+        "installing_deps",
+        "Installing AI dependencies (first launch, 1–3 min)…",
+    );
+    append_log(
+        log_path,
+        &format!(
+            "[sidecar] auto pip install --target {} -r {}",
+            site.display(),
+            req.display()
+        ),
+    );
+
+    let _ = python_command(bootstrap)
+        .args([
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--target",
+            &path_for_command(&site),
+            "pip",
+            "wheel",
+            "setuptools",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    let install = python_command(bootstrap)
+        .args([
+            "-m",
+            "pip",
+            "install",
+            "--target",
+            &path_for_command(&site),
+            "-r",
+        ])
+        .arg(path_for_command(req))
+        .env("PYTHONPATH", path_for_command(&site))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| {
+            AppError::msg(format!(
+                "AI engine failed to install dependencies: {e}. See {}.",
+                log_path.display()
+            ))
+        })?;
+    if !install.status.success() {
+        let err = String::from_utf8_lossy(&install.stderr);
+        append_log(log_path, &format!("[sidecar] pip install failed: {err}"));
+        return Err(AppError::msg(format!(
+            "AI engine failed to install dependencies. See {}.",
+            log_path.display()
+        )));
+    }
+
+    if !python_has_runtime_deps_with_path(bootstrap, Some(&site)) {
+        return Err(AppError::msg(format!(
+            "AI dependencies incomplete after install. See {}.",
+            log_path.display()
+        )));
+    }
+
+    let _ = std::fs::write(stamp, req_hash);
+    append_log(
+        log_path,
+        &format!(
+            "[sidecar] site-packages ready: {} (python {bootstrap})",
+            site.display()
+        ),
+    );
+    emit_bootstrap(app, "ready", "AI runtime ready");
+    Ok(())
+}
+
+fn ensure_unix_venv(
+    app: &AppHandle,
+    data: &std::path::Path,
+    log_path: &std::path::Path,
+    bootstrap: &str,
+    req: &std::path::Path,
+    req_hash: &str,
+    stamp: &std::path::Path,
+) -> AppResult<String> {
+    let venv_dir = data.join("venv");
+    emit_bootstrap(
+        app,
+        "creating_venv",
+        "Preparing private AI Python environment…",
+    );
+    append_log(
+        log_path,
         &format!(
             "[sidecar] provisioning venv with {bootstrap} → {}",
             venv_dir.display()
         ),
     );
 
-    if venv_dir.exists() {
-        let _ = std::fs::remove_dir_all(&venv_dir);
-    }
-    let status = python_command(&bootstrap)
+    clear_dir_for_rebuild(&venv_dir, log_path);
+    let status = python_command(bootstrap)
         .args(["-m", "venv"])
         .arg(&venv_dir)
         .stdout(Stdio::null())
@@ -286,18 +523,17 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
         .map_err(|e| AppError::msg(format!("AI engine failed to create environment: {e}")))?;
     if !status.status.success() {
         let err = String::from_utf8_lossy(&status.stderr);
-        append_log(&log_path, &format!("[sidecar] venv create failed: {err}"));
+        append_log(log_path, &format!("[sidecar] venv create failed: {err}"));
         return Err(AppError::msg(format!(
             "AI engine failed to create its private environment. See {}.",
             log_path.display()
         )));
     }
 
-    let venv_py = venv_python_path(&venv_dir);
-    if !venv_py.is_file() {
+    let venv_py = path_for_command(&venv_python_path(&venv_dir));
+    if !std::path::Path::new(&venv_py).is_file() {
         return Err(AppError::msg(format!(
-            "AI environment python missing at {}",
-            venv_py.display()
+            "AI environment python missing at {venv_py}"
         )));
     }
 
@@ -307,7 +543,7 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
         "Installing AI dependencies (first launch, 1–3 min)…",
     );
     append_log(
-        &log_path,
+        log_path,
         &format!("[sidecar] auto pip install -r {}", req.display()),
     );
 
@@ -327,7 +563,7 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
 
     let install = python_command(&venv_py)
         .args(["-m", "pip", "install", "-r"])
-        .arg(&req)
+        .arg(req)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -339,27 +575,24 @@ fn ensure_python_for_sidecar(app: &AppHandle, sidecar_dir: &std::path::Path) -> 
         })?;
     if !install.status.success() {
         let err = String::from_utf8_lossy(&install.stderr);
-        append_log(&log_path, &format!("[sidecar] pip install failed: {err}"));
+        append_log(log_path, &format!("[sidecar] pip install failed: {err}"));
         return Err(AppError::msg(format!(
             "AI engine failed to install dependencies. See {}.",
             log_path.display()
         )));
     }
 
-    if !python_has_runtime_deps(&venv_py.to_string_lossy()) {
+    if !python_has_runtime_deps(&venv_py) {
         return Err(AppError::msg(format!(
             "AI dependencies incomplete after install. See {}.",
             log_path.display()
         )));
     }
 
-    let _ = std::fs::write(&stamp, req_hash);
-    append_log(
-        &log_path,
-        &format!("[sidecar] venv ready: {}", venv_py.display()),
-    );
+    let _ = std::fs::write(stamp, req_hash);
+    append_log(log_path, &format!("[sidecar] venv ready: {venv_py}"));
     emit_bootstrap(app, "ready", "AI runtime ready");
-    Ok(venv_py.to_string_lossy().into_owned())
+    Ok(venv_py)
 }
 
 pub fn ensure_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
@@ -407,6 +640,18 @@ pub fn restart_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
     let log_err = log_file.try_clone().map_err(AppError::from)?;
 
     let mut cmd = python_command(&python);
+    // Windows private deps live in site-packages (pip --target); Unix uses a venv python.
+    let site = site_packages_dir(&data);
+    if site.is_dir() {
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let existing = std::env::var_os("PYTHONPATH").unwrap_or_default();
+        let mut joined = path_for_command(&site);
+        if !existing.is_empty() {
+            joined.push_str(sep);
+            joined.push_str(&existing.to_string_lossy());
+        }
+        cmd.env("PYTHONPATH", joined);
+    }
     cmd.current_dir(&sidecar_dir)
         .env("TW_AI_TOKEN", &token)
         .env("TW_AI_DATA_DIR", &data)

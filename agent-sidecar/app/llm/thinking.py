@@ -56,9 +56,20 @@ _COT_MARKERS = (
     "wait, i should",
     "let me try to",
     "this is a security policy",
+    "this is sufficient",
+    "i will output the response",
+    "one last check",
+    "one detail:",
+    "i will answer '",
+    "i will answer \"",
 )
 
-# Chinese "thinking out loud" that never calls tools (URL guessing loops, etc.).
+# Model echo of "Response:" + same answer (common with local thinking models).
+_RESPONSE_HEADER_RE = re.compile(r"(?mi)^\s*Response\s*:\s*")
+_OUTPUT_META_LINE_RE = re.compile(
+    r"(?im)^\s*(?:this is sufficient|i will output the response|"
+    r"one last check\b|one detail\b|i will answer\b).*$"
+)
 _ZH_PLAN_MARKERS = (
     "让我尝试",
     "实际上，让我",
@@ -144,6 +155,75 @@ def _looks_like_commandish(window: str) -> bool:
     if _CMD_LINE_RE.search(window):
         return True
     return False
+
+
+def looks_like_response_echo_loop(text: str | None) -> bool:
+    """True when the model reprints ``Response:`` / the same answer multiple times."""
+    raw = text or ""
+    if len(_RESPONSE_HEADER_RE.findall(raw)) >= 2:
+        return True
+    low = raw.lower()
+    if low.count("i will output the response") >= 2:
+        return True
+    if low.count("this is sufficient") >= 2 and _cjk_count(raw) >= 12:
+        return True
+    return False
+
+
+def _cut_at_output_meta(text: str) -> str:
+    """Drop trailing English 'I will output the response' self-talk."""
+    lines = (text or "").splitlines()
+    kept: list[str] = []
+    meta_prefixes = (
+        "this is sufficient",
+        "i will output the response",
+        "one last check",
+        "one detail",
+        "response:",
+    )
+    for line in lines:
+        stripped = line.strip()
+        low = stripped.lower()
+        if _OUTPUT_META_LINE_RE.match(stripped):
+            break
+        if low.startswith("response:"):
+            continue
+        # Incomplete streamed prefixes of meta lines ("Th", "This is suf", …).
+        if len(low) >= 3 and any(p.startswith(low) or low.startswith(p) for p in meta_prefixes):
+            break
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def extract_first_user_answer(text: str | None) -> str:
+    """Best-effort first user-facing answer when the model echo-loops."""
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+
+    def _usable(block: str) -> str | None:
+        cut = _cut_at_output_meta(_RESPONSE_HEADER_RE.sub("", block).strip())
+        if not cut:
+            return None
+        if looks_like_zh_planning_narration(cut) or _looks_like_cot_block(cut):
+            return None
+        if _cjk_count(cut) >= 8:
+            return cut
+        if len(cut) >= 24 and not any(m in cut.lower() for m in _COT_MARKERS):
+            return cut
+        return None
+
+    if _RESPONSE_HEADER_RE.search(raw):
+        for chunk in _RESPONSE_HEADER_RE.split(raw):
+            got = _usable(chunk)
+            if got:
+                return got
+
+    for part in re.split(r"\n{2,}", raw):
+        got = _usable(part)
+        if got:
+            return got
+    return ""
 
 
 def looks_like_truncated_plan(text: str | None) -> bool:
@@ -259,21 +339,31 @@ def sanitize_assistant_content(text: str | None) -> str:
     if not cleaned:
         return ""
 
-    if (
-        is_repetition_loop(cleaned)
-        or looks_like_zh_planning_narration(cleaned)
-        or looks_like_idle_plan_dump(cleaned)
-    ):
+    if looks_like_zh_planning_narration(cleaned) or looks_like_idle_plan_dump(cleaned):
         return ""
+
+    if is_repetition_loop(cleaned) or looks_like_response_echo_loop(cleaned):
+        return extract_first_user_answer(cleaned)
 
     if _is_english_planning_dump(cleaned):
         return ""
 
     parts = [p.strip() for p in re.split(r"\n{2,}", cleaned) if p.strip()]
     if len(parts) < 2:
-        return "" if _looks_like_cot_block(cleaned) else cleaned
+        single = cleaned
+        if _RESPONSE_HEADER_RE.match(single):
+            single = _RESPONSE_HEADER_RE.sub("", single, count=1).strip()
+        single = _cut_at_output_meta(single)
+        return "" if _looks_like_cot_block(single) else single
 
     if not any(_looks_like_cot_block(p) for p in parts):
+        # Strip a lone Response: header / trailing output-meta if present.
+        if looks_like_response_echo_loop(cleaned):
+            return extract_first_user_answer(cleaned)
+        if _RESPONSE_HEADER_RE.match(cleaned) or _OUTPUT_META_LINE_RE.search(cleaned):
+            recovered = extract_first_user_answer(cleaned)
+            if recovered:
+                return recovered
         return cleaned
 
     answer: list[str] = []
@@ -284,7 +374,8 @@ def sanitize_assistant_content(text: str | None) -> str:
             continue
         answer.append(part)
     if answer:
-        return "\n\n".join(reversed(answer)).strip()
+        joined = "\n\n".join(reversed(answer)).strip()
+        return _cut_at_output_meta(_RESPONSE_HEADER_RE.sub("", joined, count=1).strip())
     return ""
 
 
@@ -308,6 +399,11 @@ _COT_OPENERS = (
     "actually, ",
     "wait, i should",
     "let me try",
+    "this is sufficient",
+    "i will output the response",
+    "one last check",
+    "one detail:",
+    "response:",
 )
 
 _ZH_STREAM_OPENERS = (
@@ -351,6 +447,7 @@ class StreamContentFilter:
         self._in_think = False
         self._suppress_cot = False
         self._started = False
+        self._has_user_answer = False
         self.thinking = False
         self.loop_detected = False
 
@@ -362,9 +459,17 @@ class StreamContentFilter:
         self._raw += chunk
         if self.loop_detected:
             return ""
-        if len(self._raw) > 280 and (
+        if len(self._raw) > 200 and (
             looks_like_idle_plan_dump(self._raw)
-            or (is_repetition_loop(self._raw) and not self._visible.strip())
+            or looks_like_response_echo_loop(self._raw)
+            or (
+                is_repetition_loop(self._raw)
+                and (
+                    not self._visible.strip()
+                    or _cjk_count(self._visible) >= 12
+                    or looks_like_response_echo_loop(self._visible)
+                )
+            )
         ):
             self.loop_detected = True
             self.thinking = True
@@ -420,11 +525,19 @@ class StreamContentFilter:
         visible_piece = "".join(x for x in out if x)
         if visible_piece:
             self._visible += visible_piece
-            if looks_like_idle_plan_dump(self._visible) or (
-                len(self._visible) > 400 and is_repetition_loop(self._visible)
+            if (
+                looks_like_idle_plan_dump(self._visible)
+                or looks_like_response_echo_loop(self._visible)
+                or looks_like_response_echo_loop(self._raw)
+                or (len(self._visible) > 280 and is_repetition_loop(self._visible))
             ):
                 self.loop_detected = True
                 self.thinking = True
+                recovered = extract_first_user_answer(
+                    self._raw
+                ) or extract_first_user_answer(self._visible)
+                if recovered:
+                    self._visible = recovered
                 return ""
         return visible_piece
 
@@ -447,9 +560,33 @@ class StreamContentFilter:
                     continue
                 if looks_like_zh_planning_narration(part):
                     continue
-                self._suppress_cot = False
-                self.thinking = False
-                released = "\n\n".join(parts[idx:])
+                released_parts: list[str] = []
+                for block in parts[idx:]:
+                    low = block.strip().lower()
+                    if (
+                        low.startswith("response:")
+                        or _OUTPUT_META_LINE_RE.match(block.strip())
+                        or _looks_like_cot_block(block)
+                    ):
+                        break
+                    if (
+                        "i will output the response" in low
+                        or "this is sufficient" in low
+                        or "one last check" in low
+                        or "one detail:" in low
+                    ):
+                        cut = _cut_at_output_meta(block)
+                        if cut.strip():
+                            released_parts.append(cut)
+                        break
+                    released_parts.append(block)
+                released = "\n\n".join(released_parts).strip()
+                if not released:
+                    continue
+                # Keep suppressing — models often echo Response: after the answer.
+                self._suppress_cot = True
+                self.thinking = True
+                self._has_user_answer = True
                 self._cot_buf = ""
                 return released
         # Single block / incomplete: substantial CJK that isn't planning narration.
@@ -458,6 +595,16 @@ class StreamContentFilter:
             and not looks_like_zh_planning_narration(buf)
             and not _is_english_planning_dump(buf)
         ):
+            low_buf = buf.lower()
+            # Don't lock mid-sentence — wait for paragraph break or output-meta.
+            if not (
+                "\n\n" in buf
+                or "i will output the response" in low_buf
+                or "this is sufficient" in low_buf
+                or "one last check" in low_buf
+                or looks_like_response_echo_loop(buf)
+            ):
+                return ""
             # Strip leading English CoT lines if present.
             lines = buf.splitlines()
             start = 0
@@ -474,10 +621,11 @@ class StreamContentFilter:
                 if _cjk_count(line) > 0:
                     start = i
                     break
-            tail = "\n".join(lines[start:]).strip()
+            tail = _cut_at_output_meta("\n".join(lines[start:]).strip())
             if _cjk_count(tail) >= 12:
-                self._suppress_cot = False
-                self.thinking = False
+                self._suppress_cot = True
+                self.thinking = True
+                self._has_user_answer = True
                 self._cot_buf = ""
                 return tail
         return ""
@@ -492,8 +640,50 @@ class StreamContentFilter:
         if self._suppress_cot:
             self.thinking = True
             self._cot_buf += piece
+            # Already delivered a user answer — swallow echo / second Response:.
+            if self._has_user_answer:
+                if looks_like_response_echo_loop(self._raw) or is_repetition_loop(
+                    self._raw
+                ):
+                    self.loop_detected = True
+                return ""
             released = self._release_answer_from_cot_buf()
             return self._scrub_loops(released) if released else ""
+
+        # After a real answer started, hide "Response:" / "I will output…" echoes.
+        if (
+            self._has_user_answer
+            or _cjk_count(self._visible) >= 8
+            or _cjk_count(self._hold) >= 8
+        ):
+            low = piece.lstrip().lower()
+            if (
+                low.startswith("response:")
+                or "i will output the response" in low
+                or low.startswith("this is sufficient")
+                or low.startswith("one last check")
+                or low.startswith("one detail")
+            ):
+                self._suppress_cot = True
+                self.thinking = True
+                self._cot_buf += piece
+                self.loop_detected = True
+                return ""
+
+        scrubbed = self._scrub_answer_meta(piece)
+        if scrubbed != piece:
+            # Trailing meta stripped; keep answer text only and lock further CoT.
+            if scrubbed.strip():
+                piece = scrubbed
+                self._has_user_answer = True
+                self._suppress_cot = True
+                self.loop_detected = True
+            else:
+                self._suppress_cot = True
+                self.thinking = True
+                self._cot_buf += piece
+                self.loop_detected = True
+                return ""
 
         if not self._started:
             self._hold += piece
@@ -524,9 +714,32 @@ class StreamContentFilter:
             self._hold = ""
             self._started = True
             self.thinking = False
+            if _cjk_count(released) >= 8:
+                self._has_user_answer = True
             return self._scrub_loops(released)
 
+        if _cjk_count(piece) >= 8:
+            self._has_user_answer = True
         return self._scrub_loops(piece)
+
+    @staticmethod
+    def _scrub_answer_meta(piece: str) -> str:
+        """If a chunk mixes a CJK answer with English output-meta, keep the answer."""
+        if not piece:
+            return piece
+        if _cjk_count(piece) < 8:
+            return piece
+        low = piece.lower()
+        if not (
+            "i will output the response" in low
+            or "this is sufficient" in low
+            or "\nresponse:" in low
+            or low.lstrip().startswith("response:")
+            or "one last check" in low
+            or "one detail:" in low
+        ):
+            return piece
+        return _cut_at_output_meta(_RESPONSE_HEADER_RE.sub("", piece, count=1))
 
     @staticmethod
     def _scrub_loops(piece: str) -> str:
@@ -575,6 +788,12 @@ class StreamContentFilter:
         cleaned = sanitize_assistant_content(self._raw)
         if cleaned:
             return cleaned
+        if self.loop_detected:
+            recovered = extract_first_user_answer(self._raw) or extract_first_user_answer(
+                self._visible
+            )
+            if recovered:
+                return recovered
         # Prefer already-streamed visible text over empty (avoids blinking cursor
         # when a false loop flag wiped sanitize but UI already showed an answer).
         if self._visible.strip():
