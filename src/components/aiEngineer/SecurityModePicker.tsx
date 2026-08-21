@@ -110,7 +110,7 @@ export function SecurityModePicker({
       </button>
       {open ? (
         <div
-          className="ai-engineer-security-menu ai-engineer-menu-up"
+          className="ai-engineer-menu ai-engineer-menu-up ai-engineer-security-menu"
           role="menu"
           aria-label={t("aiEngineer.securityMenu.title")}
         >
@@ -151,7 +151,12 @@ export function SecurityModePicker({
                 </span>
                 {selected ? (
                   <span className="ai-engineer-security-option-check" aria-hidden>
-                    ✓
+                    <svg viewBox="0 0 16 16" width="14" height="14">
+                      <path
+                        fill="currentColor"
+                        d="M6.5 11.2 3.3 8l1.1-1.1 2.1 2.1 5-5L12.6 5l-6.1 6.2Z"
+                      />
+                    </svg>
                   </span>
                 ) : null}
               </button>

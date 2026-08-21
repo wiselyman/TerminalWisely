@@ -5805,6 +5805,8 @@ body.cmd-nav-panel-resizing {
   background: #0d1117 !important;
   border-left-color: #30363d;
   right: 0;
+  /* Allow composer popovers (model / security) to escape the panel chrome. */
+  overflow: visible;
 }
 .ai-engineer-head {
   display: flex;
@@ -5983,8 +5985,8 @@ body.cmd-nav-panel-resizing {
   /* Nudge after rotate so the slanted Lucide pin stays visually centered. */
   transform: rotate(-45deg) translate(0.5px, -0.5px);
 }
-.ai-engineer-body { display: flex; flex-direction: column; min-height: 0; flex: 1; background: #0d1117; }
-.ai-engineer-chat { display: flex; flex-direction: column; min-height: 0; flex: 1; gap: 0; }
+.ai-engineer-body { display: flex; flex-direction: column; min-height: 0; flex: 1; background: #0d1117; overflow: visible; }
+.ai-engineer-chat { display: flex; flex-direction: column; min-height: 0; flex: 1; gap: 0; overflow: visible; }
 .ai-engineer-messages {
   overflow: auto;
   flex: 1;
@@ -6223,16 +6225,31 @@ body.cmd-nav-panel-resizing {
   min-width: 0;
   flex: 1;
 }
+.ai-engineer-security-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .ai-engineer-security-wrap .ai-engineer-security-menu {
   left: 0;
   right: auto;
-  min-width: 300px;
-  max-width: min(360px, calc(100vw - 48px));
-  padding: 8px;
+  z-index: 60;
+  width: min(340px, calc(100vw - 48px));
+  min-width: 280px;
+  max-width: min(340px, calc(100vw - 48px));
+  max-height: min(420px, 60vh);
+  padding: 6px;
+  overflow: auto;
+  border-radius: 12px;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(48, 54, 61, 0.9);
 }
+
 .ai-engineer-security-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   max-width: 120px;
   border: 1px solid #30363d;
@@ -6241,73 +6258,95 @@ body.cmd-nav-panel-resizing {
   border-radius: 999px;
   padding: 4px 10px 4px 8px;
   font-size: 0.74rem;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
 }
+
 .ai-engineer-security-btn:hover:not(:disabled),
 .ai-engineer-security-btn.is-open {
   border-color: #8b949e;
   color: #e6edf3;
 }
+
 .ai-engineer-security-btn.is-safe {
   border-color: #388bfd55;
   color: #79c0ff;
 }
+
 .ai-engineer-security-btn.is-bold {
   border-color: #a371f755;
   color: #d2a8ff;
 }
+
 .ai-engineer-security-btn.is-warn {
   border-color: #f0883e66;
   color: #ffa657;
 }
+
 .ai-engineer-security-btn.is-muted {
   color: #8b949e;
 }
+
 .ai-engineer-security-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .ai-engineer-security-btn-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 14px;
   height: 14px;
   flex-shrink: 0;
 }
+
 .ai-engineer-security-btn-icon svg {
+  display: block;
   width: 14px;
   height: 14px;
 }
+
 .ai-engineer-security-btn-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .ai-engineer-security-menu-head {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px 8px 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px 8px;
   border-bottom: 1px solid #21262d;
   margin-bottom: 4px;
 }
+
 .ai-engineer-security-menu-head strong {
-  font-size: 0.82rem;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.84rem;
   font-weight: 600;
   color: #f0f6fc;
-  line-height: 1.3;
+  line-height: 1.35;
 }
+
 .ai-engineer-security-menu-head span {
+  flex-shrink: 0;
   font-size: 0.72rem;
   color: #8b949e;
   line-height: 1.35;
+  white-space: nowrap;
 }
+
 .ai-engineer-security-option {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   width: 100%;
   margin: 0;
-  padding: 8px;
+  padding: 9px 10px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -6315,27 +6354,44 @@ body.cmd-nav-panel-resizing {
   text-align: left;
   cursor: pointer;
 }
+
 .ai-engineer-security-option:hover {
   background: #21262d;
 }
+
 .ai-engineer-security-option.selected {
-  background: #21262d;
+  background: rgba(33, 38, 45, 0.95);
 }
+
 .ai-engineer-security-option-icon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
   margin-top: 1px;
   flex-shrink: 0;
   color: #8b949e;
 }
+
 .ai-engineer-security-option-icon svg {
+  display: block;
   width: 18px;
   height: 18px;
 }
-.ai-engineer-security-option.is-safe .ai-engineer-security-option-icon { color: #79c0ff; }
-.ai-engineer-security-option.is-bold .ai-engineer-security-option-icon { color: #d2a8ff; }
-.ai-engineer-security-option.is-warn .ai-engineer-security-option-icon { color: #ffa657; }
+
+.ai-engineer-security-option.is-safe .ai-engineer-security-option-icon {
+  color: #79c0ff;
+}
+
+.ai-engineer-security-option.is-bold .ai-engineer-security-option-icon {
+  color: #d2a8ff;
+}
+
+.ai-engineer-security-option.is-warn .ai-engineer-security-option-icon {
+  color: #ffa657;
+}
+
 .ai-engineer-security-option-copy {
   display: flex;
   flex-direction: column;
@@ -6343,23 +6399,39 @@ body.cmd-nav-panel-resizing {
   min-width: 0;
   flex: 1;
 }
+
 .ai-engineer-security-option-copy strong {
   font-size: 0.8rem;
   font-weight: 600;
   color: #e6edf3;
   line-height: 1.25;
 }
+
 .ai-engineer-security-option-copy span {
   font-size: 0.72rem;
   color: #8b949e;
-  line-height: 1.35;
+  line-height: 1.4;
 }
+
 .ai-engineer-security-option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 1px;
   color: #3fb950;
-  font-size: 0.82rem;
-  font-weight: 700;
+}
+
+.ai-engineer-security-option.is-safe.selected .ai-engineer-security-option-check {
+  color: #58a6ff;
+}
+
+.ai-engineer-security-option.is-bold.selected .ai-engineer-security-option-check {
+  color: #d2a8ff;
+}
+
+.ai-engineer-security-option.is-warn.selected .ai-engineer-security-option-check {
+  color: #ffa657;
 }
 .ai-engineer-model-btn {
   display: inline-flex;
