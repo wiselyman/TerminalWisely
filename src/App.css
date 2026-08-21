@@ -6079,8 +6079,9 @@ body.cmd-nav-panel-resizing {
   border-radius: 10px;
   background: #010409;
   border: 1px solid #30363d;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
+  font-family: var(--tw-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.8rem;
+  font-weight: 400;
   color: #c9d1d9;
 }
 .ai-engineer-exec-head {
@@ -6098,10 +6099,11 @@ body.cmd-nav-panel-resizing {
 }
 .ai-engineer-exec-title {
   font-family: inherit;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: #e6edf3;
-  line-height: 1.4;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #9da7b3;
+  line-height: 1.45;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 .ai-engineer-exec-status {
@@ -6136,6 +6138,8 @@ body.cmd-nav-panel-resizing {
   border-radius: 6px;
   background: #0d1117;
   border: 1px solid #21262d;
+  font-family: inherit;
+  font-weight: 400;
   color: #8b949e;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
