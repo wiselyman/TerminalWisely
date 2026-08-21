@@ -13,6 +13,7 @@
   "compress": "压缩",
   "extract": "解压",
   "blankMenuAria": "终端操作",
+  "copy": "复制",
   "upload": "上传",
   "paste": "粘贴",
   "uploadDialogTitle": "选择要上传的文件",

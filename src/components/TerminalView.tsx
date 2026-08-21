@@ -142,6 +142,7 @@ export function TerminalView({
   const [blankContextMenu, setBlankContextMenu] = useState<{
     x: number;
     y: number;
+    selection: string;
   } | null>(null);
   const [fsDialog, setFsDialog] = useState<{
     mode: TerminalFsDialogMode;
@@ -313,6 +314,17 @@ export function TerminalView({
     const screenElement =
       host.querySelector<HTMLElement>(".xterm-screen") ?? host;
 
+    const openBlankMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setFsContextMenuRef.current(null);
+      setBlankContextMenuRef.current({
+        x: event.clientX,
+        y: event.clientY,
+        selection: terminal.hasSelection() ? terminal.getSelection() : "",
+      });
+    };
+
     const onHostContextMenu = (event: MouseEvent) => {
       armChromeClickSuppress(800);
 
@@ -320,25 +332,13 @@ export function TerminalView({
 
       const cell = getTerminalMouseCell(terminal, screenElement, event);
       if (!cell) {
-        event.preventDefault();
-        event.stopPropagation();
-        setFsContextMenuRef.current(null);
-        setBlankContextMenuRef.current({
-          x: event.clientX,
-          y: event.clientY,
-        });
+        openBlankMenu(event);
         return;
       }
 
       const hit = findRemotePathAtCell(terminal, cell);
       if (!hit) {
-        event.preventDefault();
-        event.stopPropagation();
-        setFsContextMenuRef.current(null);
-        setBlankContextMenuRef.current({
-          x: event.clientX,
-          y: event.clientY,
-        });
+        openBlankMenu(event);
         return;
       }
 
@@ -1177,7 +1177,13 @@ export function TerminalView({
           x={blankContextMenu.x}
           y={blankContextMenu.y}
           showUpload={kind === "ssh"}
+          canCopy={blankContextMenu.selection.length > 0}
           onClose={() => setBlankContextMenu(null)}
+          onCopy={() => {
+            const text = blankContextMenu.selection;
+            if (!text) return;
+            void copyToClipboard(text);
+          }}
           onUpload={
             kind === "ssh"
               ? () => {

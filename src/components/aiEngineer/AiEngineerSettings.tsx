@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RISK_CODES, riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import { listAiModels } from "../../lib/aiEngineer/api";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
-
-const SECURITY_MODES = ["observe", "safe", "autonomous", "production"] as const;
 
 /** All types speak OpenAI-compatible HTTP via ModelGateway. */
 type ProviderType = "openai" | "anthropic" | "gemini" | "ollama";
@@ -120,7 +117,6 @@ export function AiEngineerSettings() {
   const refreshSettings = useAiEngineerStore((s) => s.refreshSettings);
 
   const [view, setView] = useState<View>({ kind: "list" });
-  const [securityMode, setSecurityMode] = useState("safe");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,18 +128,12 @@ export function AiEngineerSettings() {
     void refreshSettings();
   }, [refreshSettings]);
 
-  useEffect(() => {
-    if (!settings) return;
-    setSecurityMode(settings.security_mode || "safe");
-  }, [settings]);
-
   const profiles = settings?.profiles ?? [];
   const activeId = settings?.active_profile_id ?? "";
 
   const persist = async (next: {
     profiles: AiModelProfile[];
     active_profile_id: string;
-    security_mode?: string;
   }) => {
     setSaving(true);
     setError(null);
@@ -151,7 +141,6 @@ export function AiEngineerSettings() {
       await saveSettings({
         profiles: next.profiles,
         active_profile_id: next.active_profile_id,
-        security_mode: next.security_mode ?? securityMode,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -212,15 +201,6 @@ export function AiEngineerSettings() {
     });
     setApiKey("");
     setView({ kind: "list" });
-  };
-
-  const onSaveSecurity = async () => {
-    if (!settings) return;
-    await persist({
-      profiles: settings.profiles,
-      active_profile_id: settings.active_profile_id,
-      security_mode: securityMode,
-    });
   };
 
   const onRefreshModels = async () => {
@@ -414,58 +394,11 @@ export function AiEngineerSettings() {
               </ul>
             )}
 
-            <section className="ai-engineer-settings-security-block">
-              <label className="ai-engineer-settings-security">
-                {t("aiEngineer.settings.securityMode")}
-                <select
-                  value={securityMode}
-                  onChange={(e) => setSecurityMode(e.target.value)}
-                >
-                  {SECURITY_MODES.map((m) => (
-                    <option key={m} value={m}>
-                      {t(`aiEngineer.settings.securityModeOption.${m}.label`)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="ai-engineer-settings-security-hint">
-                {t(`aiEngineer.settings.securityModeOption.${securityMode}.desc`)}
-              </p>
-            </section>
-
-            <section
-              className="ai-engineer-settings-risk-guide"
-              aria-label={t("aiEngineer.settings.riskGuideTitle")}
-            >
-              <h4 className="ai-engineer-settings-risk-guide-title">
-                {t("aiEngineer.settings.riskGuideTitle")}
-              </h4>
-              <p className="ai-engineer-settings-risk-guide-intro">
-                {t("aiEngineer.settings.riskGuideIntro")}
-              </p>
-              <ul className="ai-engineer-settings-risk-list">
-                {RISK_CODES.map((code) => (
-                  <li key={code} className="ai-engineer-settings-risk-row">
-                    <span className="ai-engineer-settings-risk-badge" title={code}>
-                      {t(riskLabelKey(code))}
-                    </span>
-                    <span className="ai-engineer-settings-risk-text">
-                      {t(riskDescKey(code))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
             <div className="ai-engineer-approval-actions">
               <button
                 type="button"
                 className="find-panel-run"
-                disabled={saving}
-                onClick={() => {
-                  void onSaveSecurity()
-                    .then(() => setSettingsOpen(false))
-                    .catch(() => undefined);
-                }}
+                onClick={() => setSettingsOpen(false)}
               >
                 {t("aiEngineer.settings.done")}
               </button>

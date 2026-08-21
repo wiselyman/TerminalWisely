@@ -23,7 +23,7 @@ const PANEL_ROOT_SELECTOR = [
 /** Pin + Cursor-style panel-right collapse for every right workspace panel. */
 export function WorkspacePanelHeadActions({ panelId }: Props) {
   const { t } = useTranslation("tools");
-  const pinned = useWorkspacePanelPinStore((s) => s.pinnedId === panelId);
+  const pinned = useWorkspacePanelPinStore((s) => s.pinned);
   const togglePinned = useWorkspacePanelPinStore((s) => s.togglePinned);
 
   const collapseToRight = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -64,13 +64,13 @@ export function WorkspacePanelHeadActions({ panelId }: Props) {
     <div className="workspace-panel-head-actions">
       <button
         type="button"
-        className={`workspace-panel-icon-btn${pinned ? " is-active" : ""}`}
+        className={`workspace-panel-icon-btn${pinned ? " is-active is-pinned" : ""}`}
         aria-pressed={pinned}
         aria-label={pinned ? t("panel.unpin") : t("panel.pin")}
         title={pinned ? t("panel.unpin") : t("panel.pin")}
-        onClick={() => togglePinned(panelId)}
+        onClick={() => togglePinned()}
       >
-        <PinPanelIcon />
+        <PinPanelIcon pinned={pinned} />
       </button>
       <button
         type="button"

@@ -7,6 +7,7 @@ import type { ProcessEntry } from "../types";
 import { useTaskManagerStore } from "../stores/taskManagerStore";
 import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
+import { useWorkspacePanelEnter } from "../lib/useWorkspacePanelEnter";
 
 interface TaskManagerPanelProps {
   sessionId: string;
@@ -39,6 +40,7 @@ export function TaskManagerPanel({
   sessionTitle: _sessionTitle,
 }: TaskManagerPanelProps) {
   const { t } = useTranslation("tools");
+  const panelRef = useWorkspacePanelEnter<HTMLElement>();
   const {
     width,
     setWidth,
@@ -97,8 +99,8 @@ export function TaskManagerPanel({
 
   return (
     <>
-      <WorkspacePanelBackdrop />
-      <aside className="task-manager-panel open" style={{ width }} aria-hidden={false}>
+      <WorkspacePanelBackdrop panelId="taskManager" />
+      <aside ref={panelRef} className="task-manager-panel open" style={{ width }} aria-hidden={false}>
         <div
           className="task-manager-resizer"
           role="separator"

@@ -7,6 +7,7 @@ import { usePreviewStore } from "../stores/previewStore";
 import { PathInput } from "./PathInput";
 import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
+import { useWorkspacePanelEnter } from "../lib/useWorkspacePanelEnter";
 
 interface FindPanelProps {
   sessionId: string;
@@ -28,6 +29,7 @@ function entryLabel(entry: FindFileEntry) {
 export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
   const { t } = useTranslation("tools");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useWorkspacePanelEnter<HTMLElement>();
   const openPreview = usePreviewStore((s) => s.openPreview);
   const {
     width,
@@ -100,8 +102,9 @@ export function FindPanel({ sessionId, sessionTitle }: FindPanelProps) {
 
   return (
     <>
-      <WorkspacePanelBackdrop />
+      <WorkspacePanelBackdrop panelId="find" />
       <aside
+        ref={panelRef}
         className="find-panel open"
         style={{ width }}
         aria-hidden={false}

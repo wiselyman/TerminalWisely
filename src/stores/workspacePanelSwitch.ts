@@ -11,6 +11,8 @@ export type WorkspacePanelId =
   | "find"
   | "commandNav";
 
+let animateNextWorkspacePanelEnter = true;
+
 function closeOtherWorkspacePanels(except?: WorkspacePanelId) {
   if (except !== "aiEngineer")
     useAiEngineerStore.getState().close({ force: true });
@@ -34,6 +36,15 @@ function isPanelOpen(id: WorkspacePanelId): boolean {
     case "commandNav":
       return useCommandNavigatorStore.getState().open;
   }
+}
+
+function hasAnyWorkspacePanelOpen() {
+  return (
+    isPanelOpen("aiEngineer") ||
+    isPanelOpen("taskManager") ||
+    isPanelOpen("find") ||
+    isPanelOpen("commandNav")
+  );
 }
 
 function closePanel(id: WorkspacePanelId) {
@@ -75,24 +86,37 @@ function openWorkspacePanel(
 }
 
 export function closeWorkspacePanels() {
-  const pinned = useWorkspacePanelPinStore.getState().pinnedId;
-  if (pinned && isPanelOpen(pinned as WorkspacePanelId)) return;
+  if (useWorkspacePanelPinStore.getState().pinned) return;
   closeAllWorkspacePanels();
+}
+
+/** Close the open panel unless the right dock is pinned. */
+export function dismissWorkspacePanelIfUnpinned(id: WorkspacePanelId) {
+  if (!isPanelOpen(id)) return;
+  if (useWorkspacePanelPinStore.getState().pinned) return;
+  closePanel(id);
 }
 
 /** Explicit panel-right collapse (always wins over pin). */
 export function collapseWorkspacePanel(id: WorkspacePanelId) {
-  useWorkspacePanelPinStore.getState().setPinned(id, false);
+  useWorkspacePanelPinStore.getState().setPinned(false);
   if (!isPanelOpen(id)) return;
   closePanel(id);
 }
 
 /** Bring AI panel to front without aborting a run (e.g. approval / ask-user). */
 export function revealAiEngineerPanel() {
+  animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();
   unstable_batchedUpdates(() => {
     closeOtherWorkspacePanels("aiEngineer");
     useAiEngineerStore.setState({ open: true });
   });
+}
+
+export function shouldAnimateWorkspacePanelEnter() {
+  const shouldAnimate = animateNextWorkspacePanelEnter;
+  animateNextWorkspacePanelEnter = true;
+  return shouldAnimate;
 }
 
 export function switchWorkspacePanel(
@@ -101,11 +125,12 @@ export function switchWorkspacePanel(
   serverId?: string,
 ) {
   if (isPanelOpen(id)) {
-    if (useWorkspacePanelPinStore.getState().pinnedId === id) return;
+    if (useWorkspacePanelPinStore.getState().pinned) return;
     closePanel(id);
     return;
   }
 
+  animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();
   unstable_batchedUpdates(() => {
     closeOtherWorkspacePanels(id);
     openWorkspacePanel(id, sessionId, serverId);

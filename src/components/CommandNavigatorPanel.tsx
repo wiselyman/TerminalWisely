@@ -16,6 +16,7 @@ import { CommandEditorDialog } from "./CommandEditorDialog";
 import { CommandRunDialog } from "./CommandRunDialog";
 import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
+import { useWorkspacePanelEnter } from "../lib/useWorkspacePanelEnter";
 
 interface CommandNavigatorPanelProps {
   sessionId: string;
@@ -48,6 +49,7 @@ export function CommandNavigatorPanel({
   serverId,
 }: CommandNavigatorPanelProps) {
   const { t, i18n } = useTranslation("tools");
+  const panelRef = useWorkspacePanelEnter<HTMLElement>();
   const {
     width,
     setWidth,
@@ -143,8 +145,8 @@ export function CommandNavigatorPanel({
 
   return (
     <>
-      <WorkspacePanelBackdrop />
-      <aside className="cmd-nav-panel open" style={{ width }}>
+      <WorkspacePanelBackdrop panelId="commandNav" />
+      <aside ref={panelRef} className="cmd-nav-panel open" style={{ width }}>
         <div
           className="cmd-nav-panel-resizer"
           role="separator"

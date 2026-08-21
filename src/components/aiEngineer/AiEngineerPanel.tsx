@@ -1,10 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
-import { useAiEngineerStore } from "../../stores/aiEngineerStore";
+import {
+  normalizeSecurityMode,
+  useAiEngineerStore,
+} from "../../stores/aiEngineerStore";
 import { AiEngineerSettings } from "./AiEngineerSettings";
+import { SecurityModePicker } from "./SecurityModePicker";
 import { AiMarkdown } from "./AiMarkdown";
 import { WorkspacePanelBackdrop } from "../WorkspacePanelBackdrop";
+import { useWorkspacePanelEnter } from "../../lib/useWorkspacePanelEnter";
 import {
   ChatHistoryIcon,
   NewChatIcon,
@@ -180,6 +185,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const createThread = useAiEngineerStore((s) => s.createThread);
   const switchThread = useAiEngineerStore((s) => s.switchThread);
   const deleteThread = useAiEngineerStore((s) => s.deleteThread);
+  const setThreadSecurityMode = useAiEngineerStore((s) => s.setThreadSecurityMode);
   const pendingAsk = useAiEngineerStore((s) => s.pendingAsk);
   const resolveAsk = useAiEngineerStore((s) => s.resolveAsk);
   const pendingApproval = useAiEngineerStore((s) => s.pendingApproval);
@@ -190,6 +196,8 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const [rememberRead, setRememberRead] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const panelRef = useWorkspacePanelEnter<HTMLElement>();
 
   const threads = useMemo(() => {
     const list = chatScope ? threadsByScope[chatScope]?.threads ?? [] : [];
@@ -199,6 +207,9 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const threadTitle =
     threads.find((th) => th.id === activeThreadId)?.title ||
     t("aiEngineer.newChat");
+  const threadSecurityMode = normalizeSecurityMode(
+    threads.find((th) => th.id === activeThreadId)?.securityMode,
+  );
 
   const profiles = settings?.profiles ?? [];
   const activeProfile =
@@ -284,8 +295,16 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
 
   return (
     <>
-      <WorkspacePanelBackdrop dismissible={!busy && !settingsOpen} />
-      <aside className="ai-engineer-panel find-panel" style={{ width }} aria-label="AI Linux Engineer">
+      <WorkspacePanelBackdrop
+        panelId="aiEngineer"
+        dismissible={!busy && !settingsOpen}
+      />
+      <aside
+        ref={panelRef}
+        className="ai-engineer-panel find-panel"
+        style={{ width }}
+        aria-label="AI Linux Engineer"
+      >
         <div
           className="find-panel-resizer"
           role="separator"
@@ -661,18 +680,20 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   }}
                 />
                 <div className="ai-engineer-composer-foot">
-                  <div className="ai-engineer-menu-wrap ai-engineer-model-wrap">
-                    <button
-                      type="button"
-                      className="ai-engineer-model-btn"
-                      aria-label={t("aiEngineer.modelPicker")}
-                      aria-expanded={modelOpen}
-                      disabled={!ready}
-                      onClick={() => {
-                        setModelOpen((v) => !v);
-                        setHistoryOpen(false);
-                      }}
-                    >
+                  <div className="ai-engineer-composer-tools">
+                    <div className="ai-engineer-menu-wrap ai-engineer-model-wrap">
+                      <button
+                        type="button"
+                        className="ai-engineer-model-btn"
+                        aria-label={t("aiEngineer.modelPicker")}
+                        aria-expanded={modelOpen}
+                        disabled={!ready}
+                        onClick={() => {
+                          setModelOpen((v) => !v);
+                          setHistoryOpen(false);
+                          setSecurityOpen(false);
+                        }}
+                      >
                       {activeProfile
                         ? activeProfile.name.trim() === activeProfile.model.trim()
                           ? activeProfile.model
@@ -716,6 +737,24 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                         </button>
                       </div>
                     ) : null}
+                    </div>
+                    <SecurityModePicker
+                      mode={threadSecurityMode}
+                      disabled={!ready}
+                      open={securityOpen}
+                      onOpenChange={(open) => {
+                        setSecurityOpen(open);
+                        if (open) {
+                          setModelOpen(false);
+                          setHistoryOpen(false);
+                        }
+                      }}
+                      onChange={(m) => {
+                        setThreadSecurityMode(m);
+                        setModelOpen(false);
+                        setHistoryOpen(false);
+                      }}
+                    />
                   </div>
                   <div className="ai-engineer-composer-actions">
                     {busy ? (

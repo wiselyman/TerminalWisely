@@ -271,7 +271,9 @@ interface TerminalBlankContextMenuProps {
   x: number;
   y: number;
   showUpload: boolean;
+  canCopy: boolean;
   onClose: () => void;
+  onCopy?: () => void;
   onUpload?: () => void;
   onPaste: () => void;
 }
@@ -280,7 +282,9 @@ export function TerminalBlankContextMenu({
   x,
   y,
   showUpload,
+  canCopy,
   onClose,
+  onCopy,
   onUpload,
   onPaste,
 }: TerminalBlankContextMenuProps) {
@@ -351,6 +355,18 @@ export function TerminalBlankContextMenu({
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
+      <button
+        type="button"
+        className="tab-context-menu-item"
+        role="menuitem"
+        disabled={!canCopy}
+        onClick={() => {
+          onCopy?.();
+          onClose();
+        }}
+      >
+        {t("copy")}
+      </button>
       {showUpload && onUpload ? (
         <button
           type="button"

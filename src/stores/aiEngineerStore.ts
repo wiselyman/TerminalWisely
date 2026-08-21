@@ -65,11 +65,22 @@ export type ChatLine =
       decision?: "approved" | "rejected";
     };
 
+export const SECURITY_MODES = ["observe", "safe", "autonomous", "production"] as const;
+export type SecurityMode = (typeof SECURITY_MODES)[number];
+
+export function normalizeSecurityMode(raw: unknown): SecurityMode {
+  const value = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return (SECURITY_MODES as readonly string[]).includes(value)
+    ? (value as SecurityMode)
+    : "safe";
+}
+
 export type ChatThread = {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+  securityMode: SecurityMode;
   messages: ChatLine[];
 };
 
@@ -148,6 +159,7 @@ function makeEmptyThread(title = DEFAULT_THREAD_TITLE): ChatThread {
     title,
     createdAt: now,
     updatedAt: now,
+    securityMode: "safe",
     messages: [],
   };
 }
@@ -187,6 +199,7 @@ function parseV2Bundle(raw: unknown): ScopeThreadBundle | null {
           : titleFromMessages(messages),
       createdAt: typeof t.createdAt === "number" ? t.createdAt : Date.now(),
       updatedAt: typeof t.updatedAt === "number" ? t.updatedAt : Date.now(),
+      securityMode: normalizeSecurityMode(t.securityMode),
       messages,
     });
   }
@@ -316,6 +329,7 @@ type AiEngineerState = {
   setWidth: (w: number) => void;
   setInput: (v: string) => void;
   setSettingsOpen: (v: boolean) => void;
+  setThreadSecurityMode: (mode: string) => void;
   createThread: () => string;
   switchThread: (threadId: string) => void;
   deleteThread: (threadId: string) => void;
@@ -531,6 +545,25 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   },
 
   setSettingsOpen: (v) => set({ settingsOpen: v }),
+
+  setThreadSecurityMode: (mode) => {
+    const { chatScope, activeThreadId, threadsByScope } = get();
+    if (!chatScope || !activeThreadId) return;
+    const nextMode = normalizeSecurityMode(mode);
+    const bundle = threadsByScope[chatScope];
+    if (!bundle) return;
+    const threads = bundle.threads.map((t) =>
+      t.id === activeThreadId
+        ? { ...t, securityMode: nextMode, updatedAt: Date.now() }
+        : t,
+    );
+    const nextByScope = {
+      ...threadsByScope,
+      [chatScope]: { ...bundle, threads },
+    };
+    savePersistedThreads(nextByScope);
+    set({ threadsByScope: nextByScope });
+  },
 
   createThread: () => {
     const { chatScope, busy, pendingAsk, pendingApproval, sidecar, sessionId } =
@@ -938,7 +971,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         sidecar,
         sessionId,
         message: text,
-        securityMode: get().settings?.security_mode || "safe",
+        securityMode: normalizeSecurityMode(
+          get()
+            .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId)
+            ?.securityMode,
+        ),
         serverId: serverId ?? get().serverId ?? undefined,
         history: priorHistory,
         signal: abort.signal,

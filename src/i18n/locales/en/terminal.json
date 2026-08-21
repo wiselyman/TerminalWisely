@@ -13,6 +13,7 @@
   "compress": "Compress",
   "extract": "Extract",
   "blankMenuAria": "Terminal actions",
+  "copy": "Copy",
   "upload": "Upload",
   "paste": "Paste",
   "uploadDialogTitle": "Choose files to upload",

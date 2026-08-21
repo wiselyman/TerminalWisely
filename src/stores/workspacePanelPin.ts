@@ -1,64 +1,59 @@
 import { create } from "zustand";
 
-const PINNED_KEY = "tw.workspacePanel.pinnedId";
+const PINNED_KEY = "tw.workspacePanel.pinned";
+const LEGACY_PINNED_ID_KEY = "tw.workspacePanel.pinnedId";
 
-export type PinnablePanelId =
-  | "aiEngineer"
-  | "taskManager"
-  | "find"
-  | "commandNav";
-
-function writePinnedId(id: PinnablePanelId | null) {
+function writePinned(pinned: boolean) {
   try {
-    if (id) localStorage.setItem(PINNED_KEY, id);
+    if (pinned) localStorage.setItem(PINNED_KEY, "1");
     else localStorage.removeItem(PINNED_KEY);
   } catch {
     /* ignore */
   }
 }
 
-function readPinnedId(): PinnablePanelId | null {
+function readPinned(): boolean {
   try {
-    const raw = localStorage.getItem(PINNED_KEY);
+    if (localStorage.getItem(PINNED_KEY) === "1") return true;
+
+    const legacyId = localStorage.getItem(LEGACY_PINNED_ID_KEY);
     if (
-      raw === "aiEngineer" ||
-      raw === "taskManager" ||
-      raw === "find" ||
-      raw === "commandNav"
+      legacyId === "aiEngineer" ||
+      legacyId === "taskManager" ||
+      legacyId === "find" ||
+      legacyId === "commandNav"
     ) {
-      return raw;
+      writePinned(true);
+      localStorage.removeItem(LEGACY_PINNED_ID_KEY);
+      return true;
     }
-    if (raw === "hostStats") {
-      localStorage.removeItem(PINNED_KEY);
-      return null;
+    if (legacyId === "hostStats") {
+      localStorage.removeItem(LEGACY_PINNED_ID_KEY);
     }
     if (localStorage.getItem("tw.aiEngineer.panelPinned") === "1") {
-      writePinnedId("aiEngineer");
+      writePinned(true);
       localStorage.removeItem("tw.aiEngineer.panelPinned");
-      return "aiEngineer";
+      return true;
     }
   } catch {
     /* ignore */
   }
-  return null;
+  return false;
 }
 
 type State = {
-  pinnedId: PinnablePanelId | null;
-  isPinned: (id: PinnablePanelId) => boolean;
-  setPinned: (id: PinnablePanelId, pinned: boolean) => void;
-  togglePinned: (id: PinnablePanelId) => void;
+  pinned: boolean;
+  setPinned: (pinned: boolean) => void;
+  togglePinned: () => void;
 };
 
 export const useWorkspacePanelPinStore = create<State>((set, get) => ({
-  pinnedId: readPinnedId(),
-  isPinned: (id) => get().pinnedId === id,
-  setPinned: (id, pinned) => {
-    const next = pinned ? id : get().pinnedId === id ? null : get().pinnedId;
-    writePinnedId(next);
-    set({ pinnedId: next });
+  pinned: readPinned(),
+  setPinned: (pinned) => {
+    writePinned(pinned);
+    set({ pinned });
   },
-  togglePinned: (id) => {
-    get().setPinned(id, get().pinnedId !== id);
+  togglePinned: () => {
+    get().setPinned(!get().pinned);
   },
 }));

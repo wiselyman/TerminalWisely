@@ -1,7 +1,9 @@
 import { closeWorkspacePanels } from "../stores/workspacePanelSwitch";
+import type { WorkspacePanelId } from "../stores/workspacePanelSwitch";
 import { useWorkspacePanelPinStore } from "../stores/workspacePanelPin";
 
 type WorkspacePanelBackdropProps = {
+  panelId: WorkspacePanelId;
   /** When false, overlay is non-interactive (does not dismiss panels). Default true. */
   dismissible?: boolean;
 };
@@ -9,9 +11,8 @@ type WorkspacePanelBackdropProps = {
 export function WorkspacePanelBackdrop({
   dismissible = true,
 }: WorkspacePanelBackdropProps) {
-  const pinnedId = useWorkspacePanelPinStore((s) => s.pinnedId);
-  // Pinned panel: clicking the dimmed area must not collapse it.
-  const canDismiss = dismissible && !pinnedId;
+  const pinned = useWorkspacePanelPinStore((s) => s.pinned);
+  const canDismiss = dismissible && !pinned;
 
   return (
     <div

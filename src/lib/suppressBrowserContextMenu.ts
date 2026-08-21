@@ -23,11 +23,19 @@ function isFormField(target: EventTarget | null): boolean {
   );
 }
 
+function isNativeContextMenuTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    !!target.closest(".ai-engineer-panel")
+  );
+}
+
 /** Block the WebView browser menu without interfering with app context menus. */
 export function suppressBrowserContextMenu(event: MouseEvent): void {
   if (event.defaultPrevented) return;
   if (hasAppContextMenu(event.target)) return;
   if (isTerminalCopyTarget(event.target)) return;
   if (isFormField(event.target)) return;
+  if (isNativeContextMenuTarget(event.target)) return;
   event.preventDefault();
 }
