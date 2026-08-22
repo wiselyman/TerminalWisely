@@ -1,5 +1,9 @@
 # TerminalWisely
 
+<p align="center">
+  <img src="./docs/images/app-icon.svg" alt="TerminalWisely" width="200" height="200" />
+</p>
+
 **English** | [中文](./README.zh-CN.md)
 
 **Fix Linux with natural language.** A cross-platform desktop terminal with SSH/SFTP and a built-in **AI Linux Engineer** — describe problems in English or Chinese on a connected host; the AI proposes commands, then executes and verifies them under a security policy.

@@ -1,5 +1,9 @@
 # TerminalWisely
 
+<p align="center">
+  <img src="./docs/images/app-icon.svg" alt="TerminalWisely" width="200" height="200" />
+</p>
+
 [English](./README.md) | **中文**
 
 **用自然语言修 Linux。** 跨平台桌面终端：SSH/SFTP，以及内置的 **AI Linux Engineer**——在已连接的主机上用中文/英文描述问题，由 AI 提出命令、在安全策略下执行与验证。
