@@ -6,6 +6,14 @@
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md) · [变更日志](./CHANGELOG.md)
 
+<p align="center">
+  <img src="./docs/images/promo-ai-engineer.jpg" alt="TerminalWisely — SSH 终端与 AI Linux Engineer 并排：自然语言查显存与进程" width="920" />
+</p>
+
+<p align="center">
+  <img src="./docs/images/promo-model-settings.jpg" alt="TerminalWisely — AI 模型配置：多 profile，一键切换 Active" width="920" />
+</p>
+
 ---
 
 ## 为什么是 1.0.0

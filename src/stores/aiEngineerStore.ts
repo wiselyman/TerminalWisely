@@ -189,7 +189,9 @@ function parseV2Bundle(raw: unknown): ScopeThreadBundle | null {
     const t = item as Record<string, unknown>;
     if (typeof t.id !== "string") continue;
     const messages = Array.isArray(t.messages)
-      ? t.messages.filter(isPersistableChatLine).slice(-MAX_LINES_PER_THREAD)
+      ? ensureUniqueMessageIds(
+          t.messages.filter(isPersistableChatLine).slice(-MAX_LINES_PER_THREAD),
+        )
       : [];
     threads.push({
       id: t.id,
@@ -230,7 +232,9 @@ function loadPersistedThreads(): Record<string, ScopeThreadBundle> {
     const out: Record<string, ScopeThreadBundle> = {};
     for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
       if (!Array.isArray(v)) continue;
-      const messages = v.filter(isPersistableChatLine).slice(-MAX_LINES_PER_THREAD);
+      const messages = ensureUniqueMessageIds(
+        v.filter(isPersistableChatLine).slice(-MAX_LINES_PER_THREAD),
+      );
       const thread = makeEmptyThread(titleFromMessages(messages, "Chat 1"));
       thread.messages = messages;
       out[k] = makeBundle(thread);
@@ -252,7 +256,7 @@ function savePersistedThreads(byScope: Record<string, ScopeThreadBundle>) {
         activeThreadId: bundle.activeThreadId,
         threads: bundle.threads.map((t) => ({
           ...t,
-          messages: slimMessagesForPersist(t.messages),
+          messages: ensureUniqueMessageIds(slimMessagesForPersist(t.messages)),
         })),
       };
     }
@@ -294,7 +298,35 @@ let activeRunId: string | null = null;
 let activeRunScope: string | null = null;
 let activeRunThreadId: string | null = null;
 let lineSeq = 0;
-const nextId = () => `m${++lineSeq}`;
+const nextId = () => {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return `m_${crypto.randomUUID()}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  lineSeq += 1;
+  return `m_${Date.now().toString(36)}_${lineSeq}`;
+};
+
+/** React keys must be unique — old `m1`/`m2` seq reset on reload and collided. */
+function ensureUniqueMessageIds(messages: ChatLine[]): ChatLine[] {
+  const seen = new Set<string>();
+  let changed = false;
+  const out = messages.map((line) => {
+    const id = typeof line.id === "string" ? line.id : "";
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      return line;
+    }
+    changed = true;
+    const fresh = nextId();
+    seen.add(fresh);
+    return { ...line, id: fresh } as ChatLine;
+  });
+  return changed ? out : messages;
+}
 
 type AiEngineerState = {
   open: boolean;
@@ -440,10 +472,23 @@ function loadScopeIntoState(
   }
   const active =
     bundle.threads.find((t) => t.id === bundle!.activeThreadId) ?? bundle.threads[0];
+  const uniqueMessages = ensureUniqueMessageIds(active.messages);
+  if (uniqueMessages !== active.messages) {
+    nextMap = {
+      ...nextMap,
+      [scope]: {
+        ...bundle,
+        threads: bundle.threads.map((t) =>
+          t.id === active.id ? { ...t, messages: uniqueMessages } : t,
+        ),
+      },
+    };
+    savePersistedThreads(nextMap);
+  }
   return {
     threadsByScope: nextMap,
     activeThreadId: active.id,
-    messages: active.messages,
+    messages: uniqueMessages,
     input: inputsByThread[active.id] ?? "",
   };
 }
@@ -623,11 +668,18 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const target = bundle?.threads.find((t) => t.id === threadId);
     if (!target || !bundle) return;
 
+    const uniqueMessages = ensureUniqueMessageIds(target.messages);
     const threadsByScope = {
       ...persisted.threadsByScope,
       [chatScope]: {
         ...bundle,
         activeThreadId: threadId,
+        threads:
+          uniqueMessages === target.messages
+            ? bundle.threads
+            : bundle.threads.map((t) =>
+                t.id === threadId ? { ...t, messages: uniqueMessages } : t,
+              ),
       },
     };
     savePersistedThreads(threadsByScope);
@@ -635,7 +687,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       ...persisted,
       threadsByScope,
       activeThreadId: threadId,
-      messages: target.messages,
+      messages: uniqueMessages,
       input: persisted.inputsByThread[threadId] ?? "",
       busy: false,
       modelPhase: "idle",

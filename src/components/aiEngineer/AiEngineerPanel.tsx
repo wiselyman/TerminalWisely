@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import {
@@ -15,6 +15,14 @@ import {
   NewChatIcon,
 } from "../WorkspaceToolIcons";
 import { WorkspacePanelHeadActions } from "../WorkspacePanelHeadActions";
+import {
+  extractCommandTitle,
+  sanitizeDisplayCommand,
+} from "../../lib/aiEngineer/commandDisplay";
+import {
+  highlightShell,
+  summarizeShellTools,
+} from "../../lib/aiEngineer/shellHighlight";
 
 type Props = {
   sessionId: string;
@@ -43,6 +51,78 @@ type ToolLine = Extract<
   { kind: "tool" }
 >;
 
+function TerminalGlyph({
+  mode,
+}: {
+  mode: "prompt" | "expand" | "collapse";
+}) {
+  if (mode === "collapse") {
+    return (
+      <svg
+        className="ai-engineer-exec-glyph-svg"
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        fill="none"
+        aria-hidden
+      >
+        <path
+          d="M2.5 4L6 7.5L9.5 4"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (mode === "expand") {
+    return (
+      <svg
+        className="ai-engineer-exec-glyph-svg"
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        fill="none"
+        aria-hidden
+      >
+        <path
+          d="M4 2.5L7.5 6L4 9.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  // Terminal prompt >_  (图1)
+  return (
+    <svg
+      className="ai-engineer-exec-glyph-svg"
+      width="14"
+      height="12"
+      viewBox="0 0 14 12"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M1.5 2L5.2 6L1.5 10"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7 10H12.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function ToolExecCard({
   line,
   t,
@@ -52,14 +132,15 @@ function ToolExecCard({
 }) {
   const outputRef = useRef<HTMLPreElement>(null);
   const [, tick] = useState(0);
+  const [hovered, setHovered] = useState(false);
   const running = line.status === "running";
   const isExec = line.name === "terminal_exec" || line.name === "ai_exec";
-  const [expanded, setExpanded] = useState(running || line.status === undefined);
+  // Cursor: collapsed = header only; body only after click (open while running).
+  const [expanded, setExpanded] = useState(() => running);
 
   useEffect(() => {
     if (running) setExpanded(true);
-    else if (line.status === "done" || line.status === "failed") setExpanded(false);
-  }, [running, line.status]);
+  }, [running]);
 
   useEffect(() => {
     if (!running) return;
@@ -74,7 +155,7 @@ function ToolExecCard({
 
   if (!isExec) {
     return (
-      <details className="ai-engineer-tool-row">
+      <details className="ai-engineer-tool-row" open>
         <summary>
           <span className="ai-engineer-tool-name">{line.name}</span>
           {line.ok === false ? (
@@ -92,67 +173,118 @@ function ToolExecCard({
     (running ? Date.now() : (line.finishedAt ?? Date.now())) -
     (line.startedAt ?? Date.now());
 
-  const statusLabel =
-    line.status === "running"
-      ? t("aiEngineer.toolRunning")
-      : line.status === "done"
-        ? t("aiEngineer.toolDone")
-        : line.status === "failed"
-          ? t("aiEngineer.toolFailed")
-          : line.status === "denied"
-            ? t("aiEngineer.rejected")
-            : null;
+  const displayCommand = sanitizeDisplayCommand(line.detail || "");
+  const title = (
+    line.intent ||
+    extractCommandTitle(line.detail || "") ||
+    displayCommand.split("\n")[0] ||
+    line.name
+  ).trim();
+  const toolChips = summarizeShellTools(displayCommand);
+  const toolsLabel =
+    toolChips.length > 0
+      ? `${toolChips.slice(0, 5).join(", ")}${toolChips.length > 5 ? " …" : ""}`
+      : "";
+  const hasOutput = Boolean(line.output) || running;
+
+  const copyCommand = (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    const text = displayCommand || line.detail || "";
+    if (!text) return;
+    void navigator.clipboard?.writeText(text).catch(() => undefined);
+  };
+
+  // 图1 >_ · 图3 hover > · 图2 expanded ∨
+  const glyphMode = expanded ? "collapse" : hovered ? "expand" : "prompt";
 
   return (
-    <div className={`ai-engineer-exec-card${expanded ? "" : " is-collapsed"}`}>
-      <button
-        type="button"
+    <div
+      className={`ai-engineer-exec-card${expanded ? " is-expanded" : " is-collapsed"}${hovered ? " is-hovered" : ""}`}
+      data-ai-exec="1"
+      data-ai-exec-status={line.status ?? "idle"}
+      style={{ flexShrink: 0, minHeight: 28, overflow: "visible" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
         className="ai-engineer-exec-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={
+          expanded
+            ? t("aiEngineer.toolCollapse", { title })
+            : t("aiEngineer.toolExpand", { title })
+        }
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
         onClick={() => setExpanded((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        }}
       >
-        <div className="ai-engineer-exec-title">
-          {line.intent || line.detail || line.name}
-        </div>
-        {statusLabel ? (
-          <span className={`ai-engineer-exec-status is-${line.status ?? "idle"}`}>
-            {statusLabel}
+        <span className="ai-engineer-exec-glyph" aria-hidden>
+          <TerminalGlyph mode={glyphMode} />
+        </span>
+        <span className="ai-engineer-exec-title" title={title}>
+          {title}
+        </span>
+        {toolsLabel ? (
+          <span className="ai-engineer-exec-tools" aria-hidden>
+            {toolsLabel}
           </span>
         ) : null}
-      </button>
+        {expanded ? (
+          <button
+            type="button"
+            className="ai-engineer-exec-more"
+            aria-label={t("aiEngineer.toolCopyCommand")}
+            title={t("aiEngineer.toolCopyCommand")}
+            onClick={copyCommand}
+          >
+            ···
+          </button>
+        ) : null}
+      </div>
       {expanded ? (
-        <>
-          {line.detail && line.intent ? (
-            <code className="ai-engineer-exec-command">{line.detail}</code>
+        <div className="ai-engineer-exec-body">
+          {displayCommand ? (
+            <div className="ai-engineer-exec-command">
+              <span className="ai-engineer-exec-prompt" aria-hidden>
+                $
+              </span>
+              <code className="ai-engineer-exec-command-code">
+                {highlightShell(displayCommand)}
+              </code>
+            </div>
           ) : null}
-          {line.output || running ? (
+          {hasOutput ? (
             <pre ref={outputRef} className="ai-engineer-exec-output">
               {line.output ||
                 (running ? t("aiEngineer.toolWaitingOutput") : "")}
             </pre>
           ) : null}
-          <div className="ai-engineer-exec-foot">
-            {line.status === "done" || line.status === "failed" ? (
-              <>
-                {line.exitCode != null ? (
-                  <span>
-                    {t("aiEngineer.toolExitCode", { code: line.exitCode })}
-                  </span>
-                ) : null}
-                <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
-              </>
-            ) : running ? (
-              <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
-            ) : null}
-          </div>
-        </>
-      ) : (
-        <div className="ai-engineer-exec-foot">
-          {line.exitCode != null ? (
-            <span>{t("aiEngineer.toolExitCode", { code: line.exitCode })}</span>
-          ) : null}
-          <span>{t("aiEngineer.toolElapsed", { time: formatElapsed(elapsedMs) })}</span>
+          {(line.status === "done" ||
+            line.status === "failed" ||
+            running) && (
+            <div className="ai-engineer-exec-foot">
+              {line.exitCode != null ? (
+                <span>
+                  {t("aiEngineer.toolExitCode", { code: line.exitCode })}
+                </span>
+              ) : null}
+              <span>
+                {t("aiEngineer.toolElapsed", {
+                  time: formatElapsed(elapsedMs),
+                })}
+              </span>
+            </div>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -422,9 +554,10 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                 {messages.length === 0 ? (
                   <p className="find-panel-empty">{t("aiEngineer.hint")}</p>
                 ) : null}
-                {messages.map((line) => {
+                {messages.map((line, index) => {
+                  const rowKey = `${line.id}__${index}`;
                   if (line.kind === "tool") {
-                    return <ToolExecCard key={line.id} line={line} t={t} />;
+                    return <ToolExecCard key={rowKey} line={line} t={t} />;
                   }
                   if (line.kind === "ask") {
                     const askActive =
@@ -432,7 +565,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                       pendingAsk!.requestId === line.requestId &&
                       !line.answered;
                     return (
-                      <div key={line.id} className="ai-engineer-ask">
+                      <div key={rowKey} className="ai-engineer-ask">
                         <div className="ai-engineer-ask-title">{line.question}</div>
                         <div className="ai-engineer-approval-actions">
                           {(line.options ?? []).map((opt) => (
@@ -499,7 +632,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                       isActive && (!dual || confirmDraft.trim() === phrase);
                     return (
                       <div
-                        key={line.id}
+                        key={rowKey}
                         className={`ai-engineer-approval${line.decision ? " is-resolved" : ""}`}
                       >
                         <div className="ai-engineer-approval-head">
@@ -626,7 +759,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   }
                   return (
                     <div
-                      key={line.id}
+                      key={rowKey}
                       className={`ai-engineer-line ${line.kind}`}
                       data-ai-assistant={line.kind === "assistant" ? "1" : undefined}
                     >

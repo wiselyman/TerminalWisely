@@ -27,15 +27,19 @@ def openai_tools() -> list[dict[str, Any]]:
                     "properties": {
                         "command": {
                             "type": "string",
-                            "description": "Shell command to execute (prefer read-only).",
+                            "description": (
+                                "Clean shell to execute. No # title comments and no "
+                                "decorative echo '====…====' banners — put that text in "
+                                "intent instead."
+                            ),
                         },
                         "intent": {
                             "type": "string",
                             "description": (
-                                "One short sentence for the approval UI: what this command "
-                                "does and whether it changes the system. REQUIRED for R1+ "
-                                "commands. Use the SAME language as the user's messages "
-                                "(Chinese question → Chinese intent; English → English)."
+                                "Short UI title (one sentence): what this command does. "
+                                "Shown as the card header. Same language as the user "
+                                "(Chinese question → Chinese intent; English → English). "
+                                "Required for every call."
                             ),
                         },
                         "timeout_seconds": {
@@ -44,7 +48,7 @@ def openai_tools() -> list[dict[str, Any]]:
                             "default": 30,
                         },
                     },
-                    "required": ["command"],
+                    "required": ["command", "intent"],
                 },
             },
         },

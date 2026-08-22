@@ -5805,8 +5805,7 @@ body.cmd-nav-panel-resizing {
   background: #0d1117 !important;
   border-left-color: #30363d;
   right: 0;
-  /* Allow composer popovers (model / security) to escape the panel chrome. */
-  overflow: visible;
+  overflow: hidden;
 }
 .ai-engineer-head {
   display: flex;
@@ -5985,20 +5984,33 @@ body.cmd-nav-panel-resizing {
   /* Nudge after rotate so the slanted Lucide pin stays visually centered. */
   transform: rotate(-45deg) translate(0.5px, -0.5px);
 }
-.ai-engineer-body { display: flex; flex-direction: column; min-height: 0; flex: 1; background: #0d1117; overflow: visible; }
-.ai-engineer-chat { display: flex; flex-direction: column; min-height: 0; flex: 1; gap: 0; overflow: visible; }
+.ai-engineer-body { display: flex; flex-direction: column; min-height: 0; flex: 1; background: #0d1117; overflow: hidden; }
+.ai-engineer-chat { display: flex; flex-direction: column; min-height: 0; flex: 1; gap: 0; overflow: hidden; }
 .ai-engineer-messages {
   overflow: auto;
   flex: 1;
   min-height: 0;
   padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  /* Block layout: flex column + overflow:hidden children was collapsing
+     tool cards to 0 height in WKWebView (commands "vanished"). */
+  display: block;
   background: #0d1117;
   scroll-padding-top: 12px;
   user-select: text;
   -webkit-user-select: text;
+}
+
+.ai-engineer-messages > * {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  flex: none;
+  min-height: auto;
+}
+
+.ai-engineer-messages > *:last-child {
+  margin-bottom: 0;
 }
 .ai-engineer-line {
   padding: 8px 10px;
@@ -6008,7 +6020,7 @@ body.cmd-nav-panel-resizing {
   color: #e6edf3;
 }
 .ai-engineer-line.user {
-  align-self: flex-end;
+  margin-left: auto;
   background: #1f6feb33;
   border: 1px solid #388bfd55;
   white-space: pre-wrap;
@@ -6072,96 +6084,197 @@ body.cmd-nav-panel-resizing {
   margin-top: 8px;
 }
 .ai-engineer-exec-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #010409;
-  border: 1px solid #30363d;
-  font-family: var(--tw-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.8rem;
-  font-weight: 400;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 8px;
   color: #c9d1d9;
+  overflow: visible;
+  flex: none;
+  flex-shrink: 0;
+  min-height: 28px;
 }
+
+/* Collapsed: quiet header row — icon >_ + title + cmds, no body */
+.ai-engineer-exec-card.is-collapsed {
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.ai-engineer-exec-card.is-collapsed.is-hovered,
+.ai-engineer-exec-card.is-collapsed:focus-within {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ai-engineer-exec-card.is-expanded {
+  background: #1c2128;
+  border: 1px solid #30363d;
+}
+
 .ai-engineer-exec-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 5px 8px;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
-  padding: 0;
   cursor: pointer;
+  font-family: inherit;
+  border-radius: 8px;
 }
+
+.ai-engineer-exec-card.is-expanded .ai-engineer-exec-head {
+  border-radius: 8px 8px 0 0;
+  background: #21262d;
+  padding: 7px 10px;
+  min-height: 32px;
+}
+
+.ai-engineer-exec-card.is-expanded .ai-engineer-exec-head:hover {
+  background: #292e36;
+}
+
+.ai-engineer-exec-glyph {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #8b949e;
+}
+
+.ai-engineer-exec-card.is-collapsed.is-hovered .ai-engineer-exec-glyph,
+.ai-engineer-exec-card.is-collapsed:focus-within .ai-engineer-exec-glyph {
+  color: #c9d1d9;
+}
+
+.ai-engineer-exec-glyph-svg {
+  display: block;
+}
+
 .ai-engineer-exec-title {
+  min-width: 0;
+  flex: 1 1 auto;
   font-family: inherit;
   font-size: 0.8rem;
   font-weight: 400;
-  color: #9da7b3;
-  line-height: 1.45;
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
+  color: #e6edf3;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.ai-engineer-exec-status {
-  flex-shrink: 0;
+
+.ai-engineer-exec-tools {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 40%;
   font-size: 0.72rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid #30363d;
-  color: #8b949e;
-  background: #161b22;
-}
-.ai-engineer-exec-status.is-running {
-  color: #58a6ff;
-  border-color: #388bfd55;
-  background: #1f6feb22;
-}
-.ai-engineer-exec-status.is-done {
-  color: #3fb950;
-  border-color: #23863655;
-  background: #23863622;
-}
-.ai-engineer-exec-status.is-failed,
-.ai-engineer-exec-status.is-denied {
-  color: #ffa198;
-  border-color: #da363366;
-  background: #3d1214;
-}
-.ai-engineer-exec-command {
-  display: block;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #0d1117;
-  border: 1px solid #21262d;
-  font-family: inherit;
   font-weight: 400;
   color: #8b949e;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-engineer-exec-more {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 0.85rem;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+
+.ai-engineer-exec-more:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6edf3;
+}
+
+.ai-engineer-exec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  background: #0d1117;
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid #30363d;
+}
+
+.ai-engineer-exec-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px 6px;
+  border: none;
+  background: transparent;
+  font-family: var(--tw-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.ai-engineer-exec-output {
-  margin: 0;
-  max-height: 220px;
-  overflow: auto;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #0d1117;
-  border: 1px solid #21262d;
+
+.ai-engineer-exec-prompt {
+  flex-shrink: 0;
+  color: #6e7681;
+  user-select: none;
+}
+
+.ai-engineer-exec-command-code {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  font: inherit;
+  color: #e6edf3;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #c9d1d9;
+}
+
+.ai-shell-tok.is-kw { color: #ffa657; }
+.ai-shell-tok.is-flag { color: #79c0ff; }
+.ai-shell-tok.is-str { color: #ff7b72; }
+.ai-shell-tok.is-op { color: #ffa657; }
+.ai-shell-tok.is-text { color: #e6edf3; }
+
+.ai-engineer-exec-output {
+  display: block;
+  margin: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 0 12px 10px 28px;
+  border: none;
+  background: transparent;
+  font-family: var(--tw-mono-font, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.74rem;
+  font-weight: 400;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #8b949e;
   line-height: 1.45;
 }
+
 .ai-engineer-exec-foot {
   display: flex;
   gap: 12px;
-  font-size: 0.72rem;
-  color: #8b949e;
+  padding: 0 12px 8px 28px;
+  font-size: 0.68rem;
+  color: #6e7681;
 }
 .ai-engineer-typing {
   opacity: 1;

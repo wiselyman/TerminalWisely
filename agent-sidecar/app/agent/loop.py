@@ -24,6 +24,10 @@ from app.harness.verify import (
     should_nudge_verify,
 )
 from app.harness.approval_intent import sanitize_approval_intent
+from app.harness.command_display import (
+    extract_command_title,
+    sanitize_terminal_command,
+)
 from app.harness.apt_impact import (
     build_apt_simulate_command,
     needs_package_impact_preview,
@@ -453,10 +457,12 @@ class AgentLoop:
             )
 
     async def _terminal_exec(self, call_id: str, args: dict[str, Any]) -> None:
-        command = str(args.get("command") or "").strip()
-        intent = sanitize_approval_intent(
-            str(args.get("intent") or "").strip(), self.run.messages
-        )
+        raw_command = str(args.get("command") or "").strip()
+        command = sanitize_terminal_command(raw_command) or raw_command
+        intent_raw = str(args.get("intent") or "").strip()
+        if not intent_raw:
+            intent_raw = extract_command_title(raw_command)
+        intent = sanitize_approval_intent(intent_raw, self.run.messages)
         decision = self.broker.authorize(command, security_mode=self.run.security_mode)
         lease: PrivilegeLease | None = None
         exec_command = command
@@ -571,6 +577,7 @@ class AgentLoop:
             approved=decision.action == PolicyAction.REQUIRE_APPROVAL,
             rollback_plan=rollback_plan,
             apply_command=command if rollback_plan else None,
+            intent=intent,
         )
         if result is None:
             # Cancelled — still record a tool result so history stays valid.
@@ -606,6 +613,7 @@ class AgentLoop:
         rollback_plan: dict[str, Any] | None = None,
         apply_command: str | None = None,
         record_tool_message: bool = True,
+        intent: str = "",
     ) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -617,13 +625,16 @@ class AgentLoop:
             command=command,
         )
         self.run.status = RunStatus.WAITING_TOOL
+        args_payload: dict[str, Any] = {
+            "command": command,
+            "timeout_seconds": timeout_seconds,
+        }
+        if intent:
+            args_payload["intent"] = intent
         payload: dict[str, Any] = {
             "call_id": call_id,
             "name": TOOL_TERMINAL_EXEC,
-            "arguments": {
-                "command": command,
-                "timeout_seconds": timeout_seconds,
-            },
+            "arguments": args_payload,
             "awaiting_host": True,
             "requires_lease": requires_lease,
             "policy": {
