@@ -13,11 +13,11 @@ Current version: **v1.0.0**
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build](./BUILD.md) · [Changelog](./CHANGELOG.md)
 
 <p align="center">
-  <img src="./docs/images/promo-ai-engineer.jpg" alt="TerminalWisely — SSH terminal beside AI Linux Engineer inspecting GPU memory and processes" width="920" />
+  <img src="./docs/images/promo-ai-engineer-en.jpg" alt="TerminalWisely — SSH terminal beside AI Linux Engineer checking free GPU memory in English" width="920" />
 </p>
 
 <p align="center">
-  <img src="./docs/images/promo-model-settings.jpg" alt="TerminalWisely — AI model profiles with one-click Active switch" width="920" />
+  <img src="./docs/images/promo-model-settings-en.jpg" alt="TerminalWisely — AI Model Settings with multiple profiles and Active model" width="920" />
 </p>
 
 ---
