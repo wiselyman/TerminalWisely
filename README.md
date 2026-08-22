@@ -1,116 +1,144 @@
 # TerminalWisely
 
-**用自然语言修 Linux。** 跨平台桌面终端：SSH/SFTP，以及内置的 **AI Linux Engineer**——在已连接的主机上用中文/英文描述问题，由 AI 提出命令、在安全策略下执行与验证。
+**English** | [中文](./README.zh-CN.md)
 
-当前版本：**v1.0.0**
+**Fix Linux with natural language.** A cross-platform desktop terminal with SSH/SFTP and a built-in **AI Linux Engineer** — describe problems in English or Chinese on a connected host; the AI proposes commands, then executes and verifies them under a security policy.
 
-[下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md) · [变更日志](./CHANGELOG.md)
+Current version: **v1.0.0**
+
+[Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build](./BUILD.md) · [Changelog](./CHANGELOG.md)
 
 <p align="center">
-  <img src="./docs/images/promo-ai-engineer.jpg" alt="TerminalWisely — SSH 终端与 AI Linux Engineer 并排：自然语言查显存与进程" width="920" />
+  <img src="./docs/images/promo-ai-engineer.jpg" alt="TerminalWisely — SSH terminal beside AI Linux Engineer inspecting GPU memory and processes" width="920" />
 </p>
 
 <p align="center">
-  <img src="./docs/images/promo-model-settings.jpg" alt="TerminalWisely — AI 模型配置：多 profile，一键切换 Active" width="920" />
+  <img src="./docs/images/promo-model-settings.jpg" alt="TerminalWisely — AI model profiles with one-click Active switch" width="920" />
 </p>
 
 ---
 
-## 为什么是 1.0.0
+## AI Linux Engineer: solve Linux problems in natural language
 
-运维日常大量时间花在「想起该敲哪条命令、会不会敲错、会不会把自己锁在机房外」。TerminalWisely 1.0 把终端、文件操作和 **带审批的 AI 排障** 放在同一窗口：你说目标，AI 在真实 SSH 会话里查、改、验；危险操作必须你点批准。
+Open **AI Engineer** in the title bar, select a connected host, and describe what you see. The sidecar runs and verifies on the **current SSH session** — real machine evidence, not guesswork.
+
+### Which models can you connect?
+
+Manage **model profiles** in Settings: save several and switch the Active one in one click. Four connection types cover most online APIs and local/offline stacks:
+
+| Type | Best for | Notes |
+|------|----------|--------|
+| **OpenAI-compatible** | Most cloud and self-hosted APIs | Base URL (`/v1`) + API key + model id. Works with OpenAI, DeepSeek, Tongyi/Zhipu-style gateways, and self-hosted **vLLM, LM Studio, LocalAI**, etc. |
+| **Ollama** | Local / intranet offline models | Talks to local Ollama; usually **no API key**. Good for air-gapped or on-device runs. |
+| **Anthropic-compatible** | Claude via a compatible gateway | OpenAI-compatible gateway that serves Anthropic models. |
+| **Gemini** | Google Gemini | Gemini’s OpenAI-compatible endpoint. |
+
+If a model exposes **OpenAI-style Chat Completions** (or one of the types above), you can usually plug it into AI Linux Engineer without changing the client.
+
+### Agent capabilities
+
+AI Linux Engineer is not a chat box that pastes “suggested commands.” It is an in-app **ops agent** closed-looped on the connected host:
+
+1. **Real session execution**  
+   Commands go through the app’s existing SSH/terminal capture path (`terminal_exec`) — no second silent login. The terminal you see and the host the AI uses are the same machine.
+
+2. **Multi-tool loop**  
+   - Run commands and read output on the host  
+   - **Ask you questions** (`ask_user`) to clarify goals — asking is not approval  
+   - **Web search / fetch docs** (`web_search` / `web_fetch`) as reference only; external content is data, never authority  
+   - Optionally structure an ops plan (`submit_ops_plan`)
+
+3. **Dynamic investigation, not a hard-coded playbook**  
+   Unknown issues move via observe → hypothesize → act again. Read-only steps can run automatically; writes/deletes/network changes need **exact UI approval** (approval invalidates if the target changes).
+
+4. **Security decided by the Harness, not model obedience**  
+   A capability policy engine grades commands (read / mutate / catastrophic). Unknown binaries are biased strict; risky firewall/SSH changes can include a **timed rollback**. You can always **stop the AI**.
+
+5. **Per-host chats and controllable runs**  
+   Conversations are bucketed by server; history, stop, and mid-run corrections are supported; security modes include stricter production double-confirm.
+
+### Example prompts
+
+| You say | The agent roughly does |
+|---------|------------------------|
+| “Disk is full — find the largest directories” | `df` / `du` drill-down; reads auto-run; mutate steps wait for approval |
+| “What’s on port 8080 — can we free it?” | `ss`/`lsof` to find the process; kill needs confirm |
+| “nginx is 502” | Status, error logs, upstream/ports → conclusion and next steps |
+| “Docker ate tens of GB — images or overlay?” | `docker system df`, image/container inventory (read-only) |
+| “Is the firewall enabled on this box?” | `which` / `systemctl is-active` style probes — **won’t** rewrite iptables just to check |
+| “Show current GPU memory usage” | Runs `nvidia-smi` (and related) on GPU hosts; summarizes usage and processes |
+
+### How security works (important)
+
+**The model only proposes. The Harness decides what may run.**
+
+1. **Capability policy engine (not keyword panic)**  
+   Commands are split into leaf commands, `sudo`/`xargs` peeled off, then labeled by argv (`read` / `write` / `delete` / `net_mutate` / …) and mapped to R0–R4.  
+   Defaults live in [`agent-sidecar/policy/`](./agent-sidecar/policy/); you can drop `overrides.yaml` in the data directory.
+
+2. **Graded handling**  
+   - **R0 read-only**: auto-run (e.g. `du`, `systemctl status`, “is firewall installed?” probes)  
+   - **R2/R3 mutate**: exact UI approval of that command  
+   - **R4 catastrophic**: hard deny (e.g. `rm -rf /`)
+
+3. **Unknown binaries are strict**  
+   Binaries missing from the policy (unless pure flag probes) default to approval — so `./install.sh /opt/...` does not run silently.
+
+4. **Anti lock-out for network changes**  
+   Real firewall / SSH / routing mutations can get a **timed rollback** (config backup; restore after about a minute unless cancelled on success).
+
+5. **Sudo and secrets**  
+   Privilege escalation uses the in-app password flow; API keys stay in local secure storage, not the repo.
+
+6. **Execution boundary**  
+   AI only acts through an established terminal/SSH session — no silent root backchannel.
 
 ---
 
-## AI Linux Engineer：自然语言解决 Linux 问题
+## Other highlights
 
-打开标题栏的 **AI 工程师**，选中某台已连接主机，直接描述现象即可。模型通过侧车（Python sidecar）调用本机终端捕获通道在**那台机器**上执行，而不是空想答案。
+### Files and directories
 
-### 你可以这样说
+- **Drag-and-drop upload**: drop onto an SSH terminal or tab → SFTP to the current remote directory  
+- **Click to enter / preview**: click directories or files in `ls`; edit and search text  
+- **Quick download**: Ctrl/Cmd + click a path, or right-click download  
+- **SSH context menu**: download, send across servers, edit/preview, size, compress/decompress  
+- **Cross-server send**: right-click, or Ctrl/Cmd + drag to a target SSH tab  
 
-| 你说 | AI 大致会做 |
-|------|-------------|
-| 「磁盘又满了，帮我找出最大的目录」 | `df` / `du` 分层排查，只读命令自动跑；要动数据时再请你批准 |
-| 「8080 被谁占了，能不能腾出来」 | `ss`/`lsof` 定位进程，结束进程前弹出确认 |
-| 「nginx 502 了」 | 查状态、错误日志、上游与端口，给出结论与下一步 |
-| 「Docker 占了几十 G，看看是镜像还是 overlay」 | `docker system df`、镜像/容器列表等只读探查 |
-| 「这台机防火墙开了没有」 | `which`/`systemctl is-active` 等探测，**不会**为了查状态去改 iptables |
+### Sessions and workspace
 
-对话按主机隔离；可配置 OpenAI 兼容接口（含本地 vLLM / Ollama）。运行中可停止或插话纠正。
+- Local / SSH multi-tabs, bookmarks, English and Chinese UI  
+- Find, Task Manager, Command Nav (90+ ops commands — insert into the terminal, do not auto-run)  
+- Host resources: CPU / memory / disk / network  
 
-### 安全如何保证（重点）
+On first launch with no tabs, a feature intro is shown; opening a terminal enters the workspace.
 
-**模型只负责提议；能不能执行由 Harness 说了算。**
+## Common actions
 
-1. **能力策略引擎（非「提到某个词就报警」）**  
-   命令先拆成叶命令、剥掉 `sudo`/`xargs`，再按 argv 查表打上能力标签（`read` / `write` / `delete` / `net_mutate` / …），映射到 R0–R4。  
-   产品默认表在 [`agent-sidecar/policy/`](./agent-sidecar/policy/)；你可在数据目录放 `overrides.yaml` 覆盖。
+| Action | How |
+|--------|-----|
+| AI troubleshooting | Title-bar **AI Engineer**; ask in natural language for the current host |
+| Approve risky commands | Review command + risk on the approval card → Approve / Reject |
+| Enter a directory | Click a directory name in `ls` |
+| Preview a file | Click a file path in `ls` |
+| Download / upload | Ctrl/Cmd+click; drag-and-drop; right-click |
+| Command Nav | Edge toolbar command icon |
 
-2. **分级处置**  
-   - **R0 只读**：自动执行（如 `du`、`systemctl status`、防火墙**是否安装**的探测）  
-   - **R2/R3 变更**：必须在 UI 上**精确批准**这条命令  
-   - **R4 灾难级**：直接拒绝（如 `rm -rf /`）
+## Quick start
 
-3. **未知命令偏严**  
-   策略里没有的二进制，只要不是「纯 flag 探测」，默认要批准（避免 `./install.sh /opt/...` 静默跑掉）。
+1. Connect **remote SSH** from the sidebar.  
+2. Open **AI Engineer**, configure an OpenAI-compatible Base URL / model (local models may need no key).  
+3. Describe the problem; read-only steps auto-run; mutations wait for approval.  
+4. Keep using drag-drop, click, and context menus for files (drop local files onto the SSH window to upload).  
 
-4. **网络防锁死**  
-   真正可能改防火墙 / SSH / 路由的变更，批准后会套 **定时回滚**（先备份相关配置，约一分钟后自动恢复；成功则取消回滚），降低把自己踢下线的风险。
+## Download and build
 
-5. **Sudo 与密钥**  
-   需要提权时走应用内密码流程；API Key 等存在本机安全存储，不进仓库。
+Prebuilt installers are produced by GitHub Actions on tag push — see [Releases](https://github.com/wiselyman/TerminalWisely/releases) (Windows / macOS / Linux, x86_64 and ARM64).
 
-6. **执行边界**  
-   AI 只能通过已建立的终端/SSH 会话操作；没有单独的「静默 root 通道」。
+The AI sidecar ships with the app and embeds a standalone Python runtime. The first time you open **AI Engineer**, a private env is created and dependencies are installed automatically (progress in the UI — no manual `pip`).
 
-设计说明见 [`docs/superpowers/specs/2026-08-09-capability-policy-engine-design.md`](./docs/superpowers/specs/2026-08-09-capability-policy-engine-design.md)。
+To build yourself, see [BUILD.md](./BUILD.md). Version history: [CHANGELOG.md](./CHANGELOG.md).
 
----
+## License
 
-## 终端与文件（原有能力）
-
-### 文件与目录
-
-- **拖拽上传**：拖入 SSH 终端或标签，SFTP 到当前远程目录  
-- **点击进目录 / 预览**：`ls` 里点目录或文件；文本可编辑与搜索  
-- **快捷下载**：Ctrl/Cmd + 点击路径；或右键下载  
-- **右键菜单（SSH）**：下载、跨服发送、编辑预览、查看大小、压缩/解压  
-- **跨服发送**：右键或 Ctrl/Cmd + 拖到目标 SSH 标签  
-
-### 会话与工作区
-
-- 本地 / SSH 多标签、书签、中英文界面  
-- Find、任务管理器、命令导航（90+ 运维命令，插入终端不自动执行）  
-- 服务器资源：CPU / 内存 / 磁盘 / 网络  
-
-首次启动无页签时显示功能介绍；打开终端后进入工作区。
-
-## 常用操作
-
-| 操作 | 方式 |
-|------|------|
-| AI 排障 | 标题栏「AI 工程师」；对当前主机用自然语言提问 |
-| 批准危险命令 | 批准卡片中查看命令与风险等级后点「批准」/「拒绝」 |
-| 进入目录 | 单击 `ls` 中的目录名 |
-| 预览文件 | 单击 `ls` 中的文件路径 |
-| 下载 / 上传 | Ctrl/Cmd+点击；拖拽；右键 |
-| 命令导航 | 贴边工具栏命令图标 |
-
-## 快速开始
-
-1. 侧栏连接 **远程 SSH**。  
-2. 打开右侧 **AI 工程师**，在设置里填入 OpenAI 兼容的 Base URL / 模型（本地模型可免 Key）。  
-3. 用自然语言描述问题；只读步骤会自动跑，变更步骤按提示批准。  
-4. 需要文件操作时继续用拖拽、点击与右键菜单（本机文件可拖到 SSH 窗口上传）。  
-
-## 下载与自行构建
-
-预编译安装包由 GitHub Actions 在打 tag 后自动构建，见 [Releases](https://github.com/wiselyman/TerminalWisely/releases)（Windows / macOS / Linux，含 x86_64 与 ARM64）。
-
-AI 侧车随应用分发，并内嵌独立 Python 运行时。首次打开「AI 工程师」时，应用会在本机数据目录**自动**创建私有环境并安装依赖（界面提示进度，无需用户执行 pip）。
-
-自行编译请参考 [BUILD.md](./BUILD.md)。版本变更见 [CHANGELOG.md](./CHANGELOG.md)。
-
-## 许可证
-
-本项目采用 [MIT License](./LICENSE) 开源。
+[MIT License](./LICENSE).

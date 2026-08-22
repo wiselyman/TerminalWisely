@@ -1,6 +1,6 @@
 # TerminalWisely — 构建与开发
 
-本文档面向贡献者与自行编译安装的用户。产品功能说明见 [README.md](./README.md)。
+本文档面向贡献者与自行编译安装的用户。产品功能说明见 [README.md](./README.md)（English）/ [README.zh-CN.md](./README.zh-CN.md)（中文）。
 
 ## 技术栈
 
