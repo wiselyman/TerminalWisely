@@ -1,4 +1,4 @@
-"""Approval intent language must match the user's conversation language."""
+"""Tool/approval intent language must match the latest user message."""
 
 from __future__ import annotations
 
@@ -13,25 +13,37 @@ def _cjk_count(text: str) -> int:
     return len(_CJK_RE.findall(text or ""))
 
 
-def conversation_locale(messages: list[dict[str, Any]]) -> str:
-    """Infer zh vs en from recent user turns."""
-    chunks: list[str] = []
+def _latin_count(text: str) -> int:
+    return len(_LATIN_RE.findall(text or ""))
+
+
+def latest_user_text(messages: list[dict[str, Any]]) -> str:
     for msg in reversed(messages):
         if msg.get("role") != "user":
             continue
         content = msg.get("content")
         if isinstance(content, str) and content.strip():
-            chunks.append(content.strip())
-        if len(chunks) >= 4:
-            break
-    if not chunks:
+            return content.strip()
+    return ""
+
+
+def conversation_locale(messages: list[dict[str, Any]]) -> str:
+    """Infer zh vs en from the *latest* user turn only.
+
+    Earlier turns must not pin the language — mixed chats (Chinese history +
+    an English follow-up) must switch to English for that turn.
+    """
+    text = latest_user_text(messages)
+    if not text:
         return "en"
-    combined = "\n".join(chunks)
-    cjk = _cjk_count(combined)
-    if cjk >= 2:
+    cjk = _cjk_count(text)
+    latin = _latin_count(text)
+    if cjk >= 2 and cjk >= latin // 4:
         return "zh"
-    if cjk == 0 and _LATIN_RE.search(combined):
+    if latin >= 2:
         return "en"
+    if cjk >= 1:
+        return "zh"
     return "en"
 
 
@@ -40,12 +52,21 @@ def _looks_english_prose(text: str) -> bool:
     if not raw:
         return False
     cjk = _cjk_count(raw)
-    latin = len(_LATIN_RE.findall(raw))
+    latin = _latin_count(raw)
     return cjk == 0 and latin >= 8
 
 
+def _looks_chinese_prose(text: str) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    cjk = _cjk_count(raw)
+    latin = _latin_count(raw)
+    return cjk >= 2 and cjk >= max(1, latin // 3)
+
+
 def sanitize_approval_intent(intent: str | None, messages: list[dict[str, Any]]) -> str:
-    """Drop or replace intent text that ignores the user's language."""
+    """Drop or replace intent text that ignores the latest user language."""
     text = (intent or "").strip()
     locale = conversation_locale(messages)
     if locale == "zh":
@@ -57,7 +78,7 @@ def sanitize_approval_intent(intent: str | None, messages: list[dict[str, Any]])
     if locale == "en":
         if not text:
             return "Will run the command below; please confirm to proceed."
-        if _cjk_count(text) >= 4 and _cjk_count(text) > len(_LATIN_RE.findall(text)):
+        if _looks_chinese_prose(text):
             return "Will run the command below; please confirm to proceed."
         return text
     return text or "Will run the command below; please confirm to proceed."

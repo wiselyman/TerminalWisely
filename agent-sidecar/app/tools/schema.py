@@ -37,8 +37,9 @@ def openai_tools() -> list[dict[str, Any]]:
                             "type": "string",
                             "description": (
                                 "Short UI title (one sentence): what this command does. "
-                                "Shown as the card header. Same language as the user "
-                                "(Chinese question → Chinese intent; English → English). "
+                                "Shown as the card header. Match the *latest* user "
+                                "message language only (English ask → English intent; "
+                                "Chinese → Chinese). Ignore earlier turns' language. "
                                 "Required for every call."
                             ),
                         },
