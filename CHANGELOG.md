@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.3] - 2026-08-26
+
+Kubernetes workbench + AI K8S Engineer.
+
+- Sidebar Hosts ↔ K8s; local kubeconfig + SSH kubectl bindings
+- Resource browse, YAML apply/delete/scale (confirm), Pod logs/shell
+- AI mode switches with sidebar; `k8s_*` tools + PolicyEngine; chat scoped by cluster
+
+Kubernetes 工作台 + AI K8S Engineer。
+
+- 侧栏主机 ↔ K8s；本机 kubeconfig + SSH kubectl
+- 资源浏览、YAML 变更确认、Pod 日志/Shell
+- AI 模式跟随侧栏；`k8s_*` + 策略审批；聊天按集群隔离
+
 ## [0.0.2] - 2026-08-26
 
 In-app auto-update via GitHub Releases (confirm before install).

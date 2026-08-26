@@ -1,5 +1,6 @@
 {
-  "newSsh": "新建 SSH 连接",
+  "newSsh": "添加服务器",
+  "importKubeconfig": "导入 kubeconfig",
   "remoteSshTitle": "Remote 远程 SSH",
   "homeTabTitle": "Home",
   "closeTabAria": "关闭 {{title}}",
@@ -16,6 +17,7 @@
   "emptyBookmarks": "暂无 SSH 书签",
   "sidebarViewsAria": "侧栏视图",
   "sidebarViewHosts": "主机",
+  "sidebarViewK8s": "Kubernetes",
   "toolRailAria": "工作区工具",
   "toolNeedTab": "请先打开一个终端页签",
   "shortcutPathLabel": "目录",

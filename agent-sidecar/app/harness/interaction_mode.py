@@ -8,6 +8,14 @@ from app.harness.pipeline import PreToolDecision, ToolExec
 from app.tools.schema import (
     TOOL_ASK_USER,
     TOOL_GREP_REMOTE_LOGS,
+    TOOL_K8S_APPLY,
+    TOOL_K8S_DELETE,
+    TOOL_K8S_DESCRIBE,
+    TOOL_K8S_EXEC,
+    TOOL_K8S_GET,
+    TOOL_K8S_LIST,
+    TOOL_K8S_LOGS,
+    TOOL_K8S_SCALE,
     TOOL_LIST_LISTENERS,
     TOOL_READ_REMOTE_FILE,
     TOOL_SERVICE_STATUS,
@@ -27,6 +35,11 @@ INTERACTION_MODES: tuple[str, ...] = ("ask", "plan", "agent")
 _ASK_ALLOWED = frozenset(
     {
         TOOL_TERMINAL_EXEC,
+        TOOL_K8S_LIST,
+        TOOL_K8S_GET,
+        TOOL_K8S_DESCRIBE,
+        TOOL_K8S_LOGS,
+        TOOL_K8S_EXEC,
         TOOL_WEB_SEARCH,
         TOOL_WEB_FETCH,
         TOOL_SERVICE_STATUS,
@@ -48,6 +61,10 @@ _PLAN_ALLOWED = frozenset(
         TOOL_LIST_LISTENERS,
         TOOL_GREP_REMOTE_LOGS,
         TOOL_READ_REMOTE_FILE,
+        TOOL_K8S_LIST,
+        TOOL_K8S_GET,
+        TOOL_K8S_DESCRIBE,
+        TOOL_K8S_LOGS,
         TOOL_ASK_USER,
         TOOL_SPAWN_INVESTIGATOR,
     }
@@ -70,14 +87,19 @@ def allowed_tool_names(mode: InteractionMode) -> frozenset[str] | None:
     return None
 
 
-def tools_for_interaction_mode(mode: InteractionMode | str | None) -> list[dict[str, Any]]:
+def tools_for_interaction_mode(
+    mode: InteractionMode | str | None,
+    *,
+    engineer_mode: str | None = None,
+) -> list[dict[str, Any]]:
     m = normalize_interaction_mode(mode if isinstance(mode, str) else None)
     allowed = allowed_tool_names(m)
+    tools = openai_tools(engineer_mode=engineer_mode)
     if allowed is None:
-        return openai_tools()
+        return tools
     return [
         t
-        for t in openai_tools()
+        for t in tools
         if (t.get("function") or {}).get("name") in allowed
     ]
 
@@ -108,6 +130,13 @@ def tool_allowed_in_mode(name: str, mode: InteractionMode | str | None) -> bool:
     if name == TOOL_SUBMIT_OPS_PLAN and m != "agent":
         return False
     if m == "plan" and name == TOOL_TERMINAL_EXEC:
+        return False
+    if m == "plan" and name in {
+        TOOL_K8S_APPLY,
+        TOOL_K8S_DELETE,
+        TOOL_K8S_SCALE,
+        TOOL_K8S_EXEC,
+    }:
         return False
     return name in allowed
 

@@ -68,7 +68,16 @@ function openWorkspacePanel(
 ) {
   switch (id) {
     case "aiEngineer":
-      useAiEngineerStore.getState().openPanel(sessionId, serverId);
+      useAiEngineerStore.getState().bindManagedEntity(
+        {
+          kind: "server",
+          id: serverId || sessionId,
+          label: sessionId,
+          sessionId,
+          serverId: serverId ?? null,
+        },
+        { open: true },
+      );
       break;
     case "localFs":
       useLocalFsStore.getState().openPanel(sessionId, localFsTab);

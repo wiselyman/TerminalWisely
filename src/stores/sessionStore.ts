@@ -6,6 +6,7 @@ import { formatConnectError } from "../lib/connectError";
 import { uniqueTabTitle } from "../lib/tabTitle";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
+import { focusManagedEntity, openManagedHome } from "./managedEntityStore";
 import type {
   DeviceRecord,
   SavedConnection,
@@ -330,9 +331,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeTabId: id,
       tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
     }));
+    const tab = get().tabs.find((t) => t.id === id);
+    if (tab) {
+      focusManagedEntity({
+        kind: "server",
+        id: tab.server_id || tab.id,
+        label: tab.title,
+        sessionId: tab.id,
+        serverId: tab.server_id,
+      });
+    }
   },
 
   activateHome: () => {
+    openManagedHome();
     set((state) => ({
       activeTabId: null,
       tabs: state.tabs.map((tab) => ({ ...tab, active: false })),

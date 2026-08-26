@@ -1,12 +1,14 @@
 {
   "sectionAria": "产品介绍",
-  "eyebrow": "v1.0 · 开源桌面终端",
+  "eyebrow": "v0.0.3 · 开源桌面终端",
   "productName": "TerminalWisely",
-  "tagline": "用自然语言修 Linux",
-  "summary": "同一窗口管理 SSH 会话，并用 AI Linux Engineer 在真实主机上排查与修复：你描述问题，AI 提议命令；只读自动执行，变更必须你批准。拖拽上传、点击预览、跨服发送等运维能力仍在。",
+  "tagline": "用自然语言修 Linux 与 Kubernetes",
+  "summary": "同一窗口管理 SSH 会话与 Kubernetes 集群。Hosts 下为 AI Linux Engineer；侧栏切到 K8s 后为 AI K8S Engineer。你描述问题，AI 提议操作；只读自动执行，变更必须你批准。",
   "quickStart": "快速开始",
-  "feature.aiEngineer.title": "AI Linux Engineer",
-  "feature.aiEngineer.desc": "对已连接主机用中文说「磁盘满了」「8080 被谁占了」「nginx 502」；在真实 SSH 会话里查日志、端口与服务。危险命令弹出批准；防火墙等变更带定时回滚，降低锁死风险。",
+  "feature.aiEngineer.title": "AI Linux 与 K8S Engineer",
+  "feature.aiEngineer.desc": "Hosts：对已连接主机说「磁盘满了」「nginx 502」。K8s：用 k8s_* 工具排查 CrashLoop、镜像拉取与 Service。危险变更弹出批准。",
+  "feature.k8s.title": "Kubernetes 工作台",
+  "feature.k8s.desc": "侧栏切到 K8s，用 + 添加集群（导入或粘贴 kubeconfig），或绑定 SSH kubectl。浏览工作负载与 YAML。需本机/跳板机 kubectl（应用未内置）。非完整 Lens 复刻（本版无 Helm/CRD）。",
   "feature.policySafe.title": "策略与安全",
   "feature.policySafe.desc": "Harness 按命令能力分级（R0–R4）：只读自动、变更审批、灾难级拒绝。未知脚本偏严；模型不能绕过策略。API Key 存本机，执行只走你已打开的会话。",
   "feature.dragUpload.title": "拖拽上传",
@@ -28,7 +30,7 @@
   "feature.commandNav.title": "命令导航",
   "feature.commandNav.desc": "贴边工具栏打开系统运维命令库：按服务、日志、磁盘、网络等分类浏览；点击后填参数，一键插入当前终端（不自动执行）。",
   "step.ssh.iconLabel": "远程 SSH",
-  "step.ssh.text": "连接 Linux 主机；保存为书签便于重连。",
+  "step.ssh.text": "连接 Linux 主机并保存书签；或侧栏切换到 K8s 选择集群。",
   "step.bookmark.iconLabel": "AI 工程师",
-  "step.bookmark.text": "右侧工具轨打开 AI 工程师，配置模型后用自然语言排障；变更命令按提示批准。"
+  "step.bookmark.text": "标题栏打开 AI 工程师：Hosts 为 Linux 模式，K8s 为 K8S 模式；变更按提示批准。"
 }

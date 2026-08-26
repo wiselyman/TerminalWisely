@@ -21,6 +21,7 @@ mod transfer;
 mod types;
 mod updater_support;
 mod app_menu;
+mod k8s;
 
 use session::SessionManager;
 use tauri::image::Image;
@@ -281,6 +282,45 @@ pub fn run() {
             commands::ai_register_privilege_lease,
             commands::get_app_version,
             commands::get_update_target,
+            commands::k8s_discover_contexts,
+            commands::k8s_import_kubeconfig,
+            commands::k8s_import_kubeconfig_yaml,
+            commands::k8s_rename_imported_kubeconfig,
+            commands::k8s_read_kubeconfig,
+            commands::k8s_update_kubeconfig,
+            commands::k8s_list_imported_kubeconfigs,
+            commands::k8s_remove_imported_kubeconfig,
+            commands::k8s_list_ssh_bindings,
+            commands::k8s_probe_ssh_kubectl,
+            commands::k8s_save_ssh_binding,
+            commands::k8s_delete_ssh_binding,
+            commands::k8s_kubectl,
+            commands::k8s_list_resources,
+            commands::k8s_list_namespaces,
+            commands::k8s_get_resource,
+            commands::k8s_apply_yaml,
+            commands::k8s_delete_resource,
+            commands::k8s_scale_resource,
+            commands::k8s_pod_logs,
+            commands::k8s_pod_shell_command,
+            commands::k8s_open_pod_shell_local,
+            commands::k8s_pod_containers,
+            commands::k8s_port_forward_start,
+            commands::k8s_port_forward_stop,
+            commands::k8s_port_forward_list,
+            commands::k8s_helm_list_releases,
+            commands::k8s_helm_get_values,
+            commands::k8s_list_crd_instances,
+            commands::k8s_tools_status,
+            commands::k8s_tools_install,
+            commands::k8s_cluster_summary,
+            commands::k8s_top_pods,
+            commands::k8s_kubectl_shell_command,
+            commands::k8s_open_kubectl_terminal,
+            commands::k8s_pod_shell_start,
+            commands::k8s_pod_shell_input,
+            commands::k8s_pod_shell_resize,
+            commands::k8s_pod_shell_stop,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -175,7 +175,26 @@ class AgentLoop:
         )
 
     def _tool_schemas(self) -> list[dict[str, Any]]:
-        return tools_for_interaction_mode(self.run.interaction_mode)
+        engineer_mode = str(self.run.metadata.get("engineer_mode") or "linux")
+        return tools_for_interaction_mode(
+            self.run.interaction_mode,
+            engineer_mode=engineer_mode,
+        )
+
+    def _engineer_prompt_kwargs(self) -> dict[str, Any]:
+        return {
+            "engineer_mode": str(self.run.metadata.get("engineer_mode") or "linux"),
+            "cluster_id": (
+                str(self.run.metadata.get("cluster_id"))
+                if self.run.metadata.get("cluster_id")
+                else None
+            ),
+            "cluster_name": (
+                str(self.run.metadata.get("cluster_name"))
+                if self.run.metadata.get("cluster_name")
+                else None
+            ),
+        }
 
     def _should_cancel(self) -> bool:
         return bool(self.run.cancel_requested)
@@ -196,6 +215,7 @@ class AgentLoop:
                             "content": build_system_prompt(
                                 security_mode=self.run.security_mode,
                                 interaction_mode=self.run.interaction_mode,
+                                **self._engineer_prompt_kwargs(),
                             ),
                         }
                     )
@@ -204,6 +224,7 @@ class AgentLoop:
                         build_system_prompt(
                             security_mode=self.run.security_mode,
                             interaction_mode=self.run.interaction_mode,
+                            **self._engineer_prompt_kwargs(),
                         )
                     )
                 self.run.append_message({"role": "user", "content": user_message})
@@ -873,6 +894,170 @@ class AgentLoop:
         ):
             # Defer until all tool_calls in this assistant turn are answered.
             self.run.metadata["_pending_verify_nudge"] = True
+
+    async def _k8s_tool(
+        self, call_id: str, args: dict[str, Any], *, name: str
+    ) -> None:
+        from app.k8s import synthesize_kubectl_policy_command
+        from app.tools.schema import K8S_MUTATING_TOOLS
+
+        # Attach cluster target for the host bridge.
+        cluster_target = self.run.metadata.get("cluster_target")
+        if isinstance(cluster_target, dict):
+            args = {**args, "cluster_target": cluster_target}
+
+        intent_raw = str(args.get("intent") or "").strip()
+        policy_cmd = synthesize_kubectl_policy_command(name, args)
+        intent = sanitize_approval_intent(
+            intent_raw or name, self.run.messages, command=policy_cmd
+        )
+        decision = self.broker.authorize(
+            policy_cmd, security_mode=self.run.security_mode
+        )
+
+        if decision.action == PolicyAction.DENY:
+            self.run.append_event(
+                "tool_call",
+                {
+                    "call_id": call_id,
+                    "name": name,
+                    "arguments": args,
+                    "denied": True,
+                    "policy": {
+                        "allowed": False,
+                        "action": decision.action.value,
+                        "risk": decision.risk.value,
+                        "reason": decision.reason,
+                    },
+                },
+            )
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "denied": True,
+                    "risk": decision.risk.value,
+                    "reason": decision.reason,
+                    "_untrusted": True,
+                },
+            )
+            return
+
+        if decision.action == PolicyAction.REQUIRE_APPROVAL or name in K8S_MUTATING_TOOLS:
+            # Force approval for mutating k8s tools even if policy misclassifies.
+            if decision.action != PolicyAction.REQUIRE_APPROVAL:
+                # Treat as write-level approval.
+                pass
+            approved = self._try_session_approval(
+                call_id, policy_cmd, decision.risk
+            )
+            if approved is None:
+                approved = await self._wait_approval(
+                    call_id,
+                    policy_cmd,
+                    decision.risk,
+                    decision.reason,
+                    intent=intent,
+                    resume=name,
+                    timeout_seconds=60,
+                )
+            if not approved:
+                await self._add_tool_result(
+                    call_id,
+                    {
+                        "ok": False,
+                        "denied": True,
+                        "reason": "User rejected mutation approval",
+                        "risk": decision.risk.value,
+                        "_untrusted": True,
+                    },
+                )
+                return
+
+        result = await self._await_host_k8s(
+            call_id=call_id,
+            name=name,
+            args=args,
+            risk=decision.risk.value,
+            reason=decision.reason,
+            intent=intent,
+            approved=decision.action == PolicyAction.REQUIRE_APPROVAL
+            or name in K8S_MUTATING_TOOLS,
+        )
+        if result is None:
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "cancelled": True,
+                    "error": "cancelled",
+                    "_untrusted": True,
+                },
+            )
+            return
+
+        if name in K8S_MUTATING_TOOLS or decision.risk.value in {"R1", "R2", "R3"}:
+            self.run.last_mutation_risk = decision.risk.value
+            self.run.metadata["mutated"] = True
+            if should_nudge_verify(
+                risk=decision.risk.value,
+                exit_code=(
+                    result.get("exit_code")
+                    if isinstance(result.get("exit_code"), int)
+                    else None
+                ),
+                already_nudged=self.run.verify_nudged,
+            ):
+                self.run.metadata["_pending_verify_nudge"] = True
+
+    async def _await_host_k8s(
+        self,
+        *,
+        call_id: str,
+        name: str,
+        args: dict[str, Any],
+        risk: str,
+        reason: str,
+        intent: str = "",
+        approved: bool = False,
+    ) -> dict[str, Any] | None:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[dict[str, Any]] = loop.create_future()
+        display_cmd = intent or name
+        self.run.pending_tool = PendingToolWait(
+            call_id=call_id,
+            tool_name=name,
+            future=fut,
+            risk=risk,
+            command=display_cmd,
+        )
+        self.run.status = RunStatus.WAITING_TOOL
+        args_payload = dict(args)
+        if intent and "intent" not in args_payload:
+            args_payload["intent"] = intent
+        payload: dict[str, Any] = {
+            "call_id": call_id,
+            "name": name,
+            "arguments": args_payload,
+            "awaiting_host": True,
+            "requires_lease": False,
+            "policy": {
+                "allowed": True,
+                "action": PolicyAction.ALLOW.value,
+                "risk": risk,
+                "reason": reason,
+                "approved": approved,
+            },
+        }
+        self.run.append_event("tool_call", payload)
+        try:
+            result = await fut
+        except asyncio.CancelledError:
+            return None
+        finally:
+            self.run.pending_tool = None
+        await self._add_tool_result(call_id, result)
+        return result
 
     async def _await_host_terminal(
         self,

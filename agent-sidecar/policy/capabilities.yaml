@@ -183,6 +183,8 @@ binaries:
       patch: [write]
       replace: [write]
       scale: [svc_mutate]
+      exec: [unknown]
+      rollout: [svc_mutate]
   git:
     default: [unknown]
     subcommands:

@@ -12,6 +12,14 @@ from app.tools.linux_probe import (
 )
 from app.tools.schema import (
     TOOL_ASK_USER,
+    TOOL_K8S_APPLY,
+    TOOL_K8S_DELETE,
+    TOOL_K8S_DESCRIBE,
+    TOOL_K8S_EXEC,
+    TOOL_K8S_GET,
+    TOOL_K8S_LIST,
+    TOOL_K8S_LOGS,
+    TOOL_K8S_SCALE,
     TOOL_SPAWN_INVESTIGATOR,
     TOOL_SUBMIT_OPS_PLAN,
     TOOL_TERMINAL_EXEC,
@@ -32,6 +40,14 @@ TOOL_HANDLER_METHODS: dict[str, str] = {
     TOOL_GREP_REMOTE_LOGS: "_grep_remote_logs",
     TOOL_READ_REMOTE_FILE: "_read_remote_file",
     TOOL_SPAWN_INVESTIGATOR: "_spawn_investigator",
+    TOOL_K8S_LIST: "_k8s_tool",
+    TOOL_K8S_GET: "_k8s_tool",
+    TOOL_K8S_DESCRIBE: "_k8s_tool",
+    TOOL_K8S_LOGS: "_k8s_tool",
+    TOOL_K8S_APPLY: "_k8s_tool",
+    TOOL_K8S_DELETE: "_k8s_tool",
+    TOOL_K8S_SCALE: "_k8s_tool",
+    TOOL_K8S_EXEC: "_k8s_tool",
 }
 
 TOOLS_EMIT_CALL_EVENT_UPFRONT: frozenset[str] = frozenset(
@@ -58,6 +74,7 @@ class ToolHandlerHost(Protocol):
     async def _grep_remote_logs(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _read_remote_file(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _spawn_investigator(self, call_id: str, args: dict[str, Any]) -> None: ...
+    async def _k8s_tool(self, call_id: str, args: dict[str, Any], *, name: str) -> None: ...
 
 
 def resolve_handler(
@@ -69,6 +86,11 @@ def resolve_handler(
     method = getattr(host, method_name, None)
     if method is None:
         return None
+    if method_name == "_k8s_tool":
+        async def _bound(call_id: str, args: dict[str, Any]) -> None:
+            await method(call_id, args, name=name)
+
+        return _bound
     return method  # type: ignore[return-value]
 
 

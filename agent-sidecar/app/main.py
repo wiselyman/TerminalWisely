@@ -73,6 +73,17 @@ def _seed_history(run: Any, mode: str, interaction_mode: str, history: list[Any]
             "content": build_system_prompt(
                 security_mode=mode,
                 interaction_mode=interaction_mode,
+                engineer_mode=str(run.metadata.get("engineer_mode") or "linux"),
+                cluster_id=(
+                    str(run.metadata["cluster_id"])
+                    if run.metadata.get("cluster_id")
+                    else None
+                ),
+                cluster_name=(
+                    str(run.metadata["cluster_name"])
+                    if run.metadata.get("cluster_name")
+                    else None
+                ),
             ),
         }
     )

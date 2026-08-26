@@ -1,5 +1,6 @@
 {
-  "newSsh": "New SSH connection",
+  "newSsh": "Add server",
+  "importKubeconfig": "Import kubeconfig",
   "remoteSshTitle": "Remote SSH",
   "homeTabTitle": "Home",
   "closeTabAria": "Close {{title}}",
@@ -16,6 +17,7 @@
   "emptyBookmarks": "No SSH bookmarks yet",
   "sidebarViewsAria": "Sidebar views",
   "sidebarViewHosts": "Hosts",
+  "sidebarViewK8s": "Kubernetes",
   "toolRailAria": "Workspace tools",
   "toolNeedTab": "Open a terminal tab first",
   "shortcutPathLabel": "Path",

@@ -26,7 +26,10 @@ import {
   subscribeWorkspacePanelWidth,
 } from "../lib/workspacePanelWidth";
 import { useToastStore } from "./toastStore";
+import type { K8sClusterTarget } from "../lib/k8s/types";
+import type { ManagedEntityRef } from "../lib/management/types";
 import { revealAiEngineerPanel } from "./workspacePanelSwitch";
+import { focusManagedEntity } from "./managedEntityStore";
 
 let ensureReadyInFlight: Promise<void> | null = null;
 let bootstrapListenerReady: Promise<void> | null = null;
@@ -408,13 +411,22 @@ export type ActiveInvestigation = {
   summaryPreview?: string;
 };
 
-/** Isolate chat UI by host; fall back to terminal session when no server id. */
+export type EngineerMode = "linux" | "k8s";
+
+/** Isolate chat by cluster, host, or terminal session. */
 export function aiChatScopeKey(
   sessionId: string,
   serverId?: string | null,
+  clusterId?: string | null,
 ): string {
+  const cid = (clusterId ?? "").trim();
+  if (cid) return `cluster:${cid}`;
   const sid = (serverId ?? "").trim();
   return sid ? `server:${sid}` : `session:${sessionId}`;
+}
+
+export function k8sSyntheticSessionId(clusterId: string): string {
+  return `k8s:${clusterId}`;
 }
 
 let chatAbort: AbortController | null = null;
@@ -458,7 +470,11 @@ type AiEngineerState = {
   width: number;
   sessionId: string | null;
   serverId: string | null;
-  /** Current chat bucket key (server:* or session:*). */
+  engineerMode: EngineerMode;
+  clusterId: string | null;
+  clusterName: string | null;
+  clusterTarget: K8sClusterTarget | null;
+  /** Current chat bucket key (cluster:*, server:*, or session:*). */
   chatScope: string | null;
   activeThreadId: string | null;
   ready: boolean;
@@ -486,9 +502,28 @@ type AiEngineerState = {
   /** Bumped to focus the composer textarea (e.g. after Send to chat). */
   composerFocusNonce: number;
   openPanel: (sessionId: string, serverId?: string) => void;
+  openK8sPanel: (
+    clusterId: string,
+    clusterName?: string,
+    clusterTarget?: K8sClusterTarget | null,
+  ) => void;
+  /** Unified Hosts/K8s AI binding entry. */
+  bindManagedEntity: (
+    ref: ManagedEntityRef,
+    opts?: {
+      open?: boolean;
+      clusterTarget?: K8sClusterTarget | null;
+    },
+  ) => void;
   requestComposerFocus: () => void;
   /** Re-bind chat when the active terminal/server changes while panel stays open. */
   bindContext: (sessionId: string, serverId?: string) => void;
+  bindK8sContext: (
+    clusterId: string,
+    clusterName?: string,
+    clusterTarget?: K8sClusterTarget | null,
+  ) => void;
+  setEngineerMode: (mode: EngineerMode) => void;
   /** Soft-close kept for callers; side panels stay open until explicit collapse. */
   close: (opts?: { force?: boolean }) => void;
   setWidth: (w: number) => void;
@@ -508,6 +543,7 @@ type AiEngineerState = {
   sendMessage: (opts: {
     sessionId: string;
     serverId?: string;
+    clusterId?: string;
     /** Stop the in-flight run first, then send (interject). */
     interruptIfBusy?: boolean;
   }) => Promise<void>;
@@ -641,6 +677,10 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   width: readWorkspacePanelWidth(),
   sessionId: null,
   serverId: null,
+  engineerMode: "linux",
+  clusterId: null,
+  clusterName: null,
+  clusterTarget: null,
   chatScope: null,
   activeThreadId: null,
   ready: false,
@@ -666,9 +706,48 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   composerFocusNonce: 0,
 
   openPanel: (sessionId, serverId) => {
-    get().bindContext(sessionId, serverId);
-    set({ open: true });
-    void get().ensureReady();
+    get().bindManagedEntity(
+      {
+        kind: "server",
+        id: serverId || sessionId,
+        label: sessionId,
+        sessionId,
+        serverId: serverId ?? null,
+      },
+      { open: true },
+    );
+  },
+
+  openK8sPanel: (clusterId, clusterName, clusterTarget) => {
+    get().bindManagedEntity(
+      {
+        kind: "cluster",
+        id: clusterId,
+        label: clusterName ?? clusterId,
+      },
+      { open: true, clusterTarget },
+    );
+  },
+
+  bindManagedEntity: (ref, opts) => {
+    focusManagedEntity(ref);
+    const open = opts?.open ?? false;
+    if (ref.kind === "cluster") {
+      set({ engineerMode: "k8s" });
+      get().bindK8sContext(ref.id, ref.label, opts?.clusterTarget);
+      if (open) {
+        set({ open: true });
+        void get().ensureReady();
+      }
+      return;
+    }
+    const sessionId = ref.sessionId || ref.id;
+    set({ engineerMode: "linux" });
+    get().bindContext(sessionId, ref.serverId ?? undefined);
+    if (open) {
+      set({ open: true });
+      void get().ensureReady();
+    }
   },
 
   requestComposerFocus: () => {
@@ -678,13 +757,71 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }));
   },
 
+  setEngineerMode: (mode) => {
+    set({ engineerMode: mode });
+  },
+
+  bindK8sContext: (clusterId, clusterName, clusterTarget) => {
+    const sessionId = k8sSyntheticSessionId(clusterId);
+    const nextScope = aiChatScopeKey(sessionId, null, clusterId);
+    const prev = get();
+    const nextTarget = clusterTarget ?? prev.clusterTarget;
+    if (
+      prev.chatScope === nextScope &&
+      prev.sessionId === sessionId &&
+      prev.clusterId === clusterId
+    ) {
+      if (clusterTarget && clusterTarget !== prev.clusterTarget) {
+        set({ clusterTarget, clusterName: clusterName ?? prev.clusterName });
+      }
+      return;
+    }
+
+    const persisted = persistCurrentThread(get);
+    const switchingAway =
+      prev.chatScope != null && prev.chatScope !== nextScope;
+
+    if (switchingAway && (prev.busy || prev.pendingAsk || prev.pendingApproval)) {
+      const { sidecar, sessionId: oldSession } = prev;
+      const runId = activeRunId;
+      abortActiveRun(() => prev, "switch");
+      if (sidecar && oldSession && runId) {
+        void cancelAgentRun(sidecar, oldSession, runId).catch(() => undefined);
+      }
+    }
+
+    const loaded = loadScopeIntoState(
+      persisted.threadsByScope,
+      nextScope,
+      persisted.inputsByThread,
+    );
+
+    set({
+      ...persisted,
+      ...loaded,
+      engineerMode: "k8s",
+      sessionId,
+      serverId: null,
+      clusterId,
+      clusterName: clusterName ?? clusterId,
+      clusterTarget: nextTarget ?? null,
+      chatScope: nextScope,
+      busy: switchingAway ? false : prev.busy,
+      modelPhase: switchingAway ? "idle" : prev.modelPhase,
+      pendingAsk: switchingAway ? null : prev.pendingAsk,
+      pendingApproval: switchingAway ? null : prev.pendingApproval,
+      activeInvestigation: switchingAway ? null : prev.activeInvestigation,
+    });
+  },
+
   bindContext: (sessionId, serverId) => {
     const nextScope = aiChatScopeKey(sessionId, serverId);
     const prev = get();
     if (
       prev.chatScope === nextScope &&
       prev.sessionId === sessionId &&
-      (prev.serverId ?? null) === (serverId ?? null)
+      (prev.serverId ?? null) === (serverId ?? null) &&
+      prev.engineerMode === "linux"
     ) {
       return;
     }
@@ -711,8 +848,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     set({
       ...persisted,
       ...loaded,
+      engineerMode: "linux",
       sessionId,
       serverId: serverId ?? null,
+      clusterId: null,
+      clusterName: null,
+      clusterTarget: null,
       chatScope: nextScope,
       busy: switchingAway ? false : prev.busy,
       modelPhase: switchingAway ? "idle" : prev.modelPhase,
@@ -1086,8 +1227,18 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
   },
 
-  sendMessage: async ({ sessionId, serverId, interruptIfBusy }) => {
-    get().bindContext(sessionId, serverId);
+  sendMessage: async ({ sessionId, serverId, clusterId, interruptIfBusy }) => {
+    const mode = get().engineerMode;
+    const effectiveClusterId =
+      clusterId ?? (mode === "k8s" ? get().clusterId : null);
+    if (effectiveClusterId) {
+      get().bindK8sContext(
+        effectiveClusterId,
+        get().clusterName ?? effectiveClusterId,
+      );
+    } else {
+      get().bindContext(sessionId, serverId);
+    }
     const text = get().input.trim();
     const pendingAtts = [...get().pendingAttachments];
     if (!text && pendingAtts.length === 0) return;
@@ -1102,10 +1253,22 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
     if (get().busy) return;
 
-    const runScope = aiChatScopeKey(sessionId, serverId);
+    const runSessionId = effectiveClusterId
+      ? k8sSyntheticSessionId(effectiveClusterId)
+      : sessionId;
+    const runScope = effectiveClusterId
+      ? aiChatScopeKey(runSessionId, null, effectiveClusterId)
+      : aiChatScopeKey(sessionId, serverId);
     let runThreadId = get().activeThreadId;
     if (!runThreadId || get().chatScope !== runScope) {
-      get().bindContext(sessionId, serverId);
+      if (effectiveClusterId) {
+        get().bindK8sContext(
+          effectiveClusterId,
+          get().clusterName ?? effectiveClusterId,
+        );
+      } else {
+        get().bindContext(sessionId, serverId);
+      }
       runThreadId = get().activeThreadId;
     }
     if (!runThreadId) {
@@ -1174,8 +1337,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       input: "",
       busy: true,
       modelPhase: "idle",
-      sessionId,
-      serverId: serverId ?? get().serverId,
+      sessionId: runSessionId,
+      serverId: effectiveClusterId ? null : (serverId ?? get().serverId),
+      clusterId: effectiveClusterId ?? null,
       chatScope: runScope,
       activeThreadId: runThreadId,
       messages: nextMessages,
@@ -1282,15 +1446,21 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
 
       const { runId } = await runAgentChat({
         sidecar,
-        sessionId,
+        sessionId: runSessionId,
         message: text,
+        engineerMode: effectiveClusterId ? "k8s" : "linux",
+        clusterId: effectiveClusterId ?? undefined,
+        clusterName: get().clusterName ?? undefined,
+        clusterTarget: get().clusterTarget ?? undefined,
         securityMode: normalizeSecurityMode(
           get()
             .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId)
             ?.securityMode,
         ),
         interactionMode,
-        serverId: serverId ?? get().serverId ?? undefined,
+        serverId: effectiveClusterId
+          ? undefined
+          : (serverId ?? get().serverId ?? undefined),
         history: priorHistory,
         resumeRunId,
         attachments: toWireAttachments(pendingAtts),

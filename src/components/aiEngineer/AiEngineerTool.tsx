@@ -1,4 +1,6 @@
 import { AiEngineerIcon } from "../WorkspaceToolIcons";
+import { useAiEngineerStore } from "../../stores/aiEngineerStore";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   active: boolean;
@@ -7,13 +9,19 @@ type Props = {
 };
 
 export function AiEngineerTool({ active, disabled, onClick }: Props) {
+  const { t } = useTranslation("tools");
+  const mode = useAiEngineerStore((s) => s.engineerMode);
+  const label =
+    mode === "k8s"
+      ? t("aiEngineer.k8sTitle")
+      : t("aiEngineer.linuxTitle");
   return (
     <button
       type="button"
       className={`workspace-tool-btn${active ? " active" : ""}`}
       disabled={disabled}
-      title="AI Linux Engineer"
-      aria-label="AI Linux Engineer"
+      title={label}
+      aria-label={label}
       onClick={onClick}
     >
       <AiEngineerIcon />

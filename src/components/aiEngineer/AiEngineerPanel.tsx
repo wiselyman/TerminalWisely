@@ -364,6 +364,11 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const stopActiveRun = useAiEngineerStore((s) => s.stopActiveRun);
   const ensureReady = useAiEngineerStore((s) => s.ensureReady);
   const bindContext = useAiEngineerStore((s) => s.bindContext);
+  const bindK8sContext = useAiEngineerStore((s) => s.bindK8sContext);
+  const engineerMode = useAiEngineerStore((s) => s.engineerMode);
+  const clusterId = useAiEngineerStore((s) => s.clusterId);
+  const clusterName = useAiEngineerStore((s) => s.clusterName);
+  const clusterTarget = useAiEngineerStore((s) => s.clusterTarget);
   const settingsOpen = useAiEngineerStore((s) => s.settingsOpen);
   const setSettingsOpen = useAiEngineerStore((s) => s.setSettingsOpen);
   const settings = useAiEngineerStore((s) => s.settings);
@@ -553,8 +558,22 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    if (engineerMode === "k8s" && clusterId) {
+      bindK8sContext(clusterId, clusterName ?? undefined, clusterTarget);
+      return;
+    }
     bindContext(sessionId, serverId);
-  }, [open, sessionId, serverId, bindContext]);
+  }, [
+    open,
+    sessionId,
+    serverId,
+    engineerMode,
+    clusterId,
+    clusterName,
+    clusterTarget,
+    bindContext,
+    bindK8sContext,
+  ]);
 
   useEffect(() => {
     if (!composerFocusNonce) return;
@@ -678,8 +697,23 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
 
   const submit = () => {
     if (busy) return;
-    void sendMessage({ sessionId, serverId });
+    void sendMessage({
+      sessionId,
+      serverId,
+      clusterId: engineerMode === "k8s" ? (clusterId ?? undefined) : undefined,
+    });
   };
+
+  const panelTitle =
+    engineerMode === "k8s"
+      ? t("aiEngineer.k8sTitle")
+      : t("aiEngineer.linuxTitle");
+  const emptyHint =
+    engineerMode === "k8s" ? t("aiEngineer.hintK8s") : t("aiEngineer.hint");
+  const inputPlaceholder =
+    engineerMode === "k8s"
+      ? t("aiEngineer.inputPlaceholderK8s")
+      : t("aiEngineer.inputPlaceholder");
 
   if (!open) return null;
 
@@ -693,7 +727,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
         ref={panelRef}
         className="ai-engineer-panel find-panel"
         style={{ width }}
-        aria-label="AI Linux Engineer"
+        aria-label={panelTitle}
       >
         <div
           className="find-panel-resizer"
@@ -919,7 +953,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="ai-engineer-empty">
-                    <p className="find-panel-empty">{t("aiEngineer.hint")}</p>
+                    <p className="find-panel-empty">{emptyHint}</p>
                     <div className="ai-engineer-workflow-chips" role="group">
                       {WORKFLOW_CHIP_IDS.map((id) => (
                         <button
@@ -1354,7 +1388,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={t("aiEngineer.inputPlaceholder")}
+                  placeholder={inputPlaceholder}
                   rows={3}
                   disabled={!ready || !modelConfigured}
                   onPaste={onComposerPaste}

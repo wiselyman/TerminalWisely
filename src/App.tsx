@@ -5,7 +5,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
-import { AppSettingsButton } from "./components/AppSettingsButton";
 import { AppSettingsDialog } from "./components/AppSettingsDialog";
 import { UpdateAvailableDialog } from "./components/UpdateAvailableDialog";
 import { SudoPasswordModal } from "./components/SudoPasswordModal";
@@ -18,6 +17,12 @@ import { LocalFsTool } from "./components/LocalFsTool";
 import { LocalFsPanel } from "./components/LocalFsPanel";
 import { TerminalView } from "./components/TerminalView";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
+import { AddK8sClusterModal } from "./components/k8s/AddK8sClusterModal";
+import { K8sClusterIcon } from "./components/k8s/K8sClusterIcon";
+import { useSidebarViewStore } from "./stores/sidebarViewStore";
+import { useK8sStore } from "./stores/k8sStore";
+import { useManagedEntityStore } from "./stores/managedEntityStore";
 import { extractDroppedPaths } from "./lib/terminalLinks";
 import { getTerminalFontFamily, ensureTerminalFontsLoaded } from "./lib/terminalFont";
 import {
@@ -71,7 +76,7 @@ import {
 import "./App.css";
 
 function App() {
-  const { t } = useTranslation("shell");
+  const { t } = useTranslation(["shell", "k8s"]);
   const platformClass = getPlatformShellClass();
   const macWindowChrome = isMacHost();
   const tauriDragRegion = isTauriRuntime() ? true : undefined;
@@ -287,11 +292,26 @@ function App() {
   const aiEngineerSessionId = useAiEngineerStore((s) => s.sessionId);
   const aiEngineerServerId = useAiEngineerStore((s) => s.serverId);
   const aiEngineerReady = useAiEngineerStore((s) => s.ready);
+  const engineerMode = useAiEngineerStore((s) => s.engineerMode);
+  const sidebarView = useSidebarViewStore((s) => s.view);
+  const selectedCluster = useK8sStore((s) => s.selectedCluster);
+  const openClusterIds = useK8sStore((s) => s.openClusterIds);
+  const clusters = useK8sStore((s) => s.clusters);
+  const selectCluster = useK8sStore((s) => s.selectCluster);
+  const closeClusterTab = useK8sStore((s) => s.closeClusterTab);
+  const addClusterOpen = useK8sStore((s) => s.addClusterOpen);
+  const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
+  const homeOpen = useManagedEntityStore((s) => s.homeOpen);
+  /** K8s workbench only when not on shared Home. */
+  const showK8sWorkbench = sidebarView === "k8s" && !homeOpen;
+  const showHostsSession = sidebarView === "hosts" && !homeOpen;
   const aiPanelSessionId =
-    activeTabId ??
-    (aiEngineerOpen && !aiEngineerReady && aiEngineerSessionId
+    engineerMode === "k8s" && aiEngineerOpen && aiEngineerSessionId
       ? aiEngineerSessionId
-      : null);
+      : activeTabId ??
+        (aiEngineerOpen && !aiEngineerReady && aiEngineerSessionId
+          ? aiEngineerSessionId
+          : null);
   const localFsOpen = useLocalFsStore((s) => s.open);
   const localFsTab = useLocalFsStore((s) => s.activeTab);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
@@ -678,7 +698,7 @@ function App() {
                 }}
               >
                 <div
-                  className={`tab tab-home-entry ${activeTabId === null ? "active" : ""}`}
+                  className={`tab tab-home-entry ${homeOpen ? "active" : ""}`}
                   data-tab-role="home"
                   onClick={() => {
                     if (tabPointerButtonRef.current !== 0) {
@@ -690,7 +710,7 @@ function App() {
                   }}
                   onContextMenu={(event) => event.preventDefault()}
                 >
-                  {activeTabId === null ? (
+                  {homeOpen ? (
                     <>
                       <span className="tab-curve tab-curve-start" aria-hidden="true" />
                       <span className="tab-curve tab-curve-end" aria-hidden="true" />
@@ -701,13 +721,15 @@ function App() {
                   </span>
                   <span className="tab-title">{t("homeTabTitle")}</span>
                 </div>
+                {sidebarView === "hosts" ? (
+                  <>
           {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
             const tabOs = resolveSessionOsProfile(tab, savedConnections);
             return (
             <div
               key={tab.id}
-              className={`tab ${tab.active ? "active" : ""} ${
+              className={`tab ${!homeOpen && tab.active ? "active" : ""} ${
                 tabConnecting ? "tab-connecting" : ""
               } ${
                 tabDropTargetId === tab.id ? "tab-drop-target" : ""
@@ -819,7 +841,7 @@ function App() {
                   });
               }}
             >
-              {tab.active ? (
+              {!homeOpen && tab.active ? (
                 <>
                   <span className="tab-curve tab-curve-start" aria-hidden="true" />
                   <span className="tab-curve tab-curve-end" aria-hidden="true" />
@@ -842,7 +864,7 @@ function App() {
                 ) : null}
                 {tab.title}
               </span>
-              {tab.active && !tabConnecting ? (
+              {!homeOpen && tab.active && !tabConnecting ? (
                 <span className="tab-actions">
                   <button
                     type="button"
@@ -881,13 +903,82 @@ function App() {
             </div>
             );
           })}
+                  </>
+              ) : null}
+              {sidebarView === "k8s" ? (
+                <>
+                  {openClusterIds.map((id) => {
+                    const cluster = clusters.find((c) => c.id === id);
+                    if (!cluster) return null;
+                    const active = !homeOpen && selectedCluster?.id === id;
+                    return (
+                      <div
+                        key={id}
+                        className={`tab${active ? " active" : ""}`}
+                        data-tab-role="k8s-cluster"
+                        onClick={() => {
+                          if (tabPointerButtonRef.current !== 0) {
+                            tabPointerButtonRef.current = 0;
+                            return;
+                          }
+                          if (Date.now() < suppressTabClickUntilRef.current) return;
+                          selectCluster(id);
+                        }}
+                        onMouseDown={(event) => {
+                          tabPointerButtonRef.current = event.button;
+                          if (event.button === 0) {
+                            clearChromeClickSuppress();
+                            suppressTabClickUntilRef.current = 0;
+                            selectCluster(id);
+                          }
+                        }}
+                      >
+                        {active ? (
+                          <>
+                            <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                            <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                          </>
+                        ) : null}
+                        <span className="tab-kind k8s" title="Kubernetes">
+                          <K8sClusterIcon size={16} />
+                        </span>
+                        <span className="tab-title" title={cluster.display_name}>
+                          {cluster.display_name}
+                        </span>
+                        <button
+                          type="button"
+                          className="tab-close"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          aria-label={t("closeTabAria", { title: cluster.display_name })}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            closeClusterTab(id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : null}
               </div>
               <button
                 type="button"
                 className="chrome-new-session"
-                aria-label={t("newSsh")}
-                title={t("newSsh")}
-                onClick={() => openNewRemoteRef.current()}
+                aria-label={
+                  sidebarView === "k8s" ? t("k8s:addClusterTitle") : t("newSsh")
+                }
+                title={
+                  sidebarView === "k8s" ? t("k8s:addClusterTitle") : t("newSsh")
+                }
+                onClick={() => {
+                  if (sidebarView === "k8s") {
+                    setAddClusterOpen(true);
+                    return;
+                  }
+                  openNewRemoteRef.current();
+                }}
               >
                 <ChromePlusIcon />
               </button>
@@ -901,17 +992,32 @@ function App() {
               <div className="chrome-titlebar-actions">
                 <AiEngineerTool
                   active={aiEngineerOpen}
-                  disabled={!activeTabReady}
+                  disabled={
+                    sidebarView === "k8s"
+                      ? !selectedCluster
+                      : !activeTabReady
+                  }
                   onClick={() => {
+                    if (sidebarView === "k8s" && selectedCluster) {
+                      useAiEngineerStore.getState().bindManagedEntity({
+                        kind: "cluster",
+                        id: selectedCluster.id,
+                        label: selectedCluster.display_name,
+                      }, { open: true, clusterTarget: selectedCluster });
+                      return;
+                    }
                     if (activeTabId) {
-                      switchWorkspacePanel(
-                        "aiEngineer",
-                        activeTabId,
-                        activeTabServerId,
-                      );
+                      useAiEngineerStore.getState().bindManagedEntity({
+                        kind: "server",
+                        id: activeTabServerId || activeTabId,
+                        label: activeSessionTitle || activeTabId,
+                        sessionId: activeTabId,
+                        serverId: activeTabServerId,
+                      }, { open: true });
                     }
                   }}
                 />
+                {!showK8sWorkbench ? (
                 <LocalFsTool
                   active={localFsOpen}
                   disabled={!activeTabReady}
@@ -921,7 +1027,7 @@ function App() {
                     }
                   }}
                 />
-                <AppSettingsButton />
+                ) : null}
                 <LocaleSwitcher />
               </div>
 
@@ -936,7 +1042,6 @@ function App() {
           collapsed={sidebarCollapsed}
           expandedWidth={sidebarExpandedWidth}
           onExpandedWidthChange={setSidebarExpandedWidth}
-          onRequestCollapse={() => setSidebarCollapsed(true)}
           onRegisterNewRemote={registerNewRemote}
         />
 
@@ -958,13 +1063,22 @@ function App() {
           <main className="workspace">
             <div className="workspace-split">
               <div className="terminal-stack">
-                {activeTabId === null ? <WorkspaceWelcome /> : null}
+                {homeOpen ? <WorkspaceWelcome /> : null}
+                {showK8sWorkbench ? <K8sWorkbench /> : null}
+                {showHostsSession && activeTabId !== null ? (
+                  <div className="mgmt-workbench-header hosts-session-header">
+                    <div className="mgmt-workbench-title">
+                      <h2>{activeSessionTitle}</h2>
+                      <span className="mgmt-workbench-subtitle">SSH</span>
+                    </div>
+                  </div>
+                ) : null}
                 {tabs.map((tab) => (
                   <TerminalView
                     key={tab.id}
                     sessionId={tab.id}
                     kind={tab.kind}
-                    active={tab.id === activeTabId}
+                    active={showHostsSession && tab.id === activeTabId}
                     connectionStatus={tab.connectionStatus ?? "ready"}
                     title={tab.title}
                     layoutRevision={terminalLayoutRevision}
@@ -977,13 +1091,16 @@ function App() {
         </div>
       </div>
       <SendToDialog />
-      {activeTabId ? (
+      {activeTabId && showHostsSession ? (
         <PreviewPanel
           sessionId={activeTabId}
           sessionTitle={activeSessionTitle}
         />
       ) : null}
       <SudoPasswordModal />
+      {addClusterOpen ? (
+        <AddK8sClusterModal onClose={() => setAddClusterOpen(false)} />
+      ) : null}
       <AppSettingsDialog />
       {updateDialog ? (
         <UpdateAvailableDialog
@@ -998,9 +1115,11 @@ function App() {
         <AiEngineerPanel
           sessionId={aiPanelSessionId}
           serverId={
-            activeTabId === aiPanelSessionId
-              ? activeTabServerId
-              : (aiEngineerServerId ?? undefined)
+            engineerMode === "k8s"
+              ? undefined
+              : activeTabId === aiPanelSessionId
+                ? activeTabServerId
+                : (aiEngineerServerId ?? undefined)
           }
         />
       ) : null}

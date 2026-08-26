@@ -10,6 +10,7 @@ import toolsZh from "./locales/zh-CN/tools.json";
 import welcomeZh from "./locales/zh-CN/welcome.json";
 import commandsZh from "./locales/zh-CN/commands.json";
 import errorsZh from "./locales/zh-CN/errors.json";
+import k8sZh from "./locales/zh-CN/k8s.json";
 
 import commonEn from "./locales/en/common.json";
 import shellEn from "./locales/en/shell.json";
@@ -20,6 +21,7 @@ import toolsEn from "./locales/en/tools.json";
 import welcomeEn from "./locales/en/welcome.json";
 import commandsEn from "./locales/en/commands.json";
 import errorsEn from "./locales/en/errors.json";
+import k8sEn from "./locales/en/k8s.json";
 
 export const LOCALE_STORAGE_KEY = "terminal-wisely.locale";
 export const SUPPORTED_LOCALES = ["zh-CN", "en"] as const;
@@ -35,6 +37,7 @@ const NAMESPACES = [
   "welcome",
   "commands",
   "errors",
+  "k8s",
 ] as const;
 
 function isAppLocale(value: string | null | undefined): value is AppLocale {
@@ -95,6 +98,7 @@ void i18n.use(initReactI18next).init({
       welcome: welcomeZh,
       commands: commandsZh,
       errors: errorsZh,
+      k8s: k8sZh,
     },
     en: {
       common: commonEn,
@@ -106,6 +110,7 @@ void i18n.use(initReactI18next).init({
       welcome: welcomeEn,
       commands: commandsEn,
       errors: errorsEn,
+      k8s: k8sEn,
     },
   },
   lng: initialLocale,

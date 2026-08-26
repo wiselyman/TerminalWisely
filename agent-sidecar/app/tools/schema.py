@@ -19,6 +19,36 @@ TOOL_SUBMIT_OPS_PLAN = "submit_ops_plan"
 TOOL_UPDATE_PLAN = "update_plan"
 TOOL_SPAWN_INVESTIGATOR = "spawn_investigator"
 
+TOOL_K8S_LIST = "k8s_list"
+TOOL_K8S_GET = "k8s_get"
+TOOL_K8S_DESCRIBE = "k8s_describe"
+TOOL_K8S_LOGS = "k8s_logs"
+TOOL_K8S_APPLY = "k8s_apply"
+TOOL_K8S_DELETE = "k8s_delete"
+TOOL_K8S_SCALE = "k8s_scale"
+TOOL_K8S_EXEC = "k8s_exec"
+
+K8S_TOOLS = frozenset(
+    {
+        TOOL_K8S_LIST,
+        TOOL_K8S_GET,
+        TOOL_K8S_DESCRIBE,
+        TOOL_K8S_LOGS,
+        TOOL_K8S_APPLY,
+        TOOL_K8S_DELETE,
+        TOOL_K8S_SCALE,
+        TOOL_K8S_EXEC,
+    }
+)
+
+K8S_MUTATING_TOOLS = frozenset(
+    {
+        TOOL_K8S_APPLY,
+        TOOL_K8S_DELETE,
+        TOOL_K8S_SCALE,
+    }
+)
+
 _INVESTIGATOR_ALLOWED = frozenset(
     {
         TOOL_TERMINAL_EXEC,
@@ -31,8 +61,188 @@ _INVESTIGATOR_ALLOWED = frozenset(
     }
 )
 
+_INVESTIGATOR_K8S_ALLOWED = frozenset(
+    {
+        TOOL_K8S_LIST,
+        TOOL_K8S_GET,
+        TOOL_K8S_DESCRIBE,
+        TOOL_K8S_LOGS,
+        TOOL_WEB_SEARCH,
+        TOOL_WEB_FETCH,
+    }
+)
 
-def openai_tools() -> list[dict[str, Any]]:
+
+def _k8s_tool_defs() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_LIST,
+                "description": "List Kubernetes resources (pods, deployments, services, …).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "pods, deployments, services, nodes, events, …",
+                        },
+                        "namespace": {"type": "string"},
+                        "all_namespaces": {"type": "boolean"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["category"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_GET,
+                "description": "Get one Kubernetes resource (YAML/overview).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "name": {"type": "string"},
+                        "namespace": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["kind", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_DESCRIBE,
+                "description": "Describe a Kubernetes resource (events + status).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "name": {"type": "string"},
+                        "namespace": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["kind", "name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_LOGS,
+                "description": "Fetch Pod container logs (tail).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pod": {"type": "string"},
+                        "namespace": {"type": "string"},
+                        "container": {"type": "string"},
+                        "tail_lines": {"type": "integer"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["pod"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_APPLY,
+                "description": "Apply YAML to the cluster (requires approval).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "yaml": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["yaml", "intent"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_DELETE,
+                "description": "Delete a Kubernetes resource (requires approval).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "name": {"type": "string"},
+                        "namespace": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["kind", "name", "intent"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_SCALE,
+                "description": "Scale a Deployment/StatefulSet (requires approval).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "name": {"type": "string"},
+                        "namespace": {"type": "string"},
+                        "replicas": {"type": "integer"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["name", "replicas", "intent"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_K8S_EXEC,
+                "description": (
+                    "Run a short non-interactive command in a Pod. "
+                    "Interactive shells use the UI Pod shell action."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pod": {"type": "string"},
+                        "namespace": {"type": "string"},
+                        "container": {"type": "string"},
+                        "command": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["pod", "command", "intent"],
+                },
+            },
+        },
+    ]
+
+
+def openai_tools(*, engineer_mode: str | None = None) -> list[dict[str, Any]]:
+    if (engineer_mode or "linux").strip().lower() == "k8s":
+        # Shared ask/web/plan tools + k8s_* (no terminal_exec default).
+        shared_names = {
+            TOOL_WEB_SEARCH,
+            TOOL_WEB_FETCH,
+            TOOL_ASK_USER,
+            TOOL_UPDATE_PLAN,
+            TOOL_SUBMIT_OPS_PLAN,
+            TOOL_SPAWN_INVESTIGATOR,
+        }
+        linux = openai_tools_linux()
+        shared = [
+            t
+            for t in linux
+            if (t.get("function") or {}).get("name") in shared_names
+        ]
+        return [*_k8s_tool_defs(), *shared]
+    return openai_tools_linux()
+
+
+def openai_tools_linux() -> list[dict[str, Any]]:
     return [
         {
             "type": "function",
@@ -322,10 +532,15 @@ def openai_tools() -> list[dict[str, Any]]:
     ]
 
 
-def investigator_tools() -> list[dict[str, Any]]:
+def investigator_tools(*, engineer_mode: str | None = None) -> list[dict[str, Any]]:
     """Subset of tools for observe-only child agents."""
+    allowed = (
+        _INVESTIGATOR_K8S_ALLOWED
+        if (engineer_mode or "linux").strip().lower() == "k8s"
+        else _INVESTIGATOR_ALLOWED
+    )
     return [
         t
-        for t in openai_tools()
-        if (t.get("function") or {}).get("name") in _INVESTIGATOR_ALLOWED
+        for t in openai_tools(engineer_mode=engineer_mode)
+        if (t.get("function") or {}).get("name") in allowed
     ]

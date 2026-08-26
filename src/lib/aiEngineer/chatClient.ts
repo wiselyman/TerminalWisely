@@ -2,6 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../isTauri";
 import { sidecarFetch, type SidecarInfo } from "./api";
 import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
+import type { K8sClusterTarget } from "../k8s/types";
 
 export type AgentUiEvent =
   | { type: "assistant_message"; content: string }
@@ -312,6 +313,47 @@ async function handleProtocolEvent(opts: {
           untrusted: true,
         }),
       });
+    } else if (name.startsWith("k8s_")) {
+      if (!p.awaiting_host) return "continue";
+      handled.add(callId);
+      const intent =
+        typeof args.intent === "string" && args.intent.trim()
+          ? args.intent.trim()
+          : name;
+      onToolExec?.onStart?.({ callId, command: name, intent });
+      const result = await executeToolCall(
+        sessionId,
+        {
+          call_id: callId,
+          name,
+          arguments: args,
+          requires_lease: Boolean(p.requires_lease),
+          lease: (p.lease as ToolCallEvent["lease"]) || null,
+        },
+        { onOutput: onToolExec?.onOutput },
+      );
+      onToolExec?.onDone?.({
+        callId,
+        ok: result.ok !== false,
+        exitCode: typeof result.exit_code === "number" ? result.exit_code : null,
+        error: typeof result.error === "string" ? result.error : undefined,
+        stdout: typeof result.stdout === "string" ? result.stdout : undefined,
+        stderr: typeof result.stderr === "string" ? result.stderr : undefined,
+      });
+      await sidecarFetch(sidecar, "/v1/tool_result", {
+        method: "POST",
+        body: JSON.stringify({
+          session_id: sessionId,
+          run_id: activeRunId,
+          call_id: callId,
+          ok: result.ok !== false,
+          stdout: String(result.stdout ?? ""),
+          stderr: String(result.stderr ?? ""),
+          exit_code: typeof result.exit_code === "number" ? result.exit_code : null,
+          error: typeof result.error === "string" ? result.error : null,
+          untrusted: true,
+        }),
+      });
     }
   } else if (ev.type === "ask_user") {
     const requestId = String(p.request_id ?? p.call_id ?? "");
@@ -506,6 +548,10 @@ export async function runAgentChat(opts: {
   sidecar: SidecarInfo;
   sessionId: string;
   message: string;
+  engineerMode?: "linux" | "k8s";
+  clusterId?: string;
+  clusterName?: string;
+  clusterTarget?: K8sClusterTarget;
   securityMode?: string;
   serverId?: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -533,6 +579,10 @@ export async function runAgentChat(opts: {
     sidecar,
     sessionId,
     message,
+    engineerMode,
+    clusterId,
+    clusterName,
+    clusterTarget,
     securityMode,
     serverId,
     history,
@@ -546,11 +596,19 @@ export async function runAgentChat(opts: {
     signal,
   } = opts;
 
+  const metadata: Record<string, unknown> = {
+    engineer_mode: engineerMode ?? "linux",
+  };
+  if (clusterId) metadata.cluster_id = clusterId;
+  if (clusterName) metadata.cluster_name = clusterName;
+  if (clusterTarget) metadata.cluster_target = clusterTarget;
+
   const startRes = await sidecarFetch(sidecar, "/v1/chat/start", {
     method: "POST",
     body: JSON.stringify({
       session_id: sessionId,
       message,
+      metadata,
       security_mode: securityMode ?? null,
       interaction_mode: interactionMode ?? null,
       server_id: serverId ?? null,

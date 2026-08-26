@@ -949,3 +949,415 @@ pub fn get_app_version() -> String {
 pub fn get_update_target() -> crate::updater_support::UpdateTargetInfo {
     crate::updater_support::update_target_info()
 }
+
+#[tauri::command]
+pub fn k8s_discover_contexts() -> Result<Vec<crate::k8s::K8sContextInfo>, String> {
+    crate::k8s::discover_contexts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_import_kubeconfig(
+    path: String,
+    display_name: Option<String>,
+    #[allow(non_snake_case)]
+    displayName: Option<String>,
+) -> Result<Vec<crate::k8s::K8sContextInfo>, String> {
+    let name = display_name.or(displayName);
+    crate::k8s::import_kubeconfig_path(&path, name.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_import_kubeconfig_yaml(
+    yaml: String,
+    display_name: Option<String>,
+    #[allow(non_snake_case)]
+    displayName: Option<String>,
+) -> Result<Vec<crate::k8s::K8sContextInfo>, String> {
+    let name = display_name.or(displayName);
+    crate::k8s::import_kubeconfig_yaml(&yaml, name.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_rename_imported_kubeconfig(
+    path: String,
+    display_name: Option<String>,
+    #[allow(non_snake_case)]
+    displayName: Option<String>,
+) -> Result<Vec<crate::k8s::K8sContextInfo>, String> {
+    let name = display_name
+        .or(displayName)
+        .unwrap_or_default();
+    crate::k8s::set_imported_display_name(&path, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_read_kubeconfig(path: String) -> Result<String, String> {
+    crate::k8s::read_kubeconfig_yaml(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_update_kubeconfig(
+    path: String,
+    display_name: Option<String>,
+    #[allow(non_snake_case)]
+    displayName: Option<String>,
+    yaml: Option<String>,
+) -> Result<Vec<crate::k8s::K8sContextInfo>, String> {
+    let name = display_name.or(displayName);
+    crate::k8s::update_kubeconfig(&path, name.as_deref(), yaml.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_list_imported_kubeconfigs() -> Vec<String> {
+    crate::k8s::list_imported_kubeconfig_paths()
+}
+
+#[tauri::command]
+pub fn k8s_remove_imported_kubeconfig(path: String) -> Result<(), String> {
+    crate::k8s::remove_imported_kubeconfig_path(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_list_ssh_bindings() -> Vec<crate::k8s::K8sClusterTarget> {
+    crate::k8s::list_ssh_bindings()
+}
+
+#[tauri::command]
+pub async fn k8s_probe_ssh_kubectl(
+    sessions: State<'_, SessionManager>,
+    session_id: String,
+) -> Result<crate::k8s::SshKubectlProbe, String> {
+    crate::k8s::probe_ssh_kubectl(&session_id, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_save_ssh_binding(
+    binding: crate::k8s::SshBindingInput,
+) -> Result<crate::k8s::K8sClusterTarget, String> {
+    crate::k8s::save_ssh_binding(binding).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_delete_ssh_binding(id: String) -> Result<(), String> {
+    crate::k8s::delete_ssh_binding(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_kubectl(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    args: Vec<String>,
+) -> Result<crate::k8s::KubectlResult, String> {
+    crate::k8s::run_kubectl(&target, &args, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_list_resources(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    category: String,
+    namespace: Option<String>,
+) -> Result<Vec<crate::k8s::K8sResourceRow>, String> {
+    let cat = crate::k8s::resources::ResourceCategory::from_str(&category)
+        .ok_or_else(|| format!("unknown category: {category}"))?;
+    crate::k8s::list_resources(
+        &target,
+        cat,
+        namespace.as_deref(),
+        &sessions,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_get_resource(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    kind: String,
+    namespace: String,
+    name: String,
+) -> Result<crate::k8s::K8sResourceDetail, String> {
+    crate::k8s::get_resource(&target, &kind, &namespace, &name, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_apply_yaml(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    yaml: String,
+) -> Result<crate::k8s::KubectlResult, String> {
+    crate::k8s::apply_yaml(&target, &yaml, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_delete_resource(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    kind: String,
+    namespace: String,
+    name: String,
+) -> Result<crate::k8s::KubectlResult, String> {
+    crate::k8s::delete_resource(&target, &kind, &namespace, &name, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_scale_resource(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    kind: String,
+    namespace: String,
+    name: String,
+    replicas: i32,
+) -> Result<crate::k8s::KubectlResult, String> {
+    crate::k8s::scale_resource(&target, &kind, &namespace, &name, replicas, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_list_namespaces(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+) -> Result<Vec<String>, String> {
+    crate::k8s::list_namespaces(&target, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_pod_logs(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    namespace: String,
+    pod: String,
+    container: Option<String>,
+    tail_lines: Option<u32>,
+) -> Result<String, String> {
+    crate::k8s::pod_logs(
+        &target,
+        &namespace,
+        &pod,
+        container.as_deref(),
+        tail_lines.unwrap_or(200),
+        &sessions,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_pod_shell_command(
+    target: crate::k8s::K8sClusterTarget,
+    namespace: String,
+    pod: String,
+    container: Option<String>,
+) -> Result<String, String> {
+    Ok(crate::k8s::pod_shell_command(
+        &target,
+        &namespace,
+        &pod,
+        container.as_deref(),
+    ))
+}
+
+#[tauri::command]
+pub fn k8s_open_pod_shell_local(
+    target: crate::k8s::K8sClusterTarget,
+    namespace: String,
+    pod: String,
+    container: Option<String>,
+) -> Result<(), String> {
+    let cmd = crate::k8s::pod_shell_command(
+        &target,
+        &namespace,
+        &pod,
+        container.as_deref(),
+    );
+    crate::k8s::open_local_terminal_command(&cmd).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_pod_containers(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    namespace: String,
+    pod: String,
+) -> Result<Vec<String>, String> {
+    crate::k8s::pod_containers(&target, &namespace, &pod, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_port_forward_start(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    resource_kind: String,
+    namespace: String,
+    name: String,
+    local_port: u16,
+    remote_port: u16,
+) -> Result<crate::k8s::PortForwardInfo, String> {
+    crate::k8s::start_port_forward(
+        &target,
+        &resource_kind,
+        &namespace,
+        &name,
+        local_port,
+        remote_port,
+        &sessions,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_port_forward_stop(
+    sessions: State<'_, SessionManager>,
+    id: String,
+) -> Result<(), String> {
+    crate::k8s::stop_port_forward(&id, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_port_forward_list() -> Result<Vec<crate::k8s::PortForwardInfo>, String> {
+    Ok(crate::k8s::list_port_forwards())
+}
+
+#[tauri::command]
+pub async fn k8s_helm_list_releases(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    namespace: Option<String>,
+) -> Result<Vec<crate::k8s::HelmReleaseRow>, String> {
+    crate::k8s::list_helm_releases(&target, namespace.as_deref(), &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_helm_get_values(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    namespace: String,
+    name: String,
+) -> Result<String, String> {
+    crate::k8s::helm_release_values(&target, &namespace, &name, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_list_crd_instances(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    plural: String,
+    namespace: Option<String>,
+) -> Result<Vec<crate::k8s::K8sResourceRow>, String> {
+    crate::k8s::list_crd_instances(&target, &plural, namespace.as_deref(), &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_tools_status() -> Result<crate::k8s::K8sToolsStatus, String> {
+    crate::k8s::tools_status_checked()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_tools_install(
+    tool: crate::k8s::K8sToolKind,
+) -> Result<crate::k8s::K8sToolsStatus, String> {
+    crate::k8s::install_tools(tool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_cluster_summary(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+) -> Result<crate::k8s::K8sClusterSummary, String> {
+    crate::k8s::cluster_summary(&target, &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn k8s_top_pods(
+    sessions: State<'_, SessionManager>,
+    target: crate::k8s::K8sClusterTarget,
+    namespace: Option<String>,
+) -> Result<Vec<crate::k8s::K8sTopPodRow>, String> {
+    crate::k8s::top_pods(&target, namespace.as_deref(), &sessions)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_kubectl_shell_command(
+    target: crate::k8s::K8sClusterTarget,
+) -> Result<String, String> {
+    Ok(crate::k8s::kubectl_shell_command(&target))
+}
+
+#[tauri::command]
+pub fn k8s_open_kubectl_terminal(
+    target: crate::k8s::K8sClusterTarget,
+) -> Result<(), String> {
+    let cmd = crate::k8s::kubectl_shell_command(&target);
+    crate::k8s::open_local_terminal_command(&cmd).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_pod_shell_start(
+    app: tauri::AppHandle,
+    target: crate::k8s::K8sClusterTarget,
+    namespace: String,
+    pod: String,
+    container: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+) -> Result<crate::k8s::K8sPodShellInfo, String> {
+    crate::k8s::start_pod_shell(
+        app,
+        &target,
+        &namespace,
+        &pod,
+        container.as_deref(),
+        cols.unwrap_or(120),
+        rows.unwrap_or(32),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_pod_shell_input(id: String, data: String) -> Result<(), String> {
+    crate::k8s::pod_shell_input(&id, &data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_pod_shell_resize(id: String, cols: u16, rows: u16) -> Result<(), String> {
+    crate::k8s::pod_shell_resize(&id, cols, rows).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn k8s_pod_shell_stop(id: String) -> Result<(), String> {
+    crate::k8s::stop_pod_shell(&id).map_err(|e| e.to_string())
+}
