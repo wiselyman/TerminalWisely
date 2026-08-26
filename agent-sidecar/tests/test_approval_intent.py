@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.harness.approval_intent import (
     conversation_locale,
     intent_from_command,
+    purpose_from_command,
     sanitize_approval_intent,
 )
 
@@ -44,9 +45,9 @@ def test_sanitize_replaces_english_intent_for_zh_user_with_command():
     cmd = "fail2ban-client status sshd; iptables -L -n"
     out = sanitize_approval_intent(intent, msgs, command=cmd)
     assert _cjk_count(out) >= 2
-    assert "下方命令" not in out
+    assert "fail2ban" in out.lower()
     assert "command below" not in out.lower()
-    assert "fail2ban" in out.lower() or "iptables" in out.lower()
+    assert not out.startswith("执行：")
 
 
 def test_sanitize_replaces_chinese_intent_for_en_user_with_command():
@@ -59,7 +60,8 @@ def test_sanitize_replaces_chinese_intent_for_en_user_with_command():
     out = sanitize_approval_intent(intent, msgs, command=cmd)
     assert _cjk_count(out) == 0
     assert "command below" not in out.lower()
-    assert "nvidia-smi" in out.lower()
+    assert "GPU" in out or "gpu" in out.lower()
+    assert not out.lower().startswith("run:")
 
 
 def test_sanitize_rejects_generic_waffle():
@@ -72,7 +74,36 @@ def test_sanitize_rejects_generic_waffle():
     )
     assert "command below" not in out.lower()
     assert "下方命令" not in out
-    assert "curl" in out.lower() or "执行" in out
+    assert "model api" in out.lower() or "模型" in out
+
+
+def test_sanitize_rejects_syntax_level_intent():
+    msgs = [{"role": "user", "content": "check vllm"}]
+    cmd = (
+        "sleep 90; docker logs --tail 6 qwen38-vllm 2>&1; "
+        "curl -s -m 5 http://localhost:8000/v1/models"
+    )
+    out = sanitize_approval_intent(
+        "Request -s and inspect the response",
+        msgs,
+        command=cmd,
+    )
+    assert "-s" not in out
+    assert "inspect the response" not in out.lower()
+    assert "qwen38-vllm" in out
+    assert "model api" in out.lower() or "日志" in out
+
+
+def test_purpose_from_vllm_health_check_chain():
+    cmd = (
+        "sleep 90; docker logs --tail 6 qwen38-vllm 2>&1; "
+        "curl -s -m 5 http://localhost:8000/v1/models"
+    )
+    out = purpose_from_command(cmd, "en")
+    assert "wait" in out.lower()
+    assert "qwen38-vllm" in out
+    assert "model api" in out.lower()
+    assert "-s" not in out
 
 
 def test_sanitize_keeps_chinese_intent():
@@ -87,12 +118,49 @@ def test_sanitize_keeps_english_intent_for_en_user():
     assert sanitize_approval_intent(intent, msgs) == intent
 
 
+def test_sanitize_rejects_command_echo_intent():
+    msgs = [{"role": "user", "content": "upgrade xgrammar"}]
+    cmd = "docker exec qwen38-vllm pip install -U xgrammar==0.2.4 2>&1 | tail -5"
+    out = sanitize_approval_intent(f"Run: {cmd[:40]}", msgs, command=cmd)
+    assert not out.lower().startswith("run:")
+    assert "xgrammar" in out.lower()
+    assert "container" in out.lower() or "容器" in out
+
+
+def test_purpose_from_docker_pip_install():
+    cmd = "docker exec qwen38-vllm pip install -U xgrammar==0.2.4 2>&1 | tail -5"
+    out = purpose_from_command(cmd, "en")
+    assert "xgrammar" in out.lower()
+    assert "qwen38-vllm" in out
+    assert "pip install" not in out.lower()
+
+
+def test_purpose_from_wheel_metadata():
+    cmd = (
+        'cd /tmp/xg && python3 -c "import zipfile; '
+        'z = zipfile.ZipFile(\'xgrammar-0.2.4.whl\')"'
+    )
+    out = purpose_from_command(cmd, "zh")
+    assert "wheel" in out.lower() or "元数据" in out
+    assert not out.startswith("执行：")
+
+
+def test_purpose_from_docker_pip_list():
+    cmd = (
+        "docker run --rm --entrypoint pip nvcr.io/nvidia/vllm:26.07-py3 list "
+        "2>/dev/null | grep -iE xgrammar"
+    )
+    out = purpose_from_command(cmd, "en")
+    assert "package" in out.lower() or "python" in out.lower()
+    assert not out.lower().startswith("run:")
+
+
 def test_intent_from_command_strips_echo_banners():
     cmd = 'echo "=== Meta ==="; ip link show Meta; nc -zv 10.6.20.16 8000'
     out = intent_from_command(cmd, "zh")
     assert "echo" not in out.lower()
-    assert "ip link" in out
-    assert "nc -zv" not in out  # first statement only
+    assert "===" not in out
+    assert not out.startswith("执行：")
 
 
 def _cjk_count(text: str) -> int:

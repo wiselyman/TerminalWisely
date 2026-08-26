@@ -192,12 +192,18 @@ pub struct AiListModelsRequest {
     pub profile_id: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
+    #[serde(default)]
+    pub configured_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AiListModelsResponse {
     pub models: Vec<String>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub resolved_model: Option<String>,
+    #[serde(default)]
+    pub auto_corrected: bool,
 }
 
 /// Resolve stored API key (if any) and ask sidecar ModelGateway to list models.
@@ -218,6 +224,7 @@ pub fn list_ai_models(app: &AppHandle, request: AiListModelsRequest) -> AppResul
         "base_url": request.base_url,
         "ollama_base_url": request.ollama_base_url,
         "api_key": api_key,
+        "configured_model": request.configured_model,
     });
     let resp = crate::ai_engineer::sidecar_http(
         app,
@@ -242,6 +249,8 @@ pub fn list_ai_models(app: &AppHandle, request: AiListModelsRequest) -> AppResul
                     detail
                 }
             )),
+            resolved_model: None,
+            auto_corrected: false,
         });
     }
     #[derive(Deserialize)]
@@ -250,6 +259,10 @@ pub fn list_ai_models(app: &AppHandle, request: AiListModelsRequest) -> AppResul
         models: Vec<String>,
         #[serde(default)]
         error: Option<String>,
+        #[serde(default)]
+        resolved_model: Option<String>,
+        #[serde(default)]
+        auto_corrected: bool,
     }
     match serde_json::from_str::<Body>(&resp.body) {
         Ok(b) => {
@@ -266,6 +279,8 @@ pub fn list_ai_models(app: &AppHandle, request: AiListModelsRequest) -> AppResul
             Ok(AiListModelsResponse {
                 models: if error.is_some() { vec![] } else { b.models },
                 error,
+                resolved_model: b.resolved_model.filter(|s| !s.is_empty()),
+                auto_corrected: b.auto_corrected,
             })
         }
         Err(e) => Ok(AiListModelsResponse {
@@ -274,6 +289,8 @@ pub fn list_ai_models(app: &AppHandle, request: AiListModelsRequest) -> AppResul
                 "Bad models list response: {e}. Body: {}",
                 resp.body.chars().take(200).collect::<String>()
             )),
+            resolved_model: None,
+            auto_corrected: false,
         }),
     }
 }

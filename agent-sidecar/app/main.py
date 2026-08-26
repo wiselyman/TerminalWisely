@@ -20,7 +20,7 @@ from app.agent.loop import (
 from app.agent.prompts import build_system_prompt
 from app.harness.interaction_mode import normalize_interaction_mode
 from app.llm.context import sanitize_history_item
-from app.llm.gateway import ModelGateway, ModelGatewayError
+from app.llm.gateway import ModelGateway, ModelGatewayError, resolve_served_model_id
 from app.harness.backup import backup_commands, restore_command, validate_commands_for_path
 from app.harness.network_guard import build_timed_rollback_plan
 from app.memory.store import find_cases, save_verified_case
@@ -558,12 +558,26 @@ async def models_list(body: ModelListRequest, _: AuthDep) -> ModelListResponse:
     gw = ModelGateway(
         base_url=base,
         api_key=body.api_key or "",
-        model="-",
+        model=(body.configured_model or "-").strip() or "-",
         timeout=20.0,
     )
     try:
-        models = await gw.list_models()
-        return ModelListResponse(models=models, error=None)
+        catalog = await gw._fetch_models_catalog()
+        models = [item["id"] for item in catalog if item.get("id")]
+        resolved_model: str | None = None
+        auto_corrected = False
+        configured = (body.configured_model or "").strip()
+        if configured:
+            resolved = resolve_served_model_id(configured, catalog)
+            if resolved in models:
+                resolved_model = resolved
+                auto_corrected = resolved != configured
+        return ModelListResponse(
+            models=models,
+            error=None,
+            resolved_model=resolved_model,
+            auto_corrected=auto_corrected,
+        )
     except ModelGatewayError as exc:
         return ModelListResponse(models=[], error=str(exc))
     except Exception as exc:  # noqa: BLE001 — always surface to settings UI

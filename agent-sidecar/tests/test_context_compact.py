@@ -4,9 +4,32 @@ from __future__ import annotations
 
 from app.llm.context import (
     compact_messages_for_model,
+    normalize_messages_for_api,
     sanitize_history_item,
     truncate_tool_payload,
 )
+
+
+def test_normalize_merges_system_messages_at_front() -> None:
+    msgs = [
+        {"role": "user", "content": "hi"},
+        {"role": "system", "content": "late system"},
+        {"role": "assistant", "content": "hello"},
+    ]
+    out = normalize_messages_for_api(msgs)
+    assert out[0]["role"] == "system"
+    assert "late system" in str(out[0]["content"])
+    assert [m["role"] for m in out] == ["system", "user", "assistant"]
+
+
+def test_compact_normalizes_system_before_trim() -> None:
+    msgs = [
+        {"role": "user", "content": "old"},
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "new ask"},
+    ]
+    out = compact_messages_for_model(msgs, max_context_tokens=20_000, tools_overhead_tokens=0)
+    assert out[0]["role"] == "system"
 
 
 def test_truncate_tool_payload_shortens_stdout() -> None:

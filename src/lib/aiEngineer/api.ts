@@ -50,11 +50,14 @@ export interface AiListModelsRequest {
   ollama_base_url?: string;
   profile_id?: string | null;
   api_key?: string | null;
+  configured_model?: string | null;
 }
 
 export interface AiListModelsResponse {
   models: string[];
   error?: string | null;
+  resolved_model?: string | null;
+  auto_corrected?: boolean;
 }
 
 export async function listAiModels(

@@ -59,9 +59,12 @@ def openai_tools() -> list[dict[str, Any]]:
                         "intent": {
                             "type": "string",
                             "description": (
-                                "Short UI title (one concrete sentence): what this "
-                                "command checks or changes. Shown as the card header. "
-                                "Never use filler like 'Will run the command below'. "
+                                "Short UI title (one plain sentence): what this command "
+                                "is trying to accomplish and what outcome you expect — "
+                                "not a paraphrase of flags or syntax. Not a copy of the "
+                                "shell command. Never use filler like "
+                                "'Will run the command below', 'Run: …', or "
+                                "'Request -s and inspect the response'. "
                                 "Match the *latest* user message language only "
                                 "(English ask → English intent; Chinese → Chinese). "
                                 "Ignore earlier turns' language. Required for every call."

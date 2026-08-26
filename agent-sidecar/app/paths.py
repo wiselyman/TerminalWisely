@@ -147,7 +147,8 @@ def max_tool_calls() -> int:
 
 
 def max_run_seconds() -> float:
-    return float(os.environ.get("TW_AI_MAX_RUN_SECONDS", "300"))
+    """Active agent budget per user turn (excludes host exec / approval / ask_user waits)."""
+    return float(os.environ.get("TW_AI_MAX_RUN_SECONDS", "900"))
 
 
 def max_context_tokens() -> int:

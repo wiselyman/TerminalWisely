@@ -32,7 +32,7 @@ Auth: `Authorization: Bearer $TW_AI_TOKEN` on all `/v1/*`.
 | `TW_AI_SECURITY_MODE` | observe / safe / autonomous / production |
 | `TW_AI_DATA_DIR` | Audit SQLite dir (default `~/.terminalwisely/ai-engineer`) |
 | `TW_AI_MAX_TOOL_CALLS` | Budget (default 24) |
-| `TW_AI_MAX_RUN_SECONDS` | Time budget (default 300) |
+| `TW_AI_MAX_RUN_SECONDS` | Active agent budget per turn, excluding host command waits and approval/ask_user pauses (default 900) |
 | `TW_AI_LEASE_TTL_SECONDS` | PrivilegeLease TTL (default 120) |
 
 ## Run (dev)

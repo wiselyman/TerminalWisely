@@ -133,8 +133,11 @@ class ModelListRequest(BaseModel):
     base_url: str = ""
     ollama_base_url: str = ""
     api_key: str | None = None
+    configured_model: str | None = None
 
 
 class ModelListResponse(BaseModel):
     models: list[str] = Field(default_factory=list)
     error: str | None = None
+    resolved_model: str | None = None
+    auto_corrected: bool = False

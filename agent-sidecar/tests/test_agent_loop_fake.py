@@ -110,3 +110,39 @@ async def test_agent_loop_terminal_exec_then_complete():
     assert roles[0] == "system"
     assert "tool" in roles
     assert roles.count("assistant") >= 2
+
+
+@pytest.mark.asyncio
+async def test_run_budget_excludes_host_tool_wait():
+    """Long terminal_exec waits must not consume the active agent run budget."""
+    run = AgentRun(session_id="sess-budget", run_id="run-budget")
+    model = FakeModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=10, max_run_seconds=1)
+
+    async def _feed_tool_result_slowly() -> None:
+        for _ in range(200):
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            raise AssertionError("timed out waiting for WAITING_TOOL")
+        await asyncio.sleep(2.5)
+        assert run.pending_tool is not None
+        deliver_tool_result(
+            run,
+            run.pending_tool.call_id,
+            {
+                "ok": True,
+                "stdout": "LISTEN 0 128 *:8888 *:*",
+                "stderr": "",
+                "exit_code": 0,
+                "_untrusted": True,
+            },
+        )
+
+    feeder = asyncio.create_task(_feed_tool_result_slowly())
+    await loop.run_until_pause_or_done("who owns 8888?")
+    await feeder
+
+    assert run.status == RunStatus.COMPLETED
+    assert run.error is None

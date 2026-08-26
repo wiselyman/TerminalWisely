@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { listAiModels } from "../../lib/aiEngineer/api";
+import { ensureSidecar, listAiModels } from "../../lib/aiEngineer/api";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
 
@@ -189,18 +189,56 @@ export function AiEngineerSettings() {
       setModelHint(endpointErr);
       return;
     }
-    const others = settings.profiles.filter((p) => p.id !== draft.id);
-    const saved: AiModelProfile = {
-      ...draft,
-      api_key: apiKey || undefined,
-    };
-    const nextProfiles = [...others, saved];
-    await persist({
-      profiles: nextProfiles,
-      active_profile_id: settings.active_profile_id || draft.id,
-    });
-    setApiKey("");
-    setView({ kind: "list" });
+    setSaving(true);
+    setError(null);
+    setModelHint(null);
+    try {
+      await ensureSidecar();
+      const verify = await listAiModels({
+        provider: draft.provider,
+        base_url: draft.base_url,
+        ollama_base_url: draft.ollama_base_url,
+        profile_id: view.isNew ? null : draft.id,
+        api_key: apiKey || null,
+        configured_model: draft.model,
+      });
+      if (verify.error || verify.models.length === 0) {
+        setError(verify.error?.trim() || t("aiEngineer.settings.modelVerifyFailed"));
+        return;
+      }
+      let model = draft.model.trim();
+      if (verify.resolved_model?.trim()) {
+        model = verify.resolved_model.trim();
+      } else if (!verify.models.includes(model)) {
+        setError(
+          t("aiEngineer.settings.modelNotServed", {
+            ids: verify.models.join(", "),
+          }),
+        );
+        return;
+      }
+      if (verify.auto_corrected) {
+        setModelHint(t("aiEngineer.settings.modelAutoCorrected", { model }));
+      }
+      const others = settings.profiles.filter((p) => p.id !== draft.id);
+      const saved: AiModelProfile = {
+        ...draft,
+        model,
+        api_key: apiKey || undefined,
+      };
+      const nextProfiles = [...others, saved];
+      await persist({
+        profiles: nextProfiles,
+        active_profile_id: settings.active_profile_id || draft.id,
+      });
+      setApiKey("");
+      setView({ kind: "list" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onRefreshModels = async () => {
@@ -222,6 +260,7 @@ export function AiEngineerSettings() {
         ollama_base_url: view.profile.ollama_base_url,
         profile_id: view.isNew ? null : view.profile.id,
         api_key: apiKey || null,
+        configured_model: view.profile.model,
       });
       if (result.error || result.models.length === 0) {
         const msg =
@@ -237,7 +276,21 @@ export function AiEngineerSettings() {
         t("aiEngineer.settings.refreshOk", { count: result.models.length }),
       );
       setModelOptions(result.models);
-      if (result.models.length === 1 && !view.profile.model.trim()) {
+      const resolved = result.resolved_model?.trim();
+      if (resolved) {
+        setView({
+          ...view,
+          profile: { ...view.profile, model: resolved },
+        });
+        if (result.auto_corrected) {
+          setModelHint(
+            t("aiEngineer.settings.modelAutoCorrected", { model: resolved }),
+          );
+        }
+      } else if (
+        result.models.length === 1 &&
+        !view.profile.model.trim()
+      ) {
         setView({
           ...view,
           profile: { ...view.profile, model: result.models[0] },

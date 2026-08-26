@@ -151,6 +151,29 @@ def truncate_tool_payload(payload: dict[str, Any], *, limit: int = _MAX_TOOL_CON
     return out
 
 
+def normalize_messages_for_api(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge system roles at index 0 — required by OpenAI-compatible APIs."""
+    if not messages:
+        return []
+    system_parts: list[str] = []
+    rest: list[dict[str, Any]] = []
+    for msg in messages:
+        m = dict(msg)
+        if m.get("role") == "system":
+            content = m.get("content")
+            if isinstance(content, str) and content.strip():
+                system_parts.append(content.strip())
+            elif content is not None:
+                system_parts.append(str(content))
+        else:
+            rest.append(m)
+    out: list[dict[str, Any]] = []
+    if system_parts:
+        out.append({"role": "system", "content": "\n\n".join(system_parts)})
+    out.extend(rest)
+    return out
+
+
 def compact_messages_for_model(
     messages: list[dict[str, Any]],
     *,
@@ -158,6 +181,7 @@ def compact_messages_for_model(
     tools_overhead_tokens: int = 1_500,
 ) -> list[dict[str, Any]]:
     """Return a copy of messages trimmed to fit roughly under the context budget."""
+    messages = normalize_messages_for_api(messages)
     budget = max(2_000, max_context_tokens - tools_overhead_tokens)
     last_user_idx = -1
     for i, msg in enumerate(messages):

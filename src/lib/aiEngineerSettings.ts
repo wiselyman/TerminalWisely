@@ -19,8 +19,15 @@ export function formatActiveAiProfileLabel(
 ) {
   const profile = getActiveAiProfile(settings);
   if (!profile?.model?.trim()) return null;
-  if (profile.name.trim() === profile.model.trim()) {
-    return profile.model;
-  }
-  return `${profile.name} · ${profile.model}`;
+  const name = profile.name.trim();
+  if (name) return name;
+  return profile.model.trim();
+}
+
+/** vLLM `root` paths are not valid chat model ids — use `/v1/models` `id` instead. */
+export function looksLikeFilesystemModelPath(model: string): boolean {
+  const v = model.trim();
+  if (!v) return false;
+  if (v.startsWith("/") || v.startsWith("~")) return true;
+  return v.includes("/snapshots/") || v.includes("models--") || v.includes("/.cache/");
 }

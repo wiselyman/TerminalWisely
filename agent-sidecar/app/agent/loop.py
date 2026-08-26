@@ -149,6 +149,30 @@ class AgentLoop:
         self.pipeline.add_pre(InteractionModeGate(run.interaction_mode))
         self._compaction = CompactionEngine(self.model)
         self._started_at = time.monotonic()
+        self._budget_excluded_seconds = 0.0
+        self._budget_pause_started: float | None = None
+
+    def _pause_run_budget(self) -> None:
+        """Exclude host exec / user approval / ask_user waits from the run budget."""
+        if self._budget_pause_started is None:
+            self._budget_pause_started = time.monotonic()
+
+    def _resume_run_budget(self) -> None:
+        if self._budget_pause_started is None:
+            return
+        self._budget_excluded_seconds += time.monotonic() - self._budget_pause_started
+        self._budget_pause_started = None
+
+    def _run_budget_elapsed(self) -> float:
+        paused_now = 0.0
+        if self._budget_pause_started is not None:
+            paused_now = time.monotonic() - self._budget_pause_started
+        return (
+            time.monotonic()
+            - self._started_at
+            - self._budget_excluded_seconds
+            - paused_now
+        )
 
     def _tool_schemas(self) -> list[dict[str, Any]]:
         return tools_for_interaction_mode(self.run.interaction_mode)
@@ -916,7 +940,11 @@ class AgentLoop:
                 "record_tool_message": record_tool_message,
             },
         )
-        result = await fut
+        self._pause_run_budget()
+        try:
+            result = await fut
+        finally:
+            self._resume_run_budget()
         from app.agent.graph import clear_run_wait
 
         clear_run_wait(self.run)
@@ -1111,7 +1139,11 @@ class AgentLoop:
         if resume_extra:
             snap["resume_extra"] = resume_extra
         record_wait_snapshot(self.run, snap)
-        decision = await fut
+        self._pause_run_budget()
+        try:
+            decision = await fut
+        finally:
+            self._resume_run_budget()
         # Copy before finish clears metadata.
         return await self.finish_approval_wait(decision, dict(snap))
 
@@ -1673,7 +1705,11 @@ class AgentLoop:
             },
         )
 
-        answer = await fut
+        self._pause_run_budget()
+        try:
+            answer = await fut
+        finally:
+            self._resume_run_budget()
         from app.agent.graph import clear_run_wait
 
         clear_run_wait(self.run)
@@ -1707,7 +1743,7 @@ class AgentLoop:
     def _check_budgets(self) -> None:
         if self.run.tool_calls_used >= self.max_tool_calls:
             raise BudgetExceeded(f"max tool calls exceeded ({self.max_tool_calls})")
-        elapsed = time.monotonic() - self._started_at
+        elapsed = self._run_budget_elapsed()
         if elapsed > self.max_run_seconds:
             raise BudgetExceeded(f"max run time exceeded ({self.max_run_seconds}s)")
 

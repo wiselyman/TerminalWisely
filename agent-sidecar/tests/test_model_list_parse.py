@@ -1,11 +1,52 @@
-from app.llm.gateway import parse_openai_models_payload
+from app.llm.gateway import (
+    looks_like_filesystem_model_path,
+    parse_openai_models_catalog,
+    parse_openai_models_payload,
+    resolve_served_model_id,
+)
 from app.paths import resolve_openai_compat_base_url
+
+VLLM_CATALOG = {
+    "object": "list",
+    "data": [
+        {
+            "id": "Qwen3.8-spark",
+            "object": "model",
+            "root": "/root/.cache/huggingface/hub/models--unsloth--Qwen3.8-27B-NVFP4/snapshots/9e3d73c76eddb75f795cc24ccfbc5affe41c66bd",
+        }
+    ],
+}
 
 
 def test_parse_openai_models_payload() -> None:
     assert parse_openai_models_payload(
         {"data": [{"id": "gpt-4o"}, {"id": "gpt-4o-mini"}, {"id": "gpt-4o"}]}
     ) == ["gpt-4o", "gpt-4o-mini"]
+
+
+def test_parse_vllm_catalog_uses_id_not_root() -> None:
+    catalog = parse_openai_models_catalog(VLLM_CATALOG)
+    assert catalog == [
+        {
+            "id": "Qwen3.8-spark",
+            "root": "/root/.cache/huggingface/hub/models--unsloth--Qwen3.8-27B-NVFP4/snapshots/9e3d73c76eddb75f795cc24ccfbc5affe41c66bd",
+        }
+    ]
+    assert parse_openai_models_payload(VLLM_CATALOG) == ["Qwen3.8-spark"]
+
+
+def test_resolve_served_model_id_from_root_path() -> None:
+    catalog = parse_openai_models_catalog(VLLM_CATALOG)
+    root = catalog[0]["root"]
+    assert resolve_served_model_id(root, catalog) == "Qwen3.8-spark"
+    assert resolve_served_model_id("Qwen3.8-spark", catalog) == "Qwen3.8-spark"
+
+
+def test_looks_like_filesystem_model_path() -> None:
+    assert looks_like_filesystem_model_path(
+        "/root/.cache/huggingface/hub/models--unsloth--Qwen3.8-27B-NVFP4/snapshots/x"
+    )
+    assert not looks_like_filesystem_model_path("Qwen3.8-spark")
 
 
 def test_parse_ollama_tags_shape() -> None:
