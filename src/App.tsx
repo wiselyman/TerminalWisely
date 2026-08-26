@@ -5,7 +5,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
+import { AppSettingsButton } from "./components/AppSettingsButton";
 import { AppSettingsDialog } from "./components/AppSettingsDialog";
+import { UpdateAvailableDialog } from "./components/UpdateAvailableDialog";
 import { SudoPasswordModal } from "./components/SudoPasswordModal";
 import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
@@ -53,6 +55,9 @@ import {
 } from "./components/SidebarIcons";
 import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
 import { isTauriRuntime } from "./lib/isTauri";
+import { showManualUpdateCheckResult } from "./lib/updateCheckFeedback";
+import { useAppUpdateStore } from "./stores/appUpdateStore";
+import { openAppSettings } from "./stores/downloadSettingsStore";
 import { WindowControls } from "./components/WindowControls";
 import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
 import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
@@ -86,6 +91,11 @@ function App() {
     startRemoteTransfer,
   } = useSessionStore();
   const pushToast = useToastStore((s) => s.pushToast);
+  const updateDialog = useAppUpdateStore((s) => s.dialog);
+  const closeUpdateDialog = useAppUpdateStore((s) => s.closeDialog);
+  const markUpdateInstalled = useAppUpdateStore((s) => s.markInstalled);
+  const quietUpdateCheck = useAppUpdateStore((s) => s.quietCheck);
+  const manualUpdateCheck = useAppUpdateStore((s) => s.manualCheck);
 
   const goToHomeDirectory = (sessionId: string) => {
     void invoke("enter_directory", {
@@ -106,6 +116,48 @@ function App() {
   useEffect(() => {
     void useSessionStore.getState().hydrateFromBackend();
   }, []);
+
+  // Quiet update check after UI settles — badge only, never a modal on launch.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void quietUpdateCheck().then(() => {
+        if (cancelled) return;
+      });
+    }, 4_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [quietUpdateCheck]);
+
+  // Native menu: Check for Updates / Settings.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlistenCheck: (() => void) | undefined;
+    let unlistenSettings: (() => void) | undefined;
+    void (async () => {
+      unlistenCheck = await listen("tw://menu-check-for-updates", () => {
+        pushToast(t("updateChecking"), true);
+        void manualUpdateCheck()
+          .then((result) => showManualUpdateCheckResult(result))
+          .catch((err) =>
+            showManualUpdateCheckResult({
+              status: "error",
+              message: formatAppError(err),
+            }),
+          );
+      });
+      unlistenSettings = await listen("tw://menu-open-settings", () => {
+        openAppSettings();
+      });
+    })();
+    return () => {
+      unlistenCheck?.();
+      unlistenSettings?.();
+    };
+  }, [manualUpdateCheck, pushToast, t]);
 
   // Do NOT prewarm AI sidecar here. First launch creates a private venv + pip
   // install (1–3 min) and a sync ensure_ai_sidecar would starve other IPC —
@@ -869,6 +921,7 @@ function App() {
                     }
                   }}
                 />
+                <AppSettingsButton />
                 <LocaleSwitcher />
               </div>
 
@@ -932,6 +985,15 @@ function App() {
       ) : null}
       <SudoPasswordModal />
       <AppSettingsDialog />
+      {updateDialog ? (
+        <UpdateAvailableDialog
+          update={updateDialog.update}
+          currentVersion={updateDialog.currentVersion}
+          needsPrivilege={updateDialog.needsPrivilege}
+          onDismiss={() => closeUpdateDialog()}
+          onInstalled={() => markUpdateInstalled()}
+        />
+      ) : null}
       {aiPanelSessionId && aiEngineerOpen ? (
         <AiEngineerPanel
           sessionId={aiPanelSessionId}

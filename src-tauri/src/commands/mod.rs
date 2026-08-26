@@ -939,3 +939,13 @@ pub async fn open_local_path(app: AppHandle, path: String) -> Result<(), String>
             .map_err(|e| e.to_string())
     }
 }
+
+#[tauri::command]
+pub fn get_app_version() -> String {
+    crate::updater_support::app_version()
+}
+
+#[tauri::command]
+pub fn get_update_target() -> crate::updater_support::UpdateTargetInfo {
+    crate::updater_support::update_target_info()
+}

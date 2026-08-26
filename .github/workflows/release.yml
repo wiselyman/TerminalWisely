@@ -51,6 +51,8 @@ jobs:
     env:
       APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.linux_env && '1' || '' }}
       NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -137,6 +139,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: TerminalWisely v__VERSION__
@@ -154,6 +158,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ steps.tauri_mac_arm.outputs.releaseId }}
           args: --target x86_64-apple-darwin --bundles app,dmg
@@ -166,6 +172,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.linux_env && '1' || '' }}
           NO_STRIP: ${{ matrix.linux_env && 'true' || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: TerminalWisely v__VERSION__
@@ -173,3 +181,25 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # After all platform builds: rewrite latest.json with deb/rpm custom targets.
+  enrich_latest:
+    needs: publish
+    if: always() && !cancelled()
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enrich and upload latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME:-}"
+          if [[ -z "$TAG" || "$TAG" != v* ]]; then
+            # workflow_dispatch may not be on a tag; resolve latest release tag
+            TAG="$(gh release list --limit 1 --json tagName -q '.[0].tagName')"
+          fi
+          chmod +x scripts/enrich-latest-json.sh
+          bash scripts/enrich-latest-json.sh "$TAG" "$GITHUB_REPOSITORY"

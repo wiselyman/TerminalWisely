@@ -19,6 +19,8 @@ mod systemd;
 mod ssh;
 mod transfer;
 mod types;
+mod updater_support;
+mod app_menu;
 
 use session::SessionManager;
 use tauri::image::Image;
@@ -183,10 +185,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(SessionManager::new())
         .manage(preview::PreviewManager::new())
         .setup(|app| {
             apply_window_icon(app)?;
+            app_menu::install(app)?;
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
                 apply_macos_window_effects(&window)?;
@@ -274,6 +279,8 @@ pub fn run() {
             commands::ai_list_models,
             commands::ai_terminal_exec,
             commands::ai_register_privilege_lease,
+            commands::get_app_version,
+            commands::get_update_target,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -72,6 +72,30 @@ Release 工作流会构建以下产物：
 > Windows ARM64 不支持 MSI，仅生成 NSIS 安装包（Tauri 限制）。
 > Linux ARM64 暂不提供 `.AppImage`（linuxdeploy-aarch64 在 CI 中不稳定）；请使用 `.deb` 或 `.rpm`。
 
+### 在线升级签名（必配）
+
+应用内更新依赖 Tauri updater 的 minisign 签名（与 Apple/Windows 代码签名无关）。仓库 Actions 需要这两个 Secrets：
+
+| Secret | 说明 |
+|--------|------|
+| `TAURI_SIGNING_PRIVATE_KEY` | `tauri signer generate` 产出的私钥全文 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥密码；无密码时可为空字符串 |
+
+公钥写在 `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`。发布结束后 `enrich_latest` job 会上传带 Linux deb/rpm 自定义 target 的 `latest.json`。
+
+本地可跑 `python3 scripts/test-enrich-latest-json.py` 校验平台 key 映射（不访问网络）。
+
+#### 在线升级真机验收（下一版本起）
+
+`v0.0.1` 发布时尚未接入 updater 签名，故没有 `latest.json` / `.sig`。从**含本功能的第一个 tag**起，按下列步骤验收：
+
+1. Release 资产中应有各平台安装包、对应 `.sig`，以及根目录 `latest.json`（含 `linux-*-deb` / `linux-*-rpm`）。
+2. 安装**旧版本** → 启动约 4s 后应弹出更新提示（版本号 + notes）；点「稍后」不下载。
+3. 设置 → 关于 →「检查更新」→ 确认后才下载；进度条可见；失败可打开 Releases。
+4. macOS：装完提示重启，点重启后为新版本。
+5. Windows NSIS：确认后 installer 接管（可能退出应用）。
+6. Linux：AppImage 装走 AppImage；deb/rpm 装会弹出系统密码框，装完提示重启。
+
 ### 触发方式
 
 1. **打版本 tag**（推荐）  

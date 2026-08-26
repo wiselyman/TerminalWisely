@@ -56,7 +56,16 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ steps.release.outputs.id }}
           args: --target x86_64-apple-darwin --bundles app,dmg
           retryAttempts: 1
+
+      - name: Refresh latest.json (include darwin-x86_64)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x scripts/enrich-latest-json.sh
+          bash scripts/enrich-latest-json.sh "${{ inputs.release_tag }}" "$GITHUB_REPOSITORY"

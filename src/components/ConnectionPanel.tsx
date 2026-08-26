@@ -9,6 +9,8 @@ import { useToastStore } from "../stores/toastStore";
 import { switchWorkspacePanel } from "../stores/workspacePanelSwitch";
 import { formatAppError } from "../lib/formatAppError";
 import { clampSidebarWidth } from "../lib/sidebarLayout";
+import { useAppUpdateStore } from "../stores/appUpdateStore";
+import { UpdateAvailableBadge } from "./UpdateAvailableBadge";
 
 interface ConnectionPanelProps {
   cols: number;
@@ -68,6 +70,7 @@ export function ConnectionPanel({
     connectSaved,
     statusMessage,
   } = useSessionStore();
+  const hasPendingUpdate = useAppUpdateStore((s) => s.pending != null);
 
   useEffect(() => {
     void loadSavedConnections();
@@ -470,6 +473,7 @@ export function ConnectionPanel({
   if (collapsed) {
     return (
       <>
+        <UpdateAvailableBadge floating />
         {sshFormModal}
         {passwordModal}
       </>
@@ -502,6 +506,12 @@ export function ConnectionPanel({
             )}
             {savedConnections.map((saved) => savedItem(saved))}
           </section>
+
+          {hasPendingUpdate ? (
+            <div className="sidebar-footer">
+              <UpdateAvailableBadge />
+            </div>
+          ) : null}
 
           {statusMessage && <div className="status-bar">{statusMessage}</div>}
         </aside>

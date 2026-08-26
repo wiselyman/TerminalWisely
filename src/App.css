@@ -4885,6 +4885,86 @@ body.find-panel-resizing {
   gap: 8px;
 }
 
+.update-notes {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-error {
+  margin: 0;
+  color: #ff7b72;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.update-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: #21262d;
+  overflow: hidden;
+}
+
+.update-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #238636;
+  transition: width 0.15s ease-out;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 44px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid #21262d;
+}
+
+.update-available-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #2f7cf6;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(47, 124, 246, 0.35), 0 4px 12px rgba(47, 124, 246, 0.35);
+  transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.update-available-badge:hover {
+  background: #3d8aff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(61, 138, 255, 0.45), 0 6px 16px rgba(47, 124, 246, 0.45);
+}
+
+.update-available-badge:focus-visible {
+  outline: 2px solid #79b8ff;
+  outline-offset: 2px;
+}
+
+.update-available-badge-floating {
+  position: fixed;
+  left: 12px;
+  bottom: 16px;
+  z-index: 24000;
+}
+
 .local-fs-tree {
   flex: 1;
   min-height: 0;
