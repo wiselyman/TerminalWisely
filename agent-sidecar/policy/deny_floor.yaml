@@ -1,0 +1,13 @@
+version: 1
+
+# Catastrophic — always DENY (R4).
+patterns:
+  - '\brm\b(?:\s+-[^\s]+)*(?:\s+)/(?:\s|$)'
+  - '\brm\b(?:\s+-[^\s]+)*(?:\s+)/\*(?:\s|$)'
+  - '\brm\b(?:\s+-[^\s]+)*(?:\s+)~(?:/\*)?(?:\s|$)'
+  - '\brm\b(?:\s+-[^\s]+)*(?:\s+)(/usr|/var|/etc|/boot|/home|/root|/opt|/bin|/sbin|/lib(?:64)?)(?:/)?(?:\s|$)'
+  - '\bmkfs\b'
+  - '\bdd\s+.*\bof=/dev/'
+  - ':\(\)\s*\{\s*:\|:&\s*\}\s*;:'
+  - '\b(curl|wget)\b.*\|\s*(ba)?sh\b'
+  - '>\s*/dev/sd[a-z]'

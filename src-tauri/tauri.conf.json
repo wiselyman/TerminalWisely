@@ -1,0 +1,112 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TerminalWisely",
+  "version": "0.0.1",
+  "identifier": "com.wangyunfei.terminalwisely",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "title": "TerminalWisely",
+        "width": 1400,
+        "height": 860,
+        "minWidth": 800,
+        "minHeight": 500,
+        "center": true,
+        "dragDropEnabled": true,
+        "decorations": false,
+        "acceptFirstMouse": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage",
+      "msi",
+      "nsis",
+      "dmg",
+      "app"
+    ],
+    "macOS": {
+      "bundleName": "TerminalWisely"
+    },
+    "linux": {
+      "deb": {
+        "desktopTemplate": "./linux/TerminalWisely.desktop",
+        "postInstallScript": "./linux/postinst.sh",
+        "postRemoveScript": "./linux/postrm.sh",
+        "files": {
+          "/usr/share/applications/terminal-wisely.desktop": "linux/terminal-wisely.desktop",
+          "/usr/share/icons/hicolor/48x48/apps/TerminalWisely.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/TerminalWisely.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/256x256/apps/TerminalWisely.png": "icons/256x256.png",
+          "/usr/share/icons/hicolor/32x32/apps/terminal-wisely.png": "icons/32x32.png",
+          "/usr/share/icons/hicolor/48x48/apps/terminal-wisely.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/terminal-wisely.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/128x128/apps/terminal-wisely.png": "icons/128x128.png",
+          "/usr/share/icons/hicolor/256x256/apps/terminal-wisely.png": "icons/256x256.png"
+        }
+      },
+      "rpm": {
+        "desktopTemplate": "./linux/TerminalWisely.desktop",
+        "postInstallScript": "./linux/postinst.sh",
+        "postRemoveScript": "./linux/postrm.sh",
+        "files": {
+          "/usr/share/applications/terminal-wisely.desktop": "linux/terminal-wisely.desktop",
+          "/usr/share/icons/hicolor/48x48/apps/TerminalWisely.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/TerminalWisely.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/256x256/apps/TerminalWisely.png": "icons/256x256.png",
+          "/usr/share/icons/hicolor/32x32/apps/terminal-wisely.png": "icons/32x32.png",
+          "/usr/share/icons/hicolor/48x48/apps/terminal-wisely.png": "icons/48x48.png",
+          "/usr/share/icons/hicolor/64x64/apps/terminal-wisely.png": "icons/64x64.png",
+          "/usr/share/icons/hicolor/128x128/apps/terminal-wisely.png": "icons/128x128.png",
+          "/usr/share/icons/hicolor/256x256/apps/terminal-wisely.png": "icons/256x256.png"
+        }
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/48x48.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../agent-sidecar/app": "agent-sidecar/app",
+      "../agent-sidecar/policy": "agent-sidecar/policy",
+      "../agent-sidecar/runtime": "agent-sidecar/runtime",
+      "../agent-sidecar/requirements.txt": "agent-sidecar/requirements.txt",
+      "../agent-sidecar/requirements-runtime.txt": "agent-sidecar/requirements-runtime.txt",
+      "../agent-sidecar/README.md": "agent-sidecar/README.md"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["./windows/wix-sidecar.wxs"]
+      }
+    }
+  }
+}

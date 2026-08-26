@@ -1,0 +1,381 @@
+version: 1
+
+# Product-maintained capability table. User overrides merge on top via
+# ~/.terminalwisely/ai-engineer/policy/overrides.yaml
+
+read_binaries:
+  - cat
+  - head
+  - tail
+  - less
+  - more
+  - ls
+  - ll
+  - dir
+  - pwd
+  - whoami
+  - id
+  - uname
+  - hostname
+  - date
+  - uptime
+  - df
+  - du
+  - free
+  - env
+  - printenv
+  - which
+  - type
+  - file
+  - stat
+  - readlink
+  - realpath
+  - basename
+  - dirname
+  - wc
+  - sort
+  - uniq
+  - cut
+  - tr
+  - awk
+  - sed
+  - grep
+  - egrep
+  - fgrep
+  - rg
+  - find
+  - locate
+  - ps
+  - pgrep
+  - pidof
+  - top
+  - htop
+  - ss
+  - netstat
+  - lsof
+  - ifconfig
+  - ping
+  - traceroute
+  - mtr
+  - dig
+  - nslookup
+  - host
+  - whois
+  - curl
+  - wget
+  - journalctl
+  - echo
+  - printf
+  - "true"
+  - "false"
+  - test
+  - "["
+  - sha256sum
+  - md5sum
+  - cmp
+  - diff
+  - tree
+  - column
+  - nl
+  - od
+  - hexdump
+  - xxd
+  - jq
+  - yq
+  - lscpu
+  - lsblk
+  - lspci
+  - lsusb
+  - dmidecode
+  - vmstat
+  - iostat
+  - numactl
+  - getconf
+  - arch
+  - nproc
+  - sensors
+  - nvidia-smi
+  - rocm-smi
+  - vainfo
+  - glxinfo
+  - findmnt
+  - lsmod
+  - modinfo
+  - blkid
+  - getent
+  - last
+  - who
+  - w
+  - users
+  - groups
+  - locale
+  - resolvectl
+  - networkctl
+  - iw
+  - iwconfig
+  - ethtool
+  - sw_vers
+  - system_profiler
+  - diskutil
+  - ioreg
+  - dpkg
+  - xargs
+  - command
+
+binaries:
+  systemctl:
+    default: [svc_mutate]
+    subcommands:
+      status: [read]
+      show: [read]
+      list-units: [read]
+      list-unit-files: [read]
+      is-active: [read]
+      is-enabled: [read]
+      cat: [read]
+      help: [read]
+      start: [svc_mutate]
+      stop: [svc_mutate]
+      restart: [svc_mutate]
+      reload: [svc_mutate]
+      enable: [svc_mutate]
+      disable: [svc_mutate]
+      mask: [svc_mutate]
+  service:
+    default: [svc_mutate]
+    subcommands:
+      status: [read]
+  docker:
+    default: [unknown]
+    subcommands:
+      ps: [read]
+      images: [read]
+      inspect: [read]
+      logs: [read]
+      stats: [read]
+      top: [read]
+      version: [read]
+      info: [read]
+      system:
+        subcommands:
+          df: [read]
+          info: [read]
+      run: [write]
+      rm: [delete]
+      rmi: [delete]
+      exec: [unknown]
+      build: [write]
+      stop: [svc_mutate]
+      start: [svc_mutate]
+  kubectl:
+    default: [unknown]
+    subcommands:
+      get: [read]
+      describe: [read]
+      logs: [read]
+      top: [read]
+      explain: [read]
+      api-resources: [read]
+      version: [read]
+      apply: [write]
+      create: [write]
+      delete: [delete]
+      patch: [write]
+      replace: [write]
+      scale: [svc_mutate]
+  git:
+    default: [unknown]
+    subcommands:
+      status: [read]
+      log: [read]
+      diff: [read]
+      show: [read]
+      branch: [read]
+      remote: [read]
+      rev-parse: [read]
+      ls-files: [read]
+  ip:
+    default: [read]
+    subcommands:
+      addr: [read]
+      link: [read]
+      route: [read]
+      neigh: [read]
+      a: [read]
+      r: [read]
+      l: [read]
+    # Mutations detected via argv flags in resolver (route del, link set)
+  uci:
+    default: [unknown]
+    subcommands:
+      show: [read]
+      get: [read]
+  nmcli:
+    default: [read]
+    subcommands:
+      device: [read]
+      connection: [read]
+      general: [read]
+      networking: [read]
+      radio: [read]
+      monitor: [read]
+  swapon:
+    default: [svc_mutate]
+    subcommands:
+      --show: [read]
+      -s: [read]
+      --summary: [read]
+      --help: [read]
+      -h: [read]
+  mount:
+    default: [svc_mutate]
+    # bare mount / mount -l → read (resolver)
+    list_flags: ["-l", "-V", "--version", "-h", "--help"]
+  hostnamectl:
+    default: [read]
+    # set-* → svc_mutate in resolver
+  timedatectl:
+    default: [read]
+  localectl:
+    default: [read]
+  sysctl:
+    default: [read]
+    # -w / key=value write → write in resolver
+  apt:
+    default: [pkg_mutate]
+    simulate_flags: ["-s", "--simulate", "--dry-run"]
+    subcommands:
+      update: [read]
+      check: [read]
+      autoremove: [pkg_dangerous]
+      install: [pkg_mutate]
+      remove: [pkg_mutate]
+      purge: [pkg_mutate]
+      upgrade: [pkg_mutate]
+      dist-upgrade: [pkg_mutate]
+      full-upgrade: [pkg_mutate]
+  apt-get:
+    default: [pkg_mutate]
+    simulate_flags: ["-s", "--simulate", "--dry-run"]
+    subcommands:
+      update: [read]
+      check: [read]
+      autoremove: [pkg_dangerous]
+      install: [pkg_mutate]
+      remove: [pkg_mutate]
+      purge: [pkg_mutate]
+      upgrade: [pkg_mutate]
+      dist-upgrade: [pkg_mutate]
+      full-upgrade: [pkg_mutate]
+  dnf:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+      remove: [pkg_mutate]
+      upgrade: [pkg_mutate]
+  yum:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+      remove: [pkg_mutate]
+      update: [pkg_mutate]
+  pacman:
+    default: [pkg_mutate]
+  opkg:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+  pip:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+      uninstall: [pkg_mutate]
+      list: [read]
+      show: [read]
+      freeze: [read]
+      check: [read]
+      search: [read]
+      help: [read]
+  pip3:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+      uninstall: [pkg_mutate]
+      list: [read]
+      show: [read]
+      freeze: [read]
+      check: [read]
+      search: [read]
+      help: [read]
+  snap:
+    default: [pkg_mutate]
+    subcommands:
+      install: [pkg_mutate]
+      remove: [pkg_mutate]
+      refresh: [pkg_mutate]
+      list: [read]
+      info: [read]
+      find: [read]
+      changes: [read]
+      services: [read]
+      version: [read]
+      help: [read]
+  iptables:
+    default: [net_mutate]
+    list_flags: ["-L", "-S", "--list", "--list-rules"]
+  ip6tables:
+    default: [net_mutate]
+    list_flags: ["-L", "-S", "--list", "--list-rules"]
+  nft:
+    default: [net_mutate]
+    read_verbs: ["list", "get"]
+  ufw:
+    default: [net_mutate]
+    read_verbs: ["status", "show", "version", "app"]
+  firewall-cmd:
+    default: [net_mutate]
+    read_flag_prefixes: ["--list", "--state", "--get", "--query", "--info"]
+  rm:
+    caps: [delete]
+  kill:
+    caps: [proc_signal]
+  killall:
+    caps: [proc_signal]
+  pkill:
+    caps: [proc_signal]
+  reboot:
+    caps: [svc_mutate]
+  shutdown:
+    caps: [svc_mutate]
+  poweroff:
+    caps: [svc_mutate]
+  halt:
+    caps: [svc_mutate]
+  mv:
+    caps: [write]
+  cp:
+    caps: [write]
+  chmod:
+    caps: [write]
+  chown:
+    caps: [write]
+  tee:
+    caps: [write]
+  userdel:
+    caps: [pkg_dangerous]
+  passwd:
+    caps: [pkg_dangerous]
+  mkdir:
+    caps: [write]
+  touch:
+    caps: [write]
+  python:
+    caps: [unknown]
+  python3:
+    caps: [unknown]
+  node:
+    caps: [unknown]
+  perl:
+    caps: [unknown]
+  ruby:
+    caps: [unknown]

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories={{categories}}
+Comment={{comment}}
+Exec=/usr/bin/TerminalWisely %U
+Icon=TerminalWisely
+Name={{name}}
+Terminal=false
+Type=Application
+StartupWMClass=TerminalWisely

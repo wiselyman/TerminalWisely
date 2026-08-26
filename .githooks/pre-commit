@@ -1,0 +1,16 @@
+#!/bin/sh
+# Reject commits authored as Cursor — only the repository owner may commit.
+author_email=$(git var GIT_AUTHOR_IDENT 2>/dev/null | sed -n 's/.* <\([^>]*\)>.*/\1/p')
+committer_email=$(git var GIT_COMMITTER_IDENT 2>/dev/null | sed -n 's/.* <\([^>]*\)>.*/\1/p')
+
+for email in "$author_email" "$committer_email"; do
+  case "$email" in
+    *cursoragent@cursor.com*|*cursor.com*)
+      echo "pre-commit: blocked — author/committer must not be Cursor ($email)." >&2
+      echo "Use your own git identity, e.g. wiselyman2008@gmail.com" >&2
+      exit 1
+      ;;
+  esac
+done
+
+exit 0

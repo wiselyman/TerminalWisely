@@ -1,0 +1,59 @@
+[package]
+name = "terminal-wisely"
+version = "0.0.1"
+description = "Cross-platform terminal with SSH and SFTP"
+authors = ["WangYunfei"]
+edition = "2021"
+default-run = "TerminalWisely"
+
+[[bin]]
+name = "TerminalWisely"
+path = "src/main.rs"
+
+[lib]
+name = "terminal_wisely_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[profile.release]
+strip = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["image-png", "protocol-asset", "macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
+thiserror = "2"
+russh = "0.46"
+russh-keys = "0.46"
+russh-sftp = "2.0"
+futures = "0.3"
+dirs = "6"
+log = "0.4"
+env_logger = "0.11"
+async-trait = "0.1"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+sysinfo = "0.33"
+tauri-plugin-clipboard-manager = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSButton", "NSView", "NSResponder"] }
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
+
+[target.'cfg(windows)'.dependencies]
+netstat2 = "0.11"
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }

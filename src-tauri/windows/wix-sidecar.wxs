@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!--
+    Kill only the main app process tree. Do not taskkill all python.exe —
+    and never match *-setup.exe. WiX cannot embed PowerShell $/{}.
+  -->
+  <Fragment>
+    <CustomAction
+      Id="TwStopAppTree"
+      Directory="SystemFolder"
+      ExeCommand="cmd.exe /c taskkill /F /IM TerminalWisely.exe /T"
+      Execute="immediate"
+      Return="ignore"
+      Impersonate="yes" />
+    <InstallExecuteSequence>
+      <Custom Action="TwStopAppTree" Before="InstallFiles" />
+    </InstallExecuteSequence>
+  </Fragment>
+</Wix>
