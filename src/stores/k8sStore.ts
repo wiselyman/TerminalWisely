@@ -10,6 +10,7 @@ import {
   k8sImportKubeconfigYaml,
   k8sListNamespaces,
   k8sListResources,
+  k8sListCrdInstances,
   k8sListSshBindings,
   k8sPortForwardList,
   k8sProbeSshKubectl,
@@ -388,6 +389,20 @@ export const useK8sStore = create<K8sState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const ns = get().allNamespaces ? null : get().namespace;
+      const browse = get().crdBrowse;
+      if (browse) {
+        const instances = await k8sListCrdInstances(
+          cluster,
+          browse.plural,
+          ns,
+        );
+        set({
+          rows: instances,
+          loading: false,
+          metricsAvailable: false,
+        });
+        return;
+      }
       if (category === "helm_releases") {
         const releases = await k8sHelmListReleases(cluster, ns);
         const rows: K8sResourceRow[] = releases.map((r) => ({
