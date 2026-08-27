@@ -60,3 +60,21 @@ export function saveAutoRefreshSec(sec: K8sAutoRefreshSec) {
     /* ignore */
   }
 }
+
+const ALL_NS_KEY = "tw.k8s.allNamespaces";
+
+export function loadAllNamespaces(): boolean {
+  try {
+    return localStorage.getItem(ALL_NS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveAllNamespaces(all: boolean) {
+  try {
+    localStorage.setItem(ALL_NS_KEY, all ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}

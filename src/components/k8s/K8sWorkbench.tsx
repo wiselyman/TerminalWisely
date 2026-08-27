@@ -28,6 +28,7 @@ import { useToastStore } from "../../stores/toastStore";
 import { formatAppError } from "../../lib/formatAppError";
 import { Modal } from "../Modal";
 import { WorkbenchShell } from "../management/WorkbenchShell";
+import { DarkSelect } from "./DarkSelect";
 import { K8sClusterSummaryView } from "./K8sClusterSummary";
 import { K8sPodShellTerminal } from "./K8sPodShellTerminal";
 import { K8sCategoryIcon, K8sNavGroupIcon } from "./K8sNavIcons";
@@ -794,21 +795,22 @@ export function K8sWorkbench() {
           </span>
           <label className="k8s-auto-refresh">
             <span>{t("autoRefresh")}</span>
-            <select
-              value={autoRefreshSec}
-              onChange={(e) =>
+            <DarkSelect
+              value={String(autoRefreshSec)}
+              onChange={(v) =>
                 setAutoRefreshSec(
-                  Number(e.target.value) as (typeof AUTO_REFRESH_OPTIONS)[number],
+                  Number(v) as (typeof AUTO_REFRESH_OPTIONS)[number],
                 )
               }
               aria-label={t("autoRefresh")}
-            >
-              {AUTO_REFRESH_OPTIONS.map((sec) => (
-                <option key={sec} value={sec}>
-                  {sec === 0 ? t("autoRefreshOff") : t("autoRefreshSec", { sec })}
-                </option>
-              ))}
-            </select>
+              options={AUTO_REFRESH_OPTIONS.map((sec) => ({
+                value: String(sec),
+                label:
+                  sec === 0
+                    ? t("autoRefreshOff")
+                    : t("autoRefreshSec", { sec }),
+              }))}
+            />
           </label>
           {cluster.kind === "ssh_kubectl" && cluster.session_id ? (
           <button
@@ -928,17 +930,15 @@ export function K8sWorkbench() {
               </label>
               {!allNamespaces ? (
                 namespaces.length > 0 ? (
-                  <select
+                  <DarkSelect
                     value={namespace}
-                    onChange={(e) => setNamespace(e.target.value)}
+                    onChange={(v) => setNamespace(v)}
                     aria-label={t("namespace")}
-                  >
-                    {namespaces.map((ns) => (
-                      <option key={ns} value={ns}>
-                        {ns}
-                      </option>
-                    ))}
-                  </select>
+                    options={namespaces.map((ns) => ({
+                      value: ns,
+                      label: ns,
+                    }))}
+                  />
                 ) : (
                   <input
                     value={namespace}
@@ -1350,19 +1350,20 @@ export function K8sWorkbench() {
                 <div className="k8s-detail-tab-body k8s-detail-logs">
                   <div className="k8s-detail-logs-toolbar">
                     {logsContainers.length > 0 ? (
-                      <select
+                      <DarkSelect
                         value={logsContainer}
-                        onChange={(e) => {
-                          const next = e.target.value;
+                        onChange={(next) => {
                           setLogsContainer(next);
                           if (logsTarget) {
                             void fetchLogs(logsTarget, next);
                           }
                         }}
                         aria-label={t("logsContainer")}
-                      >
-                        {logsContainers.map((c) => (<option key={c} value={c}>{c}</option>))}
-                      </select>
+                        options={logsContainers.map((c) => ({
+                          value: c,
+                          label: c,
+                        }))}
+                      />
                     ) : null}
                     <label>{t("logsTail")}<input type="number" min={50} max={5000} value={logsTail} onChange={(e) => setLogsTail(Number.parseInt(e.target.value, 10) || 200)} /></label>
                     <label><input type="checkbox" checked={logsFollow} onChange={(e) => setLogsFollow(e.target.checked)} />{t("logsFollow")}</label>
@@ -1377,17 +1378,15 @@ export function K8sWorkbench() {
                     <>
                       {shellContainers.length > 1 ? (
                         <div className="k8s-detail-logs-toolbar">
-                          <select
+                          <DarkSelect
                             value={shellContainer}
-                            onChange={(e) => setShellContainer(e.target.value)}
+                            onChange={(v) => setShellContainer(v)}
                             aria-label={t("logsContainer")}
-                          >
-                            {shellContainers.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
+                            options={shellContainers.map((c) => ({
+                              value: c,
+                              label: c,
+                            }))}
+                          />
                         </div>
                       ) : null}
                       <K8sPodShellTerminal
@@ -1404,17 +1403,15 @@ export function K8sWorkbench() {
                       <p>{t("podShellSshHint")}</p>
                       {shellContainers.length > 0 ? (
                         <div className="k8s-detail-logs-toolbar">
-                          <select
+                          <DarkSelect
                             value={shellContainer}
-                            onChange={(e) => setShellContainer(e.target.value)}
+                            onChange={(v) => setShellContainer(v)}
                             aria-label={t("logsContainer")}
-                          >
-                            {shellContainers.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
+                            options={shellContainers.map((c) => ({
+                              value: c,
+                              label: c,
+                            }))}
+                          />
                         </div>
                       ) : null}
                       <div className="k8s-detail-tab-actions">

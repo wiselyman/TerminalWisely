@@ -36,7 +36,9 @@ import type {
 } from "../lib/k8s/types";
 import {
   categoryForKind,
+  loadAllNamespaces,
   loadAutoRefreshSec,
+  saveAllNamespaces,
   saveAutoRefreshSec,
   type K8sAutoRefreshSec,
 } from "../lib/k8s/navigation";
@@ -203,7 +205,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
   category: "cluster_overview",
   namespace: loadNs(),
   namespaces: [],
-  allNamespaces: false,
+  allNamespaces: loadAllNamespaces(),
   rows: [],
   loading: false,
   error: null,
@@ -346,10 +348,12 @@ export const useK8sStore = create<K8sState>((set, get) => ({
       /* ignore */
     }
     set({ namespace, allNamespaces: false });
+    saveAllNamespaces(false);
     void get().refreshResources();
   },
 
   setAllNamespaces: (allNamespaces) => {
+    saveAllNamespaces(allNamespaces);
     set({ allNamespaces });
     void get().refreshResources();
   },
@@ -490,6 +494,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
         /* ignore */
       }
       set({ namespace: target.namespace, allNamespaces: false });
+      saveAllNamespaces(false);
     }
 
     set({
