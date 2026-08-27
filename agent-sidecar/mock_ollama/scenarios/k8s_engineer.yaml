@@ -1,0 +1,97 @@
+# Scripted replies for AI K8s Engineer mock Ollama (OpenAI-compatible).
+# Step index = number of tool results already in the conversation.
+# More specific scenarios must appear before broad list_pods patterns.
+
+default: list_pods_soft
+
+scenarios:
+  - id: diagnose_broken_pull
+    match: "broken-pull|ImagePullBackOff|起不来|拉取失败|镜像.*(不存在|无效)"
+    steps:
+      - tool_calls:
+          - name: k8s_list
+            arguments:
+              category: pods
+              namespace: demo
+      - tool_calls:
+          - name: k8s_describe
+            arguments:
+              kind: Pod
+              name: broken-pull
+              namespace: demo
+      - content: |
+          根因：镜像拉取失败（ImagePullBackOff）。
+          镜像 does-not-exist.invalid/no/such:image 不存在。
+          建议修正镜像名或删除 Pod 重建。
+
+  - id: scale_web_up
+    match: "扩.*(4|四)|扩容到\\s*4|scale.*4|副本.*4"
+    steps:
+      - tool_calls:
+          - name: k8s_list
+            arguments:
+              category: deployments
+              namespace: demo
+      - tool_calls:
+          - name: k8s_scale
+            arguments:
+              kind: deployment
+              name: web
+              namespace: demo
+              replicas: 4
+      - tool_calls:
+          - name: k8s_get
+            arguments:
+              kind: deployment
+              name: web
+              namespace: demo
+      - content: "已将 demo/web 扩容到 4 副本，验证通过。"
+
+  - id: scale_web_down
+    match: "缩.*(3|三)|缩容到\\s*3|scale.*3|副本.*3"
+    steps:
+      - tool_calls:
+          - name: k8s_scale
+            arguments:
+              kind: deployment
+              name: web
+              namespace: demo
+              replicas: 3
+      - content: "已将 demo/web 缩回 3 副本。"
+
+  - id: list_pods_soft
+    match: "(看看|列出|列表|查询).*(demo|命名空间).*(pod|Pod)|pods.*demo|都正常"
+    steps:
+      - tool_calls:
+          - name: k8s_list
+            arguments:
+              category: pods
+              namespace: demo
+              intent: List demo pods
+      - content: |
+          在 demo 命名空间中：
+          - broken-pull：Pending（异常，ImagePullBackOff）
+          - multi、web-*：Running（正常）
+          仅 broken-pull 异常。
+
+  - id: deploy_web_ready
+    match: "(Deployment|deployment|web).*(就绪|Ready|Available)|deployment.*demo"
+    steps:
+      - tool_calls:
+          - name: k8s_list
+            arguments:
+              category: deployments
+              namespace: demo
+      - content: |
+          Deployment web：replicas=3，readyReplicas=3，availableReplicas=3，状态 Available。
+
+  - id: events_demo
+    match: "事件|events|告警|warning"
+    steps:
+      - tool_calls:
+          - name: k8s_list
+            arguments:
+              category: events
+              namespace: demo
+      - content: |
+          demo 命名空间近期与 broken-pull 相关的 Warning 事件多为 Failed 拉取镜像。
