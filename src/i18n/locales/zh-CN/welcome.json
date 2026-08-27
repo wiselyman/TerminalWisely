@@ -8,7 +8,7 @@
   "feature.aiEngineer.title": "AI Linux 与 K8S Engineer",
   "feature.aiEngineer.desc": "Hosts：对已连接主机说「磁盘满了」「nginx 502」。K8s：用 k8s_* 工具排查 CrashLoop、镜像拉取与 Service。危险变更弹出批准。",
   "feature.k8s.title": "Kubernetes 工作台",
-  "feature.k8s.desc": "侧栏切到 K8s，用 + 添加集群（导入或粘贴 kubeconfig），或绑定 SSH kubectl。浏览工作负载与 YAML。需本机/跳板机 kubectl（应用未内置）。非完整 Lens 复刻（本版无 Helm/CRD）。",
+  "feature.k8s.desc": "侧栏切到 K8s，用 + 添加集群（导入或粘贴 kubeconfig），或绑定 SSH kubectl。浏览工作负载、YAML、Helm Release 与 CRD。需本机/跳板机 kubectl（应用未内置）。",
   "feature.policySafe.title": "策略与安全",
   "feature.policySafe.desc": "Harness 按命令能力分级（R0–R4）：只读自动、变更审批、灾难级拒绝。未知脚本偏严；模型不能绕过策略。API Key 存本机，执行只走你已打开的会话。",
   "feature.dragUpload.title": "拖拽上传",

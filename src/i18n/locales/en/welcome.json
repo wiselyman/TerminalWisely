@@ -8,7 +8,7 @@
   "feature.aiEngineer.title": "AI Linux & K8S Engineers",
   "feature.aiEngineer.desc": "Hosts view: tell the connected host “disk is full” or “nginx 502” over your real SSH session. K8s view: troubleshoot CrashLoop, image pulls, and Services with k8s_* tools. Risky changes ask for approval.",
   "feature.k8s.title": "Kubernetes workbench",
-  "feature.k8s.desc": "Switch the sidebar to K8s, then use + to add a cluster (import or paste kubeconfig) or bind an SSH kubectl host. Browse workloads and YAML. Requires kubectl on PATH or on the jump host — not bundled. Not a full Lens clone (no Helm/CRD browser in this release).",
+  "feature.k8s.desc": "Switch the sidebar to K8s, then use + to add a cluster (import or paste kubeconfig) or bind an SSH kubectl host. Browse workloads, YAML, Helm releases, and CRDs. Requires kubectl on PATH or on the jump host — not bundled.",
   "feature.policySafe.title": "Policy & safety",
   "feature.policySafe.desc": "The harness classifies commands by capability (R0–R4): auto-allow reads, approve mutations, deny catastrophes. Unknown scripts are strict. The model cannot bypass policy. API keys stay on-device; execution uses only your open sessions.",
   "feature.dragUpload.title": "Drag & drop upload",
