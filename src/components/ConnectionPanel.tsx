@@ -762,10 +762,25 @@ export function ConnectionPanel({
                   ? t("k8s:emptyClusters")
                   : null
               }
+              emptyAction={
+                !k8sLoading && clusters.length === 0 ? (
+                  <button
+                    type="button"
+                    className="find-panel-run primary"
+                    onClick={() => setAddClusterOpen(true)}
+                  >
+                    {t("k8s:emptyClustersAdd")}
+                  </button>
+                ) : null
+              }
             >
               {clusters.map((cluster) => {
                 const secondary =
-                  cluster.kind === "ssh_kubectl" ? t("k8s:sourceSsh") : undefined;
+                  cluster.kind === "ssh_kubectl"
+                    ? t("k8s:sourceSsh")
+                    : cluster.source === "imported"
+                      ? t("k8s:sourceImported")
+                      : t("k8s:sourceDefault");
                 const canEdit =
                   cluster.kind === "kubeconfig" &&
                   Boolean(cluster.kubeconfig_path);
