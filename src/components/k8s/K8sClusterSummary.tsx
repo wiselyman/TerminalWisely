@@ -1,14 +1,16 @@
 import { useTranslation } from "react-i18next";
-import type { K8sClusterSummary as Summary } from "../../lib/k8s/types";
+import type { K8sClusterSummary as Summary, K8sWarningEvent } from "../../lib/k8s/types";
 
 export function K8sClusterSummaryView({
   summary,
   loading,
   clusterName,
+  onWarningClick,
 }: {
   summary: Summary | null;
   loading: boolean;
   clusterName: string;
+  onWarningClick?: (ev: K8sWarningEvent) => void;
 }) {
   const { t } = useTranslation("k8s");
 
@@ -57,21 +59,33 @@ export function K8sClusterSummaryView({
           <p className="k8s-detail-empty">{t("summaryNoWarnings")}</p>
         ) : (
           <ul className="k8s-summary-events">
-            {summary.recent_warnings.map((ev, i) => (
-              <li key={`${ev.namespace}/${ev.name}/${ev.reason}/${i}`}>
-                <div className="k8s-summary-event-head">
-                  <span className="k8s-summary-event-reason">{ev.reason}</span>
-                  {ev.age ? (
-                    <span className="k8s-summary-event-age">{ev.age}</span>
-                  ) : null}
-                </div>
-                <div className="k8s-summary-event-target">
-                  {ev.namespace ? `${ev.namespace}/` : ""}
-                  {ev.name}
-                </div>
-                <p className="k8s-summary-event-msg">{ev.message}</p>
-              </li>
-            ))}
+            {summary.recent_warnings.map((ev, i) => {
+              const clickable = Boolean(onWarningClick && ev.kind?.trim());
+              return (
+                <li key={`${ev.namespace}/${ev.name}/${ev.reason}/${i}`}>
+                  <button
+                    type="button"
+                    className={`k8s-summary-event-btn${clickable ? "" : " k8s-summary-event-btn--static"}`}
+                    disabled={!clickable}
+                    title={clickable ? t("warningNavigateHint") : undefined}
+                    onClick={() => onWarningClick?.(ev)}
+                  >
+                    <div className="k8s-summary-event-head">
+                      <span className="k8s-summary-event-reason">{ev.reason}</span>
+                      {ev.age ? (
+                        <span className="k8s-summary-event-age">{ev.age}</span>
+                      ) : null}
+                    </div>
+                    <div className="k8s-summary-event-target">
+                      {ev.kind ? `${ev.kind} · ` : ""}
+                      {ev.namespace ? `${ev.namespace}/` : ""}
+                      {ev.name}
+                    </div>
+                    <p className="k8s-summary-event-msg">{ev.message}</p>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

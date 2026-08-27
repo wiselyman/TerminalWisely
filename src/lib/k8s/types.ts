@@ -108,6 +108,7 @@ export interface HelmReleaseRow {
 export interface K8sWarningEvent {
   namespace: string;
   name: string;
+  kind: string;
   reason: string;
   message: string;
   age?: string | null;
@@ -133,7 +134,7 @@ export interface K8sPodShellInfo {
   pod: string;
 }
 
-export type K8sSortField = "name" | "namespace" | "age";
+export type K8sSortField = "name" | "namespace" | "age" | "status";
 export type K8sSortDir = "asc" | "desc";
 
 export interface K8sCrdBrowseContext {

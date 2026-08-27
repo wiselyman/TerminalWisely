@@ -9405,6 +9405,22 @@ body.k8s-detail-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.k8s-auto-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+.k8s-auto-refresh select {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
 .k8s-kubectl-terminal-btn {
   display: inline-flex;
   align-items: center;
@@ -9465,10 +9481,30 @@ body.k8s-detail-resizing {
   gap: 8px;
 }
 .k8s-summary-events li {
-  padding: 8px 10px;
+  padding: 0;
   border: 1px solid #21262d;
   border-radius: 6px;
   background: #0d1117;
+}
+.k8s-summary-event-btn {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.k8s-summary-event-btn:hover:not(:disabled) {
+  background: rgba(56, 139, 253, 0.08);
+}
+.k8s-summary-event-btn--static,
+.k8s-summary-event-btn:disabled {
+  cursor: default;
+  opacity: 0.85;
 }
 .k8s-summary-event-head {
   display: flex;

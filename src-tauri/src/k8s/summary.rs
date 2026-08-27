@@ -14,6 +14,7 @@ use super::{K8sClusterTarget, K8sResourceRow};
 pub struct K8sWarningEvent {
     pub namespace: String,
     pub name: String,
+    pub kind: String,
     pub reason: String,
     pub message: String,
     pub age: Option<String>,
@@ -195,6 +196,11 @@ async fn fetch_recent_warnings(
                         .to_string(),
                     name: involved
                         .get("name")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    kind: involved
+                        .get("kind")
                         .and_then(|x| x.as_str())
                         .unwrap_or("")
                         .to_string(),
