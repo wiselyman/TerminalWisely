@@ -313,6 +313,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
     set({
       category,
       selectedResource: null,
+      openResources: [],
       detail: null,
       yamlDraft: "",
       crdBrowse: null,

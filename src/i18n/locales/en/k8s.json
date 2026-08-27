@@ -100,6 +100,8 @@
   "terminalFocused": "Switched to SSH terminal tab",
   "terminalNeedSshBind": "Bind an SSH kubectl host to use the in-app terminal",
   "tableSearch": "Search resources…",
+  "tableEmpty": "No resources found.",
+  "tableEmptyFiltered": "No resources match your filter.",
   "rowActions": "Row actions",
   "actionDetails": "Details",
   "actionEdit": "Edit YAML",
