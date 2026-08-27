@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 type Props = {
   emptyText?: string | null;
+  emptyAction?: ReactNode;
   loadingText?: string | null;
   leading?: ReactNode;
   children: ReactNode;
@@ -11,6 +12,7 @@ type Props = {
 /** Shared sidebar entity list chrome for Hosts and Kubernetes. */
 export function EntityCatalog({
   emptyText,
+  emptyAction,
   loadingText,
   leading,
   children,
@@ -21,7 +23,10 @@ export function EntityCatalog({
       {leading}
       {loadingText ? <p className="empty-state">{loadingText}</p> : null}
       {!loadingText && emptyText ? (
-        <p className="empty-state">{emptyText}</p>
+        <div className="empty-state entity-catalog-empty">
+          <p>{emptyText}</p>
+          {emptyAction}
+        </div>
       ) : null}
       {children}
     </section>
