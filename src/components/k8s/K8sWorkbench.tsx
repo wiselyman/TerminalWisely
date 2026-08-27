@@ -294,7 +294,7 @@ function groupOverview(overview: Record<string, string>) {
 }
 
 export function K8sWorkbench() {
-  const { t } = useTranslation(["k8s", "common"]);
+  const { t } = useTranslation(["k8s", "common", "terminal"]);
   const pushToast = useToastStore((s) => s.pushToast);
   const cluster = useK8sStore((s) => s.selectedCluster);
   const category = useK8sStore((s) => s.category);
@@ -696,7 +696,7 @@ export function K8sWorkbench() {
     }
   };
 
-  const sendToEngineer = () => {
+  const sendToChat = () => {
     if (!detail || !cluster) return;
     const phase =
       detail.overview.phase ??
@@ -716,6 +716,11 @@ export function K8sWorkbench() {
     );
     useAiEngineerStore.getState().requestComposerFocus();
   };
+
+  const resourceTabLabel = (row: K8sResourceRow) =>
+    row.namespace
+      ? `${row.kind} · ${row.namespace}/${row.name}`
+      : `${row.kind} · ${row.name}`;
 
   const handleWarningClick = (ev: K8sWarningEvent) => {
     if (!ev.kind?.trim()) {
@@ -1133,56 +1138,42 @@ export function K8sWorkbench() {
       detail={
         showDetailPanel ? (
         <>
-          {openResources.length > 0 ? (
-            <div className="k8s-resource-tabs" role="tablist">
-              {openResources.map((row) => {
-                const active =
-                  selectedResource?.name === row.name &&
-                  selectedResource.namespace === row.namespace &&
-                  selectedResource.kind === row.kind;
-                return (
-                  <button
-                    key={`${row.kind}/${row.namespace}/${row.name}`}
-                    type="button"
-                    role="tab"
-                    className={`k8s-resource-tab${active ? " active" : ""}`}
-                    onClick={() => {
-                      setDetailTab("overview");
-                      void selectResource(row);
-                    }}
-                  >
-                    <span className="tab-title">
-                      {row.kind}/{row.name}
-                    </span>
-                    <span
-                      className="k8s-resource-tab-close"
-                      role="presentation"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeResourceTab(row);
+          {openResources.length > 0 || selectedResource ? (
+            <div className="k8s-resource-tabs-row">
+              <div className="k8s-resource-tabs" role="tablist">
+                {openResources.map((row) => {
+                  const active =
+                    selectedResource?.name === row.name &&
+                    selectedResource.namespace === row.namespace &&
+                    selectedResource.kind === row.kind;
+                  return (
+                    <button
+                      key={`${row.kind}/${row.namespace}/${row.name}`}
+                      type="button"
+                      role="tab"
+                      className={`k8s-resource-tab${active ? " active" : ""}`}
+                      title={resourceTabLabel(row)}
+                      onClick={() => {
+                        setDetailTab("overview");
+                        void selectResource(row);
                       }}
                     >
-                      ×
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          <aside className="k8s-detail-panel">
-          {detailLoading ? <p>{t("loading")}</p> : null}
-          {detail && selectedResource ? (
-            <>
-              <div className="k8s-detail-header">
-                <div className="k8s-detail-title">
-                  <strong>{selectedResource.name}</strong>
-                  <span className="k8s-detail-subtitle">
-                    {selectedResource.kind}
-                    {selectedResource.namespace
-                      ? ` · ${selectedResource.namespace}`
-                      : ""}
-                  </span>
-                </div>
+                      <span className="tab-title">{resourceTabLabel(row)}</span>
+                      <span
+                        className="k8s-resource-tab-close"
+                        role="presentation"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeResourceTab(row);
+                        }}
+                      >
+                        ×
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedResource ? (
                 <div className="k8s-detail-quick-actions">
                   <button
                     type="button"
@@ -1195,12 +1186,18 @@ export function K8sWorkbench() {
                   <button
                     type="button"
                     className="k8s-detail-quick-btn primary"
-                    onClick={sendToEngineer}
+                    onClick={sendToChat}
                   >
-                    {t("sendToEngineer")}
+                    {t("terminal:sendToChat")}
                   </button>
                 </div>
-              </div>
+              ) : null}
+            </div>
+          ) : null}
+          <aside className="k8s-detail-panel">
+          {detailLoading ? <p>{t("loading")}</p> : null}
+          {detail && selectedResource ? (
+            <>
               <div className="k8s-detail-tabs" role="tablist">
                 <button type="button" role="tab" className={detailTab === "overview" ? "active" : ""} onClick={() => setDetailTab("overview")}>{t("detailOverview")}</button>
                 <button type="button" role="tab" className={detailTab === "yaml" ? "active" : ""} onClick={() => setDetailTab("yaml")}>{t("detailYaml")}</button>
