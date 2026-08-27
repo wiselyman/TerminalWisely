@@ -426,7 +426,10 @@ export function aiChatScopeKey(
 }
 
 export function k8sSyntheticSessionId(clusterId: string): string {
-  return `k8s:${clusterId}`;
+  // Cluster ids often embed kubeconfig paths (`kube:/path:ctx`). Starlette
+  // decodes %2F to `/` before routing, so /v1/sessions/{session_id}/pull|stream
+  // must stay a single path segment — never put raw `/` in the session id.
+  return `k8s:${clusterId.replace(/\//g, "|")}`;
 }
 
 let chatAbort: AbortController | null = null;
