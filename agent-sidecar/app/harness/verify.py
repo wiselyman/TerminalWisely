@@ -11,10 +11,22 @@ VERIFY_NUDGE = (
     "Exit code alone is insufficient."
 )
 
+VERIFY_NUDGE_K8S = (
+    "[HARNESS] Previous mutating k8s_* call reported exit_code=0 but SUCCESS requires "
+    "evidence. Verify with k8s_get / k8s_describe / k8s_logs / k8s_list before concluding. "
+    "Exit code alone is insufficient."
+)
+
 ACT_NUDGE = (
     "[HARNESS] Your previous turn had no tool calls and no user-facing answer "
     "(planning/thinking only). Call the required tools now (e.g. terminal_exec / "
     "web_fetch) to make progress. Do not narrate a plan without acting."
+)
+
+ACT_NUDGE_K8S = (
+    "[HARNESS] Your previous turn had no tool calls and no user-facing answer "
+    "(planning/thinking only). Call the required tools now (e.g. k8s_list / k8s_get / "
+    "k8s_describe / k8s_logs) to make progress. Do not narrate a plan without acting."
 )
 
 CONCLUDE_NUDGE = (
@@ -30,11 +42,30 @@ TRUNCATED_PLAN_NUDGE = (
     "terminal_exec for the next real command. Output ONLY tool calls this turn."
 )
 
+TRUNCATED_PLAN_NUDGE_K8S = (
+    "[HARNESS] You wrote a numbered plan (and may have stopped mid-step) but did "
+    "not call any tools. Do NOT continue writing Step N. Immediately call "
+    "k8s_list / k8s_get / k8s_describe for the next real probe. Output ONLY tool "
+    "calls this turn."
+)
+
 LOOP_ABORT_MESSAGE = (
     "模型陷入重复叙述（空转计划），已停止本轮。"
     "请换一种说法再试；若是安装类任务，也可直接提供确切下载链接 / 安装步骤，"
     "或让我改用 web_search 一次后根据结果执行。"
 )
+
+
+def nudge_for_engineer_mode(kind: str, engineer_mode: str | None = None) -> str:
+    """Return Linux or K8s harness nudge text without changing Linux defaults."""
+    k8s = (engineer_mode or "linux").strip().lower() == "k8s"
+    if kind == "verify":
+        return VERIFY_NUDGE_K8S if k8s else VERIFY_NUDGE
+    if kind == "act":
+        return ACT_NUDGE_K8S if k8s else ACT_NUDGE
+    if kind == "truncated_plan":
+        return TRUNCATED_PLAN_NUDGE_K8S if k8s else TRUNCATED_PLAN_NUDGE
+    return CONCLUDE_NUDGE
 
 
 def should_nudge_verify(

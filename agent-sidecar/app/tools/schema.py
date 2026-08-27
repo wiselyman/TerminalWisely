@@ -223,13 +223,14 @@ def _k8s_tool_defs() -> list[dict[str, Any]]:
 
 def openai_tools(*, engineer_mode: str | None = None) -> list[dict[str, Any]]:
     if (engineer_mode or "linux").strip().lower() == "k8s":
-        # Shared ask/web/plan tools + k8s_* (no terminal_exec default).
+        # Shared ask/web/plan tools + k8s_* (no terminal_exec / OpsPlan).
+        # OpsPlan steps are shell-shaped and break on synthetic k8s sessions —
+        # prefer sequential k8s_* tools instead.
         shared_names = {
             TOOL_WEB_SEARCH,
             TOOL_WEB_FETCH,
             TOOL_ASK_USER,
             TOOL_UPDATE_PLAN,
-            TOOL_SUBMIT_OPS_PLAN,
             TOOL_SPAWN_INVESTIGATOR,
         }
         linux = openai_tools_linux()

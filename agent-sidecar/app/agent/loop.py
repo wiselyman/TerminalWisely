@@ -15,12 +15,10 @@ from app.broker import CommandBroker
 from app.harness.conclusion import build_conclusion
 from app.harness.network_guard import build_timed_rollback_plan, is_network_dangerous
 from app.harness.verify import (
-    ACT_NUDGE,
     CONCLUDE_NUDGE,
     LOOP_ABORT_MESSAGE,
-    TRUNCATED_PLAN_NUDGE,
-    VERIFY_NUDGE,
     claim_success_without_evidence,
+    nudge_for_engineer_mode,
     should_nudge_verify,
 )
 from app.harness.approval_intent import sanitize_approval_intent
@@ -273,7 +271,13 @@ class AgentLoop:
                         self.run.verify_nudged = True
                         # Mid-chat system roles break some OpenAI-compatible APIs.
                         self.run.append_message(
-                            {"role": "user", "content": VERIFY_NUDGE}
+                            {
+                                "role": "user",
+                                "content": nudge_for_engineer_mode(
+                                    "verify",
+                                    str(self.run.metadata.get("engineer_mode") or "linux"),
+                                ),
+                            }
                         )
                         self.run.append_event(
                             "verify_nudge", {"risk": self.run.last_mutation_risk}
@@ -297,7 +301,13 @@ class AgentLoop:
                         self.run.metadata["_trunc_plan_nudged"] = True
                         self.run.metadata["_act_nudged"] = True
                         self.run.append_message(
-                            {"role": "user", "content": TRUNCATED_PLAN_NUDGE}
+                            {
+                                "role": "user",
+                                "content": nudge_for_engineer_mode(
+                                    "truncated_plan",
+                                    str(self.run.metadata.get("engineer_mode") or "linux"),
+                                ),
+                            }
                         )
                         self.run.append_event(
                             "act_nudge",
@@ -306,7 +316,14 @@ class AgentLoop:
                         continue
                     if planning_only and not self.run.metadata.get("_act_nudged"):
                         self.run.metadata["_act_nudged"] = True
-                        nudge = CONCLUDE_NUDGE if has_tool_evidence else ACT_NUDGE
+                        nudge = (
+                            CONCLUDE_NUDGE
+                            if has_tool_evidence
+                            else nudge_for_engineer_mode(
+                                "act",
+                                str(self.run.metadata.get("engineer_mode") or "linux"),
+                            )
+                        )
                         self.run.append_message({"role": "user", "content": nudge})
                         self.run.append_event(
                             "act_nudge",
@@ -384,7 +401,15 @@ class AgentLoop:
 
                 if pending_verify_nudge and not self.run.verify_nudged:
                     self.run.verify_nudged = True
-                    self.run.append_message({"role": "user", "content": VERIFY_NUDGE})
+                    self.run.append_message(
+                        {
+                            "role": "user",
+                            "content": nudge_for_engineer_mode(
+                                "verify",
+                                str(self.run.metadata.get("engineer_mode") or "linux"),
+                            ),
+                        }
+                    )
                     self.run.append_event(
                         "verify_nudge",
                         {"risk": self.run.last_mutation_risk or "R2"},
@@ -612,6 +637,9 @@ class AgentLoop:
             pending.extend(str(n) for n in notes)
 
     def _maybe_inject_skills(self, user_message: str) -> None:
+        # Linux playbooks (systemd/nginx/ports) mislead the K8s engineer.
+        if str(self.run.metadata.get("engineer_mode") or "linux").strip().lower() == "k8s":
+            return
         matched = match_skills(user_message)
         if not matched:
             return
@@ -1053,10 +1081,16 @@ class AgentLoop:
         try:
             result = await fut
         except asyncio.CancelledError:
-            return None
-        finally:
             self.run.pending_tool = None
+            self.run.status = RunStatus.CANCELLED
+            return None
+        if result.get("cancelled"):
+            self.run.pending_tool = None
+            self.run.status = RunStatus.CANCELLED
+            return None
         await self._add_tool_result(call_id, result)
+        self.run.status = RunStatus.RUNNING
+        self.run.pending_tool = None
         return result
 
     async def _await_host_terminal(
