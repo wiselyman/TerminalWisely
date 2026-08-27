@@ -15,12 +15,10 @@ from app.broker import CommandBroker
 from app.harness.conclusion import build_conclusion
 from app.harness.network_guard import build_timed_rollback_plan, is_network_dangerous
 from app.harness.verify import (
-    ACT_NUDGE,
     CONCLUDE_NUDGE,
     LOOP_ABORT_MESSAGE,
-    TRUNCATED_PLAN_NUDGE,
-    VERIFY_NUDGE,
     claim_success_without_evidence,
+    nudge_for_engineer_mode,
     should_nudge_verify,
 )
 from app.harness.approval_intent import sanitize_approval_intent
@@ -273,7 +271,13 @@ class AgentLoop:
                         self.run.verify_nudged = True
                         # Mid-chat system roles break some OpenAI-compatible APIs.
                         self.run.append_message(
-                            {"role": "user", "content": VERIFY_NUDGE}
+                            {
+                                "role": "user",
+                                "content": nudge_for_engineer_mode(
+                                    "verify",
+                                    str(self.run.metadata.get("engineer_mode") or "linux"),
+                                ),
+                            }
                         )
                         self.run.append_event(
                             "verify_nudge", {"risk": self.run.last_mutation_risk}
@@ -297,7 +301,13 @@ class AgentLoop:
                         self.run.metadata["_trunc_plan_nudged"] = True
                         self.run.metadata["_act_nudged"] = True
                         self.run.append_message(
-                            {"role": "user", "content": TRUNCATED_PLAN_NUDGE}
+                            {
+                                "role": "user",
+                                "content": nudge_for_engineer_mode(
+                                    "truncated_plan",
+                                    str(self.run.metadata.get("engineer_mode") or "linux"),
+                                ),
+                            }
                         )
                         self.run.append_event(
                             "act_nudge",
@@ -306,7 +316,14 @@ class AgentLoop:
                         continue
                     if planning_only and not self.run.metadata.get("_act_nudged"):
                         self.run.metadata["_act_nudged"] = True
-                        nudge = CONCLUDE_NUDGE if has_tool_evidence else ACT_NUDGE
+                        nudge = (
+                            CONCLUDE_NUDGE
+                            if has_tool_evidence
+                            else nudge_for_engineer_mode(
+                                "act",
+                                str(self.run.metadata.get("engineer_mode") or "linux"),
+                            )
+                        )
                         self.run.append_message({"role": "user", "content": nudge})
                         self.run.append_event(
                             "act_nudge",
@@ -360,31 +377,47 @@ class AgentLoop:
                         return
                     if self.run.metadata.pop("_pending_verify_nudge", None):
                         pending_verify_nudge = True
-                    # Never leave the turn early without answering remaining tool_calls.
+                    # Host waits are awaited inside the handler. A stale WAITING_*
+                    # status with no pending_* future must not abort the turn
+                    # (seen with k8s_* after tool_result already applied).
                     if self.run.status in (
                         RunStatus.WAITING_TOOL,
                         RunStatus.WAITING_USER,
                         RunStatus.WAITING_APPROVAL,
                     ):
-                        # Still awaiting inside handler — should not happen after await returns.
-                        # Fill any unanswered siblings so the next model call is valid.
-                        remaining = tool_calls[idx + 1 :]
-                        for rtc in remaining:
-                            rid = (rtc.get("id") or "").strip()
-                            if rid:
-                                await self._add_tool_result(
-                                    rid,
-                                    {
-                                        "ok": False,
-                                        "error": "skipped: prior tool still waiting",
-                                        "_untrusted": True,
-                                    },
-                                )
-                        return
+                        still_waiting = bool(
+                            self.run.pending_tool
+                            or self.run.pending_user
+                            or self.run.pending_approval
+                        )
+                        if not still_waiting:
+                            self.run.status = RunStatus.RUNNING
+                        else:
+                            remaining = tool_calls[idx + 1 :]
+                            for rtc in remaining:
+                                rid = (rtc.get("id") or "").strip()
+                                if rid:
+                                    await self._add_tool_result(
+                                        rid,
+                                        {
+                                            "ok": False,
+                                            "error": "skipped: prior tool still waiting",
+                                            "_untrusted": True,
+                                        },
+                                    )
+                            return
 
                 if pending_verify_nudge and not self.run.verify_nudged:
                     self.run.verify_nudged = True
-                    self.run.append_message({"role": "user", "content": VERIFY_NUDGE})
+                    self.run.append_message(
+                        {
+                            "role": "user",
+                            "content": nudge_for_engineer_mode(
+                                "verify",
+                                str(self.run.metadata.get("engineer_mode") or "linux"),
+                            ),
+                        }
+                    )
                     self.run.append_event(
                         "verify_nudge",
                         {"risk": self.run.last_mutation_risk or "R2"},
@@ -612,6 +645,9 @@ class AgentLoop:
             pending.extend(str(n) for n in notes)
 
     def _maybe_inject_skills(self, user_message: str) -> None:
+        # Linux playbooks (systemd/nginx/ports) mislead the K8s engineer.
+        if str(self.run.metadata.get("engineer_mode") or "linux").strip().lower() == "k8s":
+            return
         matched = match_skills(user_message)
         if not matched:
             return
@@ -1050,13 +1086,32 @@ class AgentLoop:
             },
         }
         self.run.append_event("tool_call", payload)
+        from app.agent.graph import clear_run_wait, record_wait_snapshot
+
+        record_wait_snapshot(
+            self.run,
+            {
+                "kind": "tool",
+                "call_id": call_id,
+                "tool_name": name,
+                "command": display_cmd,
+                "risk": risk,
+                "record_tool_message": True,
+            },
+        )
+        self._pause_run_budget()
         try:
             result = await fut
-        except asyncio.CancelledError:
-            return None
         finally:
+            self._resume_run_budget()
+        clear_run_wait(self.run)
+        if result.get("cancelled"):
             self.run.pending_tool = None
+            self.run.status = RunStatus.CANCELLED
+            return None
         await self._add_tool_result(call_id, result)
+        self.run.status = RunStatus.RUNNING
+        self.run.pending_tool = None
         return result
 
     async def _await_host_terminal(
