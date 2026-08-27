@@ -377,27 +377,35 @@ class AgentLoop:
                         return
                     if self.run.metadata.pop("_pending_verify_nudge", None):
                         pending_verify_nudge = True
-                    # Never leave the turn early without answering remaining tool_calls.
+                    # Host waits are awaited inside the handler. A stale WAITING_*
+                    # status with no pending_* future must not abort the turn
+                    # (seen with k8s_* after tool_result already applied).
                     if self.run.status in (
                         RunStatus.WAITING_TOOL,
                         RunStatus.WAITING_USER,
                         RunStatus.WAITING_APPROVAL,
                     ):
-                        # Still awaiting inside handler — should not happen after await returns.
-                        # Fill any unanswered siblings so the next model call is valid.
-                        remaining = tool_calls[idx + 1 :]
-                        for rtc in remaining:
-                            rid = (rtc.get("id") or "").strip()
-                            if rid:
-                                await self._add_tool_result(
-                                    rid,
-                                    {
-                                        "ok": False,
-                                        "error": "skipped: prior tool still waiting",
-                                        "_untrusted": True,
-                                    },
-                                )
-                        return
+                        still_waiting = bool(
+                            self.run.pending_tool
+                            or self.run.pending_user
+                            or self.run.pending_approval
+                        )
+                        if not still_waiting:
+                            self.run.status = RunStatus.RUNNING
+                        else:
+                            remaining = tool_calls[idx + 1 :]
+                            for rtc in remaining:
+                                rid = (rtc.get("id") or "").strip()
+                                if rid:
+                                    await self._add_tool_result(
+                                        rid,
+                                        {
+                                            "ok": False,
+                                            "error": "skipped: prior tool still waiting",
+                                            "_untrusted": True,
+                                        },
+                                    )
+                            return
 
                 if pending_verify_nudge and not self.run.verify_nudged:
                     self.run.verify_nudged = True
@@ -1078,12 +1086,25 @@ class AgentLoop:
             },
         }
         self.run.append_event("tool_call", payload)
+        from app.agent.graph import clear_run_wait, record_wait_snapshot
+
+        record_wait_snapshot(
+            self.run,
+            {
+                "kind": "tool",
+                "call_id": call_id,
+                "tool_name": name,
+                "command": display_cmd,
+                "risk": risk,
+                "record_tool_message": True,
+            },
+        )
+        self._pause_run_budget()
         try:
             result = await fut
-        except asyncio.CancelledError:
-            self.run.pending_tool = None
-            self.run.status = RunStatus.CANCELLED
-            return None
+        finally:
+            self._resume_run_budget()
+        clear_run_wait(self.run)
         if result.get("cancelled"):
             self.run.pending_tool = None
             self.run.status = RunStatus.CANCELLED

@@ -131,13 +131,19 @@ fn pick_port() -> AppResult<u16> {
 }
 
 fn resolve_sidecar_script(app: &AppHandle) -> PathBuf {
+    // Dev binaries bake CARGO_MANIFEST_DIR; prefer the live source tree so
+    // edits under /agent-sidecar are picked up without copying into target/.
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agent-sidecar");
+    if source.join("app/main.py").is_file() {
+        return source;
+    }
     if let Ok(dir) = app.path().resource_dir() {
         let candidate = dir.join("agent-sidecar");
-        if candidate.join("app/main.py").exists() {
+        if candidate.join("app/main.py").is_file() {
             return candidate;
         }
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agent-sidecar")
+    source
 }
 
 fn data_dir(app: &AppHandle) -> AppResult<PathBuf> {
