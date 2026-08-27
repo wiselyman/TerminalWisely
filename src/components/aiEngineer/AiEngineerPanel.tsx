@@ -31,14 +31,17 @@ import {
   summarizeShellTools,
 } from "../../lib/aiEngineer/shellHighlight";
 import {
+  K8S_WORKFLOW_CHIP_IDS,
   WORKFLOW_CHIP_IDS,
   classifyLocalFile,
+  k8sWorkflowPrompt,
   nextAttachmentId,
   readLocalImageBase64,
   readLocalTextFile,
+  type K8sWorkflowChipId,
   type PendingAttachment,
-  workflowPrompt,
   type WorkflowChipId,
+  workflowPrompt,
 } from "../../lib/aiEngineer/attachments";
 import { sendRemotePathToChat } from "../../lib/aiEngineer/sendToChat";
 import { readActiveTerminalSelection } from "../../lib/aiEngineer/terminalSelectionBridge";
@@ -179,7 +182,10 @@ function ToolExecCard({
   const [, tick] = useState(0);
   const [hovered, setHovered] = useState(false);
   const running = line.status === "running";
-  const isExec = line.name === "terminal_exec" || line.name === "ai_exec";
+  const isExec =
+    line.name === "terminal_exec" ||
+    line.name === "ai_exec" ||
+    line.name.startsWith("k8s_");
   // Open while running so the user can watch output; collapse when finished for a cleaner transcript.
   const [expanded, setExpanded] = useState(() => running);
 
@@ -548,8 +554,12 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
     void onLocalFiles(images);
   };
 
-  const applyWorkflowChip = (id: WorkflowChipId) => {
-    setInput(workflowPrompt(id, threadInteractionMode));
+  const applyWorkflowChip = (id: WorkflowChipId | K8sWorkflowChipId) => {
+    if (engineerMode === "k8s") {
+      setInput(k8sWorkflowPrompt(id as K8sWorkflowChipId, threadInteractionMode));
+    } else {
+      setInput(workflowPrompt(id as WorkflowChipId, threadInteractionMode));
+    }
   };
 
   const profiles = settings?.profiles ?? [];
@@ -955,7 +965,10 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   <div className="ai-engineer-empty">
                     <p className="find-panel-empty">{emptyHint}</p>
                     <div className="ai-engineer-workflow-chips" role="group">
-                      {WORKFLOW_CHIP_IDS.map((id) => (
+                      {(engineerMode === "k8s"
+                        ? K8S_WORKFLOW_CHIP_IDS
+                        : WORKFLOW_CHIP_IDS
+                      ).map((id) => (
                         <button
                           key={id}
                           type="button"

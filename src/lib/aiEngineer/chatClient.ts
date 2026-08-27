@@ -320,7 +320,16 @@ async function handleProtocolEvent(opts: {
         typeof args.intent === "string" && args.intent.trim()
           ? args.intent.trim()
           : name;
-      onToolExec?.onStart?.({ callId, command: name, intent });
+      const commandHint = String(
+        (args.kind && args.name
+          ? `${args.kind}/${args.namespace ?? ""}/${args.name}`
+          : "") ||
+          (args.category as string) ||
+          (args.pod as string) ||
+          (args.name as string) ||
+          name,
+      );
+      onToolExec?.onStart?.({ callId, command: commandHint, intent });
       const result = await executeToolCall(
         sessionId,
         {

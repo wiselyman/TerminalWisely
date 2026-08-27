@@ -426,7 +426,10 @@ export function aiChatScopeKey(
 }
 
 export function k8sSyntheticSessionId(clusterId: string): string {
-  return `k8s:${clusterId}`;
+  // Cluster ids often embed kubeconfig paths (`kube:/path:ctx`). Starlette
+  // decodes %2F to `/` before routing, so /v1/sessions/{session_id}/pull|stream
+  // must stay a single path segment — never put raw `/` in the session id.
+  return `k8s:${clusterId.replace(/\//g, "|")}`;
 }
 
 let chatAbort: AbortController | null = null;
@@ -765,7 +768,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const sessionId = k8sSyntheticSessionId(clusterId);
     const nextScope = aiChatScopeKey(sessionId, null, clusterId);
     const prev = get();
-    const nextTarget = clusterTarget ?? prev.clusterTarget;
+    // Prefer explicit target; if omitted while staying on the same cluster, keep
+    // previous. When switching cluster id without a target, clear stale target
+    // so the host bridge falls back to the workbench selection.
+    const nextTarget =
+      clusterTarget !== undefined && clusterTarget !== null
+        ? clusterTarget
+        : prev.clusterId === clusterId
+          ? prev.clusterTarget
+          : null;
     if (
       prev.chatScope === nextScope &&
       prev.sessionId === sessionId &&
@@ -1232,9 +1243,19 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const effectiveClusterId =
       clusterId ?? (mode === "k8s" ? get().clusterId : null);
     if (effectiveClusterId) {
+      // Refresh cluster_target from workbench without a static import cycle.
+      const { useK8sStore } = await import("./k8sStore");
+      const ks = useK8sStore.getState();
+      const target =
+        ks.clusters.find((c) => c.id === effectiveClusterId) ??
+        (ks.selectedCluster?.id === effectiveClusterId
+          ? ks.selectedCluster
+          : null) ??
+        get().clusterTarget;
       get().bindK8sContext(
         effectiveClusterId,
-        get().clusterName ?? effectiveClusterId,
+        target?.display_name ?? get().clusterName ?? effectiveClusterId,
+        target,
       );
     } else {
       get().bindContext(sessionId, serverId);
@@ -1650,6 +1671,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 (event.arguments.query as string) ||
                 (event.arguments.url as string) ||
                 (event.arguments.question as string) ||
+                (event.arguments.category as string) ||
+                (event.arguments.kind && event.arguments.name
+                  ? `${event.arguments.kind}/${event.arguments.namespace ?? ""}/${event.arguments.name}`
+                  : "") ||
+                (event.arguments.pod as string) ||
+                (event.arguments.name as string) ||
                 "",
             );
             const intent =
@@ -1657,7 +1684,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 ? event.arguments.intent.trim()
                 : undefined;
             const isExec =
-              event.name === "terminal_exec" || event.name === "ai_exec";
+              event.name === "terminal_exec" ||
+              event.name === "ai_exec" ||
+              event.name.startsWith("k8s_");
             const msgs = get().messages;
             const last = msgs[msgs.length - 1];
             if (last?.kind === "assistant" && last.streaming) {
