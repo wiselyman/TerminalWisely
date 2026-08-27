@@ -340,7 +340,6 @@ export function K8sWorkbench() {
   const [detailTab, setDetailTab] = useState<
     | "overview"
     | "yaml"
-    | "apply"
     | "delete"
     | "scale"
     | "logs"
@@ -1214,9 +1213,6 @@ export function K8sWorkbench() {
                   <button type="button" role="tab" className={detailTab === "portForward" ? "active" : ""} onClick={() => setDetailTab("portForward")}>{t("portForward")}</button>
                 ) : null}
                 {detail.kind !== "HelmRelease" ? (
-                  <button type="button" role="tab" className={detailTab === "apply" ? "active" : ""} onClick={() => setDetailTab("apply")}>{t("apply")}</button>
-                ) : null}
-                {detail.kind !== "HelmRelease" ? (
                   <button type="button" role="tab" className={detailTab === "delete" ? "active" : ""} onClick={() => setDetailTab("delete")}>{t("delete")}</button>
                 ) : null}
               </div>
@@ -1251,10 +1247,10 @@ export function K8sWorkbench() {
                 })()
               ) : null}
 
-              {detailTab === "yaml" || detailTab === "apply" ? (
+              {detailTab === "yaml" ? (
                 <div className="k8s-detail-tab-body">
                   <textarea className="k8s-yaml-editor" value={yamlDraft} onChange={(e) => setYamlDraft(e.target.value)} spellCheck={false} readOnly={detail.kind === "HelmRelease"} />
-                  {detailTab === "apply" && detail.kind !== "HelmRelease" ? (
+                  {detail.kind !== "HelmRelease" ? (
                     <div className="k8s-detail-tab-actions">
                       <button type="button" className="find-panel-run primary" onClick={() => setConfirm({ kind: "apply" })}>{t("apply")}</button>
                     </div>
