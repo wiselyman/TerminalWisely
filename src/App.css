@@ -9414,12 +9414,19 @@ body.k8s-detail-resizing {
   white-space: nowrap;
 }
 .k8s-auto-refresh select {
-  background: #0d1117;
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: dark;
+  background-color: #0d1117;
   border: 1px solid #30363d;
   color: #e6edf3;
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 11px;
+}
+.k8s-auto-refresh select option {
+  background: #0d1117;
+  color: #e6edf3;
 }
 .k8s-kubectl-terminal-btn {
   display: inline-flex;
@@ -9990,12 +9997,76 @@ body.k8s-detail-resizing {
   padding-left: 8px;
   margin-bottom: 4px;
 }
-.k8s-workbench-ns select {
-  background: #161b22;
-  border: 1px solid #30363d;
-  color: #e6edf3;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
+.k8s-dark-select {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+.k8s-dark-select-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
   max-width: 160px;
+  padding: 4px 28px 4px 8px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background-color: #161b22;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239da7b3' d='M1.4 1.2 6 5.8l4.6-4.6 1.2 1.2L6 8.2.2 2.4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 7px;
+  color: #e6edf3;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k8s-dark-select-trigger:hover,
+.k8s-dark-select.open .k8s-dark-select-trigger {
+  border-color: #58a6ff;
+}
+.k8s-dark-select-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.k8s-dark-select-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #e6edf3;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.k8s-dark-select-menu button:hover,
+.k8s-dark-select-menu button.selected {
+  background: #21262d;
+}
+.k8s-auto-refresh .k8s-dark-select-trigger {
+  background-color: #0d1117;
+  min-height: 24px;
+  padding: 2px 24px 2px 6px;
+  font-size: 11px;
+  max-width: 72px;
+}
+.k8s-detail-logs-toolbar .k8s-dark-select-trigger {
+  max-width: 140px;
 }
