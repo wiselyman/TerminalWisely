@@ -9750,6 +9750,18 @@ body.k8s-detail-resizing {
   border-radius: 999px;
   padding: 2px 8px;
 }
+.k8s-pf-chip-label {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .k8s-pf-chip button {
   border: none;
   background: transparent;
@@ -9803,9 +9815,13 @@ body.k8s-detail-resizing {
   display: grid;
   background: #161b22;
   border: 1px solid #30363d;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
   padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.k8s-row-menu--portal {
+  position: fixed;
+  z-index: 10050;
 }
 .k8s-row-menu button {
   text-align: left;
@@ -10077,6 +10093,11 @@ body.k8s-detail-resizing {
   border-radius: 6px;
   background: #0d1117;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.k8s-dark-select-menu--portal {
+  position: fixed;
+  top: auto;
+  left: auto;
 }
 .k8s-dark-select-menu button {
   display: block;
