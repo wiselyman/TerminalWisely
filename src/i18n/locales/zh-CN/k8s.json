@@ -94,7 +94,6 @@
   "copyName": "复制名称",
   "copyNameOk": "已复制名称",
   "copyNameFailed": "复制失败",
-  "sendToEngineer": "发给 AI 工程师",
   "aiEngineerPrompt": "请分析 {{kind}} {{namespace}}/{{name}}，当前状态：{{phase}}",
   "openTerminal": "终端",
   "terminalFocused": "已切换到 SSH 终端页签",

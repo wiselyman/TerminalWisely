@@ -94,7 +94,6 @@
   "copyName": "Copy name",
   "copyNameOk": "Name copied",
   "copyNameFailed": "Could not copy name",
-  "sendToEngineer": "Send to AI Engineer",
   "aiEngineerPrompt": "Please analyze {{kind}} {{namespace}}/{{name}}. Current status: {{phase}}",
   "openTerminal": "Terminal",
   "terminalFocused": "Switched to SSH terminal tab",
