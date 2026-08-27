@@ -188,16 +188,21 @@ function columnsForCategory(
   category: K8sResourceCategory,
   metricsAvailable: boolean,
   clusterScoped: boolean,
+  showNamespace: boolean,
 ): TableColumn[] {
   if (category === "pods") {
     const cols: TableColumn[] = [
       { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
-      {
+    ];
+    if (showNamespace) {
+      cols.push({
         id: "namespace",
         labelKey: "colNamespace",
         sortable: "namespace",
         cell: (r) => r.namespace || "—",
-      },
+      });
+    }
+    cols.push(
       { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
       {
         id: "restarts",
@@ -206,7 +211,7 @@ function columnsForCategory(
       },
       { id: "node", labelKey: "colNode", cell: (r) => r.node ?? "—" },
       { id: "age", labelKey: "colAge", sortable: "age", cell: (r) => r.age ?? "—" },
-    ];
+    );
     if (metricsAvailable) {
       cols.push(
         { id: "cpu", labelKey: "colCpu", cell: (r) => r.cpu ?? "—" },
@@ -216,23 +221,28 @@ function columnsForCategory(
     return cols;
   }
   if (category === "deployments" || category === "statefulsets" || category === "daemonsets" || category === "replicasets") {
-    return [
+    const cols: TableColumn[] = [
       { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
-      {
+    ];
+    if (showNamespace) {
+      cols.push({
         id: "namespace",
         labelKey: "colNamespace",
         sortable: "namespace",
         cell: (r) => r.namespace || "—",
-      },
+      });
+    }
+    cols.push(
       { id: "ready", labelKey: "colReady", cell: (r) => r.ready ?? "—" },
       { id: "age", labelKey: "colAge", sortable: "age", cell: (r) => r.age ?? "—" },
       { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
-    ];
+    );
+    return cols;
   }
   const cols: TableColumn[] = [
     { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
   ];
-  if (!clusterScoped) {
+  if (showNamespace) {
     cols.push({
       id: "namespace",
       labelKey: "colNamespace",
@@ -496,8 +506,14 @@ export function K8sWorkbench() {
   }, [detailTab, logsFollow, cluster, logsTarget, logsContainer, logsTail]);
 
   const tableColumns = useMemo(
-    () => columnsForCategory(category, metricsAvailable, isClusterScoped),
-    [category, metricsAvailable, isClusterScoped],
+    () =>
+      columnsForCategory(
+        category,
+        metricsAvailable,
+        isClusterScoped,
+        !isClusterScoped && allNamespaces,
+      ),
+    [category, metricsAvailable, isClusterScoped, allNamespaces],
   );
 
   const filteredRows = useMemo(() => {
