@@ -100,6 +100,8 @@
   "terminalFocused": "已切换到 SSH 终端页签",
   "terminalNeedSshBind": "请先绑定 SSH kubectl 主机以使用应用内终端",
   "tableSearch": "搜索资源…",
+  "tableEmpty": "没有匹配的资源。",
+  "tableEmptyFiltered": "没有符合筛选条件的资源。",
   "rowActions": "行操作",
   "actionDetails": "详情",
   "actionEdit": "编辑 YAML",
