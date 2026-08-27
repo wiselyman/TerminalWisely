@@ -187,7 +187,6 @@ function ageSortKey(age?: string | null): number {
 function columnsForCategory(
   category: K8sResourceCategory,
   metricsAvailable: boolean,
-  clusterScoped: boolean,
   showNamespace: boolean,
 ): TableColumn[] {
   if (category === "pods") {
@@ -510,7 +509,6 @@ export function K8sWorkbench() {
       columnsForCategory(
         category,
         metricsAvailable,
-        isClusterScoped,
         !isClusterScoped && allNamespaces,
       ),
     [category, metricsAvailable, isClusterScoped, allNamespaces],
