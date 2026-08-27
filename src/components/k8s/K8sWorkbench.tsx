@@ -340,7 +340,6 @@ export function K8sWorkbench() {
   const [detailTab, setDetailTab] = useState<
     | "overview"
     | "yaml"
-    | "delete"
     | "scale"
     | "logs"
     | "shell"
@@ -773,7 +772,7 @@ export function K8sWorkbench() {
         break;
       case "delete":
         void selectResource(row);
-        setDetailTab("delete");
+        setConfirm({ kind: "delete", row });
         break;
       case "crdInstances":
         void listCrdInstances(row);
@@ -1189,6 +1188,24 @@ export function K8sWorkbench() {
                   >
                     {t("terminal:sendToChat")}
                   </button>
+                  {selectedResource.kind !== "HelmRelease" ? (
+                    <button
+                      type="button"
+                      className="k8s-detail-quick-btn danger"
+                      onClick={() =>
+                        setConfirm({
+                          kind: "delete",
+                          row: {
+                            kind: selectedResource.kind,
+                            namespace: selectedResource.namespace,
+                            name: selectedResource.name,
+                          },
+                        })
+                      }
+                    >
+                      {t("delete")}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1211,9 +1228,6 @@ export function K8sWorkbench() {
                 ) : null}
                 {canPortForward(selectedResource.kind) ? (
                   <button type="button" role="tab" className={detailTab === "portForward" ? "active" : ""} onClick={() => setDetailTab("portForward")}>{t("portForward")}</button>
-                ) : null}
-                {detail.kind !== "HelmRelease" ? (
-                  <button type="button" role="tab" className={detailTab === "delete" ? "active" : ""} onClick={() => setDetailTab("delete")}>{t("delete")}</button>
                 ) : null}
               </div>
 
@@ -1255,30 +1269,6 @@ export function K8sWorkbench() {
                       <button type="button" className="find-panel-run primary" onClick={() => setConfirm({ kind: "apply" })}>{t("apply")}</button>
                     </div>
                   ) : null}
-                </div>
-              ) : null}
-
-              {detailTab === "delete" ? (
-                <div className="k8s-detail-tab-body k8s-detail-action-pane">
-                  <p>{t("confirmDeleteBody", { name: selectedResource.name, kind: selectedResource.kind })}</p>
-                  <div className="k8s-detail-tab-actions">
-                    <button
-                      type="button"
-                      className="find-panel-run danger"
-                      onClick={() =>
-                        setConfirm({
-                          kind: "delete",
-                          row: {
-                            kind: selectedResource.kind,
-                            namespace: selectedResource.namespace,
-                            name: selectedResource.name,
-                          },
-                        })
-                      }
-                    >
-                      {t("delete")}
-                    </button>
-                  </div>
                 </div>
               ) : null}
 
