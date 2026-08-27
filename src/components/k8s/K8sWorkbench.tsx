@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Copy, RefreshCw, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
@@ -214,7 +215,7 @@ function columnsForCategory(
     }
     return cols;
   }
-  if (category === "deployments") {
+  if (category === "deployments" || category === "statefulsets" || category === "daemonsets" || category === "replicasets") {
     return [
       { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
       {
@@ -319,6 +320,8 @@ export function K8sWorkbench() {
   const error = useK8sStore((s) => s.error);
   const detail = useK8sStore((s) => s.detail);
   const detailLoading = useK8sStore((s) => s.detailLoading);
+  const detailError = useK8sStore((s) => s.detailError);
+  const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const openResources = useK8sStore((s) => s.openResources);
   const closeResourceTab = useK8sStore((s) => s.closeResourceTab);
   const yamlDraft = useK8sStore((s) => s.yamlDraft);
@@ -349,16 +352,21 @@ export function K8sWorkbench() {
   const [tableFilter, setTableFilter] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(loadExpandedGroups);
   const [menuRow, setMenuRow] = useState<K8sResourceRow | null>(null);
+  const [menuPos, setMenuPos] = useState<CSSProperties | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [detailTab, setDetailTab] = useState<
     "overview" | "yaml" | "logs" | "shell"
   >("overview");
   const [shellSessionReady, setShellSessionReady] = useState(false);
+  const [shellPrepError, setShellPrepError] = useState<string | null>(null);
   const [pfLocal, setPfLocal] = useState("8080");
   const [pfRemote, setPfRemote] = useState("80");
   const [scaleReplicas, setScaleReplicas] = useState("1");
+  const [nsDraft, setNsDraft] = useState(namespace);
 
   const [logs, setLogs] = useState("");
+  const [logsLoading, setLogsLoading] = useState(false);
   const [logsFollow, setLogsFollow] = useState(true);
   const [logsTail, setLogsTail] = useState(200);
   const [logsContainer, setLogsContainer] = useState("");
@@ -369,6 +377,10 @@ export function K8sWorkbench() {
     namespace: string;
     name: string;
   } | null>(null);
+
+  useEffect(() => {
+    setNsDraft(namespace);
+  }, [namespace]);
 
   useEffect(() => {
     if (cluster) {
@@ -414,20 +426,32 @@ export function K8sWorkbench() {
   }, [category]);
 
   useEffect(() => {
-    if (!menuRow) return;
+    if (!menuRow) {
+      setMenuPos(null);
+      return;
+    }
     const onPointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest(".k8s-col-actions")) {
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(".k8s-row-menu-btn")) {
         return;
       }
       setMenuRow(null);
     };
+    const close = () => setMenuRow(null);
     window.addEventListener("mousedown", onPointerDown);
-    return () => window.removeEventListener("mousedown", onPointerDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [menuRow]);
 
   useEffect(() => {
     setShellSessionReady(false);
+    setShellPrepError(null);
   }, [
     selectedResource?.kind,
     selectedResource?.namespace,
@@ -493,10 +517,25 @@ export function K8sWorkbench() {
     return sortRows(list, sortField, sortDir);
   }, [rows, tableFilter, sortField, sortDir]);
 
+  const clusterPortForwards = useMemo(
+    () =>
+      cluster
+        ? portForwards.filter((pf) => pf.cluster_id === cluster.id)
+        : [],
+    [portForwards, cluster],
+  );
+
   if (!cluster) {
     return (
       <div className="k8s-workbench-empty">
         <p>{t("selectClusterHint")}</p>
+        <button
+          type="button"
+          className="find-panel-run primary"
+          onClick={() => setAddClusterOpen(true)}
+        >
+          {t("emptyClustersAdd")}
+        </button>
       </div>
     );
   }
@@ -535,6 +574,9 @@ export function K8sWorkbench() {
   };
 
   const openLogs = async (row: K8sResourceRow) => {
+    setLogsLoading(true);
+    setLogs("");
+    setDetailTab("logs");
     try {
       const containers = await k8sPodContainers(
         cluster,
@@ -554,9 +596,10 @@ export function K8sWorkbench() {
       );
       setLogs(text);
       setLogsFollow(true);
-      setDetailTab("logs");
     } catch (err) {
       pushToast(formatAppError(err), false);
+    } finally {
+      setLogsLoading(false);
     }
   };
 
@@ -564,6 +607,7 @@ export function K8sWorkbench() {
     target: { namespace: string; name: string },
     container: string,
   ) => {
+    setLogsLoading(true);
     try {
       const text = await k8sPodLogs(
         cluster,
@@ -575,10 +619,14 @@ export function K8sWorkbench() {
       setLogs(text);
     } catch (err) {
       pushToast(formatAppError(err), false);
+    } finally {
+      setLogsLoading(false);
     }
   };
 
   const preparePodShell = async (row: K8sResourceRow) => {
+    setShellPrepError(null);
+    setDetailTab("shell");
     try {
       const containers = await k8sPodContainers(
         cluster,
@@ -587,7 +635,6 @@ export function K8sWorkbench() {
       ).catch(() => [] as string[]);
       setShellContainers(containers);
       setShellContainer(containers[0] ?? "");
-      setDetailTab("shell");
       if (
         selectedResource?.name !== row.name ||
         selectedResource.namespace !== row.namespace
@@ -596,7 +643,10 @@ export function K8sWorkbench() {
       }
       setShellSessionReady(true);
     } catch (err) {
-      pushToast(formatAppError(err) || t("podShellFailed"), false);
+      const msg = formatAppError(err) || t("podShellFailed");
+      setShellPrepError(msg);
+      setShellSessionReady(false);
+      pushToast(msg, false);
     }
   };
 
@@ -635,7 +685,17 @@ export function K8sWorkbench() {
     if (!selectedResource || !canPortForward(selectedResource.kind)) return;
     const localPort = Number.parseInt(pfLocal, 10);
     const remotePort = Number.parseInt(pfRemote, 10);
-    if (Number.isNaN(localPort) || Number.isNaN(remotePort)) return;
+    if (
+      Number.isNaN(localPort) ||
+      Number.isNaN(remotePort) ||
+      localPort < 1 ||
+      localPort > 65535 ||
+      remotePort < 1 ||
+      remotePort > 65535
+    ) {
+      pushToast(t("invalidPort"), false);
+      return;
+    }
     try {
       const info = await k8sPortForwardStart(
         cluster,
@@ -666,7 +726,10 @@ export function K8sWorkbench() {
   const runScale = async () => {
     if (!selectedResource || !canScale(selectedResource.kind)) return;
     const replicas = Number.parseInt(scaleReplicas, 10);
-    if (Number.isNaN(replicas) || replicas < 0) return;
+    if (Number.isNaN(replicas) || replicas < 0) {
+      pushToast(t("invalidReplicas"), false);
+      return;
+    }
     try {
       const res = await k8sScaleResource(
         cluster,
@@ -741,7 +804,7 @@ export function K8sWorkbench() {
       : `${row.kind} · ${row.name}`;
 
   const handleWarningClick = (ev: K8sWarningEvent) => {
-    if (!ev.kind?.trim()) {
+    if (!ev.kind?.trim() || !ev.name?.trim()) {
       pushToast(t("warningNavigateNoKind"), false);
       return;
     }
@@ -751,6 +814,16 @@ export function K8sWorkbench() {
       name: ev.name,
     }).catch((err) => pushToast(formatAppError(err), false));
   };
+
+  const toolsErrorBanner =
+    error === "kubectl_missing" ||
+    error === "helm_missing" ||
+    Boolean(
+      error &&
+        /kubectl not found|does not bundle kubectl|kubectl failed to start|Use Install kubectl|helm not found|Use Install Helm/i.test(
+          error,
+        ),
+    );
 
   const showDetailPanel =
     category !== "cluster_overview" &&
@@ -846,14 +919,30 @@ export function K8sWorkbench() {
             {t("openTerminal")}
           </button>
           ) : null}
-          {portForwards.length > 0 ? (
+          {clusterPortForwards.length > 0 ? (
             <div className="k8s-pf-bar">
-              {portForwards.map((pf) => (
+              {clusterPortForwards.map((pf) => (
                 <span key={pf.id} className="k8s-pf-chip">
-                  {pf.name}:{pf.local_port}→{pf.remote_port}
-                  {pf.mode === "ssh_remote" ? " (SSH)" : ""}
                   <button
                     type="button"
+                    className="k8s-pf-chip-label"
+                    title={`${pf.resource_kind} · ${pf.namespace ? `${pf.namespace}/` : ""}${pf.name}`}
+                    onClick={() =>
+                      void navigateToResource({
+                        kind: pf.resource_kind,
+                        namespace: pf.namespace,
+                        name: pf.name,
+                      }).catch((err) => pushToast(formatAppError(err), false))
+                    }
+                  >
+                    {pf.resource_kind}/{pf.namespace ? `${pf.namespace}/` : ""}
+                    {pf.name} · {pf.local_port}→{pf.remote_port}
+                    {pf.mode === "ssh_remote" ? " (SSH)" : ""}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("portForwardStop")}
+                    title={t("portForwardStop")}
                     onClick={() =>
                       void k8sPortForwardStop(pf.id)
                         .then(() => {
@@ -918,6 +1007,17 @@ export function K8sWorkbench() {
         <section className="k8s-table-panel">
           {category === "cluster_overview" ? (
             <div className="k8s-table-scroll">
+              {toolsErrorBanner ? (
+                <div className="k8s-tools-banner" role="alert">
+                  <span>
+                    {error === "helm_missing"
+                      ? t("helmNotFoundSidebar")
+                      : t("kubectlNotFoundSidebar")}
+                  </span>
+                </div>
+              ) : error ? (
+                <p className="k8s-error">{error}</p>
+              ) : null}
               <K8sClusterSummaryView
                 summary={clusterSummary}
                 loading={clusterSummaryLoading}
@@ -964,8 +1064,18 @@ export function K8sWorkbench() {
                   />
                 ) : (
                   <input
-                    value={namespace}
-                    onChange={(e) => setNamespace(e.target.value)}
+                    value={nsDraft}
+                    onChange={(e) => setNsDraft(e.target.value)}
+                    onBlur={() => {
+                      const next = nsDraft.trim();
+                      if (next && next !== namespace) setNamespace(next);
+                      else setNsDraft(namespace);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                     aria-label={t("namespace")}
                   />
                 )
@@ -1083,65 +1193,35 @@ export function K8sWorkbench() {
                         menuRow.namespace === row.namespace &&
                         menuRow.kind === row.kind
                       }
-                      onClick={() =>
-                        setMenuRow((cur) =>
-                          cur?.name === row.name &&
-                          cur.namespace === row.namespace &&
-                          cur.kind === row.kind
-                            ? null
-                            : row,
-                        )
-                      }
+                      onClick={(e) => {
+                        const btn = e.currentTarget;
+                        const same =
+                          menuRow?.name === row.name &&
+                          menuRow.namespace === row.namespace &&
+                          menuRow.kind === row.kind;
+                        if (same) {
+                          setMenuRow(null);
+                          setMenuPos(null);
+                          return;
+                        }
+                        const rect = btn.getBoundingClientRect();
+                        const menuH = 220;
+                        const openUp =
+                          window.innerHeight - rect.bottom < menuH &&
+                          rect.top > menuH;
+                        setMenuPos({
+                          position: "fixed",
+                          right: window.innerWidth - rect.right,
+                          zIndex: 10050,
+                          ...(openUp
+                            ? { bottom: window.innerHeight - rect.top + 4 }
+                            : { top: rect.bottom + 4 }),
+                        });
+                        setMenuRow(row);
+                      }}
                     >
                       ⋮
                     </button>
-                    {menuRow?.name === row.name &&
-                    menuRow.namespace === row.namespace &&
-                    menuRow.kind === row.kind ? (
-                      <div className="k8s-row-menu" role="menu">
-                        <button type="button" role="menuitem" onClick={() => void onRowAction("details", row)}>
-                          {t("actionDetails")}
-                        </button>
-                        <button type="button" role="menuitem" onClick={() => void onRowAction("edit", row)}>
-                          {row.kind === "HelmRelease" ? t("actionViewValues") : t("actionEdit")}
-                        </button>
-                        {canLogs(row.kind) ? (
-                          <button type="button" role="menuitem" onClick={() => void onRowAction("logs", row)}>
-                            {t("logs")}
-                          </button>
-                        ) : null}
-                        {canShell(row.kind) ? (
-                          <button type="button" role="menuitem" onClick={() => void onRowAction("shell", row)}>
-                            {t("podShell")}
-                          </button>
-                        ) : null}
-                        {canScale(row.kind) ? (
-                          <button type="button" role="menuitem" onClick={() => void onRowAction("scale", row)}>
-                            {t("scale")}
-                          </button>
-                        ) : null}
-                        {canPortForward(row.kind) ? (
-                          <button type="button" role="menuitem" onClick={() => void onRowAction("portForward", row)}>
-                            {t("portForward")}
-                          </button>
-                        ) : null}
-                        {row.kind === "Namespace" ? (
-                          <button type="button" role="menuitem" onClick={() => void onRowAction("useNamespace", row)}>
-                            {t("useNamespace")}
-                          </button>
-                        ) : null}
-                        {row.kind === "CustomResourceDefinition" ? (
-                          <button type="button" role="menuitem" onClick={() => void onRowAction("crdInstances", row)}>
-                            {t("listCrdInstances")}
-                          </button>
-                        ) : null}
-                        {row.kind !== "HelmRelease" ? (
-                          <button type="button" role="menuitem" className="danger" onClick={() => void onRowAction("delete", row)}>
-                            {t("delete")}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -1277,6 +1357,23 @@ export function K8sWorkbench() {
           <aside className="k8s-detail-panel">
           {detailLoading ? (
             <p>{t("loading")}</p>
+          ) : detailError && selectedResource ? (
+            <div className="k8s-detail-empty">
+              <p className="k8s-error">{detailError === "kubectl_missing" || detailError === "helm_missing" ? (detailError === "helm_missing" ? t("helmNotFoundSidebar") : t("kubectlNotFoundSidebar")) : detailError}</p>
+              <button
+                type="button"
+                className="find-panel-run"
+                onClick={() =>
+                  void selectResource({
+                    kind: selectedResource.kind,
+                    namespace: selectedResource.namespace,
+                    name: selectedResource.name,
+                  })
+                }
+              >
+                {t("refresh")}
+              </button>
+            </div>
           ) : detail && selectedResource ? (
             <>
               <div className="k8s-detail-tabs" role="tablist">
@@ -1321,8 +1418,15 @@ export function K8sWorkbench() {
                         </dl>
                       </section>
                     ) : null;
+                  const empty =
+                    groups.status.length === 0 &&
+                    groups.meta.length === 0 &&
+                    groups.other.length === 0;
                   return (
                     <div className="k8s-detail-overview">
+                      {empty ? (
+                        <p className="k8s-detail-empty">{t("overviewEmpty")}</p>
+                      ) : null}
                       {renderGroup(t("overviewStatus"), groups.status)}
                       {renderGroup(t("overviewMeta"), groups.meta)}
                       {renderGroup(t("overviewOther"), groups.other)}
@@ -1361,10 +1465,25 @@ export function K8sWorkbench() {
                         }))}
                       />
                     ) : null}
-                    <label>{t("logsTail")}<input type="number" min={50} max={5000} value={logsTail} onChange={(e) => setLogsTail(Number.parseInt(e.target.value, 10) || 200)} /></label>
+                    <label>{t("logsTail")}<input type="number" min={50} max={5000} value={logsTail} onChange={(e) => setLogsTail(Number.parseInt(e.target.value, 10) || 200)} onBlur={() => { if (logsTarget && !logsFollow) void fetchLogs(logsTarget, logsContainer); }} /></label>
                     <label><input type="checkbox" checked={logsFollow} onChange={(e) => setLogsFollow(e.target.checked)} />{t("logsFollow")}</label>
+                    {!logsFollow && logsTarget ? (
+                      <button
+                        type="button"
+                        className="k8s-refresh-btn"
+                        title={t("refresh")}
+                        aria-label={t("refresh")}
+                        onClick={() => void fetchLogs(logsTarget, logsContainer)}
+                      >
+                        <RefreshCw size={14} strokeWidth={2} className={logsLoading ? "k8s-spin" : ""} />
+                      </button>
+                    ) : null}
                   </div>
-                  <pre className="k8s-logs-pre">{logs || t("loading")}</pre>
+                  <pre className="k8s-logs-pre">
+                    {logsLoading && !logs
+                      ? t("loading")
+                      : logs || t("logsEmpty")}
+                  </pre>
                 </div>
               ) : null}
 
@@ -1381,7 +1500,7 @@ export function K8sWorkbench() {
                       <DarkSelect
                         value={shellContainer}
                         onChange={(v) => setShellContainer(v)}
-                        aria-label={t("logsContainer")}
+                        aria-label={t("shellContainer")}
                         options={shellContainers.map((c) => ({
                           value: c,
                           label: c,
@@ -1404,7 +1523,26 @@ export function K8sWorkbench() {
               !(cluster.kind === "kubeconfig" && shellSessionReady) ? (
                 <div className="k8s-detail-tab-body k8s-detail-shell-pane">
                   {cluster.kind === "kubeconfig" ? (
-                    <p>{t("loading")}</p>
+                    shellPrepError ? (
+                      <div className="k8s-detail-empty">
+                        <p className="k8s-error">{shellPrepError}</p>
+                        <button
+                          type="button"
+                          className="find-panel-run"
+                          onClick={() =>
+                            void preparePodShell({
+                              kind: selectedResource!.kind,
+                              namespace: selectedResource!.namespace,
+                              name: selectedResource!.name,
+                            })
+                          }
+                        >
+                          {t("refresh")}
+                        </button>
+                      </div>
+                    ) : (
+                      <p>{t("loading")}</p>
+                    )
                   ) : (
                     <>
                       <p>{t("podShellSshHint")}</p>
@@ -1413,7 +1551,7 @@ export function K8sWorkbench() {
                           <DarkSelect
                             value={shellContainer}
                             onChange={(v) => setShellContainer(v)}
-                            aria-label={t("logsContainer")}
+                            aria-label={t("shellContainer")}
                             options={shellContainers.map((c) => ({
                               value: c,
                               label: c,
@@ -1450,6 +1588,60 @@ export function K8sWorkbench() {
       }
       dock={null}
     />
+      {menuRow && menuPos
+        ? createPortal(
+            <div
+              className="k8s-row-menu k8s-row-menu--portal"
+              role="menu"
+              ref={menuRef}
+              style={menuPos}
+            >
+              <button type="button" role="menuitem" onClick={() => void onRowAction("details", menuRow)}>
+                {t("actionDetails")}
+              </button>
+              <button type="button" role="menuitem" onClick={() => void onRowAction("edit", menuRow)}>
+                {menuRow.kind === "HelmRelease" ? t("actionViewValues") : t("actionEdit")}
+              </button>
+              {canLogs(menuRow.kind) ? (
+                <button type="button" role="menuitem" onClick={() => void onRowAction("logs", menuRow)}>
+                  {t("logs")}
+                </button>
+              ) : null}
+              {canShell(menuRow.kind) ? (
+                <button type="button" role="menuitem" onClick={() => void onRowAction("shell", menuRow)}>
+                  {t("podShell")}
+                </button>
+              ) : null}
+              {canScale(menuRow.kind) ? (
+                <button type="button" role="menuitem" onClick={() => void onRowAction("scale", menuRow)}>
+                  {t("scale")}
+                </button>
+              ) : null}
+              {canPortForward(menuRow.kind) ? (
+                <button type="button" role="menuitem" onClick={() => void onRowAction("portForward", menuRow)}>
+                  {t("portForward")}
+                </button>
+              ) : null}
+              {menuRow.kind === "Namespace" ? (
+                <button type="button" role="menuitem" onClick={() => void onRowAction("useNamespace", menuRow)}>
+                  {t("useNamespace")}
+                </button>
+              ) : null}
+              {menuRow.kind === "CustomResourceDefinition" ? (
+                <button type="button" role="menuitem" onClick={() => void onRowAction("crdInstances", menuRow)}>
+                  {t("listCrdInstances")}
+                </button>
+              ) : null}
+              {menuRow.kind !== "HelmRelease" ? (
+                <button type="button" role="menuitem" className="danger" onClick={() => void onRowAction("delete", menuRow)}>
+                  {t("delete")}
+                </button>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+
       {confirm && (confirm.kind === "apply" || confirm.kind === "delete") ? (
         <Modal
           title={
@@ -1461,7 +1653,9 @@ export function K8sWorkbench() {
             {confirm.kind === "apply"
               ? t("confirmApplyBody")
               : t("confirmDeleteBody", {
-                  name: confirm.row.name,
+                  name: confirm.row.namespace
+                    ? `${confirm.row.namespace}/${confirm.row.name}`
+                    : confirm.row.name,
                   kind: confirm.row.kind,
                 })}
           </p>

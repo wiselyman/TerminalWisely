@@ -40,3 +40,4 @@ venv/
 agent-sidecar/runtime/**
 !agent-sidecar/runtime/.gitkeep
 !agent-sidecar/runtime/.gitignore
+testdata/

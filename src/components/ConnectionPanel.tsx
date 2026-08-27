@@ -5,6 +5,7 @@ import { Modal } from "./Modal";
 import { ServerOsIcon } from "./ServerOsIcon";
 import { SystemInfoIcon } from "./WorkspaceToolIcons";
 import { K8sClusterIcon } from "./k8s/K8sClusterIcon";
+import { DarkSelect } from "./k8s/DarkSelect";
 import { HelmBrandIcon } from "./k8s/HelmBrandIcon";
 import { EditK8sClusterModal } from "./k8s/EditK8sClusterModal";
 import { EntityCatalog } from "./management/EntityCatalog";
@@ -688,12 +689,11 @@ export function ConnectionPanel({
                     {sshTabs.length > 1 ? (
                       <label className="k8s-bind-ssh-pick">
                         <span className="k8s-bind-ssh-pick-label">{t("k8s:bindSshPickHost")}</span>
-                        <select
+                        <DarkSelect
                           value={bindTarget.id}
-                          onChange={(e) => setBindSessionId(e.target.value)}
+                          onChange={(v) => setBindSessionId(v)}
                           aria-label={t("k8s:bindSshPickHost")}
-                        >
-                          {sshTabs.map((tab) => {
+                          options={sshTabs.map((tab) => {
                             const probe = probeBySession[tab.id];
                             const tag =
                               probe === "loading"
@@ -703,14 +703,12 @@ export function ConnectionPanel({
                                   : probe
                                     ? " ✗"
                                     : "";
-                            return (
-                              <option key={tab.id} value={tab.id}>
-                                {tab.title}
-                                {tag}
-                              </option>
-                            );
+                            return {
+                              value: tab.id,
+                              label: `${tab.title}${tag}`,
+                            };
                           })}
-                        </select>
+                        />
                       </label>
                     ) : null}
                     {bindProbe === "loading" ? (

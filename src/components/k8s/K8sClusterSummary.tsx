@@ -72,7 +72,9 @@ export function K8sClusterSummaryView({
         ) : (
           <ul className="k8s-summary-events">
             {summary.recent_warnings.map((ev, i) => {
-              const clickable = Boolean(onWarningClick && ev.kind?.trim());
+              const clickable = Boolean(
+                onWarningClick && ev.kind?.trim() && ev.name?.trim(),
+              );
               return (
                 <li key={`${ev.namespace}/${ev.name}/${ev.reason}/${i}`}>
                   <button

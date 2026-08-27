@@ -94,6 +94,7 @@ interface K8sState {
   openResources: K8sResourceRow[];
   detail: K8sResourceDetail | null;
   detailLoading: boolean;
+  detailError: string | null;
   yamlDraft: string;
   addClusterOpen: boolean;
   portForwards: PortForwardInfo[];
@@ -214,6 +215,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
   openResources: [],
   detail: null,
   detailLoading: false,
+  detailError: null,
   yamlDraft: "",
   addClusterOpen: false,
   portForwards: [],
@@ -410,7 +412,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
           name: r.name,
           kind: "HelmRelease",
           status: r.status,
-          age: null,
+          age: r.updated ?? null,
           extra: `${r.chart} · rev ${r.revision}`,
         }));
         set({ rows, loading: false, metricsAvailable: false });
@@ -550,6 +552,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
       },
       openResources,
       detailLoading: true,
+      detailError: null,
       detail: null,
     });
     try {
@@ -574,6 +577,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
             },
           },
           detailLoading: false,
+          detailError: null,
           yamlDraft: values,
         });
         return;
@@ -584,11 +588,17 @@ export const useK8sStore = create<K8sState>((set, get) => ({
         row.namespace,
         row.name,
       );
-      set({ detail, detailLoading: false, yamlDraft: detail.yaml });
+      set({
+        detail,
+        detailLoading: false,
+        detailError: null,
+        yamlDraft: detail.yaml,
+      });
     } catch (err) {
       set({
         detailLoading: false,
-        error: formatK8sError(err),
+        detail: null,
+        detailError: formatK8sError(err),
       });
     }
   },
@@ -610,6 +620,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
         set({
           selectedResource: null,
           detail: null,
+          detailError: null,
           yamlDraft: "",
         });
       }

@@ -103,6 +103,7 @@ export interface HelmReleaseRow {
   status: string;
   chart: string;
   app_version: string;
+  updated?: string | null;
 }
 
 export interface K8sWarningEvent {

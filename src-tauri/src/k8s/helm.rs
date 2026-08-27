@@ -11,6 +11,30 @@ use super::exec::run_kubectl;
 use super::summary::format_age;
 use super::{K8sClusterKind, K8sClusterTarget, K8sResourceRow};
 
+fn helm_updated_age(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(ts) = chrono::DateTime::parse_from_rfc3339(trimmed) {
+        return Some(format_age(&ts.to_rfc3339()));
+    }
+    // Helm list JSON: "2024-03-15 10:22:33.123456789 +0000 UTC"
+    let cleaned = trimmed
+        .trim_end_matches(" UTC")
+        .trim_end_matches(" utc")
+        .trim();
+    if let Ok(ts) =
+        chrono::DateTime::parse_from_str(cleaned, "%Y-%m-%d %H:%M:%S%.f %z")
+    {
+        return Some(format_age(&ts.to_rfc3339()));
+    }
+    if let Ok(ts) = chrono::DateTime::parse_from_str(cleaned, "%Y-%m-%d %H:%M:%S %z") {
+        return Some(format_age(&ts.to_rfc3339()));
+    }
+    None
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HelmReleaseRow {
     pub name: String,
@@ -19,6 +43,8 @@ pub struct HelmReleaseRow {
     pub status: String,
     pub chart: String,
     pub app_version: String,
+    #[serde(default)]
+    pub updated: Option<String>,
 }
 
 async fn run_helm(
@@ -151,6 +177,10 @@ pub async fn list_helm_releases(
                 .and_then(|x| x.as_str())
                 .unwrap_or("")
                 .into(),
+            updated: item
+                .get("updated")
+                .and_then(|x| x.as_str())
+                .and_then(helm_updated_age),
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));

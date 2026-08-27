@@ -260,7 +260,21 @@ fn extract_pod_deploy_fields(
                 .map(String::from);
             (restarts, node, None)
         }
-        "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet" => {
+        "DaemonSet" => {
+            let ready = item.get("status").map(|s| {
+                let ready_n = s
+                    .get("numberReady")
+                    .and_then(|r| r.as_u64())
+                    .unwrap_or(0);
+                let desired = s
+                    .get("desiredNumberScheduled")
+                    .and_then(|r| r.as_u64())
+                    .unwrap_or(ready_n);
+                format!("{ready_n}/{desired}")
+            });
+            (None, None, ready)
+        }
+        "Deployment" | "StatefulSet" | "ReplicaSet" => {
             let ready = item.get("status").and_then(|s| {
                 let ready_replicas = s.get("readyReplicas").and_then(|r| r.as_u64()).unwrap_or(0);
                 let desired = item
@@ -316,16 +330,85 @@ fn extract_extra(item: &Value, kind: &str) -> Option<String> {
                     .unwrap_or("");
                 format!("{plural}.{g}")
             }),
-        "Service" => item
-            .get("spec")
-            .and_then(|s| s.get("type"))
-            .and_then(|t| t.as_str())
-            .map(String::from),
-        "PersistentVolumeClaim" => item
-            .get("status")
-            .and_then(|s| s.get("phase"))
-            .and_then(|p| p.as_str())
-            .map(String::from),
+        "Service" => {
+            let ports = item
+                .get("spec")
+                .and_then(|s| s.get("ports"))
+                .and_then(|p| p.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|p| {
+                            let port = p.get("port").and_then(|x| x.as_u64())?;
+                            let proto = p
+                                .get("protocol")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("TCP");
+                            Some(format!("{port}/{proto}"))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .filter(|s| !s.is_empty());
+            ports
+        }
+        "PersistentVolumeClaim" => {
+            let capacity = item
+                .get("status")
+                .and_then(|s| s.get("capacity"))
+                .and_then(|c| c.get("storage"))
+                .and_then(|s| s.as_str())
+                .or_else(|| {
+                    item.get("spec")
+                        .and_then(|s| s.get("resources"))
+                        .and_then(|r| r.get("requests"))
+                        .and_then(|r| r.get("storage"))
+                        .and_then(|s| s.as_str())
+                });
+            let sc = item
+                .get("spec")
+                .and_then(|s| s.get("storageClassName"))
+                .and_then(|s| s.as_str());
+            match (capacity, sc) {
+                (Some(c), Some(s)) => Some(format!("{c} · {s}")),
+                (Some(c), None) => Some(c.to_string()),
+                (None, Some(s)) => Some(s.to_string()),
+                _ => None,
+            }
+        }
+        "Event" => {
+            let obj = item.get("involvedObject").or_else(|| item.get("regarding"));
+            let kind = obj
+                .and_then(|o| o.get("kind"))
+                .and_then(|k| k.as_str())
+                .unwrap_or("");
+            let name = obj
+                .and_then(|o| o.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("");
+            let msg = item
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("")
+                .chars()
+                .take(80)
+                .collect::<String>();
+            let target = if kind.is_empty() && name.is_empty() {
+                String::new()
+            } else if name.is_empty() {
+                kind.to_string()
+            } else {
+                format!("{kind}/{name}")
+            };
+            if target.is_empty() && msg.is_empty() {
+                None
+            } else if msg.is_empty() {
+                Some(target)
+            } else if target.is_empty() {
+                Some(msg)
+            } else {
+                Some(format!("{target} — {msg}"))
+            }
+        }
         _ => None,
     }
 }
@@ -358,33 +441,91 @@ fn extract_status(item: &Value, kind: &str) -> Option<String> {
             .and_then(|s| s.get("phase"))
             .and_then(|v| v.as_str())
             .map(String::from),
-        "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet" => {
-            let ready = item.get("status").and_then(|s| {
-                let ready_replicas = s.get("readyReplicas").and_then(|r| r.as_u64()).unwrap_or(0);
-                let desired = item
-                    .get("spec")
-                    .and_then(|sp| sp.get("replicas"))
-                    .and_then(|r| r.as_u64())
-                    .unwrap_or(ready_replicas);
-                Some(format!("{ready_replicas}/{desired}"))
-            });
-            ready.or_else(|| {
-                item.get("status")
-                    .and_then(|s| s.get("conditions"))
-                    .and_then(|c| c.as_array())
-                    .and_then(|arr| {
-                        arr.iter()
-                            .find(|x| x.get("type").and_then(|t| t.as_str()) == Some("Available"))
-                            .and_then(|x| x.get("status").and_then(|s| s.as_str()))
-                            .map(|s| format!("Available={s}"))
-                    })
-            })
-        }
+        "DaemonSet" => item.get("status").map(|s| {
+            let ready_n = s
+                .get("numberReady")
+                .and_then(|r| r.as_u64())
+                .unwrap_or(0);
+            let desired = s
+                .get("desiredNumberScheduled")
+                .and_then(|r| r.as_u64())
+                .unwrap_or(ready_n);
+            if ready_n >= desired && desired > 0 {
+                "Ready".to_string()
+            } else {
+                format!("{ready_n}/{desired} ready")
+            }
+        }),
+        "Deployment" | "StatefulSet" | "ReplicaSet" => item
+            .get("status")
+            .and_then(|s| s.get("conditions"))
+            .and_then(|c| c.as_array())
+            .and_then(|arr| {
+                let available = arr.iter().find(|x| {
+                    x.get("type").and_then(|t| t.as_str()) == Some("Available")
+                });
+                let progressing = arr.iter().find(|x| {
+                    x.get("type").and_then(|t| t.as_str()) == Some("Progressing")
+                });
+                if let Some(a) = available {
+                    let status = a.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                    if status.eq_ignore_ascii_case("True") {
+                        return Some("Available".to_string());
+                    }
+                    if let Some(reason) = a.get("reason").and_then(|r| r.as_str()) {
+                        return Some(reason.to_string());
+                    }
+                    return Some("Unavailable".to_string());
+                }
+                progressing.and_then(|p| {
+                    p.get("reason")
+                        .and_then(|r| r.as_str())
+                        .map(String::from)
+                        .or_else(|| {
+                            p.get("status")
+                                .and_then(|s| s.as_str())
+                                .map(|s| format!("Progressing={s}"))
+                        })
+                })
+            }),
+        "Service" => item
+            .get("spec")
+            .and_then(|s| s.get("type"))
+            .and_then(|t| t.as_str())
+            .map(String::from),
         "PersistentVolumeClaim" | "PersistentVolume" => item
             .get("status")
             .and_then(|s| s.get("phase"))
             .and_then(|v| v.as_str())
             .map(String::from),
+        "Event" => item
+            .get("reason")
+            .and_then(|r| r.as_str())
+            .map(String::from)
+            .or_else(|| {
+                item.get("type")
+                    .and_then(|t| t.as_str())
+                    .map(String::from)
+            }),
+        "Job" => item.get("status").and_then(|s| {
+            let succeeded = s.get("succeeded").and_then(|x| x.as_u64()).unwrap_or(0);
+            let failed = s.get("failed").and_then(|x| x.as_u64()).unwrap_or(0);
+            let active = s.get("active").and_then(|x| x.as_u64()).unwrap_or(0);
+            let completions = item
+                .get("spec")
+                .and_then(|sp| sp.get("completions"))
+                .and_then(|c| c.as_u64())
+                .unwrap_or(1);
+            if failed > 0 {
+                Some(format!("Failed {failed}"))
+            } else if succeeded >= completions {
+                Some("Complete".to_string())
+            } else if active > 0 {
+                Some(format!("Active {active}"))
+            } else {
+                Some(format!("{succeeded}/{completions}"))
+            }
+        }),
         _ => None,
     }
 }
