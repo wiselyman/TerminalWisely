@@ -145,6 +145,7 @@ export function ConnectionPanel({
   const installTools = useK8sStore((s) => s.installTools);
   const refreshToolsStatus = useK8sStore((s) => s.refreshToolsStatus);
   const k8sLoading = useK8sStore((s) => s.loading);
+  const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const pushToast = useToastStore((s) => s.pushToast);
   const tabs = useSessionStore((s) => s.tabs);
   const activeTabId = useSessionStore((s) => s.activeTabId);
