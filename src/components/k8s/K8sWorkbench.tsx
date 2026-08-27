@@ -17,7 +17,9 @@ import type {
   K8sResourceCategory,
   K8sResourceRow,
   K8sSortField,
+  K8sWarningEvent,
 } from "../../lib/k8s/types";
+import { AUTO_REFRESH_OPTIONS } from "../../lib/k8s/navigation";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import { useK8sStore } from "../../stores/k8sStore";
 import { useSessionStore } from "../../stores/sessionStore";
@@ -191,7 +193,7 @@ function columnsForCategory(
         sortable: "namespace",
         cell: (r) => r.namespace || "—",
       },
-      { id: "status", labelKey: "colStatus", cell: (r) => r.status ?? "—" },
+      { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
       {
         id: "restarts",
         labelKey: "colRestarts",
@@ -219,7 +221,7 @@ function columnsForCategory(
       },
       { id: "ready", labelKey: "colReady", cell: (r) => r.ready ?? "—" },
       { id: "age", labelKey: "colAge", sortable: "age", cell: (r) => r.age ?? "—" },
-      { id: "status", labelKey: "colStatus", cell: (r) => r.status ?? "—" },
+      { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
     ];
   }
   return [
@@ -230,7 +232,7 @@ function columnsForCategory(
       cell: (r) => r.namespace || "—",
     },
     { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
-    { id: "status", labelKey: "colStatus", cell: (r) => r.status ?? "—" },
+    { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
     { id: "extra", labelKey: "colExtra", cell: (r) => r.extra ?? "—" },
   ];
 }
@@ -247,6 +249,8 @@ function sortRows(
     if (field === "name") cmp = a.name.localeCompare(b.name);
     else if (field === "namespace")
       cmp = a.namespace.localeCompare(b.namespace);
+    else if (field === "status")
+      cmp = (a.status ?? "").localeCompare(b.status ?? "");
     else cmp = ageSortKey(a.age) - ageSortKey(b.age);
     if (cmp === 0) cmp = a.name.localeCompare(b.name);
     return cmp * sign;
@@ -322,6 +326,9 @@ export function K8sWorkbench() {
   const crdBrowse = useK8sStore((s) => s.crdBrowse);
   const setCrdBrowse = useK8sStore((s) => s.setCrdBrowse);
   const refreshClusterSummary = useK8sStore((s) => s.refreshClusterSummary);
+  const autoRefreshSec = useK8sStore((s) => s.autoRefreshSec);
+  const setAutoRefreshSec = useK8sStore((s) => s.setAutoRefreshSec);
+  const navigateToResource = useK8sStore((s) => s.navigateToResource);
   const setActiveTab = useSessionStore((s) => s.setActiveTab);
   const setSidebarView = useSidebarViewStore((s) => s.setView);
 
@@ -364,6 +371,25 @@ export function K8sWorkbench() {
       void refreshPortForwards();
     }
   }, [cluster, category, refreshResources, refreshClusterSummary, refreshPortForwards]);
+
+  useEffect(() => {
+    if (!cluster || autoRefreshSec <= 0) return;
+    const tick = () => {
+      if (category === "cluster_overview") {
+        void refreshClusterSummary();
+      } else {
+        void refreshResources();
+      }
+    };
+    const id = window.setInterval(tick, autoRefreshSec * 1000);
+    return () => window.clearInterval(id);
+  }, [
+    cluster,
+    category,
+    autoRefreshSec,
+    refreshResources,
+    refreshClusterSummary,
+  ]);
 
   useEffect(() => {
     const gid = groupIdForCategory(category);
@@ -534,24 +560,8 @@ export function K8sWorkbench() {
     }
   };
 
-  const openShell = async (row: K8sResourceRow) => {
+  const preparePodShell = async (row: K8sResourceRow) => {
     try {
-      if (cluster.kind === "ssh_kubectl" && cluster.session_id) {
-        const cmd = await k8sPodShellCommand(
-          cluster,
-          row.namespace,
-          row.name,
-          shellContainer || null,
-        );
-        setActiveTab(cluster.session_id);
-        setSidebarView("hosts");
-        await invoke("terminal_input", {
-          sessionId: cluster.session_id,
-          data: `${cmd}\n`,
-        });
-        pushToast(t("podShellOpened"), true);
-        return;
-      }
       const containers = await k8sPodContainers(
         cluster,
         row.namespace,
@@ -566,6 +576,27 @@ export function K8sWorkbench() {
       ) {
         await selectResource(row);
       }
+    } catch (err) {
+      pushToast(formatAppError(err) || t("podShellFailed"), false);
+    }
+  };
+
+  const runSshPodShell = async (row: K8sResourceRow) => {
+    if (!cluster.session_id) return;
+    try {
+      const cmd = await k8sPodShellCommand(
+        cluster,
+        row.namespace,
+        row.name,
+        shellContainer || null,
+      );
+      setActiveTab(cluster.session_id);
+      setSidebarView("hosts");
+      await invoke("terminal_input", {
+        sessionId: cluster.session_id,
+        data: `${cmd}\n`,
+      });
+      pushToast(t("podShellOpened"), true);
     } catch (err) {
       pushToast(formatAppError(err) || t("podShellFailed"), false);
     }
@@ -685,6 +716,18 @@ export function K8sWorkbench() {
     useAiEngineerStore.getState().requestComposerFocus();
   };
 
+  const handleWarningClick = (ev: K8sWarningEvent) => {
+    if (!ev.kind?.trim()) {
+      pushToast(t("warningNavigateNoKind"), false);
+      return;
+    }
+    void navigateToResource({
+      kind: ev.kind,
+      namespace: ev.namespace,
+      name: ev.name,
+    }).catch((err) => pushToast(formatAppError(err), false));
+  };
+
   const showDetailPanel =
     category !== "cluster_overview" &&
     (selectedResource != null || openResources.length > 0);
@@ -710,7 +753,7 @@ export function K8sWorkbench() {
       case "shell":
         void selectResource(row);
         setDetailTab("shell");
-        void openShell(row);
+        void preparePodShell(row);
         break;
       case "scale":
         void selectResource(row);
@@ -749,6 +792,24 @@ export function K8sWorkbench() {
             {cluster.display_name}
             {clusterSummary?.version ? ` · ${clusterSummary.version}` : ""}
           </span>
+          <label className="k8s-auto-refresh">
+            <span>{t("autoRefresh")}</span>
+            <select
+              value={autoRefreshSec}
+              onChange={(e) =>
+                setAutoRefreshSec(
+                  Number(e.target.value) as (typeof AUTO_REFRESH_OPTIONS)[number],
+                )
+              }
+              aria-label={t("autoRefresh")}
+            >
+              {AUTO_REFRESH_OPTIONS.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec === 0 ? t("autoRefreshOff") : t("autoRefreshSec", { sec })}
+                </option>
+              ))}
+            </select>
+          </label>
           {cluster.kind === "ssh_kubectl" && cluster.session_id ? (
           <button
             type="button"
@@ -836,6 +897,7 @@ export function K8sWorkbench() {
                 summary={clusterSummary}
                 loading={clusterSummaryLoading}
                 clusterName={cluster.display_name}
+                onWarningClick={handleWarningClick}
               />
             </div>
           ) : (
@@ -1150,7 +1212,7 @@ export function K8sWorkbench() {
                       type="button"
                       className="k8s-detail-quick-btn"
                       onClick={() =>
-                        void openShell({
+                        void preparePodShell({
                           kind: selectedResource.kind,
                           namespace: selectedResource.namespace,
                           name: selectedResource.name,
@@ -1203,7 +1265,7 @@ export function K8sWorkbench() {
                   <button type="button" role="tab" className={detailTab === "logs" ? "active" : ""} onClick={() => void openLogs({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })}>{t("logs")}</button>
                 ) : null}
                 {canShell(selectedResource.kind) ? (
-                  <button type="button" role="tab" className={detailTab === "shell" ? "active" : ""} onClick={() => { setDetailTab("shell"); void openShell({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name }); }}>{t("podShell")}</button>
+                  <button type="button" role="tab" className={detailTab === "shell" ? "active" : ""} onClick={() => void preparePodShell({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })}>{t("podShell")}</button>
                 ) : null}
                 {canPortForward(selectedResource.kind) ? (
                   <button type="button" role="tab" className={detailTab === "portForward" ? "active" : ""} onClick={() => setDetailTab("portForward")}>{t("portForward")}</button>
@@ -1340,12 +1402,27 @@ export function K8sWorkbench() {
                   ) : (
                     <>
                       <p>{t("podShellSshHint")}</p>
+                      {shellContainers.length > 0 ? (
+                        <div className="k8s-detail-logs-toolbar">
+                          <select
+                            value={shellContainer}
+                            onChange={(e) => setShellContainer(e.target.value)}
+                            aria-label={t("logsContainer")}
+                          >
+                            {shellContainers.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
                       <div className="k8s-detail-tab-actions">
                         <button
                           type="button"
                           className="find-panel-run primary"
                           onClick={() =>
-                            void openShell({
+                            void runSshPodShell({
                               kind: selectedResource!.kind,
                               namespace: selectedResource!.namespace,
                               name: selectedResource!.name,

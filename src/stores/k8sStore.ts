@@ -34,6 +34,12 @@ import type {
   K8sSortField,
   PortForwardInfo,
 } from "../lib/k8s/types";
+import {
+  categoryForKind,
+  loadAutoRefreshSec,
+  saveAutoRefreshSec,
+  type K8sAutoRefreshSec,
+} from "../lib/k8s/navigation";
 import { useAiEngineerStore } from "./aiEngineerStore";
 import { focusManagedEntity, useManagedEntityStore } from "./managedEntityStore";
 
@@ -96,6 +102,7 @@ interface K8sState {
   sortField: K8sSortField;
   sortDir: K8sSortDir;
   crdBrowse: K8sCrdBrowseContext | null;
+  autoRefreshSec: K8sAutoRefreshSec;
   setAddClusterOpen: (open: boolean) => void;
   refreshClusters: () => Promise<void>;
   selectCluster: (id: string | null) => void;
@@ -112,6 +119,12 @@ interface K8sState {
   refreshClusterSummary: () => Promise<void>;
   setSort: (field: K8sSortField) => void;
   setCrdBrowse: (ctx: K8sCrdBrowseContext | null) => void;
+  setAutoRefreshSec: (sec: K8sAutoRefreshSec) => void;
+  navigateToResource: (target: {
+    kind: string;
+    namespace: string;
+    name: string;
+  }) => Promise<void>;
   bindSshCluster: (opts: {
     display_name: string;
     session_id: string;
@@ -209,6 +222,7 @@ export const useK8sStore = create<K8sState>((set, get) => ({
   sortField: "name",
   sortDir: "asc",
   crdBrowse: null,
+  autoRefreshSec: loadAutoRefreshSec(),
 
   setAddClusterOpen: (open) => set({ addClusterOpen: open }),
 
@@ -456,6 +470,49 @@ export const useK8sStore = create<K8sState>((set, get) => ({
   },
 
   setCrdBrowse: (crdBrowse) => set({ crdBrowse }),
+
+  setAutoRefreshSec: (autoRefreshSec) => {
+    saveAutoRefreshSec(autoRefreshSec);
+    set({ autoRefreshSec });
+  },
+
+  navigateToResource: async (target) => {
+    const category = categoryForKind(target.kind);
+    if (!category) {
+      throw new Error(`Unsupported resource kind: ${target.kind || "unknown"}`);
+    }
+    if (!get().selectedCluster) return;
+
+    if (target.namespace) {
+      try {
+        localStorage.setItem(STORAGE_NS, target.namespace);
+      } catch {
+        /* ignore */
+      }
+      set({ namespace: target.namespace, allNamespaces: false });
+    }
+
+    set({
+      category,
+      selectedResource: null,
+      openResources: [],
+      detail: null,
+      yamlDraft: "",
+      crdBrowse: null,
+    });
+
+    if (category === "cluster_overview") {
+      await get().refreshClusterSummary();
+    } else {
+      await get().refreshResources();
+    }
+
+    await get().selectResource({
+      kind: target.kind,
+      namespace: target.namespace,
+      name: target.name,
+    });
+  },
 
   selectResource: async (row) => {
     const cluster = get().selectedCluster;
