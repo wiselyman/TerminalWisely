@@ -1,16 +1,17 @@
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { K8sClusterSummary as Summary, K8sWarningEvent } from "../../lib/k8s/types";
 
 export function K8sClusterSummaryView({
   summary,
   loading,
-  clusterName,
   onWarningClick,
+  onRefresh,
 }: {
   summary: Summary | null;
   loading: boolean;
-  clusterName: string;
   onWarningClick?: (ev: K8sWarningEvent) => void;
+  onRefresh?: () => void;
 }) {
   const { t } = useTranslation("k8s");
 
@@ -28,11 +29,22 @@ export function K8sClusterSummaryView({
   return (
     <div className="k8s-cluster-summary">
       <header className="k8s-cluster-summary-head">
-        <h2>{t("category.cluster_overview")}</h2>
+        <div className="k8s-cluster-summary-title-row">
+          <h2>{t("category.cluster_overview")}</h2>
+          {onRefresh ? (
+            <button
+              type="button"
+              className="k8s-summary-refresh-btn"
+              title={t("summaryRefresh")}
+              aria-label={t("summaryRefresh")}
+              onClick={onRefresh}
+            >
+              <RefreshCw size={13} strokeWidth={2} />
+            </button>
+          ) : null}
+        </div>
         <p className="k8s-cluster-summary-meta">
-          {clusterName}
-          {summary.version ? ` · ${summary.version}` : ""}
-          {" · "}
+          {summary.version ? `${summary.version} · ` : ""}
           {t("summaryNodes", { count: summary.node_count })}
         </p>
       </header>
@@ -44,7 +56,7 @@ export function K8sClusterSummaryView({
         ) : (
           <ul className="k8s-summary-phase-list">
             {phases.map(([phase, count]) => (
-              <li key={phase}>
+              <li key={phase} className="k8s-summary-phase-item">
                 <span className="k8s-summary-phase">{phase}</span>
                 <strong>{count}</strong>
               </li>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, RefreshCw, Terminal } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
@@ -126,6 +126,8 @@ function groupIdForCategory(category: K8sResourceCategory): string | null {
 type ConfirmState =
   | { kind: "apply" }
   | { kind: "delete"; row: K8sResourceRow }
+  | { kind: "scale" }
+  | { kind: "portForward" }
   | null;
 
 function canScale(kind: string) {
@@ -184,6 +186,7 @@ function ageSortKey(age?: string | null): number {
 function columnsForCategory(
   category: K8sResourceCategory,
   metricsAvailable: boolean,
+  clusterScoped: boolean,
 ): TableColumn[] {
   if (category === "pods") {
     const cols: TableColumn[] = [
@@ -225,17 +228,23 @@ function columnsForCategory(
       { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
     ];
   }
-  return [
-    {
+  const cols: TableColumn[] = [
+    { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
+  ];
+  if (!clusterScoped) {
+    cols.push({
       id: "namespace",
       labelKey: "colNamespace",
       sortable: "namespace",
       cell: (r) => r.namespace || "—",
-    },
-    { id: "name", labelKey: "colName", sortable: "name", cell: (r) => r.name },
+    });
+  }
+  cols.push(
     { id: "status", labelKey: "colStatus", sortable: "status", cell: (r) => r.status ?? "—" },
+    { id: "age", labelKey: "colAge", sortable: "age", cell: (r) => r.age ?? "—" },
     { id: "extra", labelKey: "colExtra", cell: (r) => r.extra ?? "—" },
-  ];
+  );
+  return cols;
 }
 
 function sortRows(
@@ -259,10 +268,8 @@ function sortRows(
   return out;
 }
 
+const OVERVIEW_IDENTITY = new Set(["kind", "name", "namespace"]);
 const OVERVIEW_META = new Set([
-  "kind",
-  "name",
-  "namespace",
   "uid",
   "ownerrefs",
   "group",
@@ -278,7 +285,9 @@ function groupOverview(overview: Record<string, string>) {
   const other: Array<[string, string]> = [];
   for (const [k, v] of Object.entries(overview)) {
     const lk = k.toLowerCase();
-    if (
+    if (OVERVIEW_IDENTITY.has(lk)) {
+      continue;
+    } else if (
       OVERVIEW_STATUS.has(lk) ||
       lk.includes("condition") ||
       lk.includes("phase")
@@ -296,6 +305,10 @@ function groupOverview(overview: Record<string, string>) {
 export function K8sWorkbench() {
   const { t } = useTranslation(["k8s", "common", "terminal"]);
   const pushToast = useToastStore((s) => s.pushToast);
+  const handleShellError = useCallback(
+    (msg: string) => pushToast(msg, false),
+    [pushToast],
+  );
   const cluster = useK8sStore((s) => s.selectedCluster);
   const category = useK8sStore((s) => s.category);
   const namespace = useK8sStore((s) => s.namespace);
@@ -338,13 +351,9 @@ export function K8sWorkbench() {
   const [menuRow, setMenuRow] = useState<K8sResourceRow | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [detailTab, setDetailTab] = useState<
-    | "overview"
-    | "yaml"
-    | "scale"
-    | "logs"
-    | "shell"
-    | "portForward"
+    "overview" | "yaml" | "logs" | "shell"
   >("overview");
+  const [shellSessionReady, setShellSessionReady] = useState(false);
   const [pfLocal, setPfLocal] = useState("8080");
   const [pfRemote, setPfRemote] = useState("80");
   const [scaleReplicas, setScaleReplicas] = useState("1");
@@ -379,6 +388,7 @@ export function K8sWorkbench() {
       } else {
         void refreshResources();
       }
+      void refreshPortForwards();
     };
     const id = window.setInterval(tick, autoRefreshSec * 1000);
     return () => window.clearInterval(id);
@@ -388,6 +398,7 @@ export function K8sWorkbench() {
     autoRefreshSec,
     refreshResources,
     refreshClusterSummary,
+    refreshPortForwards,
   ]);
 
   useEffect(() => {
@@ -414,6 +425,14 @@ export function K8sWorkbench() {
     window.addEventListener("mousedown", onPointerDown);
     return () => window.removeEventListener("mousedown", onPointerDown);
   }, [menuRow]);
+
+  useEffect(() => {
+    setShellSessionReady(false);
+  }, [
+    selectedResource?.kind,
+    selectedResource?.namespace,
+    selectedResource?.name,
+  ]);
 
   const isClusterScoped = CLUSTER_SCOPED_CATEGORIES.has(category);
 
@@ -453,8 +472,8 @@ export function K8sWorkbench() {
   }, [detailTab, logsFollow, cluster, logsTarget, logsContainer, logsTail]);
 
   const tableColumns = useMemo(
-    () => columnsForCategory(category, metricsAvailable),
-    [category, metricsAvailable],
+    () => columnsForCategory(category, metricsAvailable, isClusterScoped),
+    [category, metricsAvailable, isClusterScoped],
   );
 
   const filteredRows = useMemo(() => {
@@ -575,6 +594,7 @@ export function K8sWorkbench() {
       ) {
         await selectResource(row);
       }
+      setShellSessionReady(true);
     } catch (err) {
       pushToast(formatAppError(err) || t("podShellFailed"), false);
     }
@@ -762,13 +782,13 @@ export function K8sWorkbench() {
       case "scale":
         void selectResource(row);
         setScaleReplicas(parseScaleReplicas(null, row));
-        setDetailTab("scale");
+        setConfirm({ kind: "scale" });
         break;
       case "portForward":
         void selectResource(row);
         setPfLocal("8080");
         setPfRemote("80");
-        setDetailTab("portForward");
+        setConfirm({ kind: "portForward" });
         break;
       case "delete":
         void selectResource(row);
@@ -901,8 +921,8 @@ export function K8sWorkbench() {
               <K8sClusterSummaryView
                 summary={clusterSummary}
                 loading={clusterSummaryLoading}
-                clusterName={cluster.display_name}
                 onWarningClick={handleWarningClick}
+                onRefresh={() => void refreshClusterSummary()}
               />
             </div>
           ) : (
@@ -1000,7 +1020,7 @@ export function K8sWorkbench() {
             <p className="k8s-error">{error}</p>
           ) : null}
           {loading ? <p className="k8s-loading">{t("loading")}</p> : null}
-          {!loading && filteredRows.length === 0 ? (
+          {!loading && !error && filteredRows.length === 0 ? (
             <p className="k8s-detail-empty">
               {tableFilter.trim()
                 ? t("tableEmptyFiltered")
@@ -1083,7 +1103,7 @@ export function K8sWorkbench() {
                           {t("actionDetails")}
                         </button>
                         <button type="button" role="menuitem" onClick={() => void onRowAction("edit", row)}>
-                          {t("actionEdit")}
+                          {row.kind === "HelmRelease" ? t("actionViewValues") : t("actionEdit")}
                         </button>
                         {canLogs(row.kind) ? (
                           <button type="button" role="menuitem" onClick={() => void onRowAction("logs", row)}>
@@ -1145,29 +1165,38 @@ export function K8sWorkbench() {
                     selectedResource.namespace === row.namespace &&
                     selectedResource.kind === row.kind;
                   return (
-                    <button
+                    <div
                       key={`${row.kind}/${row.namespace}/${row.name}`}
-                      type="button"
                       role="tab"
+                      tabIndex={0}
+                      aria-selected={active}
                       className={`k8s-resource-tab${active ? " active" : ""}`}
                       title={resourceTabLabel(row)}
                       onClick={() => {
                         setDetailTab("overview");
                         void selectResource(row);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetailTab("overview");
+                          void selectResource(row);
+                        }
+                      }}
                     >
                       <span className="tab-title">{resourceTabLabel(row)}</span>
-                      <span
+                      <button
+                        type="button"
                         className="k8s-resource-tab-close"
-                        role="presentation"
+                        aria-label={t("common:close")}
                         onClick={(e) => {
                           e.stopPropagation();
                           closeResourceTab(row);
                         }}
                       >
                         ×
-                      </span>
-                    </button>
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1188,6 +1217,41 @@ export function K8sWorkbench() {
                   >
                     {t("terminal:sendToChat")}
                   </button>
+                  {canScale(selectedResource.kind) ? (
+                    <button
+                      type="button"
+                      className="k8s-detail-quick-btn"
+                      onClick={() => {
+                        setScaleReplicas(
+                          parseScaleReplicas(
+                            detail,
+                            rows.find(
+                              (r) =>
+                                r.name === selectedResource.name &&
+                                r.namespace === selectedResource.namespace &&
+                                r.kind === selectedResource.kind,
+                            ) ?? null,
+                          ),
+                        );
+                        setConfirm({ kind: "scale" });
+                      }}
+                    >
+                      {t("scale")}
+                    </button>
+                  ) : null}
+                  {canPortForward(selectedResource.kind) ? (
+                    <button
+                      type="button"
+                      className="k8s-detail-quick-btn"
+                      onClick={() => {
+                        setPfLocal("8080");
+                        setPfRemote("80");
+                        setConfirm({ kind: "portForward" });
+                      }}
+                    >
+                      {t("portForward")}
+                    </button>
+                  ) : null}
                   {selectedResource.kind !== "HelmRelease" ? (
                     <button
                       type="button"
@@ -1211,23 +1275,29 @@ export function K8sWorkbench() {
             </div>
           ) : null}
           <aside className="k8s-detail-panel">
-          {detailLoading ? <p>{t("loading")}</p> : null}
-          {detail && selectedResource ? (
+          {detailLoading ? (
+            <p>{t("loading")}</p>
+          ) : detail && selectedResource ? (
             <>
               <div className="k8s-detail-tabs" role="tablist">
                 <button type="button" role="tab" className={detailTab === "overview" ? "active" : ""} onClick={() => setDetailTab("overview")}>{t("detailOverview")}</button>
-                <button type="button" role="tab" className={detailTab === "yaml" ? "active" : ""} onClick={() => setDetailTab("yaml")}>{t("detailYaml")}</button>
+                <button type="button" role="tab" className={detailTab === "yaml" ? "active" : ""} onClick={() => setDetailTab("yaml")}>{selectedResource.kind === "HelmRelease" ? t("detailValues") : t("detailYaml")}</button>
                 {canLogs(selectedResource.kind) ? (
                   <button type="button" role="tab" className={detailTab === "logs" ? "active" : ""} onClick={() => void openLogs({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })}>{t("logs")}</button>
                 ) : null}
                 {canShell(selectedResource.kind) ? (
-                  <button type="button" role="tab" className={detailTab === "shell" ? "active" : ""} onClick={() => void preparePodShell({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })}>{t("podShell")}</button>
-                ) : null}
-                {canScale(selectedResource.kind) ? (
-                  <button type="button" role="tab" className={detailTab === "scale" ? "active" : ""} onClick={() => { setScaleReplicas(parseScaleReplicas(detail, rows.find((r) => r.name === selectedResource.name && r.namespace === selectedResource.namespace && r.kind === selectedResource.kind) ?? null)); setDetailTab("scale"); }}>{t("scale")}</button>
-                ) : null}
-                {canPortForward(selectedResource.kind) ? (
-                  <button type="button" role="tab" className={detailTab === "portForward" ? "active" : ""} onClick={() => setDetailTab("portForward")}>{t("portForward")}</button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={detailTab === "shell" ? "active" : ""}
+                    onClick={() =>
+                      shellSessionReady
+                        ? setDetailTab("shell")
+                        : void preparePodShell({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })
+                    }
+                  >
+                    {t("podShell")}
+                  </button>
                 ) : null}
               </div>
 
@@ -1272,15 +1342,6 @@ export function K8sWorkbench() {
                 </div>
               ) : null}
 
-              {detailTab === "scale" ? (
-                <div className="k8s-detail-tab-body k8s-detail-action-pane">
-                  <label>{t("scaleReplicas")}<input type="number" min={0} value={scaleReplicas} onChange={(e) => setScaleReplicas(e.target.value)} /></label>
-                  <div className="k8s-detail-tab-actions">
-                    <button type="button" className="find-panel-run primary" onClick={() => void runScale()}>{t("scale")}</button>
-                  </div>
-                </div>
-              ) : null}
-
               {detailTab === "logs" ? (
                 <div className="k8s-detail-tab-body k8s-detail-logs">
                   <div className="k8s-detail-logs-toolbar">
@@ -1307,32 +1368,43 @@ export function K8sWorkbench() {
                 </div>
               ) : null}
 
-              {detailTab === "shell" ? (
-                <div className="k8s-detail-tab-body k8s-detail-shell-pane">
-                  {cluster.kind === "kubeconfig" && selectedResource ? (
-                    <>
-                      {shellContainers.length > 1 ? (
-                        <div className="k8s-detail-logs-toolbar">
-                          <DarkSelect
-                            value={shellContainer}
-                            onChange={(v) => setShellContainer(v)}
-                            aria-label={t("logsContainer")}
-                            options={shellContainers.map((c) => ({
-                              value: c,
-                              label: c,
-                            }))}
-                          />
-                        </div>
-                      ) : null}
-                      <K8sPodShellTerminal
-                        key={`${selectedResource.namespace}/${selectedResource.name}/${shellContainer}`}
-                        cluster={cluster}
-                        namespace={selectedResource.namespace}
-                        pod={selectedResource.name}
-                        container={shellContainer || null}
-                        onError={(msg) => pushToast(msg, false)}
+              {cluster.kind === "kubeconfig" &&
+              shellSessionReady &&
+              selectedResource &&
+              canShell(selectedResource.kind) ? (
+                <div
+                  className="k8s-detail-tab-body k8s-detail-shell-pane"
+                  hidden={detailTab !== "shell"}
+                >
+                  {shellContainers.length > 1 ? (
+                    <div className="k8s-detail-logs-toolbar">
+                      <DarkSelect
+                        value={shellContainer}
+                        onChange={(v) => setShellContainer(v)}
+                        aria-label={t("logsContainer")}
+                        options={shellContainers.map((c) => ({
+                          value: c,
+                          label: c,
+                        }))}
                       />
-                    </>
+                    </div>
+                  ) : null}
+                  <K8sPodShellTerminal
+                    key={`${selectedResource.namespace}/${selectedResource.name}/${shellContainer}`}
+                    cluster={cluster}
+                    namespace={selectedResource.namespace}
+                    pod={selectedResource.name}
+                    container={shellContainer || null}
+                    onError={handleShellError}
+                  />
+                </div>
+              ) : null}
+
+              {detailTab === "shell" &&
+              !(cluster.kind === "kubeconfig" && shellSessionReady) ? (
+                <div className="k8s-detail-tab-body k8s-detail-shell-pane">
+                  {cluster.kind === "kubeconfig" ? (
+                    <p>{t("loading")}</p>
                   ) : (
                     <>
                       <p>{t("podShellSshHint")}</p>
@@ -1368,16 +1440,6 @@ export function K8sWorkbench() {
                   )}
                 </div>
               ) : null}
-
-              {detailTab === "portForward" ? (
-                <div className="k8s-detail-tab-body k8s-detail-action-pane">
-                  <label>{t("portForwardLocal")}<input type="number" value={pfLocal} onChange={(e) => setPfLocal(e.target.value)} /></label>
-                  <label>{t("portForwardRemote")}<input type="number" value={pfRemote} onChange={(e) => setPfRemote(e.target.value)} /></label>
-                  <div className="k8s-detail-tab-actions">
-                    <button type="button" className="find-panel-run primary" onClick={() => void startPortForward()}>{t("portForwardStart")}</button>
-                  </div>
-                </div>
-              ) : null}
             </>
           ) : (
             <p className="k8s-detail-empty">{t("selectResourceHint")}</p>
@@ -1388,7 +1450,7 @@ export function K8sWorkbench() {
       }
       dock={null}
     />
-      {confirm ? (
+      {confirm && (confirm.kind === "apply" || confirm.kind === "delete") ? (
         <Modal
           title={
             confirm.kind === "apply" ? t("confirmApply") : t("confirmDelete")
@@ -1420,6 +1482,75 @@ export function K8sWorkbench() {
               }}
             >
               {t("common:confirm")}
+            </button>
+            <button type="button" onClick={() => setConfirm(null)}>
+              {t("common:cancel")}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {confirm && confirm.kind === "scale" ? (
+        <Modal title={t("confirmScale")} onClose={() => setConfirm(null)}>
+          <div className="k8s-detail-action-pane">
+            <label>
+              {t("scaleReplicas")}
+              <input
+                type="number"
+                min={0}
+                value={scaleReplicas}
+                onChange={(e) => setScaleReplicas(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="form-row">
+            <button
+              type="button"
+              className="find-panel-run primary"
+              onClick={() => {
+                setConfirm(null);
+                void runScale();
+              }}
+            >
+              {t("scale")}
+            </button>
+            <button type="button" onClick={() => setConfirm(null)}>
+              {t("common:cancel")}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {confirm && confirm.kind === "portForward" ? (
+        <Modal title={t("confirmPortForward")} onClose={() => setConfirm(null)}>
+          <div className="k8s-detail-action-pane">
+            <label>
+              {t("portForwardLocal")}
+              <input
+                type="number"
+                value={pfLocal}
+                onChange={(e) => setPfLocal(e.target.value)}
+              />
+            </label>
+            <label>
+              {t("portForwardRemote")}
+              <input
+                type="number"
+                value={pfRemote}
+                onChange={(e) => setPfRemote(e.target.value)}
+              />
+            </label>
+          </div>
+          <div className="form-row">
+            <button
+              type="button"
+              className="find-panel-run primary"
+              onClick={() => {
+                setConfirm(null);
+                void startPortForward();
+              }}
+            >
+              {t("portForwardStart")}
             </button>
             <button type="button" onClick={() => setConfirm(null)}>
               {t("common:cancel")}

@@ -1314,6 +1314,13 @@ body.sidebar-resizing {
   line-height: 1.4;
 }
 
+.entity-catalog-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .status-bar {
   margin: 0 12px 12px;
   margin-top: auto;
@@ -9447,9 +9454,31 @@ body.k8s-detail-resizing {
   flex-direction: column;
   gap: 16px;
 }
+.k8s-cluster-summary-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .k8s-cluster-summary-head h2 {
   margin: 0 0 4px;
   font-size: 15px;
+  color: #e6edf3;
+}
+.k8s-summary-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-bottom: 4px;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  background: #161b22;
+  color: #9da7b3;
+  cursor: pointer;
+}
+.k8s-summary-refresh-btn:hover {
+  background: #21262d;
   color: #e6edf3;
 }
 .k8s-cluster-summary-meta {
@@ -9479,6 +9508,7 @@ body.k8s-detail-resizing {
   border-radius: 6px;
   background: #0d1117;
   font-size: 12px;
+  cursor: default;
 }
 .k8s-summary-events {
   list-style: none;
@@ -9562,6 +9592,9 @@ body.k8s-detail-resizing {
   display: flex;
   flex-direction: column;
   padding: 0 !important;
+}
+.k8s-detail-shell-pane[hidden] {
+  display: none !important;
 }
 .k8s-pod-shell-terminal {
   flex: 1;
