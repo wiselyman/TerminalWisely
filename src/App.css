@@ -9331,7 +9331,7 @@ body.k8s-detail-resizing {
   color: #e6edf3;
   word-break: break-word;
 }
-.k8s-detail-quickbar {
+.k8s-detail-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;

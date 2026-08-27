@@ -1173,7 +1173,7 @@ export function K8sWorkbench() {
           {detailLoading ? <p>{t("loading")}</p> : null}
           {detail && selectedResource ? (
             <>
-              <div className="k8s-detail-quickbar">
+              <div className="k8s-detail-header">
                 <div className="k8s-detail-title">
                   <strong>{selectedResource.name}</strong>
                   <span className="k8s-detail-subtitle">
@@ -1192,54 +1192,6 @@ export function K8sWorkbench() {
                   >
                     <Copy size={13} strokeWidth={2} />
                   </button>
-                  {canLogs(selectedResource.kind) ? (
-                    <button
-                      type="button"
-                      className="k8s-detail-quick-btn"
-                      onClick={() =>
-                        void openLogs({
-                          kind: selectedResource.kind,
-                          namespace: selectedResource.namespace,
-                          name: selectedResource.name,
-                        })
-                      }
-                    >
-                      {t("logs")}
-                    </button>
-                  ) : null}
-                  {canShell(selectedResource.kind) ? (
-                    <button
-                      type="button"
-                      className="k8s-detail-quick-btn"
-                      onClick={() =>
-                        void preparePodShell({
-                          kind: selectedResource.kind,
-                          namespace: selectedResource.namespace,
-                          name: selectedResource.name,
-                        })
-                      }
-                    >
-                      {t("podShell")}
-                    </button>
-                  ) : null}
-                  {detail.kind !== "HelmRelease" ? (
-                    <button
-                      type="button"
-                      className="k8s-detail-quick-btn danger"
-                      onClick={() =>
-                        setConfirm({
-                          kind: "delete",
-                          row: {
-                            kind: selectedResource.kind,
-                            namespace: selectedResource.namespace,
-                            name: selectedResource.name,
-                          },
-                        })
-                      }
-                    >
-                      {t("delete")}
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     className="k8s-detail-quick-btn primary"
@@ -1252,23 +1204,23 @@ export function K8sWorkbench() {
               <div className="k8s-detail-tabs" role="tablist">
                 <button type="button" role="tab" className={detailTab === "overview" ? "active" : ""} onClick={() => setDetailTab("overview")}>{t("detailOverview")}</button>
                 <button type="button" role="tab" className={detailTab === "yaml" ? "active" : ""} onClick={() => setDetailTab("yaml")}>{t("detailYaml")}</button>
-                {detail.kind !== "HelmRelease" ? (
-                  <button type="button" role="tab" className={detailTab === "apply" ? "active" : ""} onClick={() => setDetailTab("apply")}>{t("apply")}</button>
-                ) : null}
-                {detail.kind !== "HelmRelease" ? (
-                  <button type="button" role="tab" className={detailTab === "delete" ? "active" : ""} onClick={() => setDetailTab("delete")}>{t("delete")}</button>
-                ) : null}
-                {canScale(selectedResource.kind) ? (
-                  <button type="button" role="tab" className={detailTab === "scale" ? "active" : ""} onClick={() => { setScaleReplicas(parseScaleReplicas(detail, rows.find((r) => r.name === selectedResource.name && r.namespace === selectedResource.namespace && r.kind === selectedResource.kind) ?? null)); setDetailTab("scale"); }}>{t("scale")}</button>
-                ) : null}
                 {canLogs(selectedResource.kind) ? (
                   <button type="button" role="tab" className={detailTab === "logs" ? "active" : ""} onClick={() => void openLogs({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })}>{t("logs")}</button>
                 ) : null}
                 {canShell(selectedResource.kind) ? (
                   <button type="button" role="tab" className={detailTab === "shell" ? "active" : ""} onClick={() => void preparePodShell({ kind: selectedResource.kind, namespace: selectedResource.namespace, name: selectedResource.name })}>{t("podShell")}</button>
                 ) : null}
+                {canScale(selectedResource.kind) ? (
+                  <button type="button" role="tab" className={detailTab === "scale" ? "active" : ""} onClick={() => { setScaleReplicas(parseScaleReplicas(detail, rows.find((r) => r.name === selectedResource.name && r.namespace === selectedResource.namespace && r.kind === selectedResource.kind) ?? null)); setDetailTab("scale"); }}>{t("scale")}</button>
+                ) : null}
                 {canPortForward(selectedResource.kind) ? (
                   <button type="button" role="tab" className={detailTab === "portForward" ? "active" : ""} onClick={() => setDetailTab("portForward")}>{t("portForward")}</button>
+                ) : null}
+                {detail.kind !== "HelmRelease" ? (
+                  <button type="button" role="tab" className={detailTab === "apply" ? "active" : ""} onClick={() => setDetailTab("apply")}>{t("apply")}</button>
+                ) : null}
+                {detail.kind !== "HelmRelease" ? (
+                  <button type="button" role="tab" className={detailTab === "delete" ? "active" : ""} onClick={() => setDetailTab("delete")}>{t("delete")}</button>
                 ) : null}
               </div>
 
