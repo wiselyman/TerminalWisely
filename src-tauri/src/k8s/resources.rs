@@ -279,6 +279,30 @@ fn extract_pod_deploy_fields(
 
 fn extract_extra(item: &Value, kind: &str) -> Option<String> {
     match kind {
+        "Node" => {
+            let labels = item.get("metadata").and_then(|m| m.get("labels"))?;
+            let mut roles: Vec<&str> = Vec::new();
+            if let Some(obj) = labels.as_object() {
+                for key in obj.keys() {
+                    if let Some(role) = key.strip_prefix("node-role.kubernetes.io/") {
+                        if !role.is_empty() {
+                            roles.push(role);
+                        }
+                    } else if key == "kubernetes.io/role" {
+                        if let Some(v) = obj.get(key).and_then(|x| x.as_str()) {
+                            roles.push(v);
+                        }
+                    }
+                }
+            }
+            if roles.is_empty() {
+                None
+            } else {
+                roles.sort_unstable();
+                roles.dedup();
+                Some(roles.join(","))
+            }
+        }
         "CustomResourceDefinition" => item
             .get("spec")
             .and_then(|s| s.get("group"))
@@ -321,7 +345,13 @@ fn extract_status(item: &Value, kind: &str) -> Option<String> {
                 arr.iter()
                     .find(|x| x.get("type").and_then(|t| t.as_str()) == Some("Ready"))
                     .and_then(|x| x.get("status").and_then(|s| s.as_str()))
-                    .map(String::from)
+                    .map(|s| {
+                        if s.eq_ignore_ascii_case("True") {
+                            "Ready".to_string()
+                        } else {
+                            "NotReady".to_string()
+                        }
+                    })
             }),
         "Namespace" => item
             .get("status")
