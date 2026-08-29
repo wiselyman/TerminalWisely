@@ -8,6 +8,7 @@ import {
   useAiEngineerStore,
 } from "../../stores/aiEngineerStore";
 import { AiEngineerSettings } from "./AiEngineerSettings";
+import { AiEngineerRunTraceBar } from "./AiEngineerRunTraceBar";
 import { SecurityModePicker } from "./SecurityModePicker";
 import { InteractionModePicker } from "./InteractionModePicker";
 import { AiMarkdown } from "./AiMarkdown";
@@ -369,6 +370,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const sendMessage = useAiEngineerStore((s) => s.sendMessage);
   const stopActiveRun = useAiEngineerStore((s) => s.stopActiveRun);
   const flushMidRunContext = useAiEngineerStore((s) => s.flushMidRunContext);
+  const runTraceSpans = useAiEngineerStore((s) => s.runTraceSpans);
   const ensureReady = useAiEngineerStore((s) => s.ensureReady);
   const bindContext = useAiEngineerStore((s) => s.bindContext);
   const bindK8sContext = useAiEngineerStore((s) => s.bindK8sContext);
@@ -1002,7 +1004,11 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                         ? t("aiEngineer.noticeCompaction")
                         : line.variant === "resumed"
                           ? t("aiEngineer.noticeResumed")
-                          : line.content;
+                          : line.content === "memory_context"
+                            ? t("aiEngineer.noticeMemoryContext")
+                            : line.content.startsWith("[USER CONTEXT]")
+                              ? t("aiEngineer.noticeUserContext")
+                              : line.content;
                     return (
                       <div
                         key={rowKey}
@@ -1341,6 +1347,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   </div>
                 ) : null}
               </div>
+              <AiEngineerRunTraceBar spans={runTraceSpans} busy={busy} />
               <div className="ai-engineer-composer">
                 {pendingAttachments.length > 0 ? (
                   <div className="ai-engineer-attach-tray">
@@ -1529,6 +1536,37 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                     />
                   </div>
                   <div className="ai-engineer-composer-actions">
+                    {busy ? (
+                      <>
+                        <button
+                          type="button"
+                          className="ai-engineer-midrun-btn"
+                          onClick={() => addConsoleFromTerminal()}
+                        >
+                          {t("aiEngineer.addTerminalToRun")}
+                        </button>
+                        {input.trim() ? (
+                          <button
+                            type="button"
+                            className="ai-engineer-midrun-btn is-primary"
+                            onClick={() => {
+                              const text = input.trim();
+                              void flushMidRunContext(text).then((ok) => {
+                                if (ok) setInput("");
+                                pushToast(
+                                  ok
+                                    ? t("aiEngineer.flushContextOk")
+                                    : t("aiEngineer.flushContextFailed"),
+                                  ok,
+                                );
+                              });
+                            }}
+                          >
+                            {t("aiEngineer.addInputToRun")}
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
                     <div className="ai-engineer-menu-wrap ai-engineer-attach-wrap">
                       <button
                         ref={attachTriggerRef}

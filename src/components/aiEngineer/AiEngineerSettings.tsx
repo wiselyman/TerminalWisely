@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ensureSidecar, listAiModels } from "../../lib/aiEngineer/api";
-import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
+import { useAiEngineerStore } from "../../stores/aiEngineerStore";
+import { AiEngineerPlatformPanel } from "./AiEngineerPlatformPanel";
 
 /** All types speak OpenAI-compatible HTTP via ModelGateway. */
 type ProviderType = "openai" | "anthropic" | "gemini" | "ollama";
 
 type View =
   | { kind: "list" }
+  | { kind: "platform" }
   | { kind: "pick_type" }
   | { kind: "edit"; profile: AiModelProfile; isNew: boolean; providerType: ProviderType };
 
@@ -309,7 +311,9 @@ export function AiEngineerSettings() {
   const title =
     view.kind === "list"
       ? t("aiEngineer.settings.title")
-      : view.kind === "pick_type"
+      : view.kind === "platform"
+        ? t("aiEngineer.platform.title")
+        : view.kind === "pick_type"
         ? t("aiEngineer.settings.pickType")
         : view.isNew
           ? t("aiEngineer.settings.newProfile")
@@ -344,9 +348,11 @@ export function AiEngineerSettings() {
                   setError(null);
                   setApiKey("");
                   setView(
-                    view.kind === "edit" && view.isNew
-                      ? { kind: "pick_type" }
-                      : { kind: "list" },
+                    view.kind === "platform"
+                      ? { kind: "list" }
+                      : view.kind === "edit" && view.isNew
+                        ? { kind: "pick_type" }
+                        : { kind: "list" },
                   );
                 }}
                 aria-label="Back"
@@ -378,6 +384,13 @@ export function AiEngineerSettings() {
                 onClick={() => setView({ kind: "pick_type" })}
               >
                 {t("aiEngineer.settings.new")}
+              </button>
+              <button
+                type="button"
+                className="ai-engineer-text-btn"
+                onClick={() => setView({ kind: "platform" })}
+              >
+                {t("aiEngineer.platform.open")}
               </button>
             </div>
 
@@ -454,6 +467,21 @@ export function AiEngineerSettings() {
                 onClick={() => setSettingsOpen(false)}
               >
                 {t("aiEngineer.settings.done")}
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        {view.kind === "platform" ? (
+          <>
+            <AiEngineerPlatformPanel />
+            <div className="ai-engineer-approval-actions">
+              <button
+                type="button"
+                className="find-panel-run"
+                onClick={() => setView({ kind: "list" })}
+              >
+                {t("aiEngineer.settings.back")}
               </button>
             </div>
           </>

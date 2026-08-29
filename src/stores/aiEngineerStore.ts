@@ -3,9 +3,11 @@ import {
   ensureSidecar,
   getAiSettings,
   saveAiSettings,
+  fetchRunTrace,
   type AiSettingsUpdate,
   type AiSettingsView,
   type SidecarInfo,
+  type TraceSpanRow,
 } from "../lib/aiEngineer/api";
 import {
   cancelAgentRun,
@@ -503,6 +505,8 @@ type AiEngineerState = {
   activePlan: PlanStep[] | null;
   activeInvestigation: ActiveInvestigation | null;
   pendingAttachments: PendingAttachment[];
+  /** Live run timing spans (model / tool / approval). */
+  runTraceSpans: TraceSpanRow[];
   /** Bumped to focus the composer textarea (e.g. after Send to chat). */
   composerFocusNonce: number;
   openPanel: (sessionId: string, serverId?: string) => void;
@@ -708,6 +712,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   activePlan: null,
   activeInvestigation: null,
   pendingAttachments: [],
+  runTraceSpans: [],
   composerFocusNonce: 0,
 
   openPanel: (sessionId, serverId) => {
@@ -1402,6 +1407,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       inputsByThread: { ...get().inputsByThread, [runThreadId]: "" },
       activeInvestigation: null,
       pendingAttachments: [],
+      runTraceSpans: [],
     });
 
     const sameRunTarget = () => {
@@ -1645,7 +1651,61 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             });
             return;
           }
-          if (event.type === "assistant_delta") {
+          if (event.type === "memory_context") {
+            appendIfSameThread({
+              id: nextId(),
+              kind: "notice",
+              variant: "info",
+              content: "memory_context",
+            });
+            return;
+          }
+          if (event.type === "trace_span") {
+            const span = event.span;
+            if (!span?.id) return;
+            const prev = get().runTraceSpans;
+            const idx = prev.findIndex((s) => s.id === span.id);
+            const next =
+              idx >= 0
+                ? prev.map((s, i) => (i === idx ? { ...s, ...span } : s))
+                : [...prev, span];
+            set({ runTraceSpans: next });
+            return;
+          }
+          if (event.type === "completed") {
+            const content = event.content ?? "";
+            if (content.trim()) {
+              const msgs = get().messages;
+              for (let i = msgs.length - 1; i >= 0; i -= 1) {
+                const line = msgs[i];
+                if (line.kind === "assistant") {
+                  if (line.content === content) break;
+                  if (line.streaming) {
+                    replaceMessagesIfSameThread([
+                      ...msgs.slice(0, i),
+                      { id: line.id, kind: "assistant", content },
+                      ...msgs.slice(i + 1),
+                    ]);
+                    break;
+                  }
+                  appendIfSameThread({ id: nextId(), kind: "assistant", content });
+                  break;
+                }
+              }
+            }
+            const { sidecar, sessionId } = get();
+            const rid = activeRunId;
+            if (sidecar && sessionId && rid) {
+              void fetchRunTrace(sidecar, sessionId, rid)
+                .then((data) => {
+                  if (sameRunTarget()) {
+                    set({ runTraceSpans: data.spans ?? [] });
+                  }
+                })
+                .catch(() => undefined);
+            }
+            return;
+          } else if (event.type === "assistant_delta") {
             const text = event.text ?? "";
             if (!text) return;
             const msgs = get().messages;
@@ -1679,26 +1739,6 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             } else {
               appendIfSameThread({ id: nextId(), kind: "assistant", content });
             }
-          } else if (event.type === "completed") {
-            const content = event.content ?? "";
-            if (!content.trim()) return;
-            const msgs = get().messages;
-            for (let i = msgs.length - 1; i >= 0; i -= 1) {
-              const line = msgs[i];
-              if (line.kind === "assistant") {
-                if (line.content === content) return;
-                if (line.streaming) {
-                  replaceMessagesIfSameThread([
-                    ...msgs.slice(0, i),
-                    { id: line.id, kind: "assistant", content },
-                    ...msgs.slice(i + 1),
-                  ]);
-                  return;
-                }
-                break;
-              }
-            }
-            appendIfSameThread({ id: nextId(), kind: "assistant", content });
           } else if (event.type === "tool_call") {
             const detail = String(
               (event.arguments.command as string) ||

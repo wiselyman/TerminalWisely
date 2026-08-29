@@ -1,6 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../isTauri";
-import { sidecarFetch, type SidecarInfo } from "./api";
+import { sidecarFetch, type SidecarInfo, type TraceSpanRow } from "./api";
 import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
 import type { K8sClusterTarget } from "../k8s/types";
 
@@ -71,7 +71,9 @@ export type AgentUiEvent =
       status?: string;
       summary_preview?: string;
       error?: string;
-    };
+    }
+  | { type: "memory_context"; signature?: string }
+  | { type: "trace_span"; span: TraceSpanRow };
 
 export type AskUserHandler = (event: Extract<AgentUiEvent, { type: "ask_user" }>) => Promise<{
   selected_option_ids: string[];
@@ -257,6 +259,25 @@ async function handleProtocolEvent(opts: {
       summary_preview:
         typeof p.summary_preview === "string" ? p.summary_preview : undefined,
       error: typeof p.error === "string" ? p.error : undefined,
+    });
+  } else if (ev.type === "memory_context") {
+    onEvent({
+      type: "memory_context",
+      signature: typeof p.signature === "string" ? p.signature : undefined,
+    });
+  } else if (ev.type === "trace_span") {
+    onEvent({
+      type: "trace_span",
+      span: {
+        id: String(p.id ?? ""),
+        kind: String(p.kind ?? ""),
+        name: String(p.name ?? ""),
+        duration_ms:
+          typeof p.duration_ms === "number" ? p.duration_ms : null,
+        started_at:
+          typeof p.started_at === "number" ? p.started_at : undefined,
+        ended_at: typeof p.ended_at === "number" ? p.ended_at : null,
+      },
     });
   } else if (ev.type === "tool_call") {
     const callId = String(p.call_id ?? "");

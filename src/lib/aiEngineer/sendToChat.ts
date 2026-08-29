@@ -160,6 +160,19 @@ export function sendConsoleSelectionToChat(
       .pushToast(i18n.t("tools:aiEngineer.attachNoSelection"), false);
     return;
   }
+  const store = useAiEngineerStore.getState();
+  if (store.busy) {
+    openChatComposer(sessionId, serverId);
+    void store.flushMidRunContext(trimmed).then((ok) => {
+      useToastStore.getState().pushToast(
+        ok
+          ? i18n.t("tools:aiEngineer.flushContextOk")
+          : i18n.t("tools:aiEngineer.flushContextFailed"),
+        ok,
+      );
+    });
+    return;
+  }
   openChatComposer(sessionId, serverId);
   attachPendingAndFocus({
     id: nextAttachmentId(),

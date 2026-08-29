@@ -333,6 +333,16 @@ async def mcp_servers(_: AuthDep) -> dict[str, Any]:
     return {"servers": get_registry().list_servers()}
 
 
+@app.post("/v1/eval/run")
+async def eval_run(_: AuthDep) -> dict[str, Any]:
+    """Run ops eval harness (for settings UI regression check)."""
+    from eval.report import format_report
+    from eval.runner import run_eval_suite
+
+    results = await run_eval_suite()
+    return format_report(results)
+
+
 @app.get("/v1/sessions/{session_id}/pull", response_model=PullResponse)
 async def session_pull(
     session_id: str,
