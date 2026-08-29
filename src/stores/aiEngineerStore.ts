@@ -9,6 +9,7 @@ import {
 } from "../lib/aiEngineer/api";
 import {
   cancelAgentRun,
+  flushUserContext,
   runAgentChat,
   type AgentUiEvent,
 } from "../lib/aiEngineer/chatClient";
@@ -551,6 +552,7 @@ type AiEngineerState = {
     interruptIfBusy?: boolean;
   }) => Promise<void>;
   stopActiveRun: () => void;
+  flushMidRunContext: (content: string) => Promise<boolean>;
   resolveAsk: (selected: string[], freeText?: string) => void;
   resolveApproval: (
     approved: boolean,
@@ -1186,6 +1188,38 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
     if (sidecar && sessionId && runId) {
       void cancelAgentRun(sidecar, sessionId, runId).catch(() => undefined);
+    }
+  },
+
+  flushMidRunContext: async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+    const { sidecar, sessionId, busy } = get();
+    const runId = activeRunId;
+    if (!busy || !sidecar || !sessionId || !runId) {
+      return false;
+    }
+    try {
+      await flushUserContext(sidecar, sessionId, runId, trimmed);
+      const note = `[USER CONTEXT]\n${trimmed.slice(0, 64 * 1024)}`;
+      const { chatScope, activeThreadId, messages } = get();
+      const nextMessages: ChatLine[] = [
+        ...messages,
+        {
+          id: `m_${crypto.randomUUID()}`,
+          kind: "notice",
+          variant: "info",
+          content: note.slice(0, 500),
+        },
+      ];
+      const threadsByScope =
+        chatScope && activeThreadId
+          ? commitThreadMessages(get, chatScope, activeThreadId, nextMessages)
+          : get().threadsByScope;
+      set({ messages: nextMessages, threadsByScope });
+      return true;
+    } catch {
+      return false;
     }
   },
 

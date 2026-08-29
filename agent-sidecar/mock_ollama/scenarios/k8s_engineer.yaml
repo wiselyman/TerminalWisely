@@ -95,3 +95,16 @@ scenarios:
               namespace: demo
       - content: |
           demo 命名空间近期与 broken-pull 相关的 Warning 事件多为 Failed 拉取镜像。
+
+  - id: crashloop_multi
+    match: "CrashLoop|crashloop|崩溃循环"
+    steps:
+      - tool_calls:
+          - name: k8s_describe
+            arguments:
+              kind: Pod
+              name: multi
+              namespace: demo
+              intent: Diagnose CrashLoopBackOff
+      - content: |
+          建议先用 k8s_describe 查看 Events 与 Last State；常见根因是启动命令失败、探针误杀或配置错误。

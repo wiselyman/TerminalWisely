@@ -63,7 +63,10 @@ class ScenarioDirector:
                 continue
             content = msg.get("content")
             if isinstance(content, str):
-                return content.strip()
+                text = content.strip()
+                if text.startswith("[UNTRUSTED") or text.startswith("[VERIFIED CASE MEMORY"):
+                    continue
+                return text
             if isinstance(content, list):
                 parts = [
                     (p.get("text") if isinstance(p, dict) else str(p)) or ""
@@ -79,7 +82,10 @@ class ScenarioDirector:
             if msg.get("role") == "user":
                 content = msg.get("content")
                 if isinstance(content, str) and content.strip():
-                    return content.strip()[:240]
+                    text = content.strip()
+                    if text.startswith("[UNTRUSTED") or text.startswith("[VERIFIED CASE MEMORY"):
+                        continue
+                    return text[:240]
         return "__default__"
 
     def _pick_scenario(self, messages: list[dict[str, Any]]) -> Scenario:

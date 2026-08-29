@@ -368,6 +368,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const messages = useAiEngineerStore((s) => s.messages);
   const sendMessage = useAiEngineerStore((s) => s.sendMessage);
   const stopActiveRun = useAiEngineerStore((s) => s.stopActiveRun);
+  const flushMidRunContext = useAiEngineerStore((s) => s.flushMidRunContext);
   const ensureReady = useAiEngineerStore((s) => s.ensureReady);
   const bindContext = useAiEngineerStore((s) => s.bindContext);
   const bindK8sContext = useAiEngineerStore((s) => s.bindK8sContext);
@@ -468,6 +469,17 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
     const sel = readActiveTerminalSelection().trim();
     if (!sel) {
       pushToast(t("aiEngineer.attachNoSelection"), false);
+      return;
+    }
+    if (busy) {
+      void flushMidRunContext(sel).then((ok) => {
+        pushToast(
+          ok
+            ? t("aiEngineer.flushContextOk")
+            : t("aiEngineer.flushContextFailed"),
+          ok,
+        );
+      });
       return;
     }
     addPendingAttachment({

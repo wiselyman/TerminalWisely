@@ -177,6 +177,8 @@
   "aiEngineer.attachPreviewClose": "Close preview",
   "aiEngineer.attachNoSelection": "Select text in the terminal first",
   "aiEngineer.attachConsoleOk": "Selection attached to chat",
+  "aiEngineer.flushContextOk": "Selection sent to the active run",
+  "aiEngineer.flushContextFailed": "Could not send context to the active run",
   "aiEngineer.attachRemoteOk": "Attached {{path}}",
   "aiEngineer.attachRemotePrompt": "Absolute remote path (e.g. /etc/nginx/nginx.conf)",
   "aiEngineer.attachRemoteInvalid": "Invalid remote path",

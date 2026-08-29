@@ -23,6 +23,7 @@ from app.llm.context import sanitize_history_item
 from app.llm.gateway import ModelGateway, ModelGatewayError, resolve_served_model_id
 from app.harness.backup import backup_commands, restore_command, validate_commands_for_path
 from app.harness.network_guard import build_timed_rollback_plan
+from app.mcp.registry import get_registry
 from app.memory.store import find_cases, save_verified_case
 from app.session.attachments import compose_user_content
 from app.models.agent import (
@@ -303,6 +304,33 @@ async def run_transcript(
         hydrated=hydrated,
         on_disk=on_disk,
     )
+
+
+@app.get("/v1/runs/{run_id}/trace")
+async def run_trace(
+    run_id: str,
+    _: AuthDep,
+    session_id: str = Query(...),
+) -> dict[str, Any]:
+    run = STORE.get_run(run_id)
+    if run is None:
+        run = STORE.hydrate_run_from_disk(session_id, run_id)
+    if run is None or run.session_id != session_id:
+        raise HTTPException(status_code=404, detail="run not found")
+    spans = run.metadata.get("trace_spans")
+    if not isinstance(spans, list):
+        spans = []
+    return {
+        "session_id": session_id,
+        "run_id": run_id,
+        "status": _status_str(run.status),
+        "spans": spans,
+    }
+
+
+@app.get("/v1/mcp/servers")
+async def mcp_servers(_: AuthDep) -> dict[str, Any]:
+    return {"servers": get_registry().list_servers()}
 
 
 @app.get("/v1/sessions/{session_id}/pull", response_model=PullResponse)

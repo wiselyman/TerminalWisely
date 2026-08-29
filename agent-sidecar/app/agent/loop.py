@@ -34,6 +34,9 @@ from app.harness.apt_impact import (
 from app.policy.persistent_allow import add_persistent_allow, is_persistent_allow
 from app.policy.user_overrides import add_read_binaries, rememberable_binaries
 from app.skills.match import match_skills, skill_injection_block
+from app.memory.inject import memory_context_block, signature_from_messages
+from app.observability.trace import RunTracer
+from app.mcp.registry import get_registry
 from app.tools.linux_probe import (
     build_grep_logs_command,
     build_list_listeners_command,
@@ -146,6 +149,7 @@ class AgentLoop:
         self.pipeline.add_around(ToolTimeoutGuard())
         self.pipeline.add_pre(InteractionModeGate(run.interaction_mode))
         self._compaction = CompactionEngine(self.model)
+        self._tracer = RunTracer(run)
         self._started_at = time.monotonic()
         self._budget_excluded_seconds = 0.0
         self._budget_pause_started: float | None = None
@@ -471,6 +475,14 @@ class AgentLoop:
                 },
             )
 
+        sig = signature_from_messages(self.run.messages)
+        if sig and self.run.metadata.get("_memory_injected_for") != sig:
+            block = memory_context_block(sig)
+            if block:
+                self.run.metadata["_memory_injected_for"] = sig
+                self.run.append_message({"role": "user", "content": block})
+                self.run.append_event("memory_context", {"signature": sig[:120]})
+
     async def _stream_assistant_turn(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         try:
             return await self._stream_assistant_turn_once()
@@ -497,6 +509,14 @@ class AgentLoop:
 
     async def _stream_assistant_turn_once(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Stream one model turn; emit assistant_delta for visible text."""
+        span_id = self._tracer.start("model", "chat_completions")
+        try:
+            return await self._stream_assistant_turn_once_inner()
+        finally:
+            self._tracer.end(span_id)
+
+    async def _stream_assistant_turn_once_inner(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Inner model turn (traced by wrapper)."""
         filter_ = StreamContentFilter()
         tool_buckets: dict[int, dict[str, Any]] = {}
         delta_buf = ""
@@ -630,7 +650,11 @@ class AgentLoop:
         async def body() -> None:
             await handler(call_id, args)
 
-        result = await self.pipeline.run(tool, body)
+        span_id = self._tracer.start("tool", name, call_id=call_id)
+        try:
+            result = await self.pipeline.run(tool, body)
+        finally:
+            self._tracer.end(span_id, call_id=call_id)
         if isinstance(result, dict) and result.get("_pipeline_deny"):
             await self._add_tool_result(
                 call_id, {k: v for k, v in result.items() if k != "_pipeline_deny"}
@@ -645,10 +669,8 @@ class AgentLoop:
             pending.extend(str(n) for n in notes)
 
     def _maybe_inject_skills(self, user_message: str) -> None:
-        # Linux playbooks (systemd/nginx/ports) mislead the K8s engineer.
-        if str(self.run.metadata.get("engineer_mode") or "linux").strip().lower() == "k8s":
-            return
-        matched = match_skills(user_message)
+        mode = str(self.run.metadata.get("engineer_mode") or "linux").strip().lower()
+        matched = match_skills(user_message, engineer_mode=mode)
         if not matched:
             return
         block = skill_injection_block(matched)
@@ -1380,9 +1402,16 @@ class AgentLoop:
             snap["resume_extra"] = resume_extra
         record_wait_snapshot(self.run, snap)
         self._pause_run_budget()
+        appr_span = self._tracer.start(
+            "approval",
+            command[:120],
+            approval_id=approval_id,
+            call_id=call_id,
+        )
         try:
             decision = await fut
         finally:
+            self._tracer.end(appr_span, approval_id=approval_id)
             self._resume_run_budget()
         # Copy before finish clears metadata.
         return await self.finish_approval_wait(decision, dict(snap))
@@ -1832,6 +1861,82 @@ class AgentLoop:
                 "_untrusted": True,
             },
         )
+
+    async def _mcp_query(self, call_id: str, args: dict[str, Any]) -> None:
+        server_id = str(args.get("server") or "").strip()
+        tool_name = str(args.get("tool") or "").strip()
+        tool_args = args.get("arguments")
+        if not isinstance(tool_args, dict):
+            tool_args = {}
+        intent = str(args.get("intent") or f"mcp {server_id}/{tool_name}")
+
+        if not server_id or not tool_name:
+            await self._add_tool_result(
+                call_id,
+                {"ok": False, "error": "server and tool are required", "_untrusted": True},
+            )
+            return
+
+        registry = get_registry()
+
+        async def host_bridge(name: str, bridge_args: dict[str, Any]) -> dict[str, Any]:
+            if name.startswith("k8s_"):
+                pt_call = f"mcp_bridge_{uuid.uuid4().hex[:8]}"
+                result = await self._await_host_k8s(
+                    call_id=pt_call,
+                    name=name,
+                    args=bridge_args,
+                    risk="R0",
+                    reason="mcp read-only bridge",
+                    intent=intent,
+                    approved=False,
+                )
+                return result or {"ok": False, "error": "host bridge cancelled", "_untrusted": True}
+            return {"ok": False, "error": f"unsupported bridge tool: {name}", "_untrusted": True}
+
+        registry.set_host_bridge(host_bridge)
+        if not registry.is_read_only_tool(server_id, tool_name):
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "error": f"read-only MCP tool not allowed: {server_id}/{tool_name}",
+                    "_untrusted": True,
+                },
+            )
+            return
+
+        client = registry.get_client(server_id)
+        if client is None:
+            await self._add_tool_result(
+                call_id,
+                {"ok": False, "error": f"unknown MCP server: {server_id}", "_untrusted": True},
+            )
+            return
+
+        try:
+            raw = await client.call_tool(tool_name, tool_args)
+            content_parts = raw.get("content") if isinstance(raw.get("content"), list) else []
+            text = "\n".join(
+                str(p.get("text") or "")
+                for p in content_parts
+                if isinstance(p, dict)
+            )
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": not bool(raw.get("isError")),
+                    "server": server_id,
+                    "tool": tool_name,
+                    "result": text or raw,
+                    "_untrusted": True,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            await self._add_tool_result(
+                call_id,
+                {"ok": False, "error": str(exc), "_untrusted": True},
+            )
 
     async def _web_search(self, call_id: str, args: dict[str, Any]) -> None:
         streak = int(self.run.metadata.get("web_fail_streak") or 0)

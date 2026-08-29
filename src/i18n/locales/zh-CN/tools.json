@@ -177,6 +177,8 @@
   "aiEngineer.attachPreviewClose": "关闭预览",
   "aiEngineer.attachNoSelection": "请先在终端中选中文本",
   "aiEngineer.attachConsoleOk": "已附加终端选中内容",
+  "aiEngineer.flushContextOk": "已发送到当前运行中的任务",
+  "aiEngineer.flushContextFailed": "无法发送到当前运行中的任务",
   "aiEngineer.attachRemoteOk": "已附加 {{path}}",
   "aiEngineer.attachRemotePrompt": "远端绝对路径（如 /etc/nginx/nginx.conf）",
   "aiEngineer.attachRemoteInvalid": "远端路径无效",

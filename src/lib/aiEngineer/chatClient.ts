@@ -680,3 +680,22 @@ export async function cancelAgentRun(
     body: JSON.stringify({ session_id: sessionId, run_id: runId }),
   });
 }
+
+/** Flush mid-run context into the active task without starting a new chat. */
+export async function flushUserContext(
+  sidecar: SidecarInfo,
+  sessionId: string,
+  runId: string,
+  content: string,
+): Promise<void> {
+  const trimmed = content.trim();
+  if (!trimmed) return;
+  await sidecarFetch(sidecar, "/v1/user_context", {
+    method: "POST",
+    body: JSON.stringify({
+      session_id: sessionId,
+      run_id: runId,
+      content: trimmed,
+    }),
+  });
+}

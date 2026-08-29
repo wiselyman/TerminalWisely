@@ -114,9 +114,7 @@ def build_system_prompt(
             model=model_id,
         )
     base = f"{base}\n- {interaction_mode_prompt_addendum(interaction_mode)}"
-    # Linux skills (systemd/nginx/ports) mislead the K8s engineer — skip them.
-    if mode != "k8s":
-        skills = skills_prompt_block()
-        if skills:
-            return f"{base}\n\n{skills}"
+    skills = skills_prompt_block(engineer_mode=mode)
+    if skills:
+        return f"{base}\n\n{skills}"
     return base

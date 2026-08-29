@@ -50,8 +50,9 @@ def test_k8s_system_prompt_skips_linux_skills() -> None:
     )
     assert "k8s_list" in prompt
     assert "Do NOT use terminal_exec" in prompt
-    # Linux skill catalog must not be injected for k8s mode.
-    assert "Available skills" not in prompt
+    # K8s mode includes k8s-* playbooks only (no Linux systemd/nginx skills).
+    assert "systemd-debug" not in prompt
+    assert "k8s-image-pull" in prompt or "k8s-crashloop" in prompt
 
 
 def test_nudge_for_engineer_mode() -> None:
