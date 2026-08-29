@@ -8,6 +8,7 @@ import {
   useAiEngineerStore,
 } from "../../stores/aiEngineerStore";
 import { AiEngineerSettings } from "./AiEngineerSettings";
+import { AiEngineerPlatformPanel } from "./AiEngineerPlatformPanel";
 import { AiEngineerRunTraceBar } from "./AiEngineerRunTraceBar";
 import { SecurityModePicker } from "./SecurityModePicker";
 import { InteractionModePicker } from "./InteractionModePicker";
@@ -380,6 +381,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const clusterTarget = useAiEngineerStore((s) => s.clusterTarget);
   const settingsOpen = useAiEngineerStore((s) => s.settingsOpen);
   const setSettingsOpen = useAiEngineerStore((s) => s.setSettingsOpen);
+  const [platformOpen, setPlatformOpen] = useState(false);
   const settings = useAiEngineerStore((s) => s.settings);
   const saveSettings = useAiEngineerStore((s) => s.saveSettings);
   const chatScope = useAiEngineerStore((s) => s.chatScope);
@@ -782,6 +784,20 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
           <div className="ai-engineer-head-actions">
             <button
               type="button"
+              className={`ai-engineer-text-btn ai-engineer-head-platform${platformOpen ? " is-active" : ""}`}
+              onClick={() => {
+                setPlatformOpen((v) => !v);
+                setHistoryOpen(false);
+                setModelOpen(false);
+              }}
+              title={t("aiEngineer.platform.title")}
+              aria-label={t("aiEngineer.platform.title")}
+              aria-pressed={platformOpen}
+            >
+              {t("aiEngineer.platform.open")}
+            </button>
+            <button
+              type="button"
               className="ai-engineer-icon-btn"
               onClick={() => createThread()}
               aria-label={t("aiEngineer.newChat")}
@@ -912,6 +928,11 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
             </div>
           ) : null}
           {ready ? (
+            platformOpen ? (
+              <div className="ai-engineer-platform-inline">
+                <AiEngineerPlatformPanel />
+              </div>
+            ) : (
             <div className="ai-engineer-chat">
               <div className="ai-engineer-messages" ref={messagesRef}>
                 {activePlan && activePlan.length > 0 ? (
@@ -1681,10 +1702,13 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                 </div>
               </div>
             </div>
+            )
           ) : null}
         </div>
       </aside>
-      {settingsOpen ? <AiEngineerSettings /> : null}
+      {settingsOpen
+        ? createPortal(<AiEngineerSettings />, document.body)
+        : null}
       {attachmentPreview
         ? createPortal(
             <div

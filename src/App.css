@@ -8541,6 +8541,14 @@ body.cmd-nav-panel-resizing {
 .ai-engineer-midrun-btn:hover { background:#30363d; }
 .ai-engineer-midrun-btn.is-primary { border-color:#238636; background:#238636; color:#fff; }
 .ai-engineer-midrun-btn.is-primary:hover { background:#2ea043; }
+.ai-engineer-head-platform { margin-right: 2px; font-size: 11px; padding: 4px 8px; }
+.ai-engineer-head-platform.is-active { background: rgba(56, 139, 253, 0.18); border-color: #388bfd; color: #58a6ff; }
+.ai-engineer-platform-inline {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+}
 .ai-engineer-settings-head {
   display: flex;
   align-items: center;

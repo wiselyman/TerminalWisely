@@ -496,6 +496,8 @@ type AiEngineerState = {
   sidecar: SidecarInfo | null;
   settings: AiSettingsView | null;
   settingsOpen: boolean;
+  /** When opening settings, jump to this view (platform panel, etc.). */
+  settingsViewHint: "list" | "platform" | null;
   input: string;
   messages: ChatLine[];
   threadsByScope: Record<string, ScopeThreadBundle>;
@@ -537,6 +539,8 @@ type AiEngineerState = {
   setWidth: (w: number) => void;
   setInput: (v: string) => void;
   setSettingsOpen: (v: boolean) => void;
+  openPlatformSettings: () => void;
+  clearSettingsViewHint: () => void;
   setThreadSecurityMode: (mode: string) => void;
   setThreadInteractionMode: (mode: string) => void;
   addPendingAttachment: (att: PendingAttachment) => void;
@@ -703,6 +707,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   sidecar: null,
   settings: null,
   settingsOpen: false,
+  settingsViewHint: null,
   input: "",
   messages: [],
   threadsByScope: loadPersistedThreads(),
@@ -905,7 +910,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
   },
 
-  setSettingsOpen: (v) => set({ settingsOpen: v }),
+  setSettingsOpen: (v) =>
+    set({
+      settingsOpen: v,
+      settingsViewHint: v ? get().settingsViewHint : null,
+    }),
+  openPlatformSettings: () =>
+    set({ settingsOpen: true, settingsViewHint: "platform" }),
+  clearSettingsViewHint: () => set({ settingsViewHint: null }),
 
   setThreadSecurityMode: (mode) => {
     const { chatScope, activeThreadId, threadsByScope } = get();

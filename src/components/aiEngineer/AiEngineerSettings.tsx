@@ -114,6 +114,9 @@ function profileEndpointError(
 export function AiEngineerSettings() {
   const { t } = useTranslation("tools");
   const settings = useAiEngineerStore((s) => s.settings);
+  const settingsOpen = useAiEngineerStore((s) => s.settingsOpen);
+  const settingsViewHint = useAiEngineerStore((s) => s.settingsViewHint);
+  const clearSettingsViewHint = useAiEngineerStore((s) => s.clearSettingsViewHint);
   const setSettingsOpen = useAiEngineerStore((s) => s.setSettingsOpen);
   const saveSettings = useAiEngineerStore((s) => s.saveSettings);
   const refreshSettings = useAiEngineerStore((s) => s.refreshSettings);
@@ -129,6 +132,14 @@ export function AiEngineerSettings() {
   useEffect(() => {
     void refreshSettings();
   }, [refreshSettings]);
+
+  useEffect(() => {
+    if (!settingsOpen || !settingsViewHint) return;
+    if (settingsViewHint === "platform") {
+      setView({ kind: "platform" });
+    }
+    clearSettingsViewHint();
+  }, [settingsOpen, settingsViewHint, clearSettingsViewHint]);
 
   const profiles = settings?.profiles ?? [];
   const activeId = settings?.active_profile_id ?? "";
