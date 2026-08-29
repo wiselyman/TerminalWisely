@@ -26,6 +26,7 @@ from app.tools.schema import (
     TOOL_UPDATE_PLAN,
     TOOL_WEB_FETCH,
     TOOL_WEB_SEARCH,
+    TOOL_MCP_QUERY,
 )
 
 TOOL_HANDLER_METHODS: dict[str, str] = {
@@ -34,6 +35,7 @@ TOOL_HANDLER_METHODS: dict[str, str] = {
     TOOL_UPDATE_PLAN: "_update_plan",
     TOOL_WEB_SEARCH: "_web_search",
     TOOL_WEB_FETCH: "_web_fetch",
+    TOOL_MCP_QUERY: "_mcp_query",
     TOOL_ASK_USER: "_ask_user",
     TOOL_SERVICE_STATUS: "_service_status",
     TOOL_LIST_LISTENERS: "_list_listeners",
@@ -54,6 +56,7 @@ TOOLS_EMIT_CALL_EVENT_UPFRONT: frozenset[str] = frozenset(
     {
         TOOL_WEB_SEARCH,
         TOOL_WEB_FETCH,
+        TOOL_MCP_QUERY,
         TOOL_SERVICE_STATUS,
         TOOL_LIST_LISTENERS,
         TOOL_GREP_REMOTE_LOGS,
@@ -68,6 +71,7 @@ class ToolHandlerHost(Protocol):
     async def _update_plan(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _web_search(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _web_fetch(self, call_id: str, args: dict[str, Any]) -> None: ...
+    async def _mcp_query(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _ask_user(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _service_status(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _list_listeners(self, call_id: str, args: dict[str, Any]) -> None: ...

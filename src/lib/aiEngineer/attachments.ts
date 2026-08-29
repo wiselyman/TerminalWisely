@@ -225,7 +225,15 @@ export const WORKFLOW_CHIP_IDS = [
   "nginx502",
 ] as const;
 
+export const K8S_WORKFLOW_CHIP_IDS = [
+  "podIssues",
+  "crashLoop",
+  "deployStatus",
+  "recentEvents",
+] as const;
+
 export type WorkflowChipId = (typeof WORKFLOW_CHIP_IDS)[number];
+export type K8sWorkflowChipId = (typeof K8S_WORKFLOW_CHIP_IDS)[number];
 
 /** English prompts; FE maps via i18n keys for display labels. */
 export function workflowPrompt(
@@ -251,5 +259,31 @@ export function workflowPrompt(
       if (ask) return "Investigate a possible nginx 502. Read configs/logs only; explain.";
       if (plan) return "Plan diagnosis for nginx 502 (update_plan). Do not restart services yet.";
       return "Diagnose nginx 502: check listeners, upstream, and recent error logs.";
+  }
+}
+
+export function k8sWorkflowPrompt(
+  id: K8sWorkflowChipId,
+  interactionMode: "ask" | "plan" | "agent",
+): string {
+  const ask = interactionMode === "ask";
+  const plan = interactionMode === "plan";
+  switch (id) {
+    case "podIssues":
+      if (ask) return "Summarize non-Running pods in the current namespace. Read-only; explain.";
+      if (plan) return "Plan how to triage unhealthy pods with k8s_list/k8s_describe (update_plan). No mutations.";
+      return "List pods, find unhealthy ones, and diagnose the worst issue with describe/logs.";
+    case "crashLoop":
+      if (ask) return "Is any pod CrashLoopBackOff or ImagePullBackOff? Explain using describe/logs only.";
+      if (plan) return "Plan CrashLoop/ImagePull diagnosis with k8s_* tools (update_plan). No mutations.";
+      return "Find CrashLoopBackOff or ImagePullBackOff pods and diagnose root cause from events/logs.";
+    case "deployStatus":
+      if (ask) return "Are Deployments Available and Ready? Explain readiness without mutating.";
+      if (plan) return "Plan how to verify Deployment readiness (update_plan). No scale/apply yet.";
+      return "Check Deployments Ready/Available status and explain any gaps.";
+    case "recentEvents":
+      if (ask) return "What Warning events happened recently? Summarize from k8s_list events.";
+      if (plan) return "Plan how to review Warning events and linked objects (update_plan).";
+      return "List recent Warning events and investigate the most severe one.";
   }
 }

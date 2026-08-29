@@ -151,3 +151,97 @@ export async function aiRegisterPrivilegeLease(opts: {
     },
   });
 }
+
+export interface McpServerInfo {
+  id: string;
+  title: string;
+  read_only: boolean;
+  tools: Array<{ name?: string; description?: string }>;
+}
+
+export interface MemoryCaseRow {
+  id?: number;
+  problem_signature?: string;
+  root_cause?: string;
+  fix?: string;
+  verification?: string;
+  confidence?: number;
+}
+
+export interface TraceSpanRow {
+  id: string;
+  kind: string;
+  name: string;
+  duration_ms?: number | null;
+  started_at?: number;
+  ended_at?: number | null;
+}
+
+export interface EvalReportSummary {
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    pass_rate: number;
+    avg_duration_ms: number;
+  };
+  results: Array<{
+    scenario_id: string;
+    passed: boolean;
+    duration_ms: number;
+    tools_called: string[];
+    failures: string[];
+  }>;
+}
+
+export async function listMcpServers(
+  sidecar: SidecarInfo,
+): Promise<{ servers: McpServerInfo[] }> {
+  const res = await sidecarFetch(sidecar, "/v1/mcp/servers");
+  if (!res.ok) throw new Error(`MCP list failed (${res.status})`);
+  return res.json() as Promise<{ servers: McpServerInfo[] }>;
+}
+
+export async function searchMemoryCases(
+  sidecar: SidecarInfo,
+  q: string,
+  limit = 8,
+): Promise<{ cases: MemoryCaseRow[] }> {
+  const res = await sidecarFetch(
+    sidecar,
+    `/v1/memory/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  );
+  if (!res.ok) throw new Error(`Memory search failed (${res.status})`);
+  return res.json() as Promise<{ cases: MemoryCaseRow[] }>;
+}
+
+export async function fetchRunTrace(
+  sidecar: SidecarInfo,
+  sessionId: string,
+  runId: string,
+): Promise<{ spans: TraceSpanRow[] }> {
+  const res = await sidecarFetch(
+    sidecar,
+    `/v1/runs/${encodeURIComponent(runId)}/trace?session_id=${encodeURIComponent(sessionId)}`,
+  );
+  if (!res.ok) throw new Error(`Trace fetch failed (${res.status})`);
+  return res.json() as Promise<{ spans: TraceSpanRow[] }>;
+}
+
+export async function runOpsEval(
+  sidecar: SidecarInfo,
+): Promise<EvalReportSummary> {
+  const res = await sidecarFetch(sidecar, "/v1/eval/run", { method: "POST" });
+  if (!res.ok) throw new Error(`Eval run failed (${res.status})`);
+  return res.json() as Promise<EvalReportSummary>;
+}
+
+export async function listAgentSkills(
+  sidecar: SidecarInfo,
+): Promise<{ skills: Array<{ id: string; title: string; excerpt?: string }> }> {
+  const res = await sidecarFetch(sidecar, "/v1/skills");
+  if (!res.ok) throw new Error(`Skills list failed (${res.status})`);
+  return res.json() as Promise<{
+    skills: Array<{ id: string; title: string; excerpt?: string }>;
+  }>;
+}

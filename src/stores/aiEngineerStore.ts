@@ -3,12 +3,15 @@ import {
   ensureSidecar,
   getAiSettings,
   saveAiSettings,
+  fetchRunTrace,
   type AiSettingsUpdate,
   type AiSettingsView,
   type SidecarInfo,
+  type TraceSpanRow,
 } from "../lib/aiEngineer/api";
 import {
   cancelAgentRun,
+  flushUserContext,
   runAgentChat,
   type AgentUiEvent,
 } from "../lib/aiEngineer/chatClient";
@@ -426,7 +429,10 @@ export function aiChatScopeKey(
 }
 
 export function k8sSyntheticSessionId(clusterId: string): string {
-  return `k8s:${clusterId}`;
+  // Cluster ids often embed kubeconfig paths (`kube:/path:ctx`). Starlette
+  // decodes %2F to `/` before routing, so /v1/sessions/{session_id}/pull|stream
+  // must stay a single path segment — never put raw `/` in the session id.
+  return `k8s:${clusterId.replace(/\//g, "|")}`;
 }
 
 let chatAbort: AbortController | null = null;
@@ -490,6 +496,8 @@ type AiEngineerState = {
   sidecar: SidecarInfo | null;
   settings: AiSettingsView | null;
   settingsOpen: boolean;
+  /** When opening settings, jump to this view (platform panel, etc.). */
+  settingsViewHint: "list" | "platform" | null;
   input: string;
   messages: ChatLine[];
   threadsByScope: Record<string, ScopeThreadBundle>;
@@ -499,6 +507,8 @@ type AiEngineerState = {
   activePlan: PlanStep[] | null;
   activeInvestigation: ActiveInvestigation | null;
   pendingAttachments: PendingAttachment[];
+  /** Live run timing spans (model / tool / approval). */
+  runTraceSpans: TraceSpanRow[];
   /** Bumped to focus the composer textarea (e.g. after Send to chat). */
   composerFocusNonce: number;
   openPanel: (sessionId: string, serverId?: string) => void;
@@ -529,6 +539,8 @@ type AiEngineerState = {
   setWidth: (w: number) => void;
   setInput: (v: string) => void;
   setSettingsOpen: (v: boolean) => void;
+  openPlatformSettings: () => void;
+  clearSettingsViewHint: () => void;
   setThreadSecurityMode: (mode: string) => void;
   setThreadInteractionMode: (mode: string) => void;
   addPendingAttachment: (att: PendingAttachment) => void;
@@ -548,6 +560,7 @@ type AiEngineerState = {
     interruptIfBusy?: boolean;
   }) => Promise<void>;
   stopActiveRun: () => void;
+  flushMidRunContext: (content: string) => Promise<boolean>;
   resolveAsk: (selected: string[], freeText?: string) => void;
   resolveApproval: (
     approved: boolean,
@@ -694,6 +707,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   sidecar: null,
   settings: null,
   settingsOpen: false,
+  settingsViewHint: null,
   input: "",
   messages: [],
   threadsByScope: loadPersistedThreads(),
@@ -703,6 +717,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   activePlan: null,
   activeInvestigation: null,
   pendingAttachments: [],
+  runTraceSpans: [],
   composerFocusNonce: 0,
 
   openPanel: (sessionId, serverId) => {
@@ -765,7 +780,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const sessionId = k8sSyntheticSessionId(clusterId);
     const nextScope = aiChatScopeKey(sessionId, null, clusterId);
     const prev = get();
-    const nextTarget = clusterTarget ?? prev.clusterTarget;
+    // Prefer explicit target; if omitted while staying on the same cluster, keep
+    // previous. When switching cluster id without a target, clear stale target
+    // so the host bridge falls back to the workbench selection.
+    const nextTarget =
+      clusterTarget !== undefined && clusterTarget !== null
+        ? clusterTarget
+        : prev.clusterId === clusterId
+          ? prev.clusterTarget
+          : null;
     if (
       prev.chatScope === nextScope &&
       prev.sessionId === sessionId &&
@@ -887,7 +910,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
   },
 
-  setSettingsOpen: (v) => set({ settingsOpen: v }),
+  setSettingsOpen: (v) =>
+    set({
+      settingsOpen: v,
+      settingsViewHint: v ? get().settingsViewHint : null,
+    }),
+  openPlatformSettings: () =>
+    set({ settingsOpen: true, settingsViewHint: "platform" }),
+  clearSettingsViewHint: () => set({ settingsViewHint: null }),
 
   setThreadSecurityMode: (mode) => {
     const { chatScope, activeThreadId, threadsByScope } = get();
@@ -1178,6 +1208,38 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
   },
 
+  flushMidRunContext: async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+    const { sidecar, sessionId, busy } = get();
+    const runId = activeRunId;
+    if (!busy || !sidecar || !sessionId || !runId) {
+      return false;
+    }
+    try {
+      await flushUserContext(sidecar, sessionId, runId, trimmed);
+      const note = `[USER CONTEXT]\n${trimmed.slice(0, 64 * 1024)}`;
+      const { chatScope, activeThreadId, messages } = get();
+      const nextMessages: ChatLine[] = [
+        ...messages,
+        {
+          id: `m_${crypto.randomUUID()}`,
+          kind: "notice",
+          variant: "info",
+          content: note.slice(0, 500),
+        },
+      ];
+      const threadsByScope =
+        chatScope && activeThreadId
+          ? commitThreadMessages(get, chatScope, activeThreadId, nextMessages)
+          : get().threadsByScope;
+      set({ messages: nextMessages, threadsByScope });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   resolveAsk: (selected, freeText) => {
     const pending = get().pendingAsk;
     if (!pending) return;
@@ -1232,9 +1294,19 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const effectiveClusterId =
       clusterId ?? (mode === "k8s" ? get().clusterId : null);
     if (effectiveClusterId) {
+      // Refresh cluster_target from workbench without a static import cycle.
+      const { useK8sStore } = await import("./k8sStore");
+      const ks = useK8sStore.getState();
+      const target =
+        ks.clusters.find((c) => c.id === effectiveClusterId) ??
+        (ks.selectedCluster?.id === effectiveClusterId
+          ? ks.selectedCluster
+          : null) ??
+        get().clusterTarget;
       get().bindK8sContext(
         effectiveClusterId,
-        get().clusterName ?? effectiveClusterId,
+        target?.display_name ?? get().clusterName ?? effectiveClusterId,
+        target,
       );
     } else {
       get().bindContext(sessionId, serverId);
@@ -1347,6 +1419,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       inputsByThread: { ...get().inputsByThread, [runThreadId]: "" },
       activeInvestigation: null,
       pendingAttachments: [],
+      runTraceSpans: [],
     });
 
     const sameRunTarget = () => {
@@ -1590,7 +1663,61 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             });
             return;
           }
-          if (event.type === "assistant_delta") {
+          if (event.type === "memory_context") {
+            appendIfSameThread({
+              id: nextId(),
+              kind: "notice",
+              variant: "info",
+              content: "memory_context",
+            });
+            return;
+          }
+          if (event.type === "trace_span") {
+            const span = event.span;
+            if (!span?.id) return;
+            const prev = get().runTraceSpans;
+            const idx = prev.findIndex((s) => s.id === span.id);
+            const next =
+              idx >= 0
+                ? prev.map((s, i) => (i === idx ? { ...s, ...span } : s))
+                : [...prev, span];
+            set({ runTraceSpans: next });
+            return;
+          }
+          if (event.type === "completed") {
+            const content = event.content ?? "";
+            if (content.trim()) {
+              const msgs = get().messages;
+              for (let i = msgs.length - 1; i >= 0; i -= 1) {
+                const line = msgs[i];
+                if (line.kind === "assistant") {
+                  if (line.content === content) break;
+                  if (line.streaming) {
+                    replaceMessagesIfSameThread([
+                      ...msgs.slice(0, i),
+                      { id: line.id, kind: "assistant", content },
+                      ...msgs.slice(i + 1),
+                    ]);
+                    break;
+                  }
+                  appendIfSameThread({ id: nextId(), kind: "assistant", content });
+                  break;
+                }
+              }
+            }
+            const { sidecar, sessionId } = get();
+            const rid = activeRunId;
+            if (sidecar && sessionId && rid) {
+              void fetchRunTrace(sidecar, sessionId, rid)
+                .then((data) => {
+                  if (sameRunTarget()) {
+                    set({ runTraceSpans: data.spans ?? [] });
+                  }
+                })
+                .catch(() => undefined);
+            }
+            return;
+          } else if (event.type === "assistant_delta") {
             const text = event.text ?? "";
             if (!text) return;
             const msgs = get().messages;
@@ -1624,32 +1751,18 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             } else {
               appendIfSameThread({ id: nextId(), kind: "assistant", content });
             }
-          } else if (event.type === "completed") {
-            const content = event.content ?? "";
-            if (!content.trim()) return;
-            const msgs = get().messages;
-            for (let i = msgs.length - 1; i >= 0; i -= 1) {
-              const line = msgs[i];
-              if (line.kind === "assistant") {
-                if (line.content === content) return;
-                if (line.streaming) {
-                  replaceMessagesIfSameThread([
-                    ...msgs.slice(0, i),
-                    { id: line.id, kind: "assistant", content },
-                    ...msgs.slice(i + 1),
-                  ]);
-                  return;
-                }
-                break;
-              }
-            }
-            appendIfSameThread({ id: nextId(), kind: "assistant", content });
           } else if (event.type === "tool_call") {
             const detail = String(
               (event.arguments.command as string) ||
                 (event.arguments.query as string) ||
                 (event.arguments.url as string) ||
                 (event.arguments.question as string) ||
+                (event.arguments.category as string) ||
+                (event.arguments.kind && event.arguments.name
+                  ? `${event.arguments.kind}/${event.arguments.namespace ?? ""}/${event.arguments.name}`
+                  : "") ||
+                (event.arguments.pod as string) ||
+                (event.arguments.name as string) ||
                 "",
             );
             const intent =
@@ -1657,7 +1770,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 ? event.arguments.intent.trim()
                 : undefined;
             const isExec =
-              event.name === "terminal_exec" || event.name === "ai_exec";
+              event.name === "terminal_exec" ||
+              event.name === "ai_exec" ||
+              event.name.startsWith("k8s_");
             const msgs = get().messages;
             const last = msgs[msgs.length - 1];
             if (last?.kind === "assistant" && last.streaming) {

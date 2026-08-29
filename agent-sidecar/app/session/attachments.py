@@ -185,10 +185,12 @@ def compose_user_content(
     blocks = attachments_to_user_blocks(list(attachments or []))
     text = (message or "").strip()
     joined = "\n\n".join(blocks)
+    # CURRENT_TURN prefix only when attachments add distractors; otherwise it
+    # confuses small local models into emitting fake JSON instead of tool_calls.
     if text and joined:
         full_text = f"{CURRENT_TURN_PREFIX}{text}\n\n{joined}"
     elif text:
-        full_text = f"{CURRENT_TURN_PREFIX}{text}"
+        full_text = text
     elif joined:
         full_text = f"{CURRENT_TURN_PREFIX}{joined}"
     else:

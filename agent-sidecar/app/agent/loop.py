@@ -15,12 +15,10 @@ from app.broker import CommandBroker
 from app.harness.conclusion import build_conclusion
 from app.harness.network_guard import build_timed_rollback_plan, is_network_dangerous
 from app.harness.verify import (
-    ACT_NUDGE,
     CONCLUDE_NUDGE,
     LOOP_ABORT_MESSAGE,
-    TRUNCATED_PLAN_NUDGE,
-    VERIFY_NUDGE,
     claim_success_without_evidence,
+    nudge_for_engineer_mode,
     should_nudge_verify,
 )
 from app.harness.approval_intent import sanitize_approval_intent
@@ -36,6 +34,9 @@ from app.harness.apt_impact import (
 from app.policy.persistent_allow import add_persistent_allow, is_persistent_allow
 from app.policy.user_overrides import add_read_binaries, rememberable_binaries
 from app.skills.match import match_skills, skill_injection_block
+from app.memory.inject import memory_context_block, signature_from_messages
+from app.observability.trace import RunTracer
+from app.mcp.registry import get_registry
 from app.tools.linux_probe import (
     build_grep_logs_command,
     build_list_listeners_command,
@@ -148,6 +149,7 @@ class AgentLoop:
         self.pipeline.add_around(ToolTimeoutGuard())
         self.pipeline.add_pre(InteractionModeGate(run.interaction_mode))
         self._compaction = CompactionEngine(self.model)
+        self._tracer = RunTracer(run)
         self._started_at = time.monotonic()
         self._budget_excluded_seconds = 0.0
         self._budget_pause_started: float | None = None
@@ -273,7 +275,13 @@ class AgentLoop:
                         self.run.verify_nudged = True
                         # Mid-chat system roles break some OpenAI-compatible APIs.
                         self.run.append_message(
-                            {"role": "user", "content": VERIFY_NUDGE}
+                            {
+                                "role": "user",
+                                "content": nudge_for_engineer_mode(
+                                    "verify",
+                                    str(self.run.metadata.get("engineer_mode") or "linux"),
+                                ),
+                            }
                         )
                         self.run.append_event(
                             "verify_nudge", {"risk": self.run.last_mutation_risk}
@@ -297,7 +305,13 @@ class AgentLoop:
                         self.run.metadata["_trunc_plan_nudged"] = True
                         self.run.metadata["_act_nudged"] = True
                         self.run.append_message(
-                            {"role": "user", "content": TRUNCATED_PLAN_NUDGE}
+                            {
+                                "role": "user",
+                                "content": nudge_for_engineer_mode(
+                                    "truncated_plan",
+                                    str(self.run.metadata.get("engineer_mode") or "linux"),
+                                ),
+                            }
                         )
                         self.run.append_event(
                             "act_nudge",
@@ -306,7 +320,14 @@ class AgentLoop:
                         continue
                     if planning_only and not self.run.metadata.get("_act_nudged"):
                         self.run.metadata["_act_nudged"] = True
-                        nudge = CONCLUDE_NUDGE if has_tool_evidence else ACT_NUDGE
+                        nudge = (
+                            CONCLUDE_NUDGE
+                            if has_tool_evidence
+                            else nudge_for_engineer_mode(
+                                "act",
+                                str(self.run.metadata.get("engineer_mode") or "linux"),
+                            )
+                        )
                         self.run.append_message({"role": "user", "content": nudge})
                         self.run.append_event(
                             "act_nudge",
@@ -360,31 +381,47 @@ class AgentLoop:
                         return
                     if self.run.metadata.pop("_pending_verify_nudge", None):
                         pending_verify_nudge = True
-                    # Never leave the turn early without answering remaining tool_calls.
+                    # Host waits are awaited inside the handler. A stale WAITING_*
+                    # status with no pending_* future must not abort the turn
+                    # (seen with k8s_* after tool_result already applied).
                     if self.run.status in (
                         RunStatus.WAITING_TOOL,
                         RunStatus.WAITING_USER,
                         RunStatus.WAITING_APPROVAL,
                     ):
-                        # Still awaiting inside handler — should not happen after await returns.
-                        # Fill any unanswered siblings so the next model call is valid.
-                        remaining = tool_calls[idx + 1 :]
-                        for rtc in remaining:
-                            rid = (rtc.get("id") or "").strip()
-                            if rid:
-                                await self._add_tool_result(
-                                    rid,
-                                    {
-                                        "ok": False,
-                                        "error": "skipped: prior tool still waiting",
-                                        "_untrusted": True,
-                                    },
-                                )
-                        return
+                        still_waiting = bool(
+                            self.run.pending_tool
+                            or self.run.pending_user
+                            or self.run.pending_approval
+                        )
+                        if not still_waiting:
+                            self.run.status = RunStatus.RUNNING
+                        else:
+                            remaining = tool_calls[idx + 1 :]
+                            for rtc in remaining:
+                                rid = (rtc.get("id") or "").strip()
+                                if rid:
+                                    await self._add_tool_result(
+                                        rid,
+                                        {
+                                            "ok": False,
+                                            "error": "skipped: prior tool still waiting",
+                                            "_untrusted": True,
+                                        },
+                                    )
+                            return
 
                 if pending_verify_nudge and not self.run.verify_nudged:
                     self.run.verify_nudged = True
-                    self.run.append_message({"role": "user", "content": VERIFY_NUDGE})
+                    self.run.append_message(
+                        {
+                            "role": "user",
+                            "content": nudge_for_engineer_mode(
+                                "verify",
+                                str(self.run.metadata.get("engineer_mode") or "linux"),
+                            ),
+                        }
+                    )
                     self.run.append_event(
                         "verify_nudge",
                         {"risk": self.run.last_mutation_risk or "R2"},
@@ -438,6 +475,14 @@ class AgentLoop:
                 },
             )
 
+        sig = signature_from_messages(self.run.messages)
+        if sig and self.run.metadata.get("_memory_injected_for") != sig:
+            block = memory_context_block(sig)
+            if block:
+                self.run.metadata["_memory_injected_for"] = sig
+                self.run.append_message({"role": "user", "content": block})
+                self.run.append_event("memory_context", {"signature": sig[:120]})
+
     async def _stream_assistant_turn(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         try:
             return await self._stream_assistant_turn_once()
@@ -464,6 +509,14 @@ class AgentLoop:
 
     async def _stream_assistant_turn_once(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Stream one model turn; emit assistant_delta for visible text."""
+        span_id = self._tracer.start("model", "chat_completions")
+        try:
+            return await self._stream_assistant_turn_once_inner()
+        finally:
+            self._tracer.end(span_id)
+
+    async def _stream_assistant_turn_once_inner(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        """Inner model turn (traced by wrapper)."""
         filter_ = StreamContentFilter()
         tool_buckets: dict[int, dict[str, Any]] = {}
         delta_buf = ""
@@ -597,7 +650,11 @@ class AgentLoop:
         async def body() -> None:
             await handler(call_id, args)
 
-        result = await self.pipeline.run(tool, body)
+        span_id = self._tracer.start("tool", name, call_id=call_id)
+        try:
+            result = await self.pipeline.run(tool, body)
+        finally:
+            self._tracer.end(span_id, call_id=call_id)
         if isinstance(result, dict) and result.get("_pipeline_deny"):
             await self._add_tool_result(
                 call_id, {k: v for k, v in result.items() if k != "_pipeline_deny"}
@@ -612,7 +669,8 @@ class AgentLoop:
             pending.extend(str(n) for n in notes)
 
     def _maybe_inject_skills(self, user_message: str) -> None:
-        matched = match_skills(user_message)
+        mode = str(self.run.metadata.get("engineer_mode") or "linux").strip().lower()
+        matched = match_skills(user_message, engineer_mode=mode)
         if not matched:
             return
         block = skill_injection_block(matched)
@@ -1050,13 +1108,32 @@ class AgentLoop:
             },
         }
         self.run.append_event("tool_call", payload)
+        from app.agent.graph import clear_run_wait, record_wait_snapshot
+
+        record_wait_snapshot(
+            self.run,
+            {
+                "kind": "tool",
+                "call_id": call_id,
+                "tool_name": name,
+                "command": display_cmd,
+                "risk": risk,
+                "record_tool_message": True,
+            },
+        )
+        self._pause_run_budget()
         try:
             result = await fut
-        except asyncio.CancelledError:
-            return None
         finally:
+            self._resume_run_budget()
+        clear_run_wait(self.run)
+        if result.get("cancelled"):
             self.run.pending_tool = None
+            self.run.status = RunStatus.CANCELLED
+            return None
         await self._add_tool_result(call_id, result)
+        self.run.status = RunStatus.RUNNING
+        self.run.pending_tool = None
         return result
 
     async def _await_host_terminal(
@@ -1325,9 +1402,16 @@ class AgentLoop:
             snap["resume_extra"] = resume_extra
         record_wait_snapshot(self.run, snap)
         self._pause_run_budget()
+        appr_span = self._tracer.start(
+            "approval",
+            command[:120],
+            approval_id=approval_id,
+            call_id=call_id,
+        )
         try:
             decision = await fut
         finally:
+            self._tracer.end(appr_span, approval_id=approval_id)
             self._resume_run_budget()
         # Copy before finish clears metadata.
         return await self.finish_approval_wait(decision, dict(snap))
@@ -1777,6 +1861,82 @@ class AgentLoop:
                 "_untrusted": True,
             },
         )
+
+    async def _mcp_query(self, call_id: str, args: dict[str, Any]) -> None:
+        server_id = str(args.get("server") or "").strip()
+        tool_name = str(args.get("tool") or "").strip()
+        tool_args = args.get("arguments")
+        if not isinstance(tool_args, dict):
+            tool_args = {}
+        intent = str(args.get("intent") or f"mcp {server_id}/{tool_name}")
+
+        if not server_id or not tool_name:
+            await self._add_tool_result(
+                call_id,
+                {"ok": False, "error": "server and tool are required", "_untrusted": True},
+            )
+            return
+
+        registry = get_registry()
+
+        async def host_bridge(name: str, bridge_args: dict[str, Any]) -> dict[str, Any]:
+            if name.startswith("k8s_"):
+                pt_call = f"mcp_bridge_{uuid.uuid4().hex[:8]}"
+                result = await self._await_host_k8s(
+                    call_id=pt_call,
+                    name=name,
+                    args=bridge_args,
+                    risk="R0",
+                    reason="mcp read-only bridge",
+                    intent=intent,
+                    approved=False,
+                )
+                return result or {"ok": False, "error": "host bridge cancelled", "_untrusted": True}
+            return {"ok": False, "error": f"unsupported bridge tool: {name}", "_untrusted": True}
+
+        registry.set_host_bridge(host_bridge)
+        if not registry.is_read_only_tool(server_id, tool_name):
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "error": f"read-only MCP tool not allowed: {server_id}/{tool_name}",
+                    "_untrusted": True,
+                },
+            )
+            return
+
+        client = registry.get_client(server_id)
+        if client is None:
+            await self._add_tool_result(
+                call_id,
+                {"ok": False, "error": f"unknown MCP server: {server_id}", "_untrusted": True},
+            )
+            return
+
+        try:
+            raw = await client.call_tool(tool_name, tool_args)
+            content_parts = raw.get("content") if isinstance(raw.get("content"), list) else []
+            text = "\n".join(
+                str(p.get("text") or "")
+                for p in content_parts
+                if isinstance(p, dict)
+            )
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": not bool(raw.get("isError")),
+                    "server": server_id,
+                    "tool": tool_name,
+                    "result": text or raw,
+                    "_untrusted": True,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            await self._add_tool_result(
+                call_id,
+                {"ok": False, "error": str(exc), "_untrusted": True},
+            )
 
     async def _web_search(self, call_id: str, args: dict[str, Any]) -> None:
         streak = int(self.run.metadata.get("web_fail_streak") or 0)
