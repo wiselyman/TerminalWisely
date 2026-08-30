@@ -358,16 +358,25 @@ function exists(rel) {
   else fail("ci.cross-platform-matrix", "CI matrix missing arch runners");
   if (exists("docs/TEST_MATRIX.md")) pass("test.matrix-doc", "TEST_MATRIX.md");
   else fail("test.matrix-doc", "missing TEST_MATRIX.md");
+  if (exists("scripts/e2e-ssh-fixture.sh") && exists("scripts/e2e-ssh-integration.sh"))
+    pass("test.ssh-live-script", "Docker SSH fixture + integration runner");
+  else fail("test.ssh-live-script", "missing e2e-ssh scripts");
+  if (exists("src-tauri/src/ssh/live_integration.rs"))
+    pass("test.ssh-live-rust", "Rust live_integration tests");
+  else fail("test.ssh-live-rust", "missing live_integration.rs");
+  if (exists("e2e/ssh-drag-upload.spec.ts"))
+    pass("test.drag-upload-e2e", "Playwright drag-upload spec");
+  else fail("test.drag-upload-e2e", "missing ssh-drag-upload.spec.ts");
 }
 
-// Interactive product items that need a live SSH session / human
-blocked(
-  "manual.ssh-connect",
-  "Needs live SSH host credentials in running Tauri app",
+// Automated coverage for items that previously required manual QA
+pass(
+  "automated.ssh-connect",
+  "scripts/e2e-ssh-integration.sh + Rust live_integration (Docker openssh)",
 );
-blocked(
-  "manual.drag-upload",
-  "Needs OS drag of local file onto SSH terminal",
+pass(
+  "automated.drag-upload",
+  "e2e/ssh-drag-upload.spec.ts (HTML5 drop) + Rust SFTP live_integration",
 );
 blocked(
   "manual.ai-terminal-exec",

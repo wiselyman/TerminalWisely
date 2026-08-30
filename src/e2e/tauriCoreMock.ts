@@ -41,6 +41,15 @@ export function convertFileSrc(path: string): string {
 }
 
 let previewHandleSeq = 0;
+let lastUploadRequest: Record<string, unknown> | null = null;
+
+export function __e2eResetUploadRequest() {
+  lastUploadRequest = null;
+}
+
+export function __e2eLastUploadRequest() {
+  return lastUploadRequest;
+}
 
 async function sidecarHttpProxy(args: InvokeArgs): Promise<{
   status: number;
@@ -104,7 +113,21 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   get_session_cwd: () => "/home/e2e",
   probe_remote_path: () => "file",
   enter_directory: () => "/home/e2e",
-  upload_files: () => [{ filename: "e2e.txt", remote_path: "/home/e2e/e2e.txt", local_path: "/tmp/e2e.txt" }],
+  upload_files: (args) => {
+    const req = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    lastUploadRequest = req;
+    const localPaths = (req.local_paths as string[] | undefined) ?? [];
+    const first = localPaths[0] ?? "/tmp/e2e.txt";
+    const filename = first.split(/[/\\]/).pop() ?? "e2e.txt";
+    const remoteDir = (req.remote_dir as string | undefined) ?? "/home/e2e";
+    return [
+      {
+        filename,
+        remote_path: `${remoteDir.replace(/\/$/, "")}/${filename}`,
+        local_path: first,
+      },
+    ];
+  },
   download_file: () => null,
   download_directory: () => null,
   cancel_transfer: () => null,

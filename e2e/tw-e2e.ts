@@ -28,6 +28,13 @@ export async function twE2e(page: Page): Promise<TwE2eApi> {
       }),
     emitTerminalPrompt: (text?: string) =>
       page.evaluate((prompt) => window.__TW_E2E__!.emitTerminalPrompt(prompt), text),
+    simulateTerminalDrop: (paths: string[]) =>
+      page.evaluate(async (p) => {
+        await window.__TW_E2E__!.simulateTerminalDrop(p);
+      }, paths),
+    getLastUpload: () =>
+      page.evaluate(() => window.__TW_E2E__!.getLastUpload()),
+    resetUpload: () => page.evaluate(() => window.__TW_E2E__!.resetUpload()),
   };
 }
 

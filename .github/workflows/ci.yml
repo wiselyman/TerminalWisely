@@ -27,6 +27,7 @@ jobs:
             os: ubuntu-22.04
             apt_deps: true
             rust_mode: test
+            ssh_live: true
             pytest: true
             eval: true
             playwright: true
@@ -95,6 +96,10 @@ jobs:
         if: matrix.rust_mode == 'test'
         working-directory: src-tauri
         run: cargo test --quiet
+
+      - name: SSH live integration (Docker openssh)
+        if: matrix.ssh_live
+        run: bash scripts/e2e-ssh-integration.sh
 
       - name: Rust cross-check Intel (macOS host)
         if: matrix.rust_cross_x64

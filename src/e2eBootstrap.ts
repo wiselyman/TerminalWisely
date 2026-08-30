@@ -1,6 +1,6 @@
 import { isE2eBrowserMode } from "./lib/e2eRuntime";
 import { E2E_SSH_SESSION_ID } from "./e2e/fixtures";
-import { __e2eEmitTerminalOutput } from "./e2e/tauriCoreMock";
+import { __e2eEmitTerminalOutput, __e2eLastUploadRequest, __e2eResetUploadRequest } from "./e2e/tauriCoreMock";
 import { useAiEngineerStore } from "./stores/aiEngineerStore";
 import { useK8sStore } from "./stores/k8sStore";
 import { useLocalFsStore } from "./stores/localFsStore";
@@ -18,6 +18,9 @@ export interface TwE2eApi {
   openAiPlatform: () => Promise<void>;
   openAiChat: () => Promise<void>;
   emitTerminalPrompt: (text?: string) => void;
+  simulateTerminalDrop: (paths: string[]) => Promise<void>;
+  getLastUpload: () => Record<string, unknown> | null;
+  resetUpload: () => void;
 }
 
 declare global {
@@ -95,6 +98,61 @@ async function openAiChat() {
   useAiEngineerStore.getState().setPlatformOpen(false);
 }
 
+function terminalDropTarget(): HTMLElement {
+  const el = document.querySelector<HTMLElement>(
+    '[data-testid="terminal-view"].active .terminal-view-inner',
+  );
+  if (!el) {
+    throw new Error("active terminal-view-inner not found");
+  }
+  return el;
+}
+
+function buildDragDataTransfer(paths: string[]): DataTransfer {
+  const dataTransfer = new DataTransfer();
+  for (const p of paths) {
+    const name = p.split(/[/\\]/).pop() ?? "upload.txt";
+    const file = new File(["e2e-upload"], name, { type: "text/plain" });
+    Object.assign(file, { path: p });
+    dataTransfer.items.add(file);
+  }
+  dataTransfer.setData("text/plain", paths.join("\n"));
+  Object.defineProperty(dataTransfer, "types", {
+    get: () => ["Files"],
+  });
+  return dataTransfer;
+}
+
+async function simulateTerminalDrop(paths: string[]) {
+  const el = terminalDropTarget();
+
+  const dataTransfer = buildDragDataTransfer(paths);
+
+  const dragEnter = new DragEvent("dragenter", {
+    bubbles: true,
+    cancelable: true,
+    dataTransfer,
+  });
+  Object.defineProperty(dragEnter, "dataTransfer", { value: dataTransfer });
+  el.dispatchEvent(dragEnter);
+
+  const drop = new DragEvent("drop", {
+    bubbles: true,
+    cancelable: true,
+    dataTransfer,
+  });
+  Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+  el.dispatchEvent(drop);
+}
+
+function getLastUpload() {
+  return __e2eLastUploadRequest();
+}
+
+function resetUpload() {
+  __e2eResetUploadRequest();
+}
+
 /** Playwright / CI browser E2E helpers */
 export function runE2eBootstrap(): void {
   if (!isE2eBrowserMode()) return;
@@ -109,6 +167,9 @@ export function runE2eBootstrap(): void {
     emitTerminalPrompt: (text = "e2e@127.0.0.1:~$ ") => {
       __e2eEmitTerminalOutput(`${text}\r\n`);
     },
+    simulateTerminalDrop,
+    getLastUpload,
+    resetUpload,
   };
 
   window.__TW_E2E__ = api;

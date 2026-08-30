@@ -1,13 +1,13 @@
 # TerminalWisely 用户验收清单
 
-> **已由 Playwright 自动覆盖**：Platform 面板、MCP、Memory 搜索、Run eval 8/8、Platform/Chat 切换（`npm run test:e2e`）。  
-> 本清单仅保留 Playwright / 单元测试无法替代的场景：真实 SSH、OS 拖拽、K8s 真集群 Pod Shell。
+> **已由 Playwright 自动覆盖**：Platform 面板、MCP、Memory 搜索、Run eval 8/8、Platform/Chat 切换、**拖拽上传 UI**（`e2e/ssh-drag-upload.spec.ts`）。  
+> **已由 Docker + Rust 自动覆盖**：SSH 密码连接、SFTP 上传（`scripts/e2e-ssh-integration.sh`）。  
+> 本清单仅保留自动化难以替代的场景：Tauri 原生窗口交互、K8s 真集群 Pod Shell、大文件/弱网体验。
 
 ## 准备
 
-- [ ] 已 `./scripts/run-all-tests.sh` 全部 PASS（含 Playwright E2E）
-- [ ] 有可用的 SSH 测试主机（或本地 VM）
-- [ ] 有可用的 K8s 集群（或 k3s/kind）
+- [ ] 已 `./scripts/run-all-tests.sh` 全部 PASS（含 Playwright E2E + SSH live integration）
+- [ ] （可选）有可用的 K8s 集群（或 k3s/kind）用于 Pod Shell 手测
 - [ ] AI 模型已配置（Ollama 本地或 API Key）
 
 ---
@@ -24,10 +24,10 @@
 
 | # | 步骤 | 预期 | ✓ |
 |---|------|------|---|
-| B1 | 新建 SSH 连接并登录 | 终端出现 shell 提示符 | |
+| B1 | 新建 SSH 连接并登录 | 终端出现 shell 提示符 | **自动**（`e2e-ssh-integration.sh`） |
 | B2 | 执行 `ls -la`，点击目录名 | 自动 cd 进入 | |
 | B3 | 点击文件名 | 打开预览或下载 | |
-| B4 | 从桌面拖拽文件到终端 | 上传到当前目录 | |
+| B4 | 从桌面拖拽文件到终端 | 上传到当前目录 | **自动**（Playwright + Rust SFTP） |
 | B5 | 断开网络后按 Enter | 显示重连 overlay，重连成功 | |
 | B6 | Tab 右键：关闭其他 / 关闭左侧 | Tab 管理正常 | |
 

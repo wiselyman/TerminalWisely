@@ -14,7 +14,8 @@
 | **功能测试** | `python -m eval` / `pytest tests/test_eval_harness.py` | 运维场景 Eval Harness 8/8 |
 | **静态功能检查** | `node scripts/smoke-product-checklist.mjs` | 前端 wiring、i18n、关键文件存在性 |
 | **端到端 (E2E)** | `pytest tests/test_e2e_hard_gates.py` 等 | Pull 协议 + fake 模型完整对话 |
-| **用户测试 / UI E2E** | `npm run test:e2e` (Playwright) | Platform 面板、Run eval 8/8、MCP、Memory、Toggle |
+| **SSH 实时连接 / SFTP 上传** | `bash scripts/e2e-ssh-integration.sh` | Docker openssh + Rust `live_integration` |
+| **拖拽上传 UI** | `npm run test:e2e` → `e2e/ssh-drag-upload.spec.ts` | Playwright HTML5 drop + mock `upload_files` |
 
 ## 跨平台 / 跨架构 CI 矩阵
 
@@ -49,7 +50,7 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| SSH 连接（密码/密钥） | Rust client | — | — | — | ✓ |
+| SSH 连接（密码/密钥） | Rust client | **SSH live** | — | — | ✓ |
 | 保存连接 / 设备历史 | — | — | smoke | — | ✓ |
 | xterm 终端渲染 | — | — | smoke | — | ✓ |
 | 断线重连 | — | — | — | — | ✓ |
@@ -63,7 +64,7 @@
 |------|:----:|:----:|:----:|:---:|:----:|
 | 点击 ls 路径 cd | `terminalContext` | — | smoke | — | ✓ |
 | 点击文件预览/下载 | `terminalLinks` | — | smoke | — | ✓ |
-| 拖拽本地上传 | — | — | smoke | — | ✓ |
+| 拖拽本地上传 | — | **SSH live + Playwright** | smoke | **✓** | ✓ |
 | 跨 Tab 远程拖拽 | — | — | smoke | — | ✓ |
 | 路径右键菜单 | — | — | smoke | — | ✓ |
 | 终端选区 → AI Chat | — | — | smoke | — | ✓ |
