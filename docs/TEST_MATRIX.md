@@ -16,6 +16,20 @@
 | **端到端 (E2E)** | `pytest tests/test_e2e_hard_gates.py` 等 | Pull 协议 + fake 模型完整对话 |
 | **用户测试 / UI E2E** | `npm run test:e2e` (Playwright) | Platform 面板、Run eval 8/8、MCP、Memory、Toggle |
 
+## 跨平台 / 跨架构 CI 矩阵
+
+| Runner | OS | CPU | 测试内容 |
+|--------|-----|-----|----------|
+| `linux-x86_64` | Ubuntu 22.04 | x86_64 | smoke + Vitest + build + `cargo test` + pytest + eval 8/8 + Playwright 19 |
+| `linux-aarch64` | Ubuntu 24.04 ARM | aarch64 | 同上（原生 ARM64） |
+| `macos-aarch64` | macOS latest | Apple Silicon | smoke + Vitest + build + `cargo test` + `cargo check` x86_64 + pytest + eval |
+| `windows-x86_64` | Windows latest | x86_64 | smoke + Vitest + build + `cargo check` + `cargo check` ARM64 + pytest |
+
+> Linux 上不做 GTK/Tauri 的跨 GNU 架构编译（需 sysroot）；由 **linux-x86_64** 与 **linux-aarch64** 两个原生 runner 覆盖。  
+> macOS Intel / Windows ARM64 安装包由 **Release** workflow 在对应 triple 上构建；CI 在 macOS 上交叉 `cargo check` Intel，在 Windows 上交叉 `cargo check` ARM64。
+
+本地：`bash scripts/cross-arch-rust-check.sh`（Linux 上自动 skip；macOS/Windows 上检查另一架构 triple）。
+
 ---
 
 ## 1. 应用壳层

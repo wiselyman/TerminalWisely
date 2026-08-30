@@ -74,8 +74,8 @@ cp src-tauri/icons/128x128.png public/icon.png
 
 ## CI
 
-- **CI**（`.github/workflows/ci.yml`）：每次 push / PR 跑 `npm run build`、`npm test`、`test:smoke`、`cargo test`、Sidecar pytest、Eval harness、Playwright E2E（Ubuntu）。
-- **Release**（`.github/workflows/release.yml`）：打 tag 或手动触发，构建全部安装包并上传到 GitHub Releases。
+- **CI**（`.github/workflows/ci.yml`）：4 个 runner 矩阵 — **linux-x86_64**、**linux-aarch64**、**macos-aarch64**、**windows-x86_64**；各跑 smoke、Vitest、build、Rust、Sidecar pytest；Linux/macOS 另跑 eval + Playwright（Ubuntu x64/ARM）；macOS 交叉检查 Intel triple，Windows 交叉检查 ARM64 triple。
+- **Release**（`.github/workflows/release.yml`）：打 tag 时构建全部 OS×架构安装包。
 
 ## 发布安装包（GitHub Actions）
 

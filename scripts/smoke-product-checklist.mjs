@@ -346,6 +346,16 @@ function exists(rel) {
   else fail("test.vitest-config", "missing vitest.config.ts");
   if (exists("scripts/run-all-tests.sh")) pass("test.run-all", "run-all-tests.sh");
   else fail("test.run-all", "missing run-all-tests.sh");
+  if (exists("scripts/cross-arch-rust-check.sh"))
+    pass("test.cross-arch-script", "cross-arch-rust-check.sh");
+  else fail("test.cross-arch-script", "missing cross-arch-rust-check.sh");
+  if (exists("scripts/run-sidecar-pytest.sh"))
+    pass("test.sidecar-pytest-script", "run-sidecar-pytest.sh");
+  else fail("test.sidecar-pytest-script", "missing run-sidecar-pytest.sh");
+  const ci = read(".github/workflows/ci.yml");
+  if (ci.includes("linux-aarch64") && ci.includes("windows-x86_64"))
+    pass("ci.cross-platform-matrix", "linux arm64 + windows in CI");
+  else fail("ci.cross-platform-matrix", "CI matrix missing arch runners");
   if (exists("docs/TEST_MATRIX.md")) pass("test.matrix-doc", "TEST_MATRIX.md");
   else fail("test.matrix-doc", "missing TEST_MATRIX.md");
 }

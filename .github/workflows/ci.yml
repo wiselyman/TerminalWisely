@@ -16,11 +16,43 @@ jobs:
       - name: Reject Cursor attribution in git history
         run: bash scripts/verify-git-authors.sh
 
-  smoke:
+  test:
+    name: test (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        include:
+          # Linux x86_64 — full automated suite (incl. Playwright)
+          - label: linux-x86_64
+            os: ubuntu-22.04
+            apt_deps: true
+            rust_mode: test
+            pytest: true
+            eval: true
+            playwright: true
+          # Linux ARM64 — native tests on aarch64 runner
+          - label: linux-aarch64
+            os: ubuntu-24.04-arm
+            apt_deps: true
+            rust_mode: test
+            pytest: true
+            eval: true
+            playwright: true
+          # macOS Apple Silicon — native + Intel cross-check
+          - label: macos-aarch64
+            os: macos-latest
+            rust_mode: test
+            rust_cross_x64: true
+            pytest: true
+            eval: true
+            cross_arch: true
+          # Windows x86_64 — frontend + pytest + native/cross Rust check
+          - label: windows-x86_64
+            os: windows-latest
+            rust_mode: check
+            rust_cross_arm64: true
+            pytest: true
+            cross_arch: true
 
     runs-on: ${{ matrix.os }}
 
@@ -33,11 +65,16 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.apt_deps
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
@@ -55,30 +92,59 @@ jobs:
         run: npm run build
 
       - name: Rust unit tests
-        if: matrix.os != 'windows-latest'
+        if: matrix.rust_mode == 'test'
         working-directory: src-tauri
         run: cargo test --quiet
 
-      - name: Check Rust backend (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Rust cross-check Intel (macOS host)
+        if: matrix.rust_cross_x64
         working-directory: src-tauri
-        run: cargo check
-
-      - name: Agent sidecar unit tests
-        if: matrix.os != 'windows-latest'
-        working-directory: agent-sidecar
         run: |
-          python3 -m venv .venv
-          . .venv/bin/activate
+          rustup target add x86_64-apple-darwin
+          cargo check --quiet --target x86_64-apple-darwin
+
+      - name: Rust native check (Windows)
+        if: matrix.rust_mode == 'check'
+        working-directory: src-tauri
+        run: cargo check --quiet
+
+      - name: Rust cross-check ARM64 (Windows host)
+        if: matrix.rust_cross_arm64
+        working-directory: src-tauri
+        run: |
+          rustup target add aarch64-pc-windows-msvc
+          cargo check --quiet --target aarch64-pc-windows-msvc
+
+      - name: Cross-arch Rust check
+        if: matrix.cross_arch
+        run: bash scripts/cross-arch-rust-check.sh
+
+      - name: Agent sidecar pytest (Unix)
+        if: matrix.pytest && runner.os != 'Windows'
+        run: bash scripts/run-sidecar-pytest.sh
+
+      - name: Agent sidecar pytest (Windows)
+        if: matrix.pytest && runner.os == 'Windows'
+        working-directory: agent-sidecar
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\Activate.ps1
           python -m pip install -q -U pip
           python -m pip install -q -r requirements.txt
-          PYTHONPATH=. python -m pytest tests/ -q --tb=line
+          $env:PYTHONPATH = "."
+          python -m pytest tests/ -q --tb=line
 
       - name: Ops eval harness (functional)
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.eval
         working-directory: agent-sidecar
+        shell: bash
         run: |
-          . .venv/bin/activate
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            .venv/Scripts/activate
+          else
+            . .venv/bin/activate
+          fi
           PYTHONPATH=. python -m eval --report /tmp/ops_eval_report.json
           python - <<'PY'
           import json
@@ -89,9 +155,9 @@ jobs:
           PY
 
       - name: Install Playwright Chromium
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.playwright
         run: npx playwright install chromium --with-deps
 
       - name: Playwright UI E2E
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.playwright
         run: bash scripts/e2e-playwright.sh

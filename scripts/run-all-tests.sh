@@ -39,34 +39,30 @@ run_step() {
   fi
 }
 
-section "1/7 Frontend static smoke (功能 wiring)"
+section "1/9 Frontend static smoke (功能 wiring)"
 run_step "smoke-product-checklist" node scripts/smoke-product-checklist.mjs
 
-section "2/7 Frontend unit tests (Vitest)"
+section "2/9 Frontend unit tests (Vitest)"
 run_step "vitest" npm test -- --run
 
-section "3/7 Frontend typecheck + build"
+section "3/9 Frontend typecheck + build"
 run_step "tsc + vite build" npm run build
 
 if [[ "$SKIP_RUST" -eq 0 ]]; then
-  section "4/7 Rust unit tests (cargo test)"
+  section "4/8 Rust unit tests (cargo test)"
   run_step "cargo test" bash -c "cd src-tauri && cargo test --quiet"
+
+  section "5/9 Cross-arch Rust check (macOS / Windows hosts only)"
+  run_step "cross-arch-rust-check" bash scripts/cross-arch-rust-check.sh
 else
   echo "⊘ Skipped Rust tests (--skip-rust)"
 fi
 
-section "5/7 Agent sidecar pytest (单元 + 集成 + E2E)"
-run_step "pytest" bash -c "
-  cd agent-sidecar
-  if [[ ! -d .venv ]]; then python3 -m venv .venv; fi
-  . .venv/bin/activate
-  python -m pip install -q -U pip
-  python -m pip install -q -r requirements.txt
-  PYTHONPATH=. python -m pytest tests/ -q --tb=line
-"
+section "6/8 Agent sidecar pytest (单元 + 集成 + E2E)"
+run_step "pytest" bash scripts/run-sidecar-pytest.sh
 
 if [[ "$SKIP_EVAL" -eq 0 ]]; then
-  section "6/8 Ops eval harness (功能测试 8/8)"
+  section "7/9 Ops eval harness (功能测试 8/8)"
   EVAL_REPORT="${TMPDIR:-/tmp}/ops_eval_report.json"
   run_step "eval harness" bash -c "
     cd agent-sidecar
@@ -87,14 +83,14 @@ else
   echo "⊘ Skipped eval harness (--skip-eval)"
 fi
 
-section "7/8 Playwright UI E2E (Platform / Eval / MCP)"
+section "8/9 Playwright UI E2E (Platform / Eval / MCP)"
 if [[ "${SKIP_E2E:-0}" -eq 0 ]]; then
   run_step "playwright e2e" bash scripts/e2e-playwright.sh
 else
   echo "⊘ Skipped Playwright E2E (--skip-e2e or SKIP_E2E=1)"
 fi
 
-section "8/8 Summary"
+section "9/9 Summary"
 if [[ "$FAIL" -eq 0 ]]; then
   echo ""
   echo "All automated tests PASSED."

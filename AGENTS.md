@@ -51,6 +51,7 @@
 - 测试通过后 `git push origin main`。
 - **禁止 Cursor 署名**；提交作者必须是 `Yunfei Wang <wiselyman2008@gmail.com>`，message 中不得含 `Co-authored-by: Cursor` 或 `Made-with: Cursor`。见 `BUILD.md`。
 - `npm run hooks:install` 启用 pre-push 全量测试。
+- 跨平台回归由 GitHub Actions 矩阵覆盖（见 `docs/TEST_MATRIX.md` → 跨平台 CI 矩阵）。
 
 ## 文档
 
