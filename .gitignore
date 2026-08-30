@@ -41,3 +41,7 @@ agent-sidecar/runtime/**
 !agent-sidecar/runtime/.gitkeep
 !agent-sidecar/runtime/.gitignore
 testdata/
+
+# Playwright artifacts
+/test-results/
+/e2e-report/

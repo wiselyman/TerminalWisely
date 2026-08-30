@@ -22,6 +22,7 @@ export function AiEngineerTool({ active, disabled, onClick }: Props) {
       disabled={disabled}
       title={label}
       aria-label={label}
+      data-testid="ai-engineer-tool"
       onClick={onClick}
     >
       <AiEngineerIcon />

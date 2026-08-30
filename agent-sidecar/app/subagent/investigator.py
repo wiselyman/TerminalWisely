@@ -1,4 +1,8 @@
-"""Depth-1 investigator subagent — same SSH identity, observe-only tools."""
+"""Depth-1 investigator subagent — same session identity, observe-only tools.
+
+Linux: SSH terminal probes on the connected host.
+K8s: read-only k8s_* tools on the selected cluster (bridged to parent host wait).
+"""
 
 from __future__ import annotations
 
@@ -22,6 +26,15 @@ MAX_DELEGATION_DEPTH = 1
 def can_spawn_investigator(parent: AgentRun) -> bool:
     depth = int(parent.metadata.get("delegation_depth") or 0)
     return depth < MAX_DELEGATION_DEPTH
+
+
+def _engineer_mode(run: AgentRun, parent: AgentRun | None = None) -> str:
+    mode = str(run.metadata.get("engineer_mode") or "").strip().lower()
+    if mode:
+        return mode
+    if parent is not None:
+        return str(parent.metadata.get("engineer_mode") or "linux").strip().lower()
+    return "linux"
 
 
 class InvestigatorLoop(AgentLoop):
@@ -49,7 +62,7 @@ class InvestigatorLoop(AgentLoop):
         self.parent = parent
 
     def _tool_schemas(self) -> list[dict[str, Any]]:
-        return investigator_tools()
+        return investigator_tools(engineer_mode=_engineer_mode(self.run, self.parent))
 
     def _should_cancel(self) -> bool:
         return bool(self.run.cancel_requested or self.parent.cancel_requested)
@@ -124,6 +137,75 @@ class InvestigatorLoop(AgentLoop):
         self.run.status = RunStatus.RUNNING
         return result
 
+    async def _await_host_k8s(
+        self,
+        *,
+        call_id: str,
+        name: str,
+        args: dict[str, Any],
+        risk: str,
+        reason: str,
+        intent: str = "",
+        approved: bool = False,
+    ) -> dict[str, Any] | None:
+        """Bridge k8s_* host waits onto the parent run (FE listens on parent)."""
+        if self.parent.cancel_requested:
+            self.run.cancel_requested = True
+            return None
+
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[dict[str, Any]] = loop.create_future()
+        display_cmd = intent or name
+        self.parent.pending_tool = PendingToolWait(
+            call_id=call_id,
+            tool_name=name,
+            future=fut,
+            risk=risk,
+            command=display_cmd,
+        )
+        self.parent.status = RunStatus.WAITING_TOOL
+        self.run.status = RunStatus.WAITING_TOOL
+        args_payload = dict(args)
+        if intent and "intent" not in args_payload:
+            args_payload["intent"] = intent
+        if "cluster_target" not in args_payload:
+            ct = self.parent.metadata.get("cluster_target")
+            if isinstance(ct, dict):
+                args_payload["cluster_target"] = ct
+        payload: dict[str, Any] = {
+            "call_id": call_id,
+            "name": name,
+            "arguments": args_payload,
+            "awaiting_host": True,
+            "requires_lease": False,
+            "investigator": True,
+            "investigator_run_id": self.run.run_id,
+            "policy": {
+                "allowed": True,
+                "action": "allow",
+                "risk": risk,
+                "reason": reason,
+                "approved": approved,
+            },
+        }
+        self.parent.append_event("tool_call", payload)
+        try:
+            result = await fut
+        except asyncio.CancelledError:
+            return None
+        if result.get("cancelled") or self.parent.cancel_requested:
+            self.parent.pending_tool = None
+            self.parent.status = RunStatus.RUNNING
+            self.run.pending_tool = None
+            self.run.cancel_requested = True
+            self.run.status = RunStatus.CANCELLED
+            return None
+        await self._add_tool_result(call_id, result)
+        self.parent.status = RunStatus.RUNNING
+        self.parent.pending_tool = None
+        self.run.status = RunStatus.RUNNING
+        return result
+
     async def _wait_approval(self, *args: Any, **kwargs: Any) -> None:
         return None
 
@@ -165,17 +247,23 @@ async def run_investigator(
             "_untrusted": True,
         }
     child_id = f"inv_{uuid.uuid4().hex[:12]}"
+    mode = _engineer_mode(parent)
+    child_meta: dict[str, Any] = {
+        "delegation_depth": int(parent.metadata.get("delegation_depth") or 0) + 1,
+        "parent_run_id": parent.run_id,
+        "origin": "investigator",
+        "engineer_mode": mode,
+    }
+    for key in ("cluster_id", "cluster_name", "cluster_target"):
+        if key in parent.metadata:
+            child_meta[key] = parent.metadata[key]
     child = AgentRun(
         session_id=parent.session_id,
         run_id=child_id,
         security_mode="observe",
         identity=parent.identity
         or TargetSessionIdentity(session_id=parent.session_id),
-        metadata={
-            "delegation_depth": int(parent.metadata.get("delegation_depth") or 0) + 1,
-            "parent_run_id": parent.run_id,
-            "origin": "investigator",
-        },
+        metadata=child_meta,
         persist_session=False,
     )
     parent.append_event(
@@ -189,14 +277,23 @@ async def run_investigator(
         broker=broker,
         research=research,
     )
-    prompt = (
-        "You are a read-only investigator on the SAME connected Terminal session.\n"
-        "Security mode is OBSERVE: mutations are denied. Use service_status, "
-        "list_listeners, grep_remote_logs, read_remote_file, terminal_exec (R0 only), "
-        "web_search/web_fetch.\n"
-        "Do not ask the user. Do not propose OpsPlan. Return a concise evidence-based "
-        "finding when done.\n"
-    )
+    if mode == "k8s":
+        prompt = (
+            "You are a read-only Kubernetes investigator on the SAME selected cluster.\n"
+            "Security mode is OBSERVE: mutations are denied. Use k8s_list, k8s_get, "
+            "k8s_describe, k8s_logs, and web_search/web_fetch only.\n"
+            "Do not ask the user. Do not propose OpsPlan or kubectl shell. Return a "
+            "concise evidence-based finding when done.\n"
+        )
+    else:
+        prompt = (
+            "You are a read-only investigator on the SAME connected Terminal session.\n"
+            "Security mode is OBSERVE: mutations are denied. Use service_status, "
+            "list_listeners, grep_remote_logs, read_remote_file, terminal_exec (R0 only), "
+            "web_search/web_fetch.\n"
+            "Do not ask the user. Do not propose OpsPlan. Return a concise evidence-based "
+            "finding when done.\n"
+        )
     if focus.strip():
         prompt += f"Focus area: {focus.strip()}\n"
     prompt += f"Investigation question: {question.strip()}"

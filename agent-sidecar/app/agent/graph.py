@@ -15,9 +15,6 @@ import asyncio
 import logging
 from typing import Any, TypedDict
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, StateGraph
-
 from app.agent.loop import AgentLoop
 from app.agent.wait_snapshot import (
     clear_wait_snapshot,
@@ -47,8 +44,18 @@ class GraphState(TypedDict, total=False):
 
 
 _GRAPH = None
-_CHECKPOINTER = MemorySaver()
+_CHECKPOINTER = None
 _wait_watchers: dict[str, asyncio.Task[None]] = {}
+
+
+def _langgraph_checkpointer() -> Any:
+    """Lazy import so wait-snapshot helpers work even if langgraph is not installed yet."""
+    global _CHECKPOINTER
+    if _CHECKPOINTER is None:
+        from langgraph.checkpoint.memory import MemorySaver
+
+        _CHECKPOINTER = MemorySaver()
+    return _CHECKPOINTER
 
 
 async def _run_loop_node(state: GraphState) -> GraphState:
@@ -74,11 +81,13 @@ async def _run_loop_node(state: GraphState) -> GraphState:
 
 
 def build_agent_graph() -> Any:
+    from langgraph.graph import END, START, StateGraph
+
     g: StateGraph = StateGraph(GraphState)
     g.add_node("agent_loop", _run_loop_node)
     g.add_edge(START, "agent_loop")
     g.add_edge("agent_loop", END)
-    return g.compile(checkpointer=_CHECKPOINTER)
+    return g.compile(checkpointer=_langgraph_checkpointer())
 
 
 def get_agent_graph() -> Any:

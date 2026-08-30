@@ -9,6 +9,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:smoke": "node scripts/smoke-product-checklist.mjs",
+    "test:all": "bash scripts/run-all-tests.sh",
+    "test:e2e": "bash scripts/e2e-playwright.sh",
+    "test:e2e:desktop": "python3 scripts/e2e-desktop-tauri.py",
     "tauri": "tauri",
     "hooks:install": "git config core.hooksPath .githooks",
     "hooks:verify": "bash scripts/verify-git-authors.sh"
@@ -38,11 +43,13 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^3.2.7"
   }
 }

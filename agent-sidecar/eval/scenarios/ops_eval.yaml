@@ -1,0 +1,69 @@
+# Ops eval scenarios — harness regression (mock LLM + simulated host).
+
+scenarios:
+  # --- K8s (mock Ollama director) ---
+  - id: k8s_list_pods
+    engineer_mode: k8s
+    prompt: "看看 demo 命名空间里的 Pod 都正常吗？"
+    required_tools: [k8s_list]
+    content_contains: ["broken-pull"]
+    max_seconds: 30
+    tags: [k8s, read]
+
+  - id: k8s_diagnose_image_pull
+    engineer_mode: k8s
+    prompt: "demo 里 broken-pull 这个 Pod 为啥起不来？"
+    required_tools: [k8s_list, k8s_describe]
+    tools_in_order: true
+    content_contains: [ImagePullBackOff]
+    max_seconds: 30
+    tags: [k8s, diagnose]
+
+  - id: k8s_scale_web
+    engineer_mode: k8s
+    prompt: "把 demo 里的 web 扩到 4 个副本"
+    required_tools: [k8s_scale]
+    content_contains: ["4"]
+    max_seconds: 30
+    tags: [k8s, mutate]
+
+  - id: k8s_events
+    engineer_mode: k8s
+    prompt: "demo 命名空间最近有什么告警事件？"
+    required_tools: [k8s_list]
+    content_contains: [broken-pull]
+    max_seconds: 30
+    tags: [k8s, events]
+
+  - id: k8s_crashloop_hint
+    engineer_mode: k8s
+    prompt: "multi pod CrashLoopBackOff 怎么查？"
+    required_tools: [k8s_describe]
+    content_contains: [k8s_describe]
+    max_seconds: 30
+    tags: [k8s, crashloop]
+
+  # --- Linux (fake model) ---
+  - id: linux_service_status
+    engineer_mode: linux
+    prompt: "nginx 服务状态怎么样？"
+    required_tools: [service_status]
+    content_contains: [nginx]
+    max_seconds: 15
+    tags: [linux, read]
+
+  - id: linux_list_ports
+    engineer_mode: linux
+    prompt: "有哪些端口在监听？"
+    required_tools: [list_listeners]
+    content_contains: [LISTEN]
+    max_seconds: 15
+    tags: [linux, read]
+
+  - id: linux_web_then_answer
+    engineer_mode: linux
+    prompt: "查一下 nginx 默认配置文件路径"
+    required_tools: [web_search]
+    content_contains: [nginx]
+    max_seconds: 20
+    tags: [linux, web]

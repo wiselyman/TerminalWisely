@@ -374,17 +374,28 @@ class ModelGateway:
         headers, _ = self._auth_headers_and_key()
         url = f"{self.base_url.rstrip('/')}/models"
         # Keep refresh snappy — bad hosts should fail fast for settings UX.
-        client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=6.0))
-        try:
-            resp = await client.get(url, headers=headers)
-        except httpx.HTTPError as exc:
-            detail = str(exc).strip() or repr(exc)
-            raise ModelGatewayError(
-                f"Cannot reach {url} ({type(exc).__name__}: {detail}). "
-                "Check Base URL / network (VPN / Tailscale)."
-            ) from exc
-        finally:
-            await client.aclose()
+        if self._client is not None:
+            client = self._client
+            try:
+                resp = await client.get(url, headers=headers)
+            except httpx.HTTPError as exc:
+                detail = str(exc).strip() or repr(exc)
+                raise ModelGatewayError(
+                    f"Cannot reach {url} ({type(exc).__name__}: {detail}). "
+                    "Check Base URL / network (VPN / Tailscale)."
+                ) from exc
+        else:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(20.0, connect=6.0)
+            ) as client:
+                try:
+                    resp = await client.get(url, headers=headers)
+                except httpx.HTTPError as exc:
+                    detail = str(exc).strip() or repr(exc)
+                    raise ModelGatewayError(
+                        f"Cannot reach {url} ({type(exc).__name__}: {detail}). "
+                        "Check Base URL / network (VPN / Tailscale)."
+                    ) from exc
         if resp.status_code >= 400:
             raise ModelGatewayError(
                 f"Model list failed HTTP {resp.status_code} from {url}: {resp.text[:400]}"

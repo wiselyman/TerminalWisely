@@ -45,10 +45,22 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Frontend static smoke
+        run: npm run test:smoke
+
+      - name: Frontend unit tests
+        run: npm test -- --run
+
       - name: Typecheck and build frontend
         run: npm run build
 
-      - name: Check Rust backend
+      - name: Rust unit tests
+        if: matrix.os != 'windows-latest'
+        working-directory: src-tauri
+        run: cargo test --quiet
+
+      - name: Check Rust backend (Windows)
+        if: matrix.os == 'windows-latest'
         working-directory: src-tauri
         run: cargo check
 
@@ -61,3 +73,25 @@ jobs:
           python -m pip install -q -U pip
           python -m pip install -q -r requirements.txt
           PYTHONPATH=. python -m pytest tests/ -q --tb=line
+
+      - name: Ops eval harness (functional)
+        if: matrix.os == 'ubuntu-22.04'
+        working-directory: agent-sidecar
+        run: |
+          . .venv/bin/activate
+          PYTHONPATH=. python -m eval --report /tmp/ops_eval_report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          s = json.loads(Path("/tmp/ops_eval_report.json").read_text())["summary"]
+          assert s["passed"] == s["total"] and s["failed"] == 0, s
+          print(f"Eval {s['passed']}/{s['total']} passed")
+          PY
+
+      - name: Install Playwright Chromium
+        if: matrix.os == 'ubuntu-22.04'
+        run: npx playwright install chromium --with-deps
+
+      - name: Playwright UI E2E
+        if: matrix.os == 'ubuntu-22.04'
+        run: bash scripts/e2e-playwright.sh

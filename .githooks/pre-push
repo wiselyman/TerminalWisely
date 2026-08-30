@@ -1,0 +1,13 @@
+#!/bin/sh
+# Run full test suite before push. Skip with: TW_SKIP_TESTS=1 git push
+if [ "${TW_SKIP_TESTS:-}" = "1" ]; then
+  exit 0
+fi
+
+echo "pre-push: running ./scripts/run-all-tests.sh ..."
+if ! ./scripts/run-all-tests.sh; then
+  echo "pre-push: tests failed — fix or push with TW_SKIP_TESTS=1 (not for PRs)." >&2
+  exit 1
+fi
+
+exit 0

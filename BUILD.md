@@ -20,9 +20,30 @@
 
 ```bash
 npm install
-npm run hooks:install   # 启用 .githooks，阻止 Cursor 署名进提交
+npm run hooks:install   # 启用 .githooks（阻止 Cursor 署名 + push 前全量测试）
 npm run tauri dev
 ```
+
+## 测试（必读）
+
+**每次开发新功能：必须添加测试，并在提交/推送前执行全量回归。**
+
+```bash
+./scripts/run-all-tests.sh    # 或 npm run test:all
+```
+
+包含：前端 Vitest、静态 smoke、Rust `cargo test`、Sidecar pytest、Eval 8/8、Playwright UI E2E。
+
+| 命令 | 说明 |
+|------|------|
+| `npm test -- --run` | 仅前端单元 |
+| `npm run test:smoke` | 静态 wiring / i18n |
+| `npm run test:e2e` | Playwright（Platform / Eval / MCP） |
+| `npm run test:all` | 全量（同 `run-all-tests.sh`） |
+
+- 功能与测试映射：`docs/TEST_MATRIX.md`
+- Agent 规范：`AGENTS.md`
+- `git push` 默认触发 pre-push 全量测试；紧急跳过：`TW_SKIP_TESTS=1 git push`（**不可用于合 PR**）
 
 ### Git 署名（必读）
 
@@ -53,7 +74,7 @@ cp src-tauri/icons/128x128.png public/icon.png
 
 ## CI
 
-- **CI**（`.github/workflows/ci.yml`）：每次 push / PR 在 Windows、macOS、Linux 上跑编译检查。
+- **CI**（`.github/workflows/ci.yml`）：每次 push / PR 跑 `npm run build`、`npm test`、`test:smoke`、`cargo test`、Sidecar pytest、Eval harness、Playwright E2E（Ubuntu）。
 - **Release**（`.github/workflows/release.yml`）：打 tag 或手动触发，构建全部安装包并上传到 GitHub Releases。
 
 ## 发布安装包（GitHub Actions）

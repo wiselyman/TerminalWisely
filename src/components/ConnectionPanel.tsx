@@ -654,6 +654,7 @@ export function ConnectionPanel({
               aria-label={t("shell:sidebarViewHosts")}
               title={t("shell:sidebarViewHosts")}
               aria-selected={sidebarView === "hosts"}
+              data-testid="sidebar-view-hosts"
               onClick={() => setSidebarView("hosts")}
             >
               <SystemInfoIcon />
@@ -665,6 +666,7 @@ export function ConnectionPanel({
               aria-label={t("shell:sidebarViewK8s")}
               title={t("shell:sidebarViewK8s")}
               aria-selected={sidebarView === "k8s"}
+              data-testid="sidebar-view-k8s"
               onClick={() => setSidebarView("k8s")}
             >
               <K8sClusterIcon />

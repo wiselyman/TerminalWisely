@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../isTauri";
+import {
+  e2eSidecarToken,
+  e2eSidecarUrl,
+  isE2eBrowserMode,
+} from "../e2eRuntime";
 
 export interface SidecarInfo {
   base_url: string;
@@ -30,17 +35,51 @@ export interface AiSettingsUpdate {
   security_mode?: string;
 }
 
+const E2E_DEFAULT_SETTINGS: AiSettingsView = {
+  active_profile_id: "e2e-default",
+  profiles: [
+    {
+      id: "e2e-default",
+      name: "E2E Ollama",
+      provider: "ollama",
+      model: "qwen-test",
+      ollama_base_url: "http://127.0.0.1:11434",
+      base_url: "",
+      has_api_key: false,
+    },
+  ],
+  security_mode: "safe",
+};
+
+let e2eSettingsCache: AiSettingsView = { ...E2E_DEFAULT_SETTINGS, profiles: [...E2E_DEFAULT_SETTINGS.profiles] };
+
 export async function ensureSidecar(): Promise<SidecarInfo> {
+  if (isE2eBrowserMode()) {
+    return {
+      base_url: e2eSidecarUrl(),
+      token: e2eSidecarToken(),
+      pid: 0,
+    };
+  }
   return invoke<SidecarInfo>("ensure_ai_sidecar");
 }
 
 export async function getAiSettings(): Promise<AiSettingsView> {
+  if (isE2eBrowserMode()) return e2eSettingsCache;
   return invoke<AiSettingsView>("get_ai_settings");
 }
 
 export async function saveAiSettings(
   update: AiSettingsUpdate,
 ): Promise<AiSettingsView> {
+  if (isE2eBrowserMode()) {
+    e2eSettingsCache = {
+      ...e2eSettingsCache,
+      ...update,
+      profiles: update.profiles ?? e2eSettingsCache.profiles,
+    };
+    return e2eSettingsCache;
+  }
   return invoke<AiSettingsView>("save_ai_settings", { update });
 }
 
@@ -74,10 +113,22 @@ type SidecarHttpResult = {
 
 /** All sidecar HTTP goes through Rust in Tauri (WKWebView fetch is unreliable). */
 export async function sidecarFetch(
-  _info: SidecarInfo,
+  info: SidecarInfo,
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
+  if (isE2eBrowserMode()) {
+    if (init?.signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    const url = `${info.base_url.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${info.token}`);
+    if (init?.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    return fetch(url, { ...init, headers });
+  }
   if (isTauriRuntime()) {
     if (init?.signal?.aborted) {
       throw new DOMException("Aborted", "AbortError");
@@ -150,4 +201,98 @@ export async function aiRegisterPrivilegeLease(opts: {
       max_executions: opts.maxExecutions ?? 1,
     },
   });
+}
+
+export interface McpServerInfo {
+  id: string;
+  title: string;
+  read_only: boolean;
+  tools: Array<{ name?: string; description?: string }>;
+}
+
+export interface MemoryCaseRow {
+  id?: number;
+  problem_signature?: string;
+  root_cause?: string;
+  fix?: string;
+  verification?: string;
+  confidence?: number;
+}
+
+export interface TraceSpanRow {
+  id: string;
+  kind: string;
+  name: string;
+  duration_ms?: number | null;
+  started_at?: number;
+  ended_at?: number | null;
+}
+
+export interface EvalReportSummary {
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    pass_rate: number;
+    avg_duration_ms: number;
+  };
+  results: Array<{
+    scenario_id: string;
+    passed: boolean;
+    duration_ms: number;
+    tools_called: string[];
+    failures: string[];
+  }>;
+}
+
+export async function listMcpServers(
+  sidecar: SidecarInfo,
+): Promise<{ servers: McpServerInfo[] }> {
+  const res = await sidecarFetch(sidecar, "/v1/mcp/servers");
+  if (!res.ok) throw new Error(`MCP list failed (${res.status})`);
+  return res.json() as Promise<{ servers: McpServerInfo[] }>;
+}
+
+export async function searchMemoryCases(
+  sidecar: SidecarInfo,
+  q: string,
+  limit = 8,
+): Promise<{ cases: MemoryCaseRow[] }> {
+  const res = await sidecarFetch(
+    sidecar,
+    `/v1/memory/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  );
+  if (!res.ok) throw new Error(`Memory search failed (${res.status})`);
+  return res.json() as Promise<{ cases: MemoryCaseRow[] }>;
+}
+
+export async function fetchRunTrace(
+  sidecar: SidecarInfo,
+  sessionId: string,
+  runId: string,
+): Promise<{ spans: TraceSpanRow[] }> {
+  const res = await sidecarFetch(
+    sidecar,
+    `/v1/runs/${encodeURIComponent(runId)}/trace?session_id=${encodeURIComponent(sessionId)}`,
+  );
+  if (!res.ok) throw new Error(`Trace fetch failed (${res.status})`);
+  return res.json() as Promise<{ spans: TraceSpanRow[] }>;
+}
+
+export async function runOpsEval(
+  sidecar: SidecarInfo,
+): Promise<EvalReportSummary> {
+  const res = await sidecarFetch(sidecar, "/v1/eval/run", { method: "POST" });
+  if (!res.ok) throw new Error(`Eval run failed (${res.status})`);
+  return res.json() as Promise<EvalReportSummary>;
+}
+
+export async function listAgentSkills(
+  sidecar: SidecarInfo,
+): Promise<{ skills: Array<{ id: string; title: string; excerpt?: string }> }> {
+  const res = await sidecarFetch(sidecar, "/v1/skills");
+  if (!res.ok) throw new Error(`Skills list failed (${res.status})`);
+  return res.json() as Promise<{
+    skills: Array<{ id: string; title: string; excerpt?: string }>;
+  }>;
 }

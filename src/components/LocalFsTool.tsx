@@ -15,6 +15,7 @@ export function LocalFsTool({ active, disabled, onClick }: LocalFsToolProps) {
       label={t("localFs.railLabel")}
       active={active}
       disabled={disabled}
+      testId="local-fs-tool"
       onClick={onClick}
     >
       <HostWorkspaceIcon />

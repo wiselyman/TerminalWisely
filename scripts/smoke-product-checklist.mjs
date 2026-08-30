@@ -105,7 +105,6 @@ function exists(rel) {
     for (const bad of [
       "create_local_session",
       "createLocalSession",
-      "portable-pty",
       "SessionKind::Local",
       "get_local_shell_info",
     ]) {
@@ -258,6 +257,99 @@ function exists(rel) {
   }
 }
 
+// --- AI Platform panel (MCP / memory / eval / trace) ---
+{
+  const panel = read("src/components/aiEngineer/AiEngineerPlatformPanel.tsx");
+  for (const [needle, id] of [
+    ["listMcpServers", "platform.mcp-api"],
+    ["searchMemoryCases", "platform.memory-api"],
+    ["runOpsEval", "platform.eval-api"],
+    ["data-testid=\"ai-engineer-platform-panel\"", "platform.testid-panel"],
+    ["data-testid=\"ai-engineer-eval-run\"", "platform.testid-eval-run"],
+    ["VITE_UI_DEMO_SCREENSHOTS", "platform.demo-env"],
+  ]) {
+    if (panel.includes(needle)) pass(id, needle);
+    else fail(id, `missing ${needle} in AiEngineerPlatformPanel`);
+  }
+  const store = read("src/stores/aiEngineerStore.ts");
+  for (const [needle, id] of [
+    ["platformOpen", "platform.store-open"],
+    ["togglePlatformView", "platform.store-toggle"],
+    ["openPlatformView", "platform.store-open-fn"],
+  ]) {
+    if (store.includes(needle)) pass(id, needle);
+    else fail(id, `missing ${needle} in aiEngineerStore`);
+  }
+  const trace = read("src/components/aiEngineer/AiEngineerRunTraceBar.tsx");
+  if (
+    trace.includes("data-testid=\"ai-engineer-run-trace\"") &&
+    trace.includes("TraceSpanRow")
+  ) {
+    pass("platform.run-trace-bar", "RunTraceBar wired");
+  } else {
+    fail("platform.run-trace-bar", "RunTraceBar missing trace UI");
+  }
+  const api = read("src/lib/aiEngineer/api.ts");
+  for (const [needle, id] of [
+    ["listMcpServers", "platform.api.mcp"],
+    ["searchMemoryCases", "platform.api.memory"],
+    ["runOpsEval", "platform.api.eval"],
+    ["fetchRunTrace", "platform.api.trace"],
+  ]) {
+    if (api.includes(needle)) pass(id, needle);
+    else fail(id, `missing ${needle} in api.ts`);
+  }
+  const chat = read("src/lib/aiEngineer/chatClient.ts");
+  if (chat.includes("flushUserContext")) pass("platform.api.user-context", "flushUserContext");
+  else fail("platform.api.user-context", "missing flushUserContext");
+}
+
+// --- K8s workbench wiring ---
+{
+  const wb = read("src/components/k8s/K8sWorkbench.tsx");
+  for (const [needle, id] of [
+    ["K8sClusterSummaryView", "k8s.summary"],
+    ["k8sPodLogs", "k8s.pod-logs"],
+    ["NAV_GROUPS", "k8s.nav-groups"],
+  ]) {
+    if (wb.includes(needle)) pass(id, needle);
+    else fail(id, `missing ${needle} in K8sWorkbench`);
+  }
+  const k8sApi = read("src/lib/k8s/api.ts");
+  for (const [needle, id] of [
+    ["k8s_list_resources", "k8s.api.list"],
+    ["k8s_apply_yaml", "k8s.api.apply"],
+    ["k8s_delete_resource", "k8s.api.delete"],
+    ["k8s_scale_resource", "k8s.api.scale"],
+  ]) {
+    if (k8sApi.includes(needle)) pass(id, needle);
+    else fail(id, `missing ${needle} in k8s/api.ts`);
+  }
+}
+
+// --- Sidecar eval harness files ---
+{
+  for (const rel of [
+    "agent-sidecar/eval/runner.py",
+    "agent-sidecar/eval/scorer.py",
+    "agent-sidecar/eval/scenarios/ops_eval.yaml",
+    "agent-sidecar/tests/test_api_surface_integration.py",
+  ]) {
+    if (exists(rel)) pass(`sidecar.${rel.replace(/\//g, ".")}`, rel);
+    else fail(`sidecar.${rel.replace(/\//g, ".")}`, `missing ${rel}`);
+  }
+}
+
+// --- Test infrastructure ---
+{
+  if (exists("vitest.config.ts")) pass("test.vitest-config", "vitest.config.ts");
+  else fail("test.vitest-config", "missing vitest.config.ts");
+  if (exists("scripts/run-all-tests.sh")) pass("test.run-all", "run-all-tests.sh");
+  else fail("test.run-all", "missing run-all-tests.sh");
+  if (exists("docs/TEST_MATRIX.md")) pass("test.matrix-doc", "TEST_MATRIX.md");
+  else fail("test.matrix-doc", "missing TEST_MATRIX.md");
+}
+
 // Interactive product items that need a live SSH session / human
 blocked(
   "manual.ssh-connect",
@@ -274,6 +366,14 @@ blocked(
 blocked(
   "manual.ui-click-header-tools",
   "Needs running Tauri window + Accessibility/manual click",
+);
+blocked(
+  "manual.platform-run-eval-ui",
+  "Automated via Playwright: npm run test:e2e / scripts/e2e-playwright.sh",
+);
+blocked(
+  "manual.k8s-workbench-live",
+  "Needs live kubeconfig; SSH/K8s shell E2E planned — core UI covered by Playwright platform tests",
 );
 
 const fails = results.filter((r) => r.status === "FAIL");

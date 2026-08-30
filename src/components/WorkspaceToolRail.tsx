@@ -20,6 +20,7 @@ interface WorkspaceToolButtonProps {
   disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
+  testId?: string;
 }
 
 export function WorkspaceToolButton({
@@ -28,6 +29,7 @@ export function WorkspaceToolButton({
   disabled,
   onClick,
   children,
+  testId,
 }: WorkspaceToolButtonProps) {
   const { t } = useTranslation("shell");
   return (
@@ -38,6 +40,7 @@ export function WorkspaceToolButton({
       aria-label={label}
       aria-pressed={active}
       disabled={disabled}
+      data-testid={testId}
       onClick={onClick}
     >
       {children}

@@ -1011,6 +1011,7 @@ export function TerminalView({
   return (
     <div
       className={`terminal-view ${active ? "active" : ""} ${isDragOver ? "drag-over" : ""}${isConnecting ? " terminal-view-connecting" : ""}`}
+      data-testid="terminal-view"
     >
       <div
         ref={containerRef}

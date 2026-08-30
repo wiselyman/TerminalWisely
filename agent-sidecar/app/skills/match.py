@@ -30,17 +30,27 @@ def _skill_body(path: Path) -> tuple[str, set[str], str]:
     return title, _skill_tags(text), text
 
 
-def match_skills(user_message: str, *, limit: int = 2) -> list[dict[str, str]]:
+def match_skills(
+    user_message: str,
+    *,
+    limit: int = 2,
+    engineer_mode: str | None = None,
+) -> list[dict[str, str]]:
     """Return skill excerpts whose tags appear in the user message."""
     msg = (user_message or "").lower()
     if not msg.strip():
         return []
+    mode = (engineer_mode or "linux").strip().lower()
     root = skills_root()
     if not root.is_dir():
         return []
     hits: list[tuple[int, dict[str, str]]] = []
     for path in sorted(root.glob("**/SKILL.md")):
         skill_id = path.parent.name
+        if mode == "k8s" and not skill_id.startswith("k8s-"):
+            continue
+        if mode != "k8s" and skill_id.startswith("k8s-"):
+            continue
         title, tags, body = _skill_body(path)
         if not tags:
             continue

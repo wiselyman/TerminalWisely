@@ -24,7 +24,7 @@ export function WorkspaceWelcome() {
   const { t } = useTranslation("welcome");
 
   return (
-    <section className="workspace-welcome" aria-label={t("sectionAria")}>
+    <section className="workspace-welcome" aria-label={t("sectionAria")} data-testid="workspace-welcome">
       <div className="workspace-welcome-inner">
         <header className="workspace-welcome-hero">
           <p className="workspace-welcome-eyebrow">{t("eyebrow")}</p>
