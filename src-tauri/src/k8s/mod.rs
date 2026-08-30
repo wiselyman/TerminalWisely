@@ -10,6 +10,9 @@ pub mod shell;
 pub mod summary;
 pub mod tools;
 
+#[cfg(all(test, feature = "integration-tests"))]
+mod live_integration;
+
 pub use bindings::*;
 pub use exec::*;
 pub use helm::*;

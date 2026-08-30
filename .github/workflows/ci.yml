@@ -28,6 +28,7 @@ jobs:
             apt_deps: true
             rust_mode: test
             ssh_live: true
+            k8s_live: true
             pytest: true
             eval: true
             playwright: true
@@ -36,6 +37,8 @@ jobs:
             os: ubuntu-24.04-arm
             apt_deps: true
             rust_mode: test
+            ssh_live: true
+            k8s_live: true
             pytest: true
             eval: true
             playwright: true
@@ -100,6 +103,15 @@ jobs:
       - name: SSH live integration (Docker openssh)
         if: matrix.ssh_live
         run: bash scripts/e2e-ssh-integration.sh
+
+      - name: Install k3d
+        if: matrix.k8s_live
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: K8s live integration (k3d)
+        if: matrix.k8s_live
+        run: bash scripts/e2e-k8s-integration.sh
 
       - name: Rust cross-check Intel (macOS host)
         if: matrix.rust_cross_x64

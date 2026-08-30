@@ -8,7 +8,9 @@
    - 前端纯逻辑 → `src/**/*.test.ts`（Vitest）
    - Sidecar / Agent → `agent-sidecar/tests/test_*.py`（pytest）
    - Rust 纯函数 → `src-tauri` 内 `#[cfg(test)]`
-   - UI 可点击流程 → `e2e/*.spec.ts`（Playwright）+ 必要时 `data-testid`
+   - UI 可点击流程 → `e2e/*.spec.ts`（Playwright，当前 **34** 项）+ 必要时 `data-testid`
+   - 真实 SSH / SFTP → `scripts/e2e-ssh-integration.sh` + `src-tauri/src/ssh/live_integration.rs`
+   - 真实 K8s（k3d）→ `scripts/e2e-k8s-integration.sh` + `src-tauri/src/k8s/live_integration.rs`
    - 静态 wiring / i18n → 扩展 `scripts/smoke-product-checklist.mjs`
 
 2. **完成前必须跑全量测试并通过**：

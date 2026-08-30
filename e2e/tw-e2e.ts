@@ -7,35 +7,58 @@ async function waitForTwE2e(page: Page) {
   });
 }
 
+function wrapApi(page: Page): TwE2eApi {
+  const call = <K extends keyof TwE2eApi>(method: K, ...args: unknown[]) =>
+    page.evaluate(
+      ([name, payload]) => {
+        const api = window.__TW_E2E__!;
+        const fn = api[name as keyof TwE2eApi] as (...a: unknown[]) => unknown;
+        return fn(...(payload as unknown[]));
+      },
+      [method, args] as const,
+    );
+
+  return {
+    openHome: () => call("openHome"),
+    openK8sWorkbench: () => call("openK8sWorkbench") as Promise<void>,
+    openSshTab: () => call("openSshTab"),
+    openSecondSshTab: () => call("openSecondSshTab"),
+    closeTab: (sessionId) => call("closeTab", sessionId) as Promise<void>,
+    setActiveTab: (sessionId) => call("setActiveTab", sessionId),
+    openLocalFsPanel: () => call("openLocalFsPanel"),
+    openAiPlatform: () => call("openAiPlatform") as Promise<void>,
+    openAiChat: () => call("openAiChat") as Promise<void>,
+    openAiChatForSsh: () => call("openAiChatForSsh") as Promise<void>,
+    emitTerminalPrompt: (text) => call("emitTerminalPrompt", text),
+    simulateTerminalDrop: (paths) => call("simulateTerminalDrop", paths) as Promise<void>,
+    simulateApproval: (command) => call("simulateApproval", command),
+    approvePending: () => call("approvePending"),
+    rejectPending: () => call("rejectPending"),
+    invokeEnterDirectory: (path) => call("invokeEnterDirectory", path) as Promise<string>,
+    invokePreviewOpen: (path) => call("invokePreviewOpen", path),
+    resetMocks: () => call("resetMocks"),
+    getLastUpload: () => call("getLastUpload") as Promise<Record<string, unknown> | null>,
+    getLastCreateSsh: () => call("getLastCreateSsh") as Promise<Record<string, unknown> | null>,
+    getCreateSshCallCount: () => call("getCreateSshCallCount") as Promise<number>,
+    getLastEnterDirectory: () =>
+      call("getLastEnterDirectory") as Promise<Record<string, unknown> | null>,
+    getLastPreviewOpen: () => call("getLastPreviewOpen") as Promise<Record<string, unknown> | null>,
+    getLastAiTerminalExec: () =>
+      call("getLastAiTerminalExec") as Promise<Record<string, unknown> | null>,
+    getLastAiLease: () => call("getLastAiLease") as Promise<Record<string, unknown> | null>,
+    getLastK8sApply: () => call("getLastK8sApply") as Promise<Record<string, unknown> | null>,
+    getLastKillProcess: () => call("getLastKillProcess") as Promise<Record<string, unknown> | null>,
+    resetUpload: () => call("resetUpload"),
+    openSettings: () => call("openSettings"),
+    invokeKillProcess: (pid) => call("invokeKillProcess", pid) as Promise<void>,
+    invokeK8sApplyYaml: (yaml) => call("invokeK8sApplyYaml", yaml) as Promise<void>,
+  };
+}
+
 /** Browser-side E2E helpers — methods run in page context (functions are not serializable). */
 export async function twE2e(page: Page): Promise<TwE2eApi> {
   await waitForTwE2e(page);
-  return {
-    openHome: () => page.evaluate(() => window.__TW_E2E__!.openHome()),
-    openK8sWorkbench: () =>
-      page.evaluate(async () => {
-        await window.__TW_E2E__!.openK8sWorkbench();
-      }),
-    openSshTab: () => page.evaluate(() => window.__TW_E2E__!.openSshTab()),
-    openLocalFsPanel: () => page.evaluate(() => window.__TW_E2E__!.openLocalFsPanel()),
-    openAiPlatform: () =>
-      page.evaluate(async () => {
-        await window.__TW_E2E__!.openAiPlatform();
-      }),
-    openAiChat: () =>
-      page.evaluate(async () => {
-        await window.__TW_E2E__!.openAiChat();
-      }),
-    emitTerminalPrompt: (text?: string) =>
-      page.evaluate((prompt) => window.__TW_E2E__!.emitTerminalPrompt(prompt), text),
-    simulateTerminalDrop: (paths: string[]) =>
-      page.evaluate(async (p) => {
-        await window.__TW_E2E__!.simulateTerminalDrop(p);
-      }, paths),
-    getLastUpload: () =>
-      page.evaluate(() => window.__TW_E2E__!.getLastUpload()),
-    resetUpload: () => page.evaluate(() => window.__TW_E2E__!.resetUpload()),
-  };
+  return wrapApi(page);
 }
 
 export async function gotoApp(page: Page) {

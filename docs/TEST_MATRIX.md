@@ -14,15 +14,17 @@
 | **功能测试** | `python -m eval` / `pytest tests/test_eval_harness.py` | 运维场景 Eval Harness 8/8 |
 | **静态功能检查** | `node scripts/smoke-product-checklist.mjs` | 前端 wiring、i18n、关键文件存在性 |
 | **端到端 (E2E)** | `pytest tests/test_e2e_hard_gates.py` 等 | Pull 协议 + fake 模型完整对话 |
-| **SSH 实时连接 / SFTP 上传** | `bash scripts/e2e-ssh-integration.sh` | Docker openssh + Rust `live_integration` |
+| **SSH 实时连接 / SFTP 上传** | `bash scripts/e2e-ssh-integration.sh` | Docker openssh + Rust `live_integration`（密码/密钥/下载/取消/重连） |
+| **K8s 真集群** | `bash scripts/e2e-k8s-integration.sh` | k3d + Rust `k8s::live_integration` |
 | **拖拽上传 UI** | `npm run test:e2e` → `e2e/ssh-drag-upload.spec.ts` | Playwright HTML5 drop + mock `upload_files` |
+| **用户测试 / UI E2E** | `npm run test:e2e` (Playwright **34**) | Platform、SSH、K8s、Tab、审批、LocalFS、设置 |
 
 ## 跨平台 / 跨架构 CI 矩阵
 
 | Runner | OS | CPU | 测试内容 |
 |--------|-----|-----|----------|
-| `linux-x86_64` | Ubuntu 22.04 | x86_64 | smoke + Vitest + build + `cargo test` + pytest + eval 8/8 + Playwright 19 |
-| `linux-aarch64` | Ubuntu 24.04 ARM | aarch64 | 同上（原生 ARM64） |
+| `linux-x86_64` | Ubuntu 22.04 | x86_64 | smoke + Vitest + build + `cargo test` + SSH/K8s live + pytest + eval 8/8 + Playwright 34 |
+| `linux-aarch64` | Ubuntu 24.04 ARM | aarch64 | 同上（含 SSH/K8s live） |
 | `macos-aarch64` | macOS latest | Apple Silicon | smoke + Vitest + build + `cargo test` + `cargo check` x86_64 + pytest + eval |
 | `windows-x86_64` | Windows latest | x86_64 | smoke + Vitest + build + `cargo check` + `cargo check` ARM64 + pytest |
 
@@ -50,10 +52,10 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| SSH 连接（密码/密钥） | Rust client | **SSH live** | — | — | ✓ |
-| 保存连接 / 设备历史 | — | — | smoke | — | ✓ |
+| SSH 连接（密码/密钥） | Rust client | **SSH live** | — | **✓** | ✓ |
+| 保存连接 / 设备历史 | — | — | smoke | **✓** | ✓ |
 | xterm 终端渲染 | — | — | smoke | — | ✓ |
-| 断线重连 | — | — | — | — | ✓ |
+| 断线重连 | — | **SSH live** | — | — | ✓ |
 | Tab 目录快捷方式 | — | — | smoke | — | ✓ |
 | OS 探测 (session metadata) | Rust probe | — | — | — | ✓ |
 | Sudo 密码弹窗 | — | — | smoke | — | ✓ |
@@ -62,8 +64,8 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| 点击 ls 路径 cd | `terminalContext` | — | smoke | — | ✓ |
-| 点击文件预览/下载 | `terminalLinks` | — | smoke | — | ✓ |
+| 点击 ls 路径 cd | `terminalLinks` | — | smoke | **✓** | ✓ |
+| 点击文件预览/下载 | `terminalLinks` | — | smoke | **✓** | ✓ |
 | 拖拽本地上传 | — | **SSH live + Playwright** | smoke | **✓** | ✓ |
 | 跨 Tab 远程拖拽 | — | — | smoke | — | ✓ |
 | 路径右键菜单 | — | — | smoke | — | ✓ |
@@ -83,7 +85,7 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| 上传/下载/取消 | Rust scp | — | smoke | — | ✓ |
+| 上传/下载/取消 | Rust scp | **SSH live** | smoke | — | ✓ |
 | 跨服务器传输 | Rust | — | — | — | ✓ |
 | 重命名/移动/删除/压缩 | Rust fs_remote | — | smoke | — | ✓ |
 | 远程 find | — | — | smoke | — | ✓ |
@@ -93,9 +95,9 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| 本地+远程双树 | `localFsTree` | — | smoke | — | ✓ |
-| Find in files | — | — | smoke | — | ✓ |
-| 任务管理器 (进程/kill) | — | — | smoke | — | ✓ |
+| 本地+远程双树 | `localFsTree` | — | smoke | **✓** | ✓ |
+| Find in files | — | — | smoke | **✓** | ✓ |
+| 任务管理器 (进程/kill) | — | — | smoke | **✓** | ✓ |
 | 发送到 AI Chat | — | — | smoke | — | ✓ |
 
 ## 7. 主机监控
@@ -109,10 +111,9 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| 集群导入 / kubeconfig | — | — | smoke | — | ✓ |
-| 资源导航树 | `navigation.test` | — | smoke | — | ✓ |
-| 资源列表/详情/YAML | — | — | smoke | — | ✓ |
-| Apply/Delete/Scale | — | — | smoke | — | ✓ |
+| 集群导入 / kubeconfig | — | **K8s live** | smoke | **✓** | ✓ |
+| 资源列表/详情/YAML | — | **K8s live** | smoke | **✓** | ✓ |
+| Apply/Delete/Scale | — | — | smoke | **✓** | ✓ |
 | Pod 日志 / Shell / Port-forward | — | — | smoke | — | ✓ |
 | Helm / Overview / 自动刷新 | — | — | smoke | — | ✓ |
 | kubectl 工具安装 | — | — | smoke | — | ✓ |
@@ -126,7 +127,7 @@
 | 流式 SSE / Pull | — | pytest stream | — | hard_gates | ✓ |
 | 安全模式 R0–R4 | `riskLabels.test` | pytest policy | — | — | ✓ |
 | 审批 / 取消 / 缓存 | — | pytest approval | — | cancel | ✓ |
-| terminal_exec 桥接 | Rust terminal | — | — | gate1 | ✓ |
+| terminal_exec 桥接 | Rust terminal | pytest gate | — | **✓** | ✓ |
 | K8s 工具 (k8s_*) | — | pytest k8s | eval | mock_ollama | ✓ |
 | 交互模式 ask/plan/act | — | pytest | — | — | ✓ |
 | Investigator 子代理 | — | pytest | — | — | ✓ |

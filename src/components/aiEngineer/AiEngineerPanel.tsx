@@ -1204,6 +1204,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                       <div
                         key={rowKey}
                         className={`ai-engineer-approval${line.decision ? " is-resolved" : ""}`}
+                        data-testid="ai-engineer-approval-card"
                       >
                         <div className="ai-engineer-approval-head">
                           <div className="ai-engineer-approval-title">
@@ -1326,6 +1327,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                             <button
                               type="button"
                               className="find-panel-run"
+                              data-testid="ai-engineer-approval-approve"
                               disabled={!canApprove}
                               onClick={() => {
                                 resolveApproval(
@@ -1346,6 +1348,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                             <button
                               type="button"
                               className="ai-engineer-stop"
+                              data-testid="ai-engineer-approval-reject"
                               disabled={!isActive}
                               onClick={() => {
                                 resolveApproval(false);

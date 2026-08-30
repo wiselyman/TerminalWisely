@@ -42,6 +42,26 @@ export function convertFileSrc(path: string): string {
 
 let previewHandleSeq = 0;
 let lastUploadRequest: Record<string, unknown> | null = null;
+let lastCreateSshRequest: Record<string, unknown> | null = null;
+let lastEnterDirectory: Record<string, unknown> | null = null;
+let lastPreviewOpen: Record<string, unknown> | null = null;
+let lastAiTerminalExec: Record<string, unknown> | null = null;
+let lastAiLease: Record<string, unknown> | null = null;
+let lastK8sApply: Record<string, unknown> | null = null;
+let lastKillProcess: Record<string, unknown> | null = null;
+let createSshCallCount = 0;
+
+export function __e2eResetMocks() {
+  lastUploadRequest = null;
+  lastCreateSshRequest = null;
+  lastEnterDirectory = null;
+  lastPreviewOpen = null;
+  lastAiTerminalExec = null;
+  lastAiLease = null;
+  lastK8sApply = null;
+  lastKillProcess = null;
+  createSshCallCount = 0;
+}
 
 export function __e2eResetUploadRequest() {
   lastUploadRequest = null;
@@ -49,6 +69,38 @@ export function __e2eResetUploadRequest() {
 
 export function __e2eLastUploadRequest() {
   return lastUploadRequest;
+}
+
+export function __e2eLastCreateSshRequest() {
+  return lastCreateSshRequest;
+}
+
+export function __e2eCreateSshCallCount() {
+  return createSshCallCount;
+}
+
+export function __e2eLastEnterDirectory() {
+  return lastEnterDirectory;
+}
+
+export function __e2eLastPreviewOpen() {
+  return lastPreviewOpen;
+}
+
+export function __e2eLastAiTerminalExec() {
+  return lastAiTerminalExec;
+}
+
+export function __e2eLastAiLease() {
+  return lastAiLease;
+}
+
+export function __e2eLastK8sApply() {
+  return lastK8sApply;
+}
+
+export function __e2eLastKillProcess() {
+  return lastKillProcess;
 }
 
 async function sidecarHttpProxy(args: InvokeArgs): Promise<{
@@ -103,7 +155,22 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   get_saved_connections: () => [e2eSavedConnection],
   get_device_history: () => [],
   list_sessions: () => [sshSessionResult().session],
-  create_ssh_session: () => sshSessionResult(),
+  create_ssh_session: (args) => {
+    const req = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    lastCreateSshRequest = req;
+    createSshCallCount += 1;
+    return sshSessionResult();
+  },
+  connect_saved: (args) => {
+    lastCreateSshRequest = args as Record<string, unknown>;
+    createSshCallCount += 1;
+    return sshSessionResult();
+  },
+  connect_device: (args) => {
+    lastCreateSshRequest = args as Record<string, unknown>;
+    createSshCallCount += 1;
+    return sshSessionResult();
+  },
   reconnect_ssh_session: () => sshSessionResult(),
   close_session: () => null,
   terminal_input: () => null,
@@ -111,8 +178,16 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   insert_terminal_command: () => null,
   insert_local_paths_command: () => null,
   get_session_cwd: () => "/home/e2e",
-  probe_remote_path: () => "file",
-  enter_directory: () => "/home/e2e",
+  probe_remote_path: (args) => {
+    const path = String((args as { path?: string }).path ?? "");
+    if (path.endsWith("/") || path.includes("bin")) return "directory";
+    return "file";
+  },
+  enter_directory: (args) => {
+    lastEnterDirectory = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    const path = String(lastEnterDirectory.remote_path ?? "/home/e2e");
+    return path;
+  },
   upload_files: (args) => {
     const req = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
     lastUploadRequest = req;
@@ -149,13 +224,19 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   get_local_path_size: () => ({ path: "/tmp", kind: "directory", size_bytes: 1024 }),
   open_local_path: () => null,
   list_processes: () => e2eProcesses,
-  kill_process: () => null,
+  kill_process: (args) => {
+    lastKillProcess = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    return null;
+  },
   list_systemd_units: () => e2eSystemdUnits,
   list_passwd_accounts: () => [{ username: "e2e", uid: 1000, gid: 1000, home: "/home/e2e", shell: "/bin/bash" }],
   get_host_stats: () => e2eHostStats,
-  preview_open: () => {
+  preview_open: (args) => {
     previewHandleSeq += 1;
-    return { handle_id: `preview-${previewHandleSeq}`, path: "/tmp/e2e-file.txt", kind: "text" };
+    const req = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    lastPreviewOpen = req;
+    const path = String(req.path ?? "/tmp/e2e-file.txt");
+    return { handle_id: `preview-${previewHandleSeq}`, path, kind: "text" };
   },
   preview_close: () => null,
   preview_save: () => null,
@@ -204,15 +285,21 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     };
   },
   ai_list_models: () => ({ models: ["qwen-test"], error: null }),
-  ai_terminal_exec: () => ({
-    command: "echo e2e",
-    stdout: "e2e ok\n",
-    stderr: "",
-    exit_code: 0,
-    timed_out: false,
-    session_id: E2E_SSH_SESSION_ID,
-  }),
-  ai_register_privilege_lease: () => ({ ok: true, lease_id: "e2e-lease" }),
+  ai_terminal_exec: (args) => {
+    lastAiTerminalExec = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    return {
+      command: String(lastAiTerminalExec.command ?? "echo e2e"),
+      stdout: "e2e ok\n",
+      stderr: "",
+      exit_code: 0,
+      timed_out: false,
+      session_id: E2E_SSH_SESSION_ID,
+    };
+  },
+  ai_register_privilege_lease: (args) => {
+    lastAiLease = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    return { ok: true, lease_id: "e2e-lease" };
+  },
   k8s_discover_contexts: () => e2eContexts,
   k8s_list_ssh_bindings: () => [],
   k8s_list_imported_kubeconfigs: () => [],
@@ -234,7 +321,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     yaml: "apiVersion: v1\nkind: Pod\nmetadata:\n  name: web-abc\n",
     overview: { Status: "Running", Node: "node-1" },
   }),
-  k8s_apply_yaml: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
+  k8s_apply_yaml: (args) => {
+    lastK8sApply = args as Record<string, unknown>;
+    return { ok: true, stdout: "", stderr: "", exit_code: 0 };
+  },
   k8s_delete_resource: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
   k8s_scale_resource: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
   k8s_pod_logs: () => "e2e pod log line\n",

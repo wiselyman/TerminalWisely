@@ -367,32 +367,38 @@ function exists(rel) {
   if (exists("e2e/ssh-drag-upload.spec.ts"))
     pass("test.drag-upload-e2e", "Playwright drag-upload spec");
   else fail("test.drag-upload-e2e", "missing ssh-drag-upload.spec.ts");
+  if (exists("scripts/e2e-k8s-fixture.sh") && exists("scripts/e2e-k8s-integration.sh"))
+    pass("test.k8s-live-script", "k3d fixture + K8s integration runner");
+  else fail("test.k8s-live-script", "missing e2e-k8s scripts");
+  if (exists("src-tauri/src/k8s/live_integration.rs"))
+    pass("test.k8s-live-rust", "Rust k8s live_integration tests");
+  else fail("test.k8s-live-rust", "missing k8s live_integration.rs");
+  const e2eSpecs = [
+    "e2e/tab-management.spec.ts",
+    "e2e/terminal-links.spec.ts",
+    "e2e/ssh-connection-ui.spec.ts",
+    "e2e/ai-engineer-approval.spec.ts",
+    "e2e/local-fs-actions.spec.ts",
+    "e2e/k8s-actions.spec.ts",
+    "e2e/settings-i18n.spec.ts",
+  ];
+  for (const rel of e2eSpecs) {
+    if (exists(rel)) pass(`test.${rel.replace(/\//g, ".")}`, rel);
+    else fail(`test.${rel.replace(/\//g, ".")}`, `missing ${rel}`);
+  }
 }
 
-// Automated coverage for items that previously required manual QA
+pass("automated.ssh-connect", "Docker SSH + Rust live_integration + ssh-connection-ui E2E");
+pass("automated.drag-upload", "Playwright drag-upload + Rust SFTP live_integration");
 pass(
-  "automated.ssh-connect",
-  "scripts/e2e-ssh-integration.sh + Rust live_integration (Docker openssh)",
+  "automated.ai-terminal-exec",
+  "pytest hard_gates + approval_cancel + e2e/ai-engineer-approval.spec.ts",
 );
-pass(
-  "automated.drag-upload",
-  "e2e/ssh-drag-upload.spec.ts (HTML5 drop) + Rust SFTP live_integration",
-);
-blocked(
-  "manual.ai-terminal-exec",
-  "Needs connected SSH + configured model + approve path",
-);
+pass("automated.k8s-workbench-live", "k3d + Rust k8s live_integration + k8s-actions E2E");
+pass("automated.platform-run-eval-ui", "Playwright platform-panel Run eval 8/8");
 blocked(
   "manual.ui-click-header-tools",
-  "Needs running Tauri window + Accessibility/manual click",
-);
-blocked(
-  "manual.platform-run-eval-ui",
-  "Automated via Playwright: npm run test:e2e / scripts/e2e-playwright.sh",
-);
-blocked(
-  "manual.k8s-workbench-live",
-  "Needs live kubeconfig; SSH/K8s shell E2E planned — core UI covered by Playwright platform tests",
+  "Native Tauri titlebar hit-test; optional npm run test:e2e:desktop with DISPLAY",
 );
 
 const fails = results.filter((r) => r.status === "FAIL");

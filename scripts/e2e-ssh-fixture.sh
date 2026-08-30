@@ -9,11 +9,15 @@ PORT="${TW_SSH_E2E_PORT:-2222}"
 USER_NAME="${TW_SSH_E2E_USER:-e2e}"
 USER_PASSWORD="${TW_SSH_E2E_PASSWORD:-e2etest}"
 IMAGE="${TW_SSH_E2E_IMAGE:-lscr.io/linuxserver/openssh-server:latest}"
+KEY_DIR="${TW_SSH_E2E_KEY_DIR:-${TMPDIR:-/tmp}/tw-e2e-ssh-keys}"
+PRIVATE_KEY="${KEY_DIR}/id_ed25519"
+PUBLIC_KEY="${KEY_DIR}/id_ed25519.pub"
 
 export TW_SSH_E2E_HOST="$HOST_BIND"
 export TW_SSH_E2E_PORT="$PORT"
 export TW_SSH_E2E_USER="$USER_NAME"
 export TW_SSH_E2E_PASSWORD="$USER_PASSWORD"
+export TW_SSH_E2E_PRIVATE_KEY="$PRIVATE_KEY"
 
 have_docker() {
   command -v docker >/dev/null 2>&1
@@ -36,6 +40,12 @@ start_fixture() {
 
   docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
+  mkdir -p "$KEY_DIR"
+  if [[ ! -f "$PRIVATE_KEY" ]]; then
+    ssh-keygen -t ed25519 -f "$PRIVATE_KEY" -N "" -q
+  fi
+  PUB_CONTENT="$(cat "$PUBLIC_KEY")"
+
   echo "Pulling ${IMAGE} (if needed)..."
   docker pull "$IMAGE" >/dev/null
 
@@ -49,6 +59,7 @@ start_fixture() {
     -e PASSWORD_ACCESS=true \
     -e USER_PASSWORD="$USER_PASSWORD" \
     -e USER_NAME="$USER_NAME" \
+    -e PUBLIC_KEY="$PUB_CONTENT" \
     -e SUDO_ACCESS=false \
     "$IMAGE" >/dev/null
 

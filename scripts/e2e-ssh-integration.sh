@@ -10,6 +10,7 @@ export TW_SSH_E2E_HOST="${TW_SSH_E2E_HOST:-127.0.0.1}"
 export TW_SSH_E2E_PORT="${TW_SSH_E2E_PORT:-2222}"
 export TW_SSH_E2E_USER="${TW_SSH_E2E_USER:-e2e}"
 export TW_SSH_E2E_PASSWORD="${TW_SSH_E2E_PASSWORD:-e2etest}"
+export TW_SSH_E2E_PRIVATE_KEY="${TW_SSH_E2E_PRIVATE_KEY:-${TMPDIR:-/tmp}/tw-e2e-ssh-keys/id_ed25519}"
 
 cleanup() {
   bash scripts/e2e-ssh-fixture.sh stop >/dev/null 2>&1 || true
