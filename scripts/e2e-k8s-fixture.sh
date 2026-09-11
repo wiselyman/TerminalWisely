@@ -23,6 +23,22 @@ cluster_running() {
   k3d cluster list 2>/dev/null | awk '{print $1}' | grep -qx "$CLUSTER_NAME"
 }
 
+# `k3d kubeconfig write` prints the *path* it wrote, not YAML — never redirect that.
+write_kubeconfig() {
+  k3d kubeconfig get "$CLUSTER_NAME" >"$KUBECONFIG_FILE"
+  if ! grep -qE '^\s*server:' "$KUBECONFIG_FILE"; then
+    echo "kubeconfig missing server: (got $(wc -c <"$KUBECONFIG_FILE") bytes)" >&2
+    head -c 200 "$KUBECONFIG_FILE" >&2 || true
+    exit 1
+  fi
+  # 0.0.0.0 is not a valid client destination on many Linux runners.
+  if command -v sed >/dev/null 2>&1; then
+    sed -i.bak 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE" 2>/dev/null \
+      || sed -i '' 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE"
+    rm -f "${KUBECONFIG_FILE}.bak"
+  fi
+}
+
 start_fixture() {
   if ! have_docker; then
     echo "SKIP: docker not installed" >&2
@@ -35,19 +51,13 @@ start_fixture() {
 
   if cluster_running; then
     echo "K8s fixture already running ($CLUSTER_NAME)"
-    k3d kubeconfig write "$CLUSTER_NAME" >"$KUBECONFIG_FILE"
-    if command -v sed >/dev/null 2>&1; then
-      sed -i.bak 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE" 2>/dev/null \
-        || sed -i '' 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE"
-      rm -f "${KUBECONFIG_FILE}.bak"
-    fi
+    write_kubeconfig
     wait_ready
     return 0
   fi
 
   echo "Creating k3d cluster ${CLUSTER_NAME}..."
-  # Bind API to 127.0.0.1 so kubeconfig is reachable on Linux CI (0.0.0.0 is not a
-  # valid client destination and often fails kubectl get nodes).
+  # Bind API to 127.0.0.1 so kubeconfig is reachable on Linux CI.
   k3d cluster create "$CLUSTER_NAME" \
     --api-port 127.0.0.1:6550 \
     --servers 1 \
@@ -57,13 +67,7 @@ start_fixture() {
     --kubeconfig-switch-context=false \
     --kubeconfig-update-default=false >/dev/null
 
-  k3d kubeconfig write "$CLUSTER_NAME" >"$KUBECONFIG_FILE"
-  # Belt-and-suspenders: rewrite any 0.0.0.0 server URLs.
-  if command -v sed >/dev/null 2>&1; then
-    sed -i.bak 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE" 2>/dev/null \
-      || sed -i '' 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE"
-    rm -f "${KUBECONFIG_FILE}.bak"
-  fi
+  write_kubeconfig
   wait_ready
 }
 
@@ -83,6 +87,8 @@ wait_ready() {
     echo "Kubernetes API not ready" >&2
     echo "--- kubeconfig server ---" >&2
     grep -E '^\s*server:' "$KUBECONFIG_FILE" >&2 || true
+    echo "--- kubectl error ---" >&2
+    kubectl --kubeconfig "$KUBECONFIG_FILE" get nodes >&2 || true
     echo "--- k3d list ---" >&2
     k3d cluster list >&2 || true
     echo "--- docker ps ---" >&2
