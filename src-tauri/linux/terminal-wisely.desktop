@@ -1,0 +1,11 @@
+[Desktop Entry]
+Categories=Utility;TerminalEmulator;
+Comment=Cross-platform terminal with SSH and SFTP
+Exec=/usr/bin/TerminalWisely %U
+Icon=terminal-wisely
+Name=TerminalWisely
+Terminal=false
+Type=Application
+StartupWMClass=TerminalWisely
+# Keep for upgrades from ≤0.5.x favorites that still launch terminal-wisely.desktop
+NoDisplay=true

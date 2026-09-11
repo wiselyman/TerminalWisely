@@ -1,0 +1,24 @@
+#!/bin/sh
+# Strip any Cursor attribution trailers before the commit is recorded.
+msg_file=$1
+[ -n "$msg_file" ] && [ -f "$msg_file" ] || exit 0
+
+sed -i '' \
+  -e '/^Co-authored-by:.*[Cc]ursor.*cursoragent@cursor\.com/d' \
+  -e '/^Co-authored-by:.*cursoragent@cursor\.com/d' \
+  -e '/^Made-with: Cursor$/d' \
+  -e '/^Made-with: Cursor /d' \
+  "$msg_file" 2>/dev/null || sed -i \
+  -e '/^Co-authored-by:.*[Cc]ursor.*cursoragent@cursor\.com/d' \
+  -e '/^Co-authored-by:.*cursoragent@cursor\.com/d' \
+  -e '/^Made-with: Cursor$/d' \
+  -e '/^Made-with: Cursor /d' \
+  "$msg_file"
+
+# Fail if trailers remain (belt-and-suspenders).
+if grep -qiE '^(Co-authored-by:.*cursoragent|Made-with: Cursor)' "$msg_file" 2>/dev/null; then
+  echo "commit-msg: blocked — remove Cursor co-author / Made-with trailers." >&2
+  exit 1
+fi
+
+exit 0

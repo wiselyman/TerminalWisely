@@ -1,0 +1,1209 @@
+import { useEffect, useRef, useState, useMemo, useCallback, type CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+import { ConnectionPanel } from "./components/ConnectionPanel";
+import { LocaleSwitcher } from "./components/LocaleSwitcher";
+import { AppSettingsDialog } from "./components/AppSettingsDialog";
+import { UpdateAvailableDialog } from "./components/UpdateAvailableDialog";
+import { SudoPasswordModal } from "./components/SudoPasswordModal";
+import { SendToDialog } from "./components/SendToDialog";
+import { PreviewPanel } from "./components/PreviewPanel";
+import { HostStatsStatusBar } from "./components/hostStats/HostStatsStatusBar";
+import { K8sClusterStatusBar } from "./components/k8s/K8sClusterStatusBar";
+import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
+import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
+import { LocalFsTool } from "./components/LocalFsTool";
+import { LocalFsPanel } from "./components/LocalFsPanel";
+import { TerminalView } from "./components/TerminalView";
+import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
+import { AddK8sClusterModal } from "./components/k8s/AddK8sClusterModal";
+import { K8sClusterIcon } from "./components/k8s/K8sClusterIcon";
+import { useSidebarViewStore } from "./stores/sidebarViewStore";
+import { useK8sStore } from "./stores/k8sStore";
+import { useManagedEntityStore } from "./stores/managedEntityStore";
+import { extractDroppedPaths } from "./lib/terminalLinks";
+import { getTerminalFontFamily, ensureTerminalFontsLoaded } from "./lib/terminalFont";
+import {
+  hasLocalFileDrop,
+  hasRemoteDrag,
+  parseRemoteDrag,
+} from "./lib/remoteDrag";
+import { dropEffectForKind } from "./lib/dragVisual";
+import { uploadLocalPathsToSession } from "./lib/sessionUpload";
+import { formatTransferError } from "./lib/transferError";
+import { formatAppError } from "./lib/formatAppError";
+import { startTabPointerReorder } from "./lib/tabPointerReorder";
+import { isSudoRequiredError } from "./stores/previewStore";
+import {
+  extractPathFromSudoError,
+  requestSudoPassword,
+} from "./stores/sudoPromptStore";
+import { useSessionStore } from "./stores/sessionStore";
+import { useAiEngineerStore } from "./stores/aiEngineerStore";
+import { shouldShowAiEngineerPanel } from "./lib/aiEngineer/panelVisibility";
+import { useHostStatsStore } from "./stores/hostStatsStore";
+import { switchWorkspacePanel, switchToAiEngineerPanel } from "./stores/workspacePanelSwitch";
+import { useFindStore } from "./stores/findStore";
+import { useTaskManagerStore } from "./stores/taskManagerStore";
+import { useLocalFsStore } from "./stores/localFsStore";
+import { useToastStore } from "./stores/toastStore";
+import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
+import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
+import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
+import { TabContextMenu } from "./components/TabContextMenu";
+import { ServerOsIcon } from "./components/ServerOsIcon";
+import {
+  TabHomeIcon,
+  ChromePlusIcon,
+  SidebarToggleIcon,
+} from "./components/SidebarIcons";
+import { SystemInfoIcon } from "./components/WorkspaceToolIcons";
+import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
+import { isTauriRuntime } from "./lib/isTauri";
+import { showManualUpdateCheckResult } from "./lib/updateCheckFeedback";
+import { useAppUpdateStore } from "./stores/appUpdateStore";
+import { openAppSettings } from "./stores/downloadSettingsStore";
+import { WindowControls } from "./components/WindowControls";
+import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
+import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
+import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
+import {
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  clampSidebarWidth,
+  loadSidebarWidth,
+} from "./lib/sidebarLayout";
+import "./App.css";
+
+function App() {
+  const { t } = useTranslation(["shell", "k8s"]);
+  const platformClass = getPlatformShellClass();
+  const macWindowChrome = isMacHost();
+  const tauriDragRegion = isTauriRuntime() ? true : undefined;
+  const {
+    tabs,
+    activeTabId,
+    savedConnections,
+    closeTab,
+    closeOtherTabs,
+    closeTabsToLeft,
+    closeTabsToRight,
+    setActiveTab,
+    activateHome,
+    reorderTabs,
+    upsertTransfer,
+    removeTransfer,
+    startRemoteTransfer,
+  } = useSessionStore();
+  const pushToast = useToastStore((s) => s.pushToast);
+  const updateDialog = useAppUpdateStore((s) => s.dialog);
+  const closeUpdateDialog = useAppUpdateStore((s) => s.closeDialog);
+  const markUpdateInstalled = useAppUpdateStore((s) => s.markInstalled);
+  const quietUpdateCheck = useAppUpdateStore((s) => s.quietCheck);
+  const manualUpdateCheck = useAppUpdateStore((s) => s.manualCheck);
+
+  const goToHomeDirectory = (sessionId: string) => {
+    void invoke("enter_directory", {
+      request: { session_id: sessionId, path: "~" },
+    }).catch((err) => {
+      pushToast(formatAppError(err), false);
+    });
+  };
+  const sessionTitles = useMemo(
+    () =>
+      Object.fromEntries(tabs.map((tab) => [tab.id, tab.title])) as Record<
+        string,
+        string
+      >,
+    [tabs],
+  );
+
+  useEffect(() => {
+    void useSessionStore.getState().hydrateFromBackend();
+  }, []);
+
+  // Quiet update check after UI settles — badge only, never a modal on launch.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void quietUpdateCheck().then(() => {
+        if (cancelled) return;
+      });
+    }, 4_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [quietUpdateCheck]);
+
+  // Native menu: Check for Updates / Settings.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlistenCheck: (() => void) | undefined;
+    let unlistenSettings: (() => void) | undefined;
+    void (async () => {
+      unlistenCheck = await listen("tw://menu-check-for-updates", () => {
+        pushToast(t("updateChecking"), true);
+        void manualUpdateCheck()
+          .then((result) => showManualUpdateCheckResult(result))
+          .catch((err) =>
+            showManualUpdateCheckResult({
+              status: "error",
+              message: formatAppError(err),
+            }),
+          );
+      });
+      unlistenSettings = await listen("tw://menu-open-settings", () => {
+        openAppSettings();
+      });
+    })();
+    return () => {
+      unlistenCheck?.();
+      unlistenSettings?.();
+    };
+  }, [manualUpdateCheck, pushToast, t]);
+
+  // Do NOT prewarm AI sidecar here. First launch creates a private venv + pip
+  // install (1–3 min) and a sync ensure_ai_sidecar would starve other IPC —
+  // white window + busy cursor until done. Sidecar starts when the AI panel opens.
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<SessionMetadataUpdatedPayload>(
+      "session-metadata-updated",
+      (event) => {
+        const payload = event.payload;
+        useSessionStore.getState().updateSessionMetadata(payload.session_id, {
+          os_id: payload.os_id,
+          os_name: payload.os_name,
+          remote_home: payload.remote_home,
+        });
+        void useSessionStore.getState().loadSavedConnections();
+      },
+    ).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    void ensureTerminalFontsLoaded().then(() => {
+      document.documentElement.style.setProperty(
+        "--tw-mono-font",
+        getTerminalFontFamily(),
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    const unlisteners: Array<() => void> = [];
+
+    void (async () => {
+      const [progressUnlisten, completeUnlisten] = await Promise.all([
+        listen<TransferProgressPayload>("transfer-progress", (event) => {
+          upsertTransfer(event.payload);
+        }),
+        listen<TransferCompletePayload>("transfer-complete", (event) => {
+          const payload = event.payload;
+          if (
+            !payload.success &&
+            payload.direction === "send" &&
+            isSudoRequiredError(payload.message)
+          ) {
+            const ctx = useSessionStore
+              .getState()
+              .takePendingSudoTransfer(payload.transfer_id);
+            removeTransfer(payload.transfer_id);
+            if (ctx) {
+              void (async () => {
+                try {
+                  const password = await requestSudoPassword({
+                    action: t("sudoActionSend"),
+                    path:
+                      extractPathFromSudoError(payload.message) || ctx.remotePath,
+                  });
+                  await useSessionStore
+                    .getState()
+                    .startRemoteTransfer(
+                      ctx.fromSessionId,
+                      ctx.remotePath,
+                      ctx.toSessionId,
+                      password,
+                      ctx.remoteDir ?? null,
+                    );
+                } catch {
+                  pushToast(t("toastSudoCancelled"), false);
+                }
+              })();
+              return;
+            }
+          }
+          useSessionStore
+            .getState()
+            .clearPendingSudoTransfer(payload.transfer_id);
+          removeTransfer(payload.transfer_id);
+          pushToast(formatAppError(payload.message), payload.success);
+        }),
+      ]);
+
+      if (disposed) {
+        progressUnlisten();
+        completeUnlisten();
+        return;
+      }
+
+      unlisteners.push(progressUnlisten, completeUnlisten);
+    })();
+
+    return () => {
+      disposed = true;
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, [pushToast, removeTransfer, upsertTransfer]);
+  const [tabDropTargetId, setTabDropTargetId] = useState<string | null>(null);
+  const [tabDropKind, setTabDropKind] = useState<"local" | "remote" | null>(
+    null,
+  );
+  const [tabReorderDragId, setTabReorderDragId] = useState<string | null>(null);
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    tabId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const tabReorderCleanupRef = useRef<(() => void) | null>(null);
+  const suppressTabClickUntilRef = useRef(0);
+  const tabPointerButtonRef = useRef(0);
+  const skipTabBarContextMenuRef = useRef(false);
+  // Always open with the connection sidebar visible; collapse is session-only.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarExpandedWidth, setSidebarExpandedWidth] = useState(loadSidebarWidth);
+  const [windowFullscreen, setWindowFullscreen] = useState(false);
+  const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const openNewRemoteRef = useRef<() => void>(() => {});
+  const registerNewRemote = useCallback((open: () => void) => {
+    openNewRemoteRef.current = open;
+  }, []);
+  const aiEngineerOpen = useAiEngineerStore((s) => s.open);
+  const aiEngineerSessionId = useAiEngineerStore((s) => s.sessionId);
+  const aiEngineerServerId = useAiEngineerStore((s) => s.serverId);
+  const aiEngineerReady = useAiEngineerStore((s) => s.ready);
+  const engineerMode = useAiEngineerStore((s) => s.engineerMode);
+  const sidebarView = useSidebarViewStore((s) => s.view);
+  const setSidebarView = useSidebarViewStore((s) => s.setView);
+  const selectedCluster = useK8sStore((s) => s.selectedCluster);
+  const openClusterIds = useK8sStore((s) => s.openClusterIds);
+  const clusters = useK8sStore((s) => s.clusters);
+  const selectCluster = useK8sStore((s) => s.selectCluster);
+  const closeClusterTab = useK8sStore((s) => s.closeClusterTab);
+  const addClusterOpen = useK8sStore((s) => s.addClusterOpen);
+  const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
+  const homeOpen = useManagedEntityStore((s) => s.homeOpen);
+  /** K8s workbench only when not on shared Home. */
+  const showK8sWorkbench = sidebarView === "k8s" && !homeOpen;
+  const showHostsSession = sidebarView === "hosts" && !homeOpen;
+  const aiPanelSessionId =
+    engineerMode === "k8s" && aiEngineerOpen && aiEngineerSessionId
+      ? aiEngineerSessionId
+      : activeTabId ??
+        (aiEngineerOpen && !aiEngineerReady && aiEngineerSessionId
+          ? aiEngineerSessionId
+          : null);
+  const showAiEngineerPanel = shouldShowAiEngineerPanel({
+    open: aiEngineerOpen,
+    sessionId: aiPanelSessionId,
+    sidebarView,
+    hasSelectedCluster: selectedCluster != null,
+  });
+  const localFsOpen = useLocalFsStore((s) => s.open);
+  const localFsTab = useLocalFsStore((s) => s.activeTab);
+  const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
+  const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
+  const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
+  const resetHostStats = useHostStatsStore((s) => s.resetForSession);
+  const workspacePanelWidth = useTaskManagerStore((s) => s.width);
+  const workspacePanelOpen =
+    showAiEngineerPanel ||
+    (sidebarView === "hosts" && activeTabId != null && localFsOpen);
+
+  const sidebarWidth = sidebarCollapsed
+    ? SIDEBAR_COLLAPSED_WIDTH
+    : sidebarExpandedWidth;
+
+  const terminalLayoutRevision = useMemo(
+    () =>
+      `${sidebarCollapsed}-${sidebarWidth}-${workspacePanelOpen}-${workspacePanelWidth}`,
+    [sidebarCollapsed, sidebarWidth, workspacePanelOpen, workspacePanelWidth],
+  );
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const win = getCurrentWindow();
+    let disposed = false;
+    const sync = () => {
+      void win.isFullscreen().then((fs) => {
+        if (!disposed) setWindowFullscreen(fs);
+      });
+    };
+    sync();
+    let unlisten: (() => void) | undefined;
+    void win.onResized(() => sync()).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    const onVis = () => sync();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      disposed = true;
+      unlisten?.();
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarCollapsed) {
+      localStorage.setItem(
+        SIDEBAR_WIDTH_STORAGE_KEY,
+        String(clampSidebarWidth(sidebarExpandedWidth)),
+      );
+    }
+  }, [sidebarCollapsed, sidebarExpandedWidth]);
+
+  // K8s AI Engineer requires an active cluster — close if selection is cleared.
+  useEffect(() => {
+    if (sidebarView !== "k8s") return;
+    if (selectedCluster) return;
+    if (!aiEngineerOpen) return;
+    useAiEngineerStore.getState().close({ force: true });
+  }, [sidebarView, selectedCluster, aiEngineerOpen]);
+
+  useEffect(() => {
+    const updateSize = () => {
+      const panelReserve = workspacePanelOpen ? workspacePanelWidth : 0;
+      const width = Math.max(
+        window.innerWidth - sidebarWidth - panelReserve - 32,
+        400,
+      );
+      const height = Math.max(window.innerHeight - 96, 300);
+      setTerminalSize({
+        cols: Math.floor(width / 9),
+        rows: Math.floor(height / 18),
+      });
+    };
+
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, [sidebarWidth, workspacePanelOpen, workspacePanelWidth]);
+
+  const clearTabReorderState = () => {
+    setTabReorderDragId(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      tabReorderCleanupRef.current?.();
+      tabReorderCleanupRef.current = null;
+    };
+  }, []);
+
+  const startTabReorder = (
+    tabId: string,
+    event: Pick<
+      React.PointerEvent,
+      "button" | "clientX" | "clientY" | "target" | "pointerId"
+    >,
+  ) => {
+    if (event.button !== 0) return;
+    if (
+      (event.target as HTMLElement).closest(
+        ".tab-close, .tab-home, .tab-shortcut-folder, .tab-shortcut-add, .tab-shortcut-wrap, .tab-shortcut-icons",
+      )
+    ) {
+      return;
+    }
+
+    const tabElement = (event.target as HTMLElement).closest<HTMLElement>(
+      ".tab[data-session-id]",
+    );
+    if (!tabElement) return;
+
+    tabReorderCleanupRef.current?.();
+    tabReorderCleanupRef.current = startTabPointerReorder({
+      tabId,
+      tabElement,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      onDragStart: () => {
+        setTabReorderDragId(tabId);
+      },
+      onPreview: (_target) => {},
+      onReorder: (dragId, targetId, position) => {
+        reorderTabs(dragId, targetId, position);
+      },
+      onEnd: () => {
+        tabReorderCleanupRef.current = null;
+        clearTabReorderState();
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (tabReorderDragId) return;
+    const activeTab = tabBarRef.current?.querySelector(".tab.active");
+    // Prefer center so a focused host tab is not left clipped off-screen.
+    activeTab?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [activeTabId, tabs.length, tabReorderDragId]);
+
+  const activeSessionTitle =
+    activeTabId != null ? sessionTitles[activeTabId] : undefined;
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId),
+    [activeTabId, tabs],
+  );
+  const activeTabReady =
+    activeTab != null && (activeTab.connectionStatus ?? "ready") === "ready";
+  // Never fall back to connecting `pending:…` tab ids — that creates orphan
+  // `server:pending:…` chat buckets and makes recent history look "missing".
+  const activeTabServerId = (activeTab?.server_id ?? "").trim();
+  const activeTabDisconnected = useSessionStore((state) =>
+    activeTabId != null ? state.disconnectedSessionIds.has(activeTabId) : false,
+  );
+
+  useEffect(() => {
+    const taskTabOpen = localFsOpen && localFsTab === "taskManager";
+    if (!taskTabOpen || !activeTabId || !activeTab || activeTabDisconnected) {
+      if (activeTabDisconnected && taskTabOpen) {
+        useTaskManagerStore.setState({
+          loading: false,
+          portsLoading: false,
+        });
+      }
+      return;
+    }
+
+    void fetchProcesses(activeTabId, {
+      initial: true,
+      kind: activeTab.kind,
+    });
+
+    const basicTimer = window.setInterval(() => {
+      void fetchProcesses(activeTabId, {
+        kind: activeTab.kind,
+        refresh: "basic",
+      });
+    }, 2000);
+
+    const portsTimer = window.setInterval(() => {
+      void fetchProcesses(activeTabId, {
+        kind: activeTab.kind,
+        refresh: "ports",
+      });
+    }, 8000);
+
+    return () => {
+      window.clearInterval(basicTimer);
+      window.clearInterval(portsTimer);
+    };
+  }, [activeTab, activeTabDisconnected, activeTabId, fetchProcesses, localFsOpen, localFsTab]);
+
+  useEffect(() => {
+    const findTabOpen = localFsOpen && localFsTab === "find";
+    if (!findTabOpen || !activeTabId) return;
+
+    const { activeSessionId, activateSession } = useFindStore.getState();
+    if (activeSessionId !== activeTabId) {
+      activateSession(activeTabId);
+    } else {
+      void loadSessionCwd(activeTabId);
+    }
+
+    const timer = window.setInterval(() => {
+      const { followTerminalCwd } = useFindStore.getState();
+      if (followTerminalCwd) {
+        void loadSessionCwd(activeTabId);
+      }
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTabId, loadSessionCwd, localFsOpen, localFsTab]);
+
+
+  useEffect(() => {
+    if (!activeTabId || activeTabDisconnected) {
+      resetHostStats();
+      return;
+    }
+
+    resetHostStats();
+    void fetchHostStats(activeTabId, { initial: true });
+    const timer = window.setInterval(() => {
+      void fetchHostStats(activeTabId);
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [
+    activeTabDisconnected,
+    activeTabId,
+    fetchHostStats,
+    resetHostStats,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.closest("input, textarea, select, [contenteditable='true']"))
+      ) {
+        return;
+      }
+
+      if (!activeTabId) return;
+
+      event.preventDefault();
+      switchWorkspacePanel("localFs", activeTabId, undefined, "find");
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTabId]);
+
+  useEffect(() => {
+    document.addEventListener("contextmenu", suppressBrowserContextMenu);
+    return () =>
+      document.removeEventListener("contextmenu", suppressBrowserContextMenu);
+  }, []);
+
+  useEffect(() => {
+    const onArmTabRightClick = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+      if (!resolveTabContextMenuTarget(event.target)) return;
+      tabPointerButtonRef.current = 2;
+      armChromeClickSuppress(1000);
+      suppressTabClickUntilRef.current = Date.now() + 1000;
+    };
+
+    document.addEventListener("mousedown", onArmTabRightClick, true);
+    return () =>
+      document.removeEventListener("mousedown", onArmTabRightClick, true);
+  }, []);
+
+  useEffect(() => {
+    const blockSpuriousTabClick = (event: MouseEvent) => {
+      if (Date.now() >= suppressTabClickUntilRef.current) return;
+      if (isIntentionalTabLeftClick(event.target)) return;
+      if (!(event.target instanceof HTMLElement)) return;
+      if (!event.target.closest(".tab[data-session-id]")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+
+    document.addEventListener("click", blockSpuriousTabClick, true);
+    return () =>
+      document.removeEventListener("click", blockSpuriousTabClick, true);
+  }, []);
+
+  useEffect(() => bindOutsideTerminalMouseCleanup(), []);
+
+  useEffect(() => {
+    const bar = tabBarRef.current;
+    if (!bar) return;
+
+    const openTabContextMenu = (event: MouseEvent, tabEl: HTMLElement) => {
+      const tabId = tabEl.dataset.sessionId;
+      if (!tabId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      tabPointerButtonRef.current = 2;
+      armChromeClickSuppress(1000);
+      suppressTabClickUntilRef.current = Date.now() + 1000;
+      setActiveTab(tabId);
+      setTabContextMenu({
+        tabId,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    };
+
+    const onTabBarMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+
+      const tabEl = resolveTabContextMenuTarget(event.target);
+      if (!tabEl) return;
+
+      skipTabBarContextMenuRef.current = true;
+      openTabContextMenu(event, tabEl);
+    };
+
+    const onTabBarContextMenu = (event: MouseEvent) => {
+      if (skipTabBarContextMenuRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        skipTabBarContextMenuRef.current = false;
+        return;
+      }
+
+      const tabEl = resolveTabContextMenuTarget(event.target);
+      if (!tabEl) return;
+
+      openTabContextMenu(event, tabEl);
+    };
+
+    bar.addEventListener("mousedown", onTabBarMouseDown, true);
+    bar.addEventListener("contextmenu", onTabBarContextMenu, true);
+    return () => {
+      bar.removeEventListener("mousedown", onTabBarMouseDown, true);
+      bar.removeEventListener("contextmenu", onTabBarContextMenu, true);
+    };
+  }, [setActiveTab, tabs.length]);
+
+  const onTitlebarDoubleClick = () => {
+    if (!isTauriRuntime()) return;
+    void getCurrentWindow().toggleMaximize();
+  };
+
+  return (
+    <div
+      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""} has-host-stats-statusbar`}
+      style={
+        {
+          "--sidebar-width": `${sidebarWidth}px`,
+          ...(workspacePanelOpen
+            ? { "--workspace-panel-width": `${workspacePanelWidth}px` }
+            : {}),
+        } as CSSProperties
+      }
+    >
+      <header className="chrome-titlebar">
+            <div
+              className={`chrome-sidebar-slot${sidebarCollapsed ? " chrome-sidebar-slot--collapsed" : ""}`}
+            >
+              {macWindowChrome ? (
+                <div
+                  className="chrome-titlebar-macos-controls chrome-titlebar-macos-traffic-spacer"
+                  aria-hidden
+                />
+              ) : null}
+              <div className="chrome-sidebar-controls">
+                <button
+                  type="button"
+                  className="chrome-sidebar-toggle"
+                  onClick={() => setSidebarCollapsed((value) => !value)}
+                  aria-label={
+                    sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")
+                  }
+                  title={
+                    sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")
+                  }
+                >
+                  <SidebarToggleIcon />
+                </button>
+                <div
+                  className="chrome-sidebar-views"
+                  role="tablist"
+                  aria-label={t("sidebarViewsAria")}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`chrome-sidebar-view-btn${sidebarView === "hosts" ? " active" : ""}`}
+                    aria-label={t("sidebarViewHosts")}
+                    title={t("sidebarViewHosts")}
+                    aria-selected={sidebarView === "hosts"}
+                    data-testid="sidebar-view-hosts"
+                    onClick={() => setSidebarView("hosts")}
+                  >
+                    <SystemInfoIcon />
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`chrome-sidebar-view-btn${sidebarView === "k8s" ? " active" : ""}`}
+                    aria-label={t("sidebarViewK8s")}
+                    title={t("sidebarViewK8s")}
+                    aria-selected={sidebarView === "k8s"}
+                    data-testid="sidebar-view-k8s"
+                    onClick={() => setSidebarView("k8s")}
+                  >
+                    <K8sClusterIcon />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="chrome-titlebar-main">
+              <div
+                className={`tab-bar${tabReorderDragId ? " tab-bar-reordering" : ""}`}
+                ref={tabBarRef}
+                onWheel={(event) => {
+                  if (!tabBarRef.current) return;
+                  const bar = tabBarRef.current;
+                  if (bar.scrollWidth <= bar.clientWidth) return;
+                  bar.scrollLeft += event.deltaY + event.deltaX;
+                  event.preventDefault();
+                }}
+              >
+                <div
+                  className={`tab tab-home-entry ${homeOpen ? "active" : ""}`}
+                  data-tab-role="home"
+                  onClick={() => {
+                    if (tabPointerButtonRef.current !== 0) {
+                      tabPointerButtonRef.current = 0;
+                      return;
+                    }
+                    if (Date.now() < suppressTabClickUntilRef.current) return;
+                    activateHome();
+                  }}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
+                  {homeOpen ? (
+                    <>
+                      <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                      <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                    </>
+                  ) : null}
+                  <span className="tab-kind home" title={t("homeTabTitle")}>
+                    <TabHomeIcon />
+                  </span>
+                  <span className="tab-title">{t("homeTabTitle")}</span>
+                </div>
+                {sidebarView === "hosts" ? (
+                  <>
+          {tabs.map((tab) => {
+            const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
+            const tabOs = resolveSessionOsProfile(tab, savedConnections);
+            return (
+            <div
+              key={tab.id}
+              className={`tab ${!homeOpen && tab.active ? "active" : ""} ${
+                tabConnecting ? "tab-connecting" : ""
+              } ${
+                tabDropTargetId === tab.id ? "tab-drop-target" : ""
+              } ${tabDropTargetId === tab.id && tabDropKind === "remote" ? "tab-drop-target-remote" : ""} ${
+                tabReorderDragId === tab.id ? "tab-reorder-dragging" : ""
+              }`}
+              data-session-id={tab.id}
+              data-tab-kind={tab.kind}
+              data-drop-kind={
+                tabDropTargetId === tab.id ? tabDropKind ?? undefined : undefined
+              }
+              onClick={() => {
+                if (tabPointerButtonRef.current !== 0) {
+                  tabPointerButtonRef.current = 0;
+                  return;
+                }
+                if (Date.now() < suppressTabClickUntilRef.current) return;
+                setActiveTab(tab.id);
+              }}
+              onPointerDown={(event) => {
+                tabPointerButtonRef.current = event.button;
+                if (event.button === 0) {
+                  clearChromeClickSuppress();
+                  suppressTabClickUntilRef.current = 0;
+                  noteIntentionalTabLeftMouseDown(tab.id);
+                  setActiveTab(tab.id);
+                  startTabReorder(tab.id, event);
+                }
+              }}
+              onMouseDown={(event) => {
+                // Right/middle still tracked here; left reorder uses pointerdown.
+                tabPointerButtonRef.current = event.button;
+              }}
+              onContextMenu={(event) => {
+                // Handled by native tab-bar listener; block duplicate React path.
+                event.preventDefault();
+              }}
+              onAuxClick={(event) => {
+                if (event.button !== 0) {
+                  event.preventDefault();
+                  tabPointerButtonRef.current = event.button;
+                  suppressTabClickUntilRef.current = Date.now() + 1000;
+                }
+              }}
+              onDragOver={(event) => {
+                if (tabReorderDragId) return;
+                if (tabConnecting) return;
+
+                const dataTransfer = event.dataTransfer;
+                if (!dataTransfer) return;
+                if (tab.kind !== "ssh") return;
+
+                const remote = hasRemoteDrag(dataTransfer);
+                const local = hasLocalFileDrop(dataTransfer);
+                if (!remote && !local) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                const kind = remote ? "remote" : "local";
+                dataTransfer.dropEffect = dropEffectForKind(kind);
+                setTabDropTargetId(tab.id);
+                setTabDropKind(kind);
+              }}
+              onDragLeave={() => {
+                setTabDropTargetId((current) => {
+                  if (current === tab.id) {
+                    setTabDropKind(null);
+                    return null;
+                  }
+                  return current;
+                });
+              }}
+              onDrop={(event) => {
+                if (tabReorderDragId) return;
+                if (tabConnecting) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                setTabDropTargetId(null);
+                setTabDropKind(null);
+                if (tab.kind !== "ssh") return;
+
+                const dataTransfer = event.dataTransfer;
+                if (!dataTransfer) return;
+
+                const remotePayload = parseRemoteDrag(dataTransfer);
+                if (remotePayload) {
+                  if (remotePayload.fromSessionId === tab.id) {
+                    pushToast(t("toastCannotSendSameSession"), false);
+                    return;
+                  }
+                  setActiveTab(tab.id);
+                  void startRemoteTransfer(
+                    remotePayload.fromSessionId,
+                    remotePayload.remotePath,
+                    tab.id,
+                  ).catch((err) => {
+                    pushToast(formatAppError(err), false);
+                  });
+                  return;
+                }
+
+                const paths = extractDroppedPaths(event);
+                if (paths.length === 0) return;
+                setActiveTab(tab.id);
+                void uploadLocalPathsToSession(tab.id, paths)
+                  .then((results) => {
+                    const names = results.map((item) => item.filename).join(", ");
+                    pushToast(t("toastUploadedTo", { title: tab.title, names }), true);
+                  })
+                  .catch((err) => {
+                    pushToast(formatTransferError(err), false);
+                  });
+              }}
+            >
+              {!homeOpen && tab.active ? (
+                <>
+                  <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                  <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                </>
+              ) : null}
+              <span
+                className={`tab-kind ${tab.kind}`}
+                title={tabOs.osName ?? tabOs.osId ?? "SSH"}
+              >
+                <ServerOsIcon
+                  osId={tabOs.osId}
+                  osName={tabOs.osName}
+                  size={16}
+                  showTitle={false}
+                />
+              </span>
+              <span className="tab-title" title={tab.title}>
+                {tabConnecting ? (
+                  <span className="tab-connecting-dot" aria-hidden="true" />
+                ) : null}
+                {tab.title}
+              </span>
+              {!homeOpen && tab.active && !tabConnecting ? (
+                <span className="tab-actions">
+                  <button
+                    type="button"
+                    className="tab-home"
+                    title={t("goHomeTitle")}
+                    aria-label={t("goHomeAria", { title: tab.title })}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setActiveTab(tab.id);
+                      goToHomeDirectory(tab.id);
+                    }}
+                  >
+                    <TabHomeIcon />
+                  </button>
+                  <TabDirectoryShortcuts
+                    sessionId={tab.id}
+                    tabKind={tab.kind}
+                    serverId={tab.server_id ?? tab.title}
+                    onActivateTab={() => setActiveTab(tab.id)}
+                  />
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="tab-close"
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+                aria-label={t("closeTabAria", { title: tab.title })}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void closeTab(tab.id);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            );
+          })}
+                  </>
+              ) : null}
+              {sidebarView === "k8s" ? (
+                <>
+                  {openClusterIds.map((id) => {
+                    const cluster = clusters.find((c) => c.id === id);
+                    if (!cluster) return null;
+                    const active = !homeOpen && selectedCluster?.id === id;
+                    return (
+                      <div
+                        key={id}
+                        className={`tab${active ? " active" : ""}`}
+                        data-tab-role="k8s-cluster"
+                        data-testid={`k8s-cluster-tab-${id}`}
+                        onClick={() => {
+                          if (tabPointerButtonRef.current !== 0) {
+                            tabPointerButtonRef.current = 0;
+                            return;
+                          }
+                          if (Date.now() < suppressTabClickUntilRef.current) return;
+                          selectCluster(id);
+                        }}
+                        onMouseDown={(event) => {
+                          tabPointerButtonRef.current = event.button;
+                          if (event.button === 0) {
+                            clearChromeClickSuppress();
+                            suppressTabClickUntilRef.current = 0;
+                            selectCluster(id);
+                          }
+                        }}
+                      >
+                        {active ? (
+                          <>
+                            <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                            <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                          </>
+                        ) : null}
+                        <span className="tab-kind k8s" title="Kubernetes">
+                          <K8sClusterIcon size={16} />
+                        </span>
+                        <span
+                          className="tab-title"
+                          data-testid="k8s-cluster-tab-title"
+                          title={cluster.display_name}
+                        >
+                          {cluster.display_name}
+                        </span>
+                        <button
+                          type="button"
+                          className="tab-close"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          aria-label={t("closeTabAria", { title: cluster.display_name })}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            closeClusterTab(id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : null}
+              </div>
+              <button
+                type="button"
+                className="chrome-new-session"
+                aria-label={
+                  sidebarView === "k8s" ? t("k8s:addClusterTitle") : t("newSsh")
+                }
+                title={
+                  sidebarView === "k8s" ? t("k8s:addClusterTitle") : t("newSsh")
+                }
+                onClick={() => {
+                  if (sidebarView === "k8s") {
+                    setAddClusterOpen(true);
+                    return;
+                  }
+                  openNewRemoteRef.current();
+                }}
+              >
+                <ChromePlusIcon />
+              </button>
+
+          <div
+            className="chrome-titlebar-drag"
+            data-tauri-drag-region={tauriDragRegion ? "" : undefined}
+            onDoubleClick={onTitlebarDoubleClick}
+          />
+
+              <div className="chrome-titlebar-actions">
+                <AiEngineerTool
+                  active={aiEngineerOpen}
+                  disabled={
+                    sidebarView === "k8s"
+                      ? !selectedCluster
+                      : !activeTabReady
+                  }
+                  onClick={() => {
+                    if (sidebarView === "k8s" && selectedCluster) {
+                      switchToAiEngineerPanel(
+                        {
+                          kind: "cluster",
+                          id: selectedCluster.id,
+                          label: selectedCluster.display_name,
+                        },
+                        { clusterTarget: selectedCluster },
+                      );
+                      return;
+                    }
+                    if (activeTabId) {
+                      switchToAiEngineerPanel({
+                        kind: "server",
+                        id: activeTabServerId || activeTabId,
+                        label: activeSessionTitle || activeTabId,
+                        sessionId: activeTabId,
+                        serverId: activeTabServerId,
+                      });
+                    }
+                  }}
+                />
+                {sidebarView === "hosts" ? (
+                <LocalFsTool
+                  active={localFsOpen}
+                  disabled={!activeTabReady}
+                  onClick={() => {
+                    if (activeTabId) {
+                      switchWorkspacePanel("localFs", activeTabId, undefined, localFsTab);
+                    }
+                  }}
+                />
+                ) : null}
+                <LocaleSwitcher />
+              </div>
+
+          {!macWindowChrome ? <WindowControls layout="windows" /> : null}
+            </div>
+          </header>
+
+      <div className="app-body">
+        <ConnectionPanel
+          cols={terminalSize.cols}
+          rows={terminalSize.rows}
+          collapsed={sidebarCollapsed}
+          expandedWidth={sidebarExpandedWidth}
+          onExpandedWidthChange={setSidebarExpandedWidth}
+          onRegisterNewRemote={registerNewRemote}
+        />
+
+        <div className="workspace-frame">
+          {tabContextMenu ? (
+            <TabContextMenu
+              x={tabContextMenu.x}
+              y={tabContextMenu.y}
+              tabIndex={tabs.findIndex((tab) => tab.id === tabContextMenu.tabId)}
+              tabCount={tabs.length}
+              onClose={() => setTabContextMenu(null)}
+              onCloseTab={() => void closeTab(tabContextMenu.tabId)}
+              onCloseOthers={() => void closeOtherTabs(tabContextMenu.tabId)}
+              onCloseLeft={() => void closeTabsToLeft(tabContextMenu.tabId)}
+              onCloseRight={() => void closeTabsToRight(tabContextMenu.tabId)}
+            />
+          ) : null}
+
+          <main className="workspace">
+            <div className="workspace-split">
+              <div className="terminal-stack">
+                {homeOpen ? <WorkspaceWelcome /> : null}
+                {showK8sWorkbench ? <K8sWorkbench /> : null}
+                {tabs.map((tab) => (
+                  <TerminalView
+                    key={tab.id}
+                    sessionId={tab.id}
+                    kind={tab.kind}
+                    active={showHostsSession && tab.id === activeTabId}
+                    connectionStatus={tab.connectionStatus ?? "ready"}
+                    title={tab.title}
+                    layoutRevision={terminalLayoutRevision}
+                  />
+                ))}
+              </div>
+            </div>
+
+          </main>
+        </div>
+      </div>
+      <SendToDialog />
+      {activeTabId && showHostsSession ? (
+        <PreviewPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle}
+        />
+      ) : null}
+      <SudoPasswordModal />
+      {addClusterOpen ? (
+        <AddK8sClusterModal onClose={() => setAddClusterOpen(false)} />
+      ) : null}
+      <AppSettingsDialog />
+      {updateDialog ? (
+        <UpdateAvailableDialog
+          update={updateDialog.update}
+          currentVersion={updateDialog.currentVersion}
+          needsPrivilege={updateDialog.needsPrivilege}
+          onDismiss={() => closeUpdateDialog()}
+          onInstalled={() => markUpdateInstalled()}
+        />
+      ) : null}
+      {showAiEngineerPanel && aiPanelSessionId ? (
+        <AiEngineerPanel
+          sessionId={aiPanelSessionId}
+          serverId={
+            engineerMode === "k8s"
+              ? undefined
+              : activeTabId === aiPanelSessionId
+                ? activeTabServerId || undefined
+                : (aiEngineerServerId ?? undefined)
+          }
+        />
+      ) : null}
+      {sidebarView === "hosts" && activeTabId && localFsOpen ? (
+        <LocalFsPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? undefined}
+        />
+      ) : null}
+      {sidebarView === "k8s" ? (
+        <K8sClusterStatusBar />
+      ) : activeTabId && !activeTabDisconnected ? (
+        <HostStatsStatusBar sessionId={activeTabId} />
+      ) : (
+        <HostStatsStatusBar sessionId={null} />
+      )}
+    </div>
+  );
+}
+
+export default App;

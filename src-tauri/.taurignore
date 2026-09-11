@@ -1,0 +1,9 @@
+# Mobile icon packs are unused during desktop `tauri dev`, but iCloud / APFS
+# metadata churn on these PNG trees retriggers the watcher and restarts the app.
+icons/android/**
+icons/ios/**
+
+# Noise that should never restart the Rust binary.
+**/.DS_Store
+**/__pycache__/
+**/*.pyc

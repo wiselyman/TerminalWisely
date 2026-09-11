@@ -1,0 +1,297 @@
+import { invoke } from "@tauri-apps/api/core";
+import { create } from "zustand";
+import i18n from "../i18n";
+import { formatAppError } from "../lib/formatAppError";
+import type { FindFileEntry, FindFilesResult, FindTypeFilter } from "../types";
+import { useHostStatsStore } from "./hostStatsStore";
+import { useTaskManagerStore } from "./taskManagerStore";
+import {
+  readWorkspacePanelWidth,
+  setWorkspacePanelWidth,
+  subscribeWorkspacePanelWidth,
+} from "../lib/workspacePanelWidth";
+
+const FIND_OPTIONS_KEY = "terminal-wisely.find-options";
+
+interface PersistedFindOptions {
+  namePattern?: string;
+  typeFilter?: FindTypeFilter;
+  maxDepth?: number;
+  caseInsensitive?: boolean;
+}
+
+function loadFindOptions(): PersistedFindOptions {
+  try {
+    const raw = localStorage.getItem(FIND_OPTIONS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as PersistedFindOptions;
+  } catch {
+    return {};
+  }
+}
+
+function persistFindOptions(options: PersistedFindOptions) {
+  localStorage.setItem(FIND_OPTIONS_KEY, JSON.stringify(options));
+}
+
+const savedOptions = loadFindOptions();
+
+interface FindSessionSnapshot {
+  sessionCwd: string | null;
+  followTerminalCwd: boolean;
+  searchPath: string;
+  entries: FindFileEntry[];
+  truncated: boolean;
+  lastRunAt: number | null;
+}
+
+function captureSessionSnapshot(state: FindState): FindSessionSnapshot {
+  return {
+    sessionCwd: state.sessionCwd,
+    followTerminalCwd: state.followTerminalCwd,
+    searchPath: state.searchPath,
+    entries: state.entries,
+    truncated: state.truncated,
+    lastRunAt: state.lastRunAt,
+  };
+}
+
+const defaultSessionFindState = {
+  sessionCwd: null as string | null,
+  followTerminalCwd: true,
+  searchPath: "",
+  entries: [] as FindFileEntry[],
+  truncated: false,
+  lastRunAt: null as number | null,
+};
+
+interface FindState {
+  open: boolean;
+  width: number;
+  sessionCwd: string | null;
+  followTerminalCwd: boolean;
+  searchPath: string;
+  namePattern: string;
+  typeFilter: FindTypeFilter;
+  maxDepth: number;
+  caseInsensitive: boolean;
+  entries: FindFileEntry[];
+  truncated: boolean;
+  loading: boolean;
+  error: string | null;
+  lastRunAt: number | null;
+  activeSessionId: string | null;
+  sessionSnapshots: Record<string, FindSessionSnapshot>;
+  focusNonce: number;
+  setWidth: (width: number) => void;
+  setNamePattern: (pattern: string) => void;
+  setTypeFilter: (filter: FindTypeFilter) => void;
+  setMaxDepth: (depth: number) => void;
+  setCaseInsensitive: (value: boolean) => void;
+  setSearchPath: (path: string) => void;
+  resetSearchPathToTerminal: () => void;
+  activateSession: (sessionId: string) => void;
+  openFind: (sessionId: string) => void;
+  toggleOpen: (sessionId: string) => void;
+  close: () => void;
+  loadSessionCwd: (sessionId: string) => Promise<void>;
+  runFind: (sessionId: string) => Promise<void>;
+  resetResults: () => void;
+}
+
+function snapshotOptions(state: FindState): PersistedFindOptions {
+  return {
+    namePattern: state.namePattern,
+    typeFilter: state.typeFilter,
+    maxDepth: state.maxDepth,
+    caseInsensitive: state.caseInsensitive,
+  };
+}
+
+export const useFindStore = create<FindState>((set, get) => ({
+  open: false,
+  width: readWorkspacePanelWidth(),
+  sessionCwd: null,
+  followTerminalCwd: true,
+  searchPath: "",
+  namePattern: savedOptions.namePattern ?? "",
+  typeFilter: savedOptions.typeFilter ?? "all",
+  maxDepth: savedOptions.maxDepth ?? 8,
+  caseInsensitive: savedOptions.caseInsensitive ?? false,
+  entries: [],
+  truncated: false,
+  loading: false,
+  error: null,
+  lastRunAt: null,
+  activeSessionId: null,
+  sessionSnapshots: {},
+  focusNonce: 0,
+
+  setWidth: (width) => {
+    const next = setWorkspacePanelWidth(width);
+    set({ width: next });
+  },
+
+  setNamePattern: (namePattern) => {
+    persistFindOptions({ ...snapshotOptions(get()), namePattern });
+    set({ namePattern });
+  },
+
+  setTypeFilter: (typeFilter) => {
+    persistFindOptions({ ...snapshotOptions(get()), typeFilter });
+    set({ typeFilter });
+  },
+
+  setMaxDepth: (maxDepth) => {
+    const next = Math.max(1, Math.min(maxDepth, 32));
+    persistFindOptions({ ...snapshotOptions(get()), maxDepth: next });
+    set({ maxDepth: next });
+  },
+
+  setCaseInsensitive: (caseInsensitive) => {
+    persistFindOptions({ ...snapshotOptions(get()), caseInsensitive });
+    set({ caseInsensitive });
+  },
+
+  setSearchPath: (searchPath) => {
+    set({
+      searchPath,
+      followTerminalCwd: false,
+    });
+  },
+
+  resetSearchPathToTerminal: () => {
+    set({
+      followTerminalCwd: true,
+      searchPath: "",
+    });
+  },
+
+  resetResults: () =>
+    set({
+      entries: [],
+      truncated: false,
+      error: null,
+      lastRunAt: null,
+    }),
+
+  activateSession: (sessionId) => {
+    const state = get();
+    let sessionSnapshots = state.sessionSnapshots;
+
+    if (state.activeSessionId && state.activeSessionId !== sessionId) {
+      sessionSnapshots = {
+        ...sessionSnapshots,
+        [state.activeSessionId]: captureSessionSnapshot(state),
+      };
+    }
+
+    const restored = sessionSnapshots[sessionId];
+    set({
+      activeSessionId: sessionId,
+      sessionSnapshots,
+      loading: false,
+      error: null,
+      ...(restored ?? defaultSessionFindState),
+    });
+    void get().loadSessionCwd(sessionId);
+  },
+
+  openFind: (sessionId) => {
+    useTaskManagerStore.getState().close();
+    useHostStatsStore.getState().close();
+    const state = get();
+    if (!state.open || state.activeSessionId !== sessionId) {
+      get().activateSession(sessionId);
+    }
+    set((current) => ({
+      open: true,
+      focusNonce: current.focusNonce + 1,
+    }));
+  },
+
+  toggleOpen: (sessionId) => {
+    const { open } = get();
+    if (open) {
+      get().close();
+      return;
+    }
+    get().openFind(sessionId);
+  },
+
+  close: () => {
+    const state = get();
+    if (!state.activeSessionId) {
+      set({ open: false, loading: false, error: null });
+      return;
+    }
+
+    set({
+      open: false,
+      loading: false,
+      error: null,
+      sessionSnapshots: {
+        ...state.sessionSnapshots,
+        [state.activeSessionId]: captureSessionSnapshot(state),
+      },
+    });
+  },
+
+  loadSessionCwd: async (sessionId) => {
+    try {
+      const cwd = await invoke<string>("get_session_cwd", {
+        request: { session_id: sessionId },
+      });
+      set({ sessionCwd: cwd || null });
+    } catch {
+      set({ sessionCwd: null });
+    }
+  },
+
+  runFind: async (sessionId) => {
+    const state = get();
+    const namePattern = state.namePattern.trim();
+    if (!namePattern) {
+      set({ error: i18n.t("errors:findPatternEmpty"), activeSessionId: sessionId });
+      return;
+    }
+
+    set({ loading: true, error: null, activeSessionId: sessionId });
+
+    const path = state.followTerminalCwd ? "." : state.searchPath.trim() || ".";
+
+    try {
+      const result = await invoke<FindFilesResult>("find_files", {
+        request: {
+          session_id: sessionId,
+          path,
+          name_pattern: namePattern,
+          type_filter: state.typeFilter,
+          max_depth: state.maxDepth,
+          case_insensitive: state.caseInsensitive,
+        },
+      });
+      set({
+        entries: result.entries,
+        truncated: result.truncated,
+        sessionCwd: result.start_path,
+        loading: false,
+        error: null,
+        lastRunAt: Date.now(),
+      });
+    } catch (err) {
+      set({
+        loading: false,
+        error: formatAppError(err),
+        entries: [],
+        truncated: false,
+      });
+    }
+  },
+}));
+
+subscribeWorkspacePanelWidth((width) => {
+  if (useFindStore.getState().width !== width) {
+    useFindStore.setState({ width });
+  }
+});

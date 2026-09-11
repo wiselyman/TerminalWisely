@@ -1,0 +1,14 @@
+version: 1
+
+# Capability → RiskLevel. Compound leaves take the max rank.
+ranks:
+  read: R0
+  write: R2
+  delete: R3
+  proc_signal: R3
+  svc_mutate: R2
+  pkg_mutate: R2
+  pkg_dangerous: R3
+  net_mutate: R3
+  sshd_mutate: R3
+  unknown: R2

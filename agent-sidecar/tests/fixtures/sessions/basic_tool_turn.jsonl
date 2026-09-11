@@ -1,0 +1,6 @@
+{"seq": 0, "type": "system/message", "data": {"content": "sys"}, "surface_op": "append", "ts": 1.0}
+{"seq": 1, "type": "user/message", "data": {"content": "check nginx"}, "surface_op": "append", "ts": 2.0}
+{"seq": 2, "type": "assistant/message", "data": {"content": null, "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "service_status", "arguments": "{}"}}]}, "surface_op": "append", "ts": 3.0}
+{"seq": 3, "type": "tool/call", "data": {"call_id": "c1", "name": "service_status", "arguments": {"unit": "nginx"}}, "ts": 4.0}
+{"seq": 4, "type": "tool/result", "data": {"tool_call_id": "c1", "content": "{\"ok\": true}"}, "surface_op": "append", "ts": 5.0}
+{"seq": 5, "type": "assistant/message", "data": {"content": "nginx is active"}, "surface_op": "append", "ts": 6.0}
