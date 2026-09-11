@@ -29,7 +29,8 @@ def memory_scope_key(
         raw = (cluster_id or "").strip() or (session_id or "").strip() or "default"
     else:
         raw = (server_id or "").strip() or (session_id or "").strip() or "default"
-    safe = re.sub(r"[^\w.@:-]+", "_", raw)
+    # Keep filenames portable (Windows forbids :<>"|?*\\/ in names).
+    safe = re.sub(r"[^\w.@-]+", "_", raw)
     return safe[:180] or "default"
 
 

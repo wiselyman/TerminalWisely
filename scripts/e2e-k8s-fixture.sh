@@ -36,13 +36,20 @@ start_fixture() {
   if cluster_running; then
     echo "K8s fixture already running ($CLUSTER_NAME)"
     k3d kubeconfig write "$CLUSTER_NAME" >"$KUBECONFIG_FILE"
+    if command -v sed >/dev/null 2>&1; then
+      sed -i.bak 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE" 2>/dev/null \
+        || sed -i '' 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE"
+      rm -f "${KUBECONFIG_FILE}.bak"
+    fi
     wait_ready
     return 0
   fi
 
   echo "Creating k3d cluster ${CLUSTER_NAME}..."
+  # Bind API to 127.0.0.1 so kubeconfig is reachable on Linux CI (0.0.0.0 is not a
+  # valid client destination and often fails kubectl get nodes).
   k3d cluster create "$CLUSTER_NAME" \
-    --api-port 6550 \
+    --api-port 127.0.0.1:6550 \
     --servers 1 \
     --agents 0 \
     --k3s-arg "--disable=traefik@server:0" \
@@ -51,6 +58,12 @@ start_fixture() {
     --kubeconfig-update-default=false >/dev/null
 
   k3d kubeconfig write "$CLUSTER_NAME" >"$KUBECONFIG_FILE"
+  # Belt-and-suspenders: rewrite any 0.0.0.0 server URLs.
+  if command -v sed >/dev/null 2>&1; then
+    sed -i.bak 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE" 2>/dev/null \
+      || sed -i '' 's#https://0\.0\.0\.0:#https://127.0.0.1:#g' "$KUBECONFIG_FILE"
+    rm -f "${KUBECONFIG_FILE}.bak"
+  fi
   wait_ready
 }
 
@@ -60,16 +73,22 @@ wait_ready() {
   fi
 
   echo "Waiting for Kubernetes API..."
-  for _ in $(seq 1 90); do
+  for _ in $(seq 1 120); do
     if kubectl --kubeconfig "$KUBECONFIG_FILE" get nodes >/dev/null 2>&1; then
       break
     fi
     sleep 2
   done
-  kubectl --kubeconfig "$KUBECONFIG_FILE" get nodes >/dev/null 2>&1 || {
+  if ! kubectl --kubeconfig "$KUBECONFIG_FILE" get nodes >/dev/null 2>&1; then
     echo "Kubernetes API not ready" >&2
+    echo "--- kubeconfig server ---" >&2
+    grep -E '^\s*server:' "$KUBECONFIG_FILE" >&2 || true
+    echo "--- k3d list ---" >&2
+    k3d cluster list >&2 || true
+    echo "--- docker ps ---" >&2
+    docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' >&2 || true
     exit 1
-  }
+  fi
 
   if ! kubectl --kubeconfig "$KUBECONFIG_FILE" -n "$TEST_NAMESPACE" get pod "$TEST_POD" >/dev/null 2>&1; then
     kubectl --kubeconfig "$KUBECONFIG_FILE" -n "$TEST_NAMESPACE" run "$TEST_POD" \

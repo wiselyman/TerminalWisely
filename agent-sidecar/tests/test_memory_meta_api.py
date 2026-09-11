@@ -21,7 +21,8 @@ def _token(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
 
 def test_memory_meta_route(tmp_path) -> None:
     put_user_memory(prefs=["中文"], notes=["n1"])
-    put_host_memory("u@h:22", facts=["os=ubuntu"], prefs=["short"])
+    scope = "u@h_22"
+    put_host_memory(scope, facts=["os=ubuntu"], prefs=["short"])
     with TestClient(app) as client:
         r = client.get(
             "/v1/memory/meta",
@@ -35,12 +36,14 @@ def test_memory_meta_route(tmp_path) -> None:
         assert body["user"]["notes"] == 1
         assert body["host_count"] >= 1
         scopes = {h["scope"] for h in body["hosts"]}
-        assert "u@h:22" in scopes
+        assert scope in scopes
         assert "hosts_dir" in body
         assert "user_path" in body
         assert "memory_dir" in body
         assert body["user_path"].endswith("user.json")
-        assert body["memory_dir"].endswith("memory") or body["memory_dir"].endswith("memory/")
+        assert body["memory_dir"].endswith("memory") or body["memory_dir"].endswith(
+            "memory/"
+        )
         assert "/hosts" in body["hosts_dir"].replace("\\", "/")
 
 

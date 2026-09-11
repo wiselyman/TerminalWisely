@@ -14,7 +14,7 @@ from app.memory.host_store import (
 
 
 def test_memory_scope_prefers_server_id() -> None:
-    assert memory_scope_key(server_id="root@h:22", session_id="tab1") == "root@h:22"
+    assert memory_scope_key(server_id="root@h:22", session_id="tab1") == "root@h_22"
     assert memory_scope_key(server_id=None, session_id="tab1") == "tab1"
 
 

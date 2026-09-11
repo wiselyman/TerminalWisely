@@ -44,7 +44,7 @@ def test_list_user_skills_catalog_includes_saved(
     skill = out["skills"][0]
     assert skill["id"] == "disk-check"
     assert skill["title"] == "Disk check"
-    assert skill["path"].endswith("disk-check/SKILL.md")
+    assert skill["path"].replace("\\", "/").endswith("disk-check/SKILL.md")
 
 
 def test_get_v1_skills() -> None:
