@@ -46,6 +46,7 @@ function isAppLocale(value: string | null | undefined): value is AppLocale {
 
 /** Chinese system → zh-CN; everything else → en. */
 export function detectSystemLocale(): AppLocale {
+  if (typeof navigator === "undefined") return "en";
   const candidates = [
     ...(navigator.languages ?? []),
     navigator.language,
