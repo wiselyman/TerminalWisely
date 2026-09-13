@@ -75,8 +75,11 @@ export function inferOsIdFromName(osName: string | null | undefined): string | n
   return null;
 }
 
-/** Brand hex on dark UI — lift near-black logos (e.g. Apple) so they stay visible. */
-export function iconFillForDarkUi(hex: string): string {
+/** Brand hex for dark/light chrome — near-black logos lift on dark; near-white darken on light. */
+export function iconFillForTheme(
+  hex: string,
+  theme: "dark" | "light" = "dark",
+): string {
   const raw = hex.replace("#", "").trim();
   if (raw.length !== 6) {
     return `#${raw}`;
@@ -86,8 +89,17 @@ export function iconFillForDarkUi(hex: string): string {
   const b = parseInt(raw.slice(4, 6), 16);
   // Relative luminance (sRGB), 0 = black.
   const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  if (theme === "light") {
+    if (luminance > 0.85) return "#1f2328";
+    return `#${raw.toLowerCase()}`;
+  }
   if (luminance < 0.22) {
     return "#e6edf3";
   }
   return `#${raw.toLowerCase()}`;
+}
+
+/** @deprecated Prefer iconFillForTheme(hex, "dark") */
+export function iconFillForDarkUi(hex: string): string {
+  return iconFillForTheme(hex, "dark");
 }

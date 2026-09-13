@@ -8,6 +8,7 @@ import {
   resolveMediaId,
 } from "../../lib/aiEngineer/chatMedia";
 import { isHttpUrl, openExternalUrl } from "../../lib/aiEngineer/openExternalUrl";
+import { getAppTheme } from "../../lib/appTheme";
 
 marked.setOptions({
   gfm: true,
@@ -20,14 +21,20 @@ type Props = {
   onImageClick?: (src: string, alt?: string) => void;
 };
 
-const PLACEHOLDER_SVG =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">` +
-      `<rect fill="#161b22" width="100%" height="100%"/>` +
-      `<text x="50%" y="50%" fill="#8b949e" font-size="14" text-anchor="middle" dy=".3em">image</text>` +
-      `</svg>`,
+function placeholderSvgDataUri(): string {
+  const theme = getAppTheme();
+  const bg = theme === "light" ? "#f6f8fa" : "#161b22";
+  const fg = theme === "light" ? "#656d76" : "#8b949e";
+  return (
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">` +
+        `<rect fill="${bg}" width="100%" height="100%"/>` +
+        `<text x="50%" y="50%" fill="${fg}" font-size="14" text-anchor="middle" dy=".3em">image</text>` +
+        `</svg>`,
+    )
   );
+}
 
 /** Lightweight markdown render for AI chat bubbles (reuses app `marked`). */
 export function AiMarkdown({ content, className, onImageClick }: Props) {
@@ -138,7 +145,7 @@ async function rewriteRemoteImages(rawHtml: string): Promise<string> {
         if (!isHttpUrl(src)) return;
         img.setAttribute("data-remote-src", src);
         // Avoid flashing a broken hotlink while caching.
-        img.setAttribute("src", PLACEHOLDER_SVG);
+        img.setAttribute("src", placeholderSvgDataUri());
         if (!looksLikeImageUrl(src) && !src.includes("image")) {
           // Still try cache — many CDNs omit extensions.
         }
@@ -150,7 +157,7 @@ async function rewriteRemoteImages(rawHtml: string): Promise<string> {
       } catch {
         const remote = img.getAttribute("data-remote-src") || src;
         img.setAttribute("data-remote-src", remote);
-        img.setAttribute("src", PLACEHOLDER_SVG);
+        img.setAttribute("src", placeholderSvgDataUri());
         img.setAttribute("alt", img.getAttribute("alt") || "image unavailable");
         img.classList.add("ai-engineer-md-img-failed");
         img.setAttribute("title", "Click to open original in browser");

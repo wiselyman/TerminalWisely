@@ -5,6 +5,10 @@ export type PreviewKind =
   | "csv"
   | "image"
   | "pdf"
+  | "office"
+  | "archive"
+  | "video"
+  | "audio"
   | "unsupported";
 
 const TEXT_EXTENSIONS = new Set([
@@ -49,6 +53,9 @@ const TEXT_EXTENSIONS = new Set([
 
 export const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 
+/** Cap for binary materialize (image/pdf/office/archive/media) before download. */
+export const MAX_BINARY_PREVIEW_BYTES = 200 * 1024 * 1024;
+
 const IMAGE_EXTENSIONS = new Set([
   "png",
   "jpg",
@@ -58,6 +65,49 @@ const IMAGE_EXTENSIONS = new Set([
   "svg",
   "bmp",
   "ico",
+]);
+
+const OFFICE_EXTENSIONS = new Set([
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "odt",
+  "ods",
+  "odp",
+  "rtf",
+  "wps",
+]);
+
+const ARCHIVE_EXTENSIONS = new Set([
+  "zip",
+  "rar",
+  "7z",
+  "tar",
+  "gz",
+  "tgz",
+  "bz2",
+  "xz",
+]);
+
+const VIDEO_EXTENSIONS = new Set([
+  "mp4",
+  "webm",
+  "mov",
+  "m4v",
+  "avi",
+  "mkv",
+]);
+
+const AUDIO_EXTENSIONS = new Set([
+  "mp3",
+  "wav",
+  "ogg",
+  "aac",
+  "m4a",
+  "flac",
 ]);
 
 /** Basename extension without the dot; empty for extensionless / `.gitignore`-style names. */
@@ -85,6 +135,10 @@ export function previewKindFromExtension(
   const ext = extension.toLowerCase();
   if (IMAGE_EXTENSIONS.has(ext)) return "image";
   if (ext === "pdf") return "pdf";
+  if (OFFICE_EXTENSIONS.has(ext)) return "office";
+  if (ARCHIVE_EXTENSIONS.has(ext)) return "archive";
+  if (VIDEO_EXTENSIONS.has(ext)) return "video";
+  if (AUDIO_EXTENSIONS.has(ext)) return "audio";
   if (ext === "csv" || ext === "tsv") return "csv";
   if (ext === "md" || ext === "markdown") return "markdown";
   if (ext === "html" || ext === "htm") return "html";
@@ -103,6 +157,17 @@ export function canPreviewPath(
   const size =
     totalSize != null && Number.isFinite(totalSize) ? Number(totalSize) : 0;
   return previewKindFromExtension(extensionOfPath(path), size) !== "unsupported";
+}
+
+export function isReadonlyBinaryPreviewKind(kind: string): boolean {
+  return (
+    kind === "image" ||
+    kind === "pdf" ||
+    kind === "office" ||
+    kind === "archive" ||
+    kind === "video" ||
+    kind === "audio"
+  );
 }
 
 export function formatFileSize(bytes: number): string {

@@ -61,6 +61,20 @@ describe("localFsPointerMove", () => {
     });
   });
 
+  it("findTreeDropHit reads data-path/kind from contents items too", () => {
+    const item = document.createElement("div");
+    item.className = "local-fs-contents-item";
+    item.dataset.path = "/home/u/docs";
+    item.dataset.kind = "directory";
+    document.body.appendChild(item);
+
+    document.elementFromPoint = () => item;
+    expect(findTreeDropHit(10, 10)).toEqual({
+      path: "/home/u/docs",
+      kind: "directory",
+    });
+  });
+
   it("isLocalFsTreeMoving tracks body class", () => {
     expect(isLocalFsTreeMoving()).toBe(false);
     document.body.classList.add("local-fs-tree-moving");

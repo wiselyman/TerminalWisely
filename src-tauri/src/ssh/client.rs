@@ -1070,13 +1070,36 @@ impl SshSession {
             return Ok(());
         }
 
+        let resolved = self.resolve_remote_path(&cd_target).await?;
+        let (cd_target, resolved) =
+            match sftp::remote_path_kind(&self.handle(), &resolved).await? {
+                Some(true) => (cd_target, resolved),
+                Some(false) => {
+                    return Err(AppError::msg(format!("Not a directory: {resolved}")));
+                }
+                None => {
+                    // Soft-wrap recovery sometimes inserts a space mid-segment
+                    // (`droi` + `d_sample` → `droi d_sample`). Retry without those.
+                    let repaired = repair_soft_wrap_spaces(&cd_target);
+                    if repaired != cd_target {
+                        let repaired_resolved = self.resolve_remote_path(&repaired).await?;
+                        match sftp::remote_path_kind(&self.handle(), &repaired_resolved).await? {
+                            Some(true) => (repaired, repaired_resolved),
+                            _ => {
+                                return Err(AppError::msg(format!("No such file: {resolved}")));
+                            }
+                        }
+                    } else {
+                        return Err(AppError::msg(format!("No such file: {resolved}")));
+                    }
+                }
+            };
+
         let cmd = format!(
             "cd {} && ls -F\r",
             crate::shell::shell_cd_argument(&cd_target)
         );
         self.write_input(&cmd)?;
-
-        let resolved = self.resolve_remote_path(&cd_target).await?;
         *self.remote_cwd.lock().await = resolved;
         Ok(())
     }
@@ -1830,6 +1853,33 @@ fn normalize_remote_path_input(remote_path: &str) -> Option<String> {
     }
 }
 
+/// Remove spaces inserted by soft-wrap join between path-safe characters
+/// (`droi` + `d_sample` → `droi d_sample` → `droid_sample`).
+/// Callers must prefer the original path when it already exists (real `my dir`).
+fn repair_soft_wrap_spaces(path: &str) -> String {
+    let chars: Vec<char> = path.chars().collect();
+    let mut result = String::with_capacity(path.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == ' '
+            && i > 0
+            && i + 1 < chars.len()
+            && is_path_token_char(chars[i - 1])
+            && is_path_token_char(chars[i + 1])
+        {
+            i += 1;
+            continue;
+        }
+        result.push(chars[i]);
+        i += 1;
+    }
+    result
+}
+
+fn is_path_token_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'
+}
+
 /// Strip shell-style quotes from path segments, e.g. `~/'下载'` → `~/下载`.
 fn sanitize_shell_path(path: &str) -> String {
     let trimmed = path.trim();
@@ -1887,11 +1937,21 @@ fn sanitize_shell_path(path: &str) -> String {
 
 #[cfg(test)]
 mod path_tests {
-    use super::{normalize_remote_path_input, sanitize_shell_path};
+    use super::{normalize_remote_path_input, repair_soft_wrap_spaces, sanitize_shell_path};
 
     #[test]
     fn quoted_segment_after_tilde() {
         assert_eq!(sanitize_shell_path("~/'下载'"), "~/下载");
+    }
+
+    #[test]
+    fn repairs_soft_wrap_space_in_droid_sample() {
+        assert_eq!(
+            repair_soft_wrap_spaces(
+                "~/Isaac-GR00T/demo_data/droi d_sample/videos"
+            ),
+            "~/Isaac-GR00T/demo_data/droid_sample/videos"
+        );
     }
 
     #[test]

@@ -16,10 +16,11 @@ import { PreviewDock } from "./PreviewDock";
 import { Modal } from "./Modal";
 import { EditableTextPreview } from "./preview/EditableTextPreview";
 import { HtmlPreview } from "./preview/HtmlPreview";
-import { ImagePreview } from "./preview/ImagePreview";
 import { MarkdownPreview } from "./preview/MarkdownPreview";
-import { PdfPreview } from "./preview/PdfPreview";
+import { NativePdfPreview } from "./preview/NativePdfPreview";
+import { OfvReadonlyPreview } from "./preview/OfvReadonlyPreview";
 import { UnsupportedPreview } from "./preview/UnsupportedPreview";
+import { isReadonlyBinaryPreviewKind } from "../lib/fileType";
 import {
   PreviewChevronDownIcon,
   PreviewChevronUpIcon,
@@ -513,11 +514,25 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             onChange={setEditedContent}
           />
         ) : null}
-        {!loading && !error && data?.kind === "image" && data.local_cache_path ? (
-          <ImagePreview path={data.local_cache_path} />
+        {!loading &&
+        !error &&
+        data?.kind === "pdf" &&
+        data.local_cache_path ? (
+          <NativePdfPreview
+            path={data.local_cache_path}
+            fileName={data.filename}
+          />
         ) : null}
-        {!loading && !error && data?.kind === "pdf" && data.local_cache_path ? (
-          <PdfPreview path={data.local_cache_path} />
+        {!loading &&
+        !error &&
+        data &&
+        isReadonlyBinaryPreviewKind(data.kind) &&
+        data.kind !== "pdf" &&
+        data.local_cache_path ? (
+          <OfvReadonlyPreview
+            path={data.local_cache_path}
+            fileName={data.filename}
+          />
         ) : null}
         {!loading && !error && data?.kind === "unsupported" ? (
           <UnsupportedPreview

@@ -101,6 +101,34 @@ export function joinRemotePath(parent: string, name: string): string {
   return `${parent}/${name}`;
 }
 
+/** Last path segment without trailing classify marks. */
+export function remotePathBasename(path: string): string {
+  const cleaned = path.replace(/[$#]+$/, "").replace(/\/$/, "").replace(/[@*=|>]$/, "");
+  const parts = cleaned.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? cleaned;
+}
+
+/**
+ * Join bare basenames with the live prompt cwd.
+ * Do NOT rewrite already-qualified `~/file` paths — those are often correct
+ * hits from an older home-directory listing in scrollback (rewriting them to
+ * the current deep cwd caused "Path not found: ~/Isaac-…/file.pdf").
+ */
+export function refineListingPath(
+  resolved: string,
+  liveCwd: string | null | undefined,
+): string {
+  if (!liveCwd) return resolved;
+  const cwd = liveCwd.replace(/\/+$/, "") || liveCwd;
+  const base = remotePathBasename(resolved);
+
+  if (!resolved.includes("/")) {
+    return joinRemotePath(cwd, base);
+  }
+
+  return resolved;
+}
+
 /** Normalize shell path arguments (quotes, ~/’dir’ segments, etc.). */
 export function unquoteShellWord(word: string): string {
   let result = word.trim();
@@ -137,7 +165,9 @@ function isLsCommand(command: string): boolean {
   const trimmed = command.trim();
   if (!trimmed) return false;
   if (/^ls(\s|$)/.test(trimmed)) return true;
-  if (/(?:&&|;)\s*ls(\s|$)/.test(trimmed)) return true;
+  if (/^(?:&&|;)\s*ls(\s|$)/.test(trimmed)) return true;
+  // `cd … && ls` as a full prompt command — not soft-wrapped `…/droi` + `d_sample && ls`.
+  if (/^cd\b/i.test(trimmed) && /(?:&&|;)\s*ls(\s|$)/.test(trimmed)) return true;
   return false;
 }
 
@@ -146,8 +176,9 @@ function isLsCommandLine(line: string): boolean {
   const trimmed = stripAnsi(line).trim();
   if (!trimmed) return false;
   if (isLsCommand(trimmed)) return true;
-  // Wrapped fragment, e.g. `...dir' && ls -F` on its own buffer row.
-  if (/(?:^|&&|;)\s*ls(?:\s|$)/.test(trimmed)) return true;
+  // Wrapped fragment that starts with the ls part: `&& ls -F` — not
+  // `d_sample/videos && ls -F` (that is a soft-wrapped path continuation).
+  if (/^(?:&&|;)\s*ls(?:\s|$)/.test(trimmed)) return true;
   return false;
 }
 
@@ -197,7 +228,19 @@ function extractCommandFromPromptRegion(
     }
 
     // Command already looks complete — don't swallow ls listing rows.
-    if (looksLikeLsListingLine(trimmed)) break;
+    // Exception: soft-wrapped `cd ~/…` continues with `Isaac-…/rest && ls` which
+    // looksLikeLsListingLine would otherwise treat as a filename row.
+    if (looksLikeLsListingLine(trimmed)) {
+      if (
+        /^\s*cd\b/i.test(cmd) &&
+        !/(?:&&|;)\s*ls\b/.test(cmd) &&
+        /^[\w./~'\"-]/.test(trimmed)
+      ) {
+        cmd = joinCommandWrap(cmd, trimmed);
+        continue;
+      }
+      break;
+    }
 
     // Still joining a wrapped `cd …` that hasn't reached `&& ls` yet.
     if (!isLsCommand(cmd) && /^\s*cd\b/i.test(cmd)) {
@@ -212,9 +255,17 @@ function extractCommandFromPromptRegion(
 }
 
 /** Soft-wrapped buffer rows abut; don't insert spaces into paths like `希望学`+`网课`. */
-function joinCommandWrap(cmd: string, next: string): string {
+export function joinCommandWrap(cmd: string, next: string): string {
   if (!cmd) return next;
   if (commandLooksIncomplete(cmd)) {
+    return cmd + next;
+  }
+  // New shell word / operator on the next row — keep a separator.
+  if (isLsCommandLine(next) || /^(&&|;|\|)/.test(next)) {
+    return `${cmd} ${next}`;
+  }
+  // Mid-token soft wrap: `.../droi` + `d_sample/videos` must not become `droi d_sample`.
+  if (/^[\w./~'\"-]/.test(next) && /[^\s&|;]$/.test(cmd)) {
     return cmd + next;
   }
   return `${cmd} ${next}`;
@@ -231,6 +282,8 @@ function commandLooksIncomplete(cmd: string): boolean {
     return true;
   }
   if (/\bcd\s*$/i.test(trimmed)) return true;
+  // Soft-wrapped `cd ~/…` often breaks right after `~/` or a path slash.
+  if (/^cd\b/i.test(trimmed) && /[~\/]$/.test(trimmed)) return true;
   return false;
 }
 
@@ -423,6 +476,49 @@ export function getListingParentDir(
   }
 
   return replayCwdAtLine(getLinePlain, lineNumber, initialCwd);
+}
+
+/**
+ * Resolve a directory click from an ls listing.
+ * Prefers live prompt cwd for plain current-dir listings, but never turns
+ * `…/demo_data` + click `demo_data` into `…/demo_data/demo_data` unless the
+ * listing parent really is already `…/demo_data`.
+ */
+export function resolveDirectoryClickPath(
+  fromListing: string,
+  liveCwd: string | null | undefined,
+  clickedName: string,
+): string {
+  const base = remotePathBasename(clickedName);
+  const cleaned = fromListing.includes(" ")
+    ? fromListing.replace(/([A-Za-z0-9_.-]) ([A-Za-z0-9_.-])/g, "$1$2")
+    : fromListing;
+
+  if (!liveCwd) return cleaned;
+
+  const underLive = joinRemotePath(liveCwd, base);
+
+  // Already inside a directory with this name.
+  if (remotePathBasename(liveCwd) === base) {
+    // Current-dir listing contains a nested folder of the same name.
+    if (cleaned === underLive) return cleaned;
+    // Parent listing / soft-wrap recovery pointed at this dir — don't nest.
+    if (cleaned === liveCwd || remotePathBasename(cleaned) === base) {
+      return liveCwd;
+    }
+    return cleaned;
+  }
+
+  // Parent recovery produced …/name/name while live cwd is the parent.
+  if (cleaned === joinRemotePath(underLive, base)) {
+    return underLive;
+  }
+
+  if (cleaned === underLive || fromListing.includes(" ")) {
+    return underLive;
+  }
+
+  return cleaned;
 }
 
 export function resolvePathFromListing(

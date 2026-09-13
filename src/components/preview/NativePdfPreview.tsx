@@ -2,23 +2,31 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 
-interface ImagePreviewProps {
+interface NativePdfPreviewProps {
   path: string;
+  fileName: string;
 }
 
-export function ImagePreview({ path }: ImagePreviewProps) {
+/**
+ * Use the WebView's built-in PDF engine (PDFKit on macOS / Edge PDF on Win).
+ * More reliable than pdf.js for large CJK / compressed documents in Tauri.
+ */
+export function NativePdfPreview({ path, fileName }: NativePdfPreviewProps) {
   const { t } = useTranslation("preview");
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
+    setSrc(null);
     setError(null);
     try {
       const next = convertFileSrc(path);
       if (!disposed) setSrc(next);
     } catch (err) {
-      if (!disposed) setError(String(err));
+      if (!disposed) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     }
     return () => {
       disposed = true;
@@ -30,12 +38,15 @@ export function ImagePreview({ path }: ImagePreviewProps) {
   }
 
   if (!src) {
-    return <div className="preview-empty">{t("loadingImage")}</div>;
+    return <div className="preview-empty">{t("loadingPreview")}</div>;
   }
 
   return (
-    <div className="preview-image-wrap">
-      <img src={src} alt="" className="preview-image" />
-    </div>
+    <iframe
+      className="preview-native-pdf"
+      src={src}
+      title={fileName}
+      data-testid="preview-native-pdf"
+    />
   );
 }

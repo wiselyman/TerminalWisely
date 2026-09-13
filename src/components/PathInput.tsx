@@ -12,6 +12,8 @@ interface PathInputProps {
   placeholder?: string;
   disabled?: boolean;
   onSubmit?: (value: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 export function PathInput({
@@ -21,6 +23,8 @@ export function PathInput({
   placeholder,
   disabled = false,
   onSubmit,
+  onFocus,
+  onBlur,
 }: PathInputProps) {
   const { t } = useTranslation("commands");
   const listId = useId();
@@ -147,6 +151,8 @@ export function PathInput({
         value={value}
         placeholder={placeholder ?? t("run.placeholderPath")}
         disabled={disabled}
+        onFocus={onFocus}
+        onBlur={onBlur}
         onChange={(event) => {
           onChange(event.target.value);
           lastPartialRef.current = "";

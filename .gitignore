@@ -45,3 +45,7 @@ testdata/
 # Playwright artifacts
 /test-results/
 /e2e-report/
+
+# pdf.js CMaps/fonts copied by vite.pdfjs.ts (from node_modules)
+/public/pdfjs/
+

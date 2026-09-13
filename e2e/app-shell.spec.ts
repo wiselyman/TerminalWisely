@@ -29,6 +29,18 @@ test.describe("App shell & welcome", () => {
     );
   });
 
+  test("switches theme dark ↔ light", async ({ page }) => {
+    await page.getByTestId("theme-switcher-trigger").click();
+    await expect(page.getByTestId("theme-switcher-menu")).toBeVisible();
+    await page.getByTestId("theme-option-light").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    await page.getByTestId("theme-switcher-trigger").click();
+    await expect(page.getByTestId("theme-switcher-menu")).toBeVisible();
+    await page.getByTestId("theme-option-dark").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
   test("sidebar hosts and k8s view toggles", async ({ page }) => {
     const api = await twE2e(page);
     await api.openK8sWorkbench();

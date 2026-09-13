@@ -5,7 +5,8 @@
  */
 import { canDropMove, dropMoveTargetDir } from "./localFsOps";
 
-const DRAG_THRESHOLD_PX = 4;
+/** Slightly above trackpad jitter so Cmd/Shift clicks still register. */
+const DRAG_THRESHOLD_PX = 8;
 const MOVING_CLASS = "local-fs-tree-moving";
 
 export { DRAG_THRESHOLD_PX };
@@ -33,7 +34,9 @@ export function isLocalFsTreeMoving(): boolean {
 export function findTreeDropHit(x: number, y: number): TreeDropHit | null {
   const el = document
     .elementFromPoint(x, y)
-    ?.closest<HTMLElement>(".local-fs-tree-row[data-path]");
+    ?.closest<HTMLElement>(
+      ".local-fs-tree-row[data-path], .local-fs-contents-item[data-path]",
+    );
   if (!el) return null;
   const path = el.dataset.path?.trim();
   const kind = el.dataset.kind?.trim();

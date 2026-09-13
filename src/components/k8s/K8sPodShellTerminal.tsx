@@ -21,6 +21,11 @@ import {
   handleTerminalFontSizeHotkey,
   subscribeTerminalFontSize,
 } from "../../lib/terminalFont";
+import {
+  getAppTheme,
+  subscribeAppTheme,
+  terminalThemeFor,
+} from "../../lib/appTheme";
 import { K8sSelectionContextMenu } from "./K8sSelectionContextMenu";
 import "@xterm/xterm/css/xterm.css";
 
@@ -107,12 +112,7 @@ export function K8sPodShellTerminal({
         fontSize: getTerminalFontSize(),
         lineHeight: TERMINAL_LINE_HEIGHT,
         cursorBlink: true,
-        theme: {
-          background: "#010409",
-          foreground: "#e6edf3",
-          cursor: "#58a6ff",
-          selectionBackground: "#264f78",
-        },
+        theme: terminalThemeFor(getAppTheme()),
         scrollback: 5000,
       });
       fit = new FitAddon();
@@ -168,6 +168,13 @@ export function K8sPodShellTerminal({
           fit.fit();
           term.refresh(0, term.rows - 1);
           resize();
+        }),
+      );
+      unlisteners.push(
+        subscribeAppTheme((theme) => {
+          if (!term) return;
+          term.options.theme = terminalThemeFor(theme);
+          term.refresh(0, term.rows - 1);
         }),
       );
       const ro = new ResizeObserver(() => resize());

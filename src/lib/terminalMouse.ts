@@ -4,7 +4,7 @@ import {
   findRemotePathMatches,
   rangeToColumns,
 } from "./terminalLinks";
-import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "./terminalContext";
+import { getLinePlainText, isLineInLsOutput, readTerminalPromptCwd, refineListingPath, resolveDirectoryClickPath, resolvePathFromListing } from "./terminalContext";
 
 export interface TerminalMouseCell {
   col: number;
@@ -124,12 +124,19 @@ export function findRemotePathHitAtCell(
     );
     if (cell.col >= startCol && cell.col < startCol + width) {
       return {
-        path: resolvePathFromListing(
-          getLinePlain,
-          terminal.buffer.active.length,
-          cell.bufferLineNumber,
-          match.path,
-        ),
+        path: (() => {
+          const fromListing = resolvePathFromListing(
+            getLinePlain,
+            terminal.buffer.active.length,
+            cell.bufferLineNumber,
+            match.path,
+          );
+          const liveCwd = readTerminalPromptCwd(terminal);
+          if (match.isDirectory) {
+            return resolveDirectoryClickPath(fromListing, liveCwd, match.path);
+          }
+          return refineListingPath(fromListing, liveCwd);
+        })(),
         directoryHint: match.isDirectory === true,
         bufferLineNumber: cell.bufferLineNumber,
         startCol,

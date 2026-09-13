@@ -44,6 +44,7 @@
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
 | 语言切换 | — | Playwright `app-shell`/`settings-i18n`（menu portal + html lang） | smoke `locale-switcher` | — | ✓ |
+| 主题切换（深色/浅色） | `appTheme` | Playwright `app-shell`（data-theme） | smoke `theme-switcher` | — | ✓ |
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
 
@@ -76,7 +77,7 @@
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
 | 多 Tab 预览面板 | — | — | smoke | — | ✓ |
-| Text/Markdown/HTML/CSV/图片/PDF | Rust preview | — | smoke | — | ✓ |
+| Text/Markdown/HTML/CSV 编辑 + 原生 PDF + OFV 只读（图/Office/压缩包/音视频） | `fileType.test` + `pdfjsOfv.test` + Rust preview | — | smoke | — | ✓ |
 | 预览内搜索 | `previewSearch.test` | — | smoke | — | ✓ |
 | 编辑保存 / sudo 重试 | Rust | — | — | — | ✓ |
 
@@ -94,7 +95,7 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| 本地+远程双树 | `localFsTree` | — | smoke | **✓** | ✓ |
+| Host 左树+右内容（列表/网格） | `localFsTree` + `openDirectory`（点行开内容、三角展开；后退/上一级；地址栏跟 contentsPath） | — | smoke | — | ✓ |
 | Host 树新建/拖移/剪贴板/多选 | `localFsOps` + Rust `fs_path_tests` | create/copy/move | smoke menu | — | ✓ |
 | Host 树局部重载 | `localFsStore.reloadDirectory` | — | — | — | ✓ |
 | Host 树 pointer 拖移 | `localFsPointerMove` | — | smoke | — | ✓ |

@@ -48,7 +48,14 @@ import {
   unregisterTerminalSession,
 } from "../lib/terminalSelectionDrag";
 import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
-import { getLinePlainText, isLineInLsOutput, resolvePathFromListing } from "../lib/terminalContext";
+import {
+  getLinePlainText,
+  isLineInLsOutput,
+  readTerminalPromptCwd,
+  refineListingPath,
+  resolveDirectoryClickPath,
+  resolvePathFromListing,
+} from "../lib/terminalContext";
 import {
   clearUploadHighlights,
   scheduleUploadHighlight,
@@ -65,6 +72,11 @@ import {
   handleTerminalFontSizeHotkey,
   subscribeTerminalFontSize,
 } from "../lib/terminalFont";
+import {
+  getAppTheme,
+  subscribeAppTheme,
+  terminalThemeFor,
+} from "../lib/appTheme";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
 import { downloadRemotePath } from "../lib/sessionDownload";
 import { formatTransferError } from "../lib/transferError";
@@ -298,12 +310,7 @@ export function TerminalView({
       fontFamily: getTerminalFontFamily(),
       fontWeight: 400,
       fontWeightBold: 700,
-      theme: {
-        background: "#0d1117",
-        foreground: "#e6edf3",
-        cursor: "#58a6ff",
-        selectionBackground: "#264f78",
-      },
+      theme: terminalThemeFor(getAppTheme()),
       scrollback: 5000,
       allowProposedApi: true,
       rightClickSelectsWord: false,
@@ -339,6 +346,15 @@ export function TerminalView({
     });
 
     const unsubFontSize = subscribeTerminalFontSize(applyFontSize);
+    const unsubTheme = subscribeAppTheme((theme) => {
+      if (disposed || !terminalRef.current) return;
+      try {
+        terminalRef.current.options.theme = terminalThemeFor(theme);
+        terminalRef.current.refresh(0, terminalRef.current.rows - 1);
+      } catch {
+        // Terminal may already be disposed.
+      }
+    });
 
     void ensureTerminalFontsLoaded().finally(() => {
       if (disposed || !fitAddonRef.current || !terminalRef.current) return;
@@ -613,14 +629,20 @@ export function TerminalView({
               return;
             }
 
-            const links = matches.map(({ path, start, end }) => {
-              const resolveClickedPath = () =>
-                resolvePathFromListing(
+            const links = matches.map(({ path, start, end, isDirectory }) => {
+              const resolveClickedPath = () => {
+                const fromListing = resolvePathFromListing(
                   getLinePlain,
                   terminal.buffer.active.length,
                   bufferLineNumber,
                   path,
                 );
+                const liveCwd = readTerminalPromptCwd(terminal);
+                if (isDirectory) {
+                  return resolveDirectoryClickPath(fromListing, liveCwd, path);
+                }
+                return refineListingPath(fromListing, liveCwd);
+              };
 
               return {
                 range: matchToXtermRange(map, line, start, end, bufferLineNumber),
@@ -679,7 +701,9 @@ export function TerminalView({
                         await downloadRemotePath(
                           sessionId,
                           targetPath,
-                          probe === "directory" ? "directory" : "file",
+                          probe === "directory" || isDirectory
+                            ? "directory"
+                            : "file",
                         );
                       } catch (err) {
                         pushToastRef.current(formatTransferError(err), false);
@@ -690,6 +714,16 @@ export function TerminalView({
 
                   void (async () => {
                     try {
+                      // ls -F trailing `/` is authoritative — never open dirs in the file previewer.
+                      if (isDirectory) {
+                        await invoke("enter_directory", {
+                          request: {
+                            session_id: sessionId,
+                            path: targetPath,
+                          },
+                        });
+                        return;
+                      }
                       const probe = await invoke<string>("probe_remote_path", {
                         request: {
                           session_id: sessionId,
@@ -703,6 +737,11 @@ export function TerminalView({
                             path: targetPath,
                           },
                         });
+                      } else if (probe === "missing") {
+                        pushToastRef.current(
+                          formatAppError(`No such file: ${targetPath}`),
+                          false,
+                        );
                       } else {
                         await openPreviewRef.current(sessionId, targetPath);
                       }
@@ -769,6 +808,7 @@ export function TerminalView({
     return () => {
       disposed = true;
       unsubFontSize();
+      unsubTheme();
       registerTerminalSelectionProvider(sessionId, null);
       cleanupSelectionDrag();
       unregisterTerminalSession(sessionId);

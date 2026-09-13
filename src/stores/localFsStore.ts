@@ -1,8 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { formatAppError } from "../lib/formatAppError";
+import {
+  normalizeRemotePath,
+  parentRemotePath,
+  type FsClipboard,
+} from "../lib/localFsOps";
 import type { ListLocalDirectoryResult, LocalFsEntry } from "../types";
-import type { FsClipboard } from "../lib/localFsOps";
 import {
   readWorkspacePanelWidth,
   setWorkspacePanelWidth,
@@ -10,6 +14,10 @@ import {
 } from "../lib/workspacePanelWidth";
 
 const SHOW_HIDDEN_KEY = "tw.localFs.showHidden";
+const VIEW_MODE_KEY = "tw.localFs.viewMode";
+const SPLIT_TREE_WIDTH_KEY = "tw.localFs.splitTreeWidth";
+
+export type LocalFsViewMode = "list" | "grid";
 
 function loadShowHidden(): boolean {
   try {
@@ -17,6 +25,24 @@ function loadShowHidden(): boolean {
   } catch {
     return false;
   }
+}
+
+function loadViewMode(): LocalFsViewMode {
+  try {
+    return localStorage.getItem(VIEW_MODE_KEY) === "grid" ? "grid" : "list";
+  } catch {
+    return "list";
+  }
+}
+
+function loadSplitTreeWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(SPLIT_TREE_WIDTH_KEY));
+    if (Number.isFinite(raw) && raw >= 140 && raw <= 420) return raw;
+  } catch {
+    // ignore
+  }
+  return 200;
 }
 
 function toSet(values: string[]): Set<string> {
@@ -38,17 +64,32 @@ export interface LocalFsState {
   selectedPath: string | null;
   selectedPaths: string[];
   selectionAnchor: string | null;
+  /** Directory shown in the right contents pane. */
+  contentsPath: string | null;
+  /** Previous contentsPath values for Back (most recent at end). */
+  contentsHistory: string[];
+  viewMode: LocalFsViewMode;
+  splitTreeWidth: number;
   clipboard: FsClipboard | null;
   showHidden: boolean;
   openPanel: (sessionId: string, tab?: "files" | "find" | "taskManager") => void;
   close: () => void;
   setWidth: (w: number) => void;
+  setSplitTreeWidth: (w: number) => void;
   setActiveTab: (tab: "files" | "find" | "taskManager") => void;
   setSelectedPath: (path: string | null) => void;
   setSelectedPaths: (paths: string[], anchor?: string | null) => void;
+  setViewMode: (mode: LocalFsViewMode) => void;
   setClipboard: (clip: FsClipboard | null) => void;
   setShowHidden: (show: boolean) => void;
   initTree: (path?: string) => Promise<void>;
+  /** Select + show folder in the right pane (tree expand only via chevron). */
+  openDirectory: (
+    path: string,
+    opts?: { fromHistory?: boolean },
+  ) => Promise<void>;
+  goBack: () => Promise<void>;
+  goUp: () => Promise<void>;
   toggleDirectory: (path: string) => Promise<void>;
   refreshTree: () => Promise<void>;
   /** Re-fetch one directory into childrenCache (local dynamic load). */
@@ -90,6 +131,10 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
   selectedPath: null,
   selectedPaths: [],
   selectionAnchor: null,
+  contentsPath: null,
+  contentsHistory: [],
+  viewMode: loadViewMode(),
+  splitTreeWidth: loadSplitTreeWidth(),
   clipboard: null,
   showHidden: loadShowHidden(),
 
@@ -112,6 +157,8 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       selectedPath: null,
       selectedPaths: [],
       selectionAnchor: null,
+      contentsPath: null,
+      contentsHistory: [],
       clipboard: null,
     });
     void get().initTree("~");
@@ -122,6 +169,16 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
   setWidth: (w) => {
     set({ width: w });
     setWorkspacePanelWidth(w);
+  },
+
+  setSplitTreeWidth: (w) => {
+    const clamped = Math.max(140, Math.min(420, Math.round(w)));
+    try {
+      localStorage.setItem(SPLIT_TREE_WIDTH_KEY, String(clamped));
+    } catch {
+      // ignore
+    }
+    set({ splitTreeWidth: clamped });
   },
 
   setActiveTab: (activeTab) => set({ activeTab }),
@@ -139,6 +196,15 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       selectedPath: paths[paths.length - 1] ?? null,
       selectionAnchor: anchor === undefined ? paths[paths.length - 1] ?? null : anchor,
     }),
+
+  setViewMode: (mode) => {
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      // ignore
+    }
+    set({ viewMode: mode });
+  },
 
   setClipboard: (clipboard) => set({ clipboard }),
 
@@ -168,6 +234,8 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       selectedPath: null,
       selectedPaths: [],
       selectionAnchor: null,
+      contentsPath: null,
+      contentsHistory: [],
     });
 
     try {
@@ -176,6 +244,10 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         rootPath: result.path,
         childrenCache: { [result.path]: result.entries },
         expandedPaths: [result.path],
+        contentsPath: result.path,
+        selectedPath: result.path,
+        selectedPaths: [result.path],
+        selectionAnchor: result.path,
         loadingRoot: false,
       });
     } catch (err) {
@@ -184,6 +256,81 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         error: formatAppError(err),
       });
     }
+  },
+
+  openDirectory: async (path, opts) => {
+    const sessionId = get().sessionId;
+    const raw = normalizeRemotePath(path || "");
+    if (!sessionId || !raw) return;
+
+    const showHidden = get().showHidden;
+    const prev = get().contentsPath;
+    const prevNorm = prev ? normalizeRemotePath(prev) : null;
+    let history = get().contentsHistory;
+    if (
+      !opts?.fromHistory &&
+      prevNorm &&
+      prevNorm !== raw &&
+      (history.length === 0 || history[history.length - 1] !== prevNorm)
+    ) {
+      history = [...history, prevNorm];
+    }
+
+    set({
+      contentsHistory: history,
+      contentsPath: raw,
+      selectedPath: raw,
+      selectedPaths: [raw],
+      selectionAnchor: raw,
+      error: null,
+    });
+
+    if (get().childrenCache[raw]) return;
+
+    const loading = new Set(get().loadingPaths);
+    loading.add(raw);
+    set({ loadingPaths: [...loading] });
+
+    try {
+      const result = await fetchDirectory(sessionId, raw, showHidden);
+      const nextLoading = new Set(get().loadingPaths);
+      nextLoading.delete(raw);
+      nextLoading.delete(result.path);
+      set({
+        loadingPaths: [...nextLoading],
+        childrenCache: {
+          ...get().childrenCache,
+          [result.path]: result.entries,
+        },
+        contentsPath: result.path,
+        selectedPath: result.path,
+        selectedPaths: [result.path],
+        selectionAnchor: result.path,
+      });
+    } catch (err) {
+      const nextLoading = new Set(get().loadingPaths);
+      nextLoading.delete(raw);
+      set({
+        loadingPaths: [...nextLoading],
+        error: formatAppError(err),
+      });
+    }
+  },
+
+  goBack: async () => {
+    const stack = get().contentsHistory;
+    if (stack.length === 0) return;
+    const next = stack[stack.length - 1];
+    set({ contentsHistory: stack.slice(0, -1) });
+    await get().openDirectory(next, { fromHistory: true });
+  },
+
+  goUp: async () => {
+    const current = get().contentsPath;
+    if (!current) return;
+    const parent = parentRemotePath(current);
+    if (normalizeRemotePath(parent) === normalizeRemotePath(current)) return;
+    await get().openDirectory(parent);
   },
 
   toggleDirectory: async (path) => {
@@ -235,7 +382,8 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
   },
 
   refreshTree: async () => {
-    const { sessionId, rootPath, rootLabel, expandedPaths, showHidden } = get();
+    const { sessionId, rootPath, rootLabel, expandedPaths, showHidden, contentsPath } =
+      get();
     if (!sessionId || !rootPath) {
       await get().initTree(rootLabel === "/" ? "/" : "~");
       return;
@@ -249,9 +397,14 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       const cache: Record<string, LocalFsEntry[]> = {
         [root.path]: root.entries,
       };
-      const keepExpanded = expandedPaths.filter((p) => p === root.path || p.startsWith(`${root.path}/`));
+      const keepExpanded = expandedPaths.filter(
+        (p) => p === root.path || p.startsWith(`${root.path}/`),
+      );
+      // Ensure right-pane contents stay cached without forcing the tree open.
+      const pathsToFetch = new Set(keepExpanded);
+      if (contentsPath) pathsToFetch.add(contentsPath);
 
-      for (const path of keepExpanded) {
+      for (const path of pathsToFetch) {
         if (path === root.path) continue;
         try {
           const result = await fetchDirectory(sessionId, path, showHidden);
@@ -261,10 +414,14 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         }
       }
 
+      const nextContents =
+        contentsPath && cache[contentsPath] ? contentsPath : root.path;
+
       set({
         rootPath: root.path,
         childrenCache: cache,
         expandedPaths: keepExpanded.length > 0 ? keepExpanded : [root.path],
+        contentsPath: nextContents,
         loadingRoot: false,
       });
     } catch (err) {
@@ -346,7 +503,13 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
   },
 
   getUploadDirectory: () => {
-    const { selectedPath, rootPath } = get();
+    const { selectedPath, rootPath, contentsPath } = get();
+    if (contentsPath) {
+      const contentsEntry = get().getEntryByPath(contentsPath);
+      if (!contentsEntry || contentsEntry.kind === "directory") {
+        return contentsPath;
+      }
+    }
     if (!selectedPath) return rootPath;
     const entry = get().getEntryByPath(selectedPath);
     if (entry?.kind === "directory") return entry.path;

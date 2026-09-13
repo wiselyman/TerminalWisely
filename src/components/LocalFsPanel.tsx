@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isExtractableArchivePath } from "../lib/archivePath";
 import { formatAppError } from "../lib/formatAppError";
 import { invokeWithSudoRetry } from "../lib/invokeWithSudoRetry";
-import { pasteTargetDir, parentRemotePath } from "../lib/localFsOps";
+import { pasteTargetDir, parentRemotePath, isSameOrDescendantPath, normalizeRemotePath } from "../lib/localFsOps";
 import { downloadRemotePath } from "../lib/sessionDownload";
 import {
   canSendPathToChat,
@@ -21,7 +21,8 @@ import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
 import { useToastStore } from "../stores/toastStore";
 import { LocalFsContextMenu, type LocalFsContextMenuProps } from "./LocalFsContextMenu";
-import { LocalFsCwdIcon, LocalFsHiddenIcon, LocalFsHomeIcon, LocalFsRefreshIcon, LocalFsSettingsIcon } from "./LocalFsIcons";
+import { LocalFsBackIcon, LocalFsCwdIcon, LocalFsHiddenIcon, LocalFsHomeIcon, LocalFsRefreshIcon, LocalFsSettingsIcon, LocalFsUpIcon, LocalFsViewGridIcon, LocalFsViewListIcon } from "./LocalFsIcons";
+import { LocalFsContentsView } from "./LocalFsContentsView";
 import { LocalFsTreeView } from "./LocalFsTreeView";
 import { PathInput } from "./PathInput";
 import { PathSizeDialog } from "./PathSizeDialog";
@@ -89,7 +90,6 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     showHidden,
     setShowHidden,
     selectedPath,
-    setSelectedPath,
     selectedPaths,
     clipboard,
     setClipboard,
@@ -98,7 +98,20 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     refreshTree,
     reloadDirectory,
     getUploadDirectory,
+    contentsPath,
+    contentsHistory,
+    openDirectory,
+    goBack,
+    goUp,
+    viewMode,
+    setViewMode,
+    splitTreeWidth,
+    setSplitTreeWidth,
   } = useLocalFsStore();
+
+  const splitDragRef = useRef<{ startX: number; startWidth: number } | null>(
+    null,
+  );
 
   const reloadDirsLocally = (dirs: string[]) => {
     const unique = [...new Set(dirs.map((d) => d.trim()).filter(Boolean))];
@@ -157,14 +170,15 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     error: string | null;
   } | null>(null);
   const [addressPath, setAddressPath] = useState("");
+  const [addressEditing, setAddressEditing] = useState(false);
 
   const panelTitle = sessionTitle
     ? t("localFs.titleWithHost", { host: sessionTitle })
     : t("localFs.title");
 
   useEffect(() => {
-    if (rootPath) setAddressPath(rootPath);
-  }, [rootPath]);
+    if (!addressEditing && contentsPath) setAddressPath(contentsPath);
+  }, [contentsPath, addressEditing]);
 
   useEffect(() => {
     if (activeTab === "find") {
@@ -179,8 +193,22 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
   }, [activeTab, focusNonce, sessionId]);
 
   const navigateToAddress = (path: string) => {
-    void initTree(path);
+    const target = normalizeRemotePath(path);
+    if (!target) return;
+    setAddressEditing(false);
+    if (rootPath && isSameOrDescendantPath(rootPath, target)) {
+      void openDirectory(target);
+      return;
+    }
+    void initTree(target);
   };
+
+  const canGoBack = contentsHistory.length > 0;
+  const canGoUp = Boolean(
+    contentsPath &&
+      normalizeRemotePath(parentRemotePath(contentsPath)) !==
+        normalizeRemotePath(contentsPath),
+  );
 
   const navigateToTerminalCwd = async () => {
     try {
@@ -278,15 +306,34 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
       return;
     }
     try {
+      const passwordRef: { current?: string } = {};
       for (const path of clip.paths) {
         if (clip.op === "cut") {
-          await invoke("move_path", {
-            request: { session_id: sessionId, path, dest_dir: dest },
-          });
+          await invokeWithSudoRetry(
+            (sudoPassword) =>
+              invoke("move_path", {
+                request: {
+                  session_id: sessionId,
+                  path,
+                  dest_dir: dest,
+                  sudo_password: sudoPassword ?? null,
+                },
+              }),
+            { action: t("terminal:moveToDir"), path, passwordRef },
+          );
         } else {
-          await invoke("copy_path", {
-            request: { session_id: sessionId, path, dest_dir: dest },
-          });
+          await invokeWithSudoRetry(
+            (sudoPassword) =>
+              invoke("copy_path", {
+                request: {
+                  session_id: sessionId,
+                  path,
+                  dest_dir: dest,
+                  sudo_password: sudoPassword ?? null,
+                },
+              }),
+            { action: t("terminal:copy"), path, passwordRef },
+          );
         }
       }
       if (clip.op === "cut") setClipboard(null);
@@ -312,10 +359,20 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
 
   const handleMovePaths = async (paths: string[], destDir: string) => {
     try {
+      const passwordRef: { current?: string } = {};
       for (const path of paths) {
-        await invoke("move_path", {
-          request: { session_id: sessionId, path, dest_dir: destDir },
-        });
+        await invokeWithSudoRetry(
+          (sudoPassword) =>
+            invoke("move_path", {
+              request: {
+                session_id: sessionId,
+                path,
+                dest_dir: destDir,
+                sudo_password: sudoPassword ?? null,
+              },
+            }),
+          { action: t("terminal:moveToDir"), path, passwordRef },
+        );
       }
       pushToast(t("terminal:toastMoved"), true);
       reloadDirsLocally([...paths.map((p) => parentRemotePath(p)), destDir]);
@@ -718,6 +775,26 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
           <div className="local-fs-tool-group">
             <button
               type="button"
+              className="local-fs-tool-btn"
+              onClick={() => void goBack()}
+              disabled={!canGoBack || loadingRoot}
+              title={t("localFs.goBack")}
+              aria-label={t("localFs.goBack")}
+            >
+              <LocalFsBackIcon />
+            </button>
+            <button
+              type="button"
+              className="local-fs-tool-btn"
+              onClick={() => void goUp()}
+              disabled={!canGoUp || loadingRoot}
+              title={t("localFs.goUp")}
+              aria-label={t("localFs.goUp")}
+            >
+              <LocalFsUpIcon />
+            </button>
+            <button
+              type="button"
               className={`local-fs-tool-btn${rootLabel === "~" ? " is-active" : ""}`}
               onClick={() => void initTree("~")}
               title={t("localFs.home")}
@@ -774,6 +851,26 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
             >
               <LocalFsSettingsIcon />
             </button>
+            <button
+              type="button"
+              className={`local-fs-tool-btn${viewMode === "list" ? " is-active" : ""}`}
+              onClick={() => setViewMode("list")}
+              title={t("localFs.viewList")}
+              aria-label={t("localFs.viewList")}
+              aria-pressed={viewMode === "list"}
+            >
+              <LocalFsViewListIcon />
+            </button>
+            <button
+              type="button"
+              className={`local-fs-tool-btn${viewMode === "grid" ? " is-active" : ""}`}
+              onClick={() => setViewMode("grid")}
+              title={t("localFs.viewGrid")}
+              aria-label={t("localFs.viewGrid")}
+              aria-pressed={viewMode === "grid"}
+            >
+              <LocalFsViewGridIcon />
+            </button>
           </div>
           <div className="local-fs-address-bar">
             <PathInput
@@ -782,6 +879,8 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
               onChange={setAddressPath}
               placeholder={t("localFs.addressPlaceholder")}
               disabled={loadingRoot}
+              onFocus={() => setAddressEditing(true)}
+              onBlur={() => setAddressEditing(false)}
               onSubmit={navigateToAddress}
             />
           </div>
@@ -791,7 +890,7 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
         {/* Home sits above the file tree (no chevron), same slot as IDE workspace root. */}
         {activeTab === "files" && rootPath ? (
           <div
-            className={`local-fs-tree-root${selectedPath === rootPath ? " is-selected" : ""}`}
+            className={`local-fs-tree-root${contentsPath === rootPath || selectedPath === rootPath ? " is-selected" : ""}`}
             onContextMenu={(e) => {
               e.preventDefault();
               openEntryMenu(e, {
@@ -805,7 +904,7 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
               type="button"
               className="local-fs-tree-root-label"
               title={rootPath}
-              onClick={() => setSelectedPath(rootPath)}
+              onClick={() => void openDirectory(rootPath)}
             >
               {rootLabel === "~" ? t("localFs.home") : rootLabel}
               {loadingRoot ? (
@@ -818,15 +917,64 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
         {activeTab === "files" ? (
           <>
             {error ? <p className="find-panel-error">{error}</p> : null}
-            <LocalFsTreeView
-              contextMenuPath={menu?.kind === "entry" ? menu.entry.path : null}
-              onEntryContextMenu={openEntryMenu}
-              onBackgroundContextMenu={openBackgroundMenu}
-              onOpenFile={handleOpenFile}
-              onMovePaths={(paths, dest) => {
-                void handleMovePaths(paths, dest);
-              }}
-            />
+            <div className="local-fs-split" data-testid="local-fs-split">
+              <div
+                className="local-fs-split-tree"
+                style={{ width: splitTreeWidth }}
+              >
+                <LocalFsTreeView
+                  contextMenuPath={
+                    menu?.kind === "entry" ? menu.entry.path : null
+                  }
+                  onEntryContextMenu={openEntryMenu}
+                  onBackgroundContextMenu={openBackgroundMenu}
+                  onMovePaths={(paths, dest) => {
+                    void handleMovePaths(paths, dest);
+                  }}
+                />
+              </div>
+              <div
+                className="local-fs-split-resizer"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={t("localFs.splitResizeAria")}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  splitDragRef.current = {
+                    startX: event.clientX,
+                    startWidth: splitTreeWidth,
+                  };
+                  const onMove = (ev: PointerEvent) => {
+                    const drag = splitDragRef.current;
+                    if (!drag) return;
+                    setSplitTreeWidth(
+                      drag.startWidth + (ev.clientX - drag.startX),
+                    );
+                  };
+                  const onUp = () => {
+                    splitDragRef.current = null;
+                    window.removeEventListener("pointermove", onMove);
+                    window.removeEventListener("pointerup", onUp);
+                  };
+                  window.addEventListener("pointermove", onMove);
+                  window.addEventListener("pointerup", onUp);
+                }}
+              />
+              <div className="local-fs-split-contents">
+                <LocalFsContentsView
+                  contextMenuPath={
+                    menu?.kind === "entry" ? menu.entry.path : null
+                  }
+                  onEntryContextMenu={openEntryMenu}
+                  onBackgroundContextMenu={openBackgroundMenu}
+                  onOpenFile={handleOpenFile}
+                  onMovePaths={(paths, dest) => {
+                    void handleMovePaths(paths, dest);
+                  }}
+                />
+              </div>
+            </div>
           </>
         ) : null}
 

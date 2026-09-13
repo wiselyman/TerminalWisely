@@ -14,26 +14,16 @@ import { rangeSelectPaths, togglePathInSelection } from "../lib/localFsOps";
 import { startLocalFsPointerMove } from "../lib/localFsPointerMove";
 import type { LocalFsEntry } from "../types";
 import { useLocalFsStore } from "../stores/localFsStore";
-import { LocalFsEntryIcon, LocalFsTreeChevronIcon } from "./LocalFsIcons";
+import { LocalFsTreeChevronIcon } from "./LocalFsIcons";
 
 const ROW_HEIGHT = 26;
 const OVERSCAN = 16;
 const DEPTH_INDENT = 14;
 
-function formatSize(sizeBytes: number | null | undefined) {
-  if (sizeBytes == null) return "—";
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  if (sizeBytes < 1024 * 1024 * 1024)
-    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
 type Props = {
   contextMenuPath?: string | null;
   onEntryContextMenu: (event: ReactMouseEvent, entry: LocalFsEntry) => void;
   onBackgroundContextMenu: (event: ReactMouseEvent) => void;
-  onOpenFile: (entry: LocalFsEntry) => void;
   onMovePaths?: (paths: string[], destDir: string) => void;
 };
 
@@ -41,7 +31,6 @@ export function LocalFsTreeView({
   contextMenuPath = null,
   onEntryContextMenu,
   onBackgroundContextMenu,
-  onOpenFile,
   onMovePaths,
 }: Props) {
   const { t } = useTranslation("tools");
@@ -59,9 +48,11 @@ export function LocalFsTreeView({
     loadingPaths,
     selectedPaths,
     selectionAnchor,
+    contentsPath,
     setSelectedPath,
     setSelectedPaths,
     toggleDirectory,
+    openDirectory,
   } = useLocalFsStore();
 
   const expandedSet = useMemo(() => new Set(expandedPaths), [expandedPaths]);
@@ -70,7 +61,14 @@ export function LocalFsTreeView({
   const rootOpen = Boolean(rootPath && childrenCache[rootPath]);
 
   const rows = useMemo(
-    () => buildVisibleTreeRows(rootPath, childrenCache, expandedSet, loadingSet),
+    () =>
+      buildVisibleTreeRows(
+        rootPath,
+        childrenCache,
+        expandedSet,
+        loadingSet,
+        { directoriesOnly: true },
+      ),
     [rootPath, childrenCache, expandedSet, loadingSet],
   );
   const orderedPaths = useMemo(() => rows.map((r) => r.entry.path), [rows]);
@@ -113,11 +111,12 @@ export function LocalFsTreeView({
       setSelectedPaths(next, entry.path);
       return;
     }
-    setSelectedPath(entry.path);
+    void openDirectory(entry.path);
   };
 
   const beginMove = (event: ReactPointerEvent, entry: LocalFsEntry) => {
     if (!onMovePaths || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest(".local-fs-tree-toggle")) return;
 
@@ -159,6 +158,7 @@ export function LocalFsTreeView({
       role="tree"
       aria-label={t("localFs.title")}
       aria-multiselectable
+      data-testid="local-fs-tree"
       onContextMenu={onBackgroundContextMenu}
     >
       <div
@@ -174,16 +174,16 @@ export function LocalFsTreeView({
             style={{ paddingTop: padTop, paddingBottom: padBottom }}
           >
             {visibleRows.map(({ entry, depth, isExpanded, isLoading }) => {
-              const isDir = entry.kind === "directory";
-              const isSelected = selectedSet.has(entry.path);
+              const isSelected =
+                selectedSet.has(entry.path) || contentsPath === entry.path;
               const isDrop = dropTarget === entry.path;
               return (
                 <div
                   key={entry.path}
-                  className={`local-fs-tree-row${isDir ? " is-dir" : " is-file"}${isSelected ? " is-selected" : ""}${contextMenuPath === entry.path ? " is-context-target" : ""}${isDrop ? " is-drop-target" : ""}`}
+                  className={`local-fs-tree-row is-dir${isSelected ? " is-selected" : ""}${contextMenuPath === entry.path ? " is-context-target" : ""}${isDrop ? " is-drop-target" : ""}${contentsPath === entry.path ? " is-contents-active" : ""}`}
                   role="treeitem"
                   aria-selected={isSelected}
-                  aria-expanded={isDir ? isExpanded : undefined}
+                  aria-expanded={isExpanded}
                   data-path={entry.path}
                   data-kind={entry.kind}
                   style={{
@@ -197,53 +197,40 @@ export function LocalFsTreeView({
                     onEntryContextMenu(e, entry);
                   }}
                   onPointerDown={(e) => beginMove(e, entry)}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement | null;
+                    if (target?.closest(".local-fs-tree-toggle")) return;
+                    selectEntry(e, entry);
+                  }}
                 >
-                  {isDir ? (
-                    <button
-                      type="button"
-                      className="local-fs-tree-toggle"
-                      aria-label={
-                        isExpanded
-                          ? t("localFs.collapseFolder")
-                          : t("localFs.expandFolder")
-                      }
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void toggleDirectory(entry.path);
-                      }}
-                    >
-                      {isLoading ? (
-                        <span className="local-fs-tree-spinner" aria-hidden />
-                      ) : (
-                        <LocalFsTreeChevronIcon expanded={isExpanded} />
-                      )}
-                    </button>
-                  ) : (
-                    <span className="local-fs-tree-toggle-spacer" aria-hidden />
-                  )}
+                  <button
+                    type="button"
+                    className="local-fs-tree-toggle"
+                    aria-label={
+                      isExpanded
+                        ? t("localFs.collapseFolder")
+                        : t("localFs.expandFolder")
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleDirectory(entry.path);
+                    }}
+                  >
+                    {isLoading ? (
+                      <span className="local-fs-tree-spinner" aria-hidden />
+                    ) : (
+                      <LocalFsTreeChevronIcon expanded={isExpanded} />
+                    )}
+                  </button>
                   <div className="local-fs-tree-name">
-                    {!isDir ? (
-                      <LocalFsEntryIcon kind={entry.kind} name={entry.name} />
-                    ) : null}
                     <button
                       type="button"
                       className="local-fs-tree-label"
                       title={entry.path}
-                      onClick={(e) => selectEntry(e, entry)}
-                      onDoubleClick={() => {
-                        if (isDir) {
-                          void toggleDirectory(entry.path);
-                          return;
-                        }
-                        onOpenFile(entry);
-                      }}
                     >
                       {entry.name}
                     </button>
                   </div>
-                  <span className="local-fs-size">
-                    {isDir ? "—" : formatSize(entry.size_bytes)}
-                  </span>
                 </div>
               );
             })}

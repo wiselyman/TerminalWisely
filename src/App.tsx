@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { LocaleSwitcher } from "./components/LocaleSwitcher";
+import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { AppSettingsDialog } from "./components/AppSettingsDialog";
 import { UpdateAvailableDialog } from "./components/UpdateAvailableDialog";
 import { SudoPasswordModal } from "./components/SudoPasswordModal";
@@ -1102,6 +1103,7 @@ function App() {
                   }}
                 />
                 ) : null}
+                <ThemeSwitcher />
                 <LocaleSwitcher />
               </div>
 

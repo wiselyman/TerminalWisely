@@ -379,20 +379,23 @@ impl SessionManager {
         // Fast path: one exec on the live session (avoid SFTP handshake for right-click).
         let quoted = crate::shell::shell_quote_remote_path(&resolved);
         let command = format!(
-            r#"if [ -d {quoted} ]; then printf directory; elif [ -e {quoted} ] || [ -L {quoted} ]; then printf file; else printf file; fi"#
+            r#"if [ -d {quoted} ]; then printf directory; elif [ -e {quoted} ] || [ -L {quoted} ]; then printf file; else printf missing; fi"#
         );
         match crate::ssh::client::exec_command(&ssh.handle(), &command).await {
             Ok(stdout) => {
                 let kind = stdout.trim();
                 if kind == "directory" {
                     Ok("directory".to_string())
+                } else if kind == "missing" {
+                    Ok("missing".to_string())
                 } else {
                     Ok("file".to_string())
                 }
             }
             Err(_) => match sftp::remote_path_kind(&ssh.handle(), &resolved).await? {
                 Some(true) => Ok("directory".to_string()),
-                Some(false) | None => Ok("file".to_string()),
+                Some(false) => Ok("file".to_string()),
+                None => Ok("missing".to_string()),
             },
         }
     }
@@ -844,9 +847,7 @@ impl SessionManager {
         if is_same_or_descendant_path(&resolved, &dest) {
             return Err(AppError::msg("不能移动到自身或其子目录"));
         }
-        let file_name = std::path::Path::new(&resolved)
-            .file_name()
-            .and_then(|n| n.to_str())
+        let file_name = remote_basename(&resolved)
             .ok_or_else(|| AppError::msg("无效的文件名"))?;
         let new_path = remote_join_path(&dest, file_name);
         if new_path == resolved {
@@ -855,19 +856,35 @@ impl SessionManager {
         if let Err(err) =
             sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await
         {
+            let quoted_src = shell_quote_remote_path(&resolved);
+            let quoted_dest = shell_quote_remote_path(&new_path);
+            // Prefer quoted `mv` for EXDEV / SSH_FX_FAILURE / names SFTP mishandles;
+            // escalate to sudo only when the shell reports permission denied.
+            let cmd = format!("mv -- {quoted_src} {quoted_dest}");
             if preview_sudo::is_permission_denied(&err) {
-                let quoted_src = shell_quote_remote_path(&resolved);
-                let quoted_dest = shell_quote_remote_path(&new_path);
                 preview_sudo::exec_remote_sudo(
                     &ssh.handle(),
-                    &format!("mv {quoted_src} {quoted_dest}"),
+                    &cmd,
                     sudo_password,
                     "移动",
                     &resolved,
                 )
                 .await?;
-            } else {
-                return Err(err);
+            } else if let Err(shell_err) =
+                crate::ssh::client::exec_command(&ssh.handle(), &cmd).await
+            {
+                if preview_sudo::is_permission_denied(&shell_err) {
+                    preview_sudo::exec_remote_sudo(
+                        &ssh.handle(),
+                        &cmd,
+                        sudo_password,
+                        "移动",
+                        &resolved,
+                    )
+                    .await?;
+                } else {
+                    return Err(shell_err);
+                }
             }
         }
 
@@ -1330,7 +1347,9 @@ fn unique_copy_name(base_name: &str) -> String {
 
 #[cfg(test)]
 mod fs_path_tests {
-    use super::{is_same_or_descendant_path, unique_copy_name, validate_fs_name};
+    use super::{
+        is_same_or_descendant_path, remote_basename, unique_copy_name, validate_fs_name,
+    };
 
     #[test]
     fn rejects_bad_names() {
@@ -1353,6 +1372,21 @@ mod fs_path_tests {
         assert_eq!(unique_copy_name("note.txt"), "note copy.txt");
         assert_eq!(unique_copy_name("README"), "README copy");
     }
+
+    #[test]
+    fn basename_keeps_brackets_and_spaces() {
+        assert_eq!(
+            remote_basename(
+                "/media/Movies/Talkshow/Jimmy O. Yang Good Deal (2020) [1080p] [YTS.MX]"
+            ),
+            Some("Jimmy O. Yang Good Deal (2020) [1080p] [YTS.MX]")
+        );
+        assert_eq!(
+            remote_basename("/media/a/Jimmy.O.Yang.Guess[TGx]/"),
+            Some("Jimmy.O.Yang.Guess[TGx]")
+        );
+        assert_eq!(remote_basename("/"), None);
+    }
 }
 
 fn remote_parent_path(path: &str) -> AppResult<String> {
@@ -1369,6 +1403,18 @@ fn remote_parent_path(path: &str) -> AppResult<String> {
     } else {
         Err(AppError::msg("无效的路径"))
     }
+}
+
+/// Basename of a remote Unix path (keeps spaces / `[]` / `()` intact).
+fn remote_basename(path: &str) -> Option<&str> {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "/" {
+        return None;
+    }
+    Some(match trimmed.rsplit_once('/') {
+        Some((_, name)) if !name.is_empty() => name,
+        _ => trimmed,
+    })
 }
 
 fn remote_join_path(base: &str, segment: &str) -> String {

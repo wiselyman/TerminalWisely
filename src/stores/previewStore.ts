@@ -314,6 +314,15 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
     useTaskManagerStore.getState().close();
     useHostStatsStore.getState().close();
 
+    // Directories are never previewable (extensionless names like `videos` used to
+    // pass canPreviewPath as "text" and then fail inside preview_open).
+    if (path.endsWith("/") || path.endsWith("\\")) {
+      useToastStore
+        .getState()
+        .pushToast(i18n.t("errors:ERR_PREVIEW_IS_DIRECTORY"), false);
+      return;
+    }
+
     if (!canPreviewPath(path, sizeBytes)) {
       useToastStore
         .getState()

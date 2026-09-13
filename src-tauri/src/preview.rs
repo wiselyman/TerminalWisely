@@ -17,6 +17,8 @@ use crate::ssh::sftp;
 use crate::types::{PreviewOpenRequest, PreviewOpenResult, SessionKind};
 
 pub const MAX_TEXT_PREVIEW_BYTES: u64 = 2 * 1024 * 1024;
+/// Cap for binary materialize (image/pdf/office/archive/media) before SFTP download.
+pub const MAX_BINARY_PREVIEW_BYTES: u64 = 200 * 1024 * 1024;
 
 #[derive(Clone)]
 struct PreviewEntry {
@@ -266,6 +268,14 @@ impl PreviewManager {
             return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
         }
 
+        if !is_binary_preview_kind(&preview_kind) {
+            return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
+        }
+
+        if total_size > MAX_BINARY_PREVIEW_BYTES {
+            return Err(AppError::code("ERR_PREVIEW_TOO_LARGE"));
+        }
+
         let cache_path = materialize_for_preview(
             app,
             sessions,
@@ -277,11 +287,7 @@ impl PreviewManager {
         )
         .await?;
 
-        let result_kind = if matches!(preview_kind.as_str(), "image" | "pdf") {
-            preview_kind
-        } else {
-            "unsupported".to_string()
-        };
+        let result_kind = preview_kind;
 
         self.entries.lock().await.insert(
             handle_id.clone(),
@@ -329,6 +335,12 @@ fn classify_preview_kind(extension: &str) -> String {
     match extension {
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" => "image".to_string(),
         "pdf" => "pdf".to_string(),
+        "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx" | "odt" | "ods" | "odp" | "rtf" | "wps" => {
+            "office".to_string()
+        }
+        "zip" | "rar" | "7z" | "tar" | "gz" | "tgz" | "bz2" | "xz" => "archive".to_string(),
+        "mp4" | "webm" | "mov" | "m4v" | "avi" | "mkv" => "video".to_string(),
+        "mp3" | "wav" | "ogg" | "aac" | "m4a" | "flac" => "audio".to_string(),
         "csv" | "tsv" => "csv".to_string(),
         "md" | "markdown" => "markdown".to_string(),
         "html" | "htm" => "html".to_string(),
@@ -354,6 +366,13 @@ fn resolve_preview_kind(extension: &str, total_size: u64) -> String {
 
 fn is_text_preview_kind(kind: &str) -> bool {
     matches!(kind, "text" | "markdown" | "html" | "csv")
+}
+
+fn is_binary_preview_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "image" | "pdf" | "office" | "archive" | "video" | "audio"
+    )
 }
 
 fn is_editable_kind(kind: &str) -> bool {
@@ -527,7 +546,14 @@ async fn probe_ssh_file(
             }
             Ok((false, 0))
         }
-        Err(err) => Err(err),
+        Err(err) => {
+            let message = err.to_string();
+            if message.contains("No such file") || message.contains("not found") {
+                Err(AppError::msg(format!("No such file: {path}")))
+            } else {
+                Err(err)
+            }
+        }
     }
 }
 
@@ -560,7 +586,15 @@ async fn materialize_for_preview(
     // Reuse the live session — previews are small; a second SSH login is the slow path.
     let ssh = sessions.ssh_snapshot(session_id).await?;
     sftp::download_file(&ssh.handle(), remote_path, &cache_path, None, |_, _| {})
-        .await?;
+        .await
+        .map_err(|err| {
+            let message = err.to_string();
+            if message.contains("No such file") || message.contains("not found") {
+                AppError::msg(format!("No such file: {remote_path}"))
+            } else {
+                err
+            }
+        })?;
     Ok(cache_path)
 }
 

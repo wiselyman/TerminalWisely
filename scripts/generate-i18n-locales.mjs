@@ -318,6 +318,7 @@ const catalog = {
     sudoPasswordLabel: { zh: "sudo 密码", en: "sudo password" },
     loadingImage: { zh: "加载图片中…", en: "Loading image…" },
     loadingPdf: { zh: "加载 PDF 中…", en: "Loading PDF…" },
+    loadingPreview: { zh: "加载预览中…", en: "Loading preview…" },
     csvEmpty: { zh: "CSV 内容为空", en: "CSV is empty" },
     csvRowCount: { zh: "{{filtered}} / {{total}} 行", en: "{{filtered}} / {{total}} rows" },
   },

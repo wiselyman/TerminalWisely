@@ -309,6 +309,62 @@ function exists(rel) {
   }
 }
 
+// --- Preview: OFV readonly binary + TW text editor ---
+{
+  const pkg = JSON.parse(read("package.json"));
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  if (deps["@open-file-viewer/core"] && deps["@open-file-viewer/react"] && deps["pdfjs-dist"]) {
+    pass("preview.ofv-deps", "open-file-viewer + pdfjs-dist");
+  } else {
+    fail("preview.ofv-deps", "missing OFV/pdfjs deps");
+  }
+  const panel = read("src/components/PreviewPanel.tsx");
+  const ofv = read("src/components/preview/OfvReadonlyPreview.tsx");
+  const fileType = read("src/lib/fileType.ts");
+  const rust = read("src-tauri/src/preview.rs");
+  const nativePdf = read("src/components/preview/NativePdfPreview.tsx");
+  if (
+    panel.includes("OfvReadonlyPreview") &&
+    panel.includes("NativePdfPreview") &&
+    panel.includes('data?.kind === "pdf"') &&
+    panel.includes("EditableTextPreview") &&
+    nativePdf.includes("preview-native-pdf") &&
+    ofv.includes("imagePlugin") &&
+    ofv.includes("pdfPlugin") &&
+    ofv.includes("cMapUrl") &&
+    ofv.includes("createOfvPdfjsModule") &&
+    ofv.includes("pdfjsAssetBase") &&
+    ofv.includes("useFetchData") &&
+    ofv.includes("officePlugin") &&
+    ofv.includes("archivePlugin") &&
+    !ofv.includes("textPlugin") &&
+    fileType.includes('"office"') &&
+    fileType.includes("isReadonlyBinaryPreviewKind") &&
+    rust.includes("MAX_BINARY_PREVIEW_BYTES") &&
+    rust.includes('"office"') &&
+    rust.includes("is_binary_preview_kind")
+  ) {
+    pass("preview.ofv-hybrid", "native PDF + OFV readonly + TW editable text");
+  } else {
+    fail("preview.ofv-hybrid", "OFV hybrid preview wiring incomplete");
+  }
+  const vitePdf = read("vite.pdfjs.ts");
+  const pdfjsOfv = read("src/lib/pdfjsOfv.ts");
+  if (
+    vitePdf.includes("pdfjs-dist/cmaps") &&
+    vitePdf.includes("standard_fonts") &&
+    vitePdf.includes("pdfjs-dist/wasm") &&
+    vitePdf.includes("pdfjs-dist/iccs") &&
+    pdfjsOfv.includes("wasmUrl") &&
+    pdfjsOfv.includes("injectPdfjsAssetUrls") &&
+    pdfjsOfv.includes("pdfjsWasmUrl")
+  ) {
+    pass("preview.pdfjs-assets", "vite copies cmaps/fonts/wasm/iccs + OFV inject");
+  } else {
+    fail("preview.pdfjs-assets", "vite.pdfjs / pdfjsOfv asset wiring incomplete");
+  }
+}
+
 // --- AI exec busy dots placement ---
 {
   const panel = read("src/components/aiEngineer/AiEngineerPanel.tsx");
@@ -489,10 +545,35 @@ function exists(rel) {
     if (menu.includes(needle)) pass(id, needle);
     else fail(id, `missing ${needle}`);
   }
-  if (tree.includes("startLocalFsPointerMove") && tree.includes("data-path")) {
-    pass("hostfs.tree-dnd", "tree pointer move (not HTML5 DnD)");
+  const panelHost = read("src/components/LocalFsPanel.tsx");
+  if (
+    tree.includes("startLocalFsPointerMove") &&
+    tree.includes("data-path") &&
+    tree.includes("event.metaKey || event.ctrlKey || event.shiftKey") &&
+    tree.includes("directoriesOnly") &&
+    tree.includes("openDirectory") &&
+    panelHost.includes("invokeWithSudoRetry") &&
+    panelHost.includes("handleMovePaths") &&
+    panelHost.includes("passwordRef") &&
+    panelHost.includes("local-fs-split") &&
+    panelHost.includes("LocalFsContentsView") &&
+    panelHost.includes("setViewMode") &&
+    read("src/lib/invokeWithSudoRetry.ts").includes("passwordRef") &&
+    read("src/stores/localFsStore.ts").includes("contentsPath") &&
+    read("src/stores/localFsStore.ts").includes("openDirectory") &&
+    read("src/components/LocalFsContentsView.tsx").includes("local-fs-contents")
+  ) {
+    pass("hostfs.tree-dnd", "Finder split + multi-select + batch sudo");
   } else {
-    fail("hostfs.tree-dnd", "missing tree pointer move");
+    fail("hostfs.tree-dnd", "missing tree pointer move / Finder split");
+  }
+  const css = read("src/App.css");
+  const backdropIdx = css.indexOf(".send-to-backdrop");
+  const backdropSlice = backdropIdx >= 0 ? css.slice(backdropIdx, backdropIdx + 280) : "";
+  if (/z-index:\s*(3[6-9]\d{3}|[4-9]\d{4})\b/.test(backdropSlice)) {
+    pass("hostfs.dialog-z", "FS dialog above Host panel");
+  } else {
+    fail("hostfs.dialog-z", "send-to-backdrop z-index still under Host panel");
   }
   if (
     cmds.includes("create_path") &&
@@ -520,8 +601,8 @@ function exists(rel) {
   const noPtyLsAfterMutations =
     !sessionRs.includes("refresh_listing") &&
     !/pub async fn move_path[\s\S]*?write_input\("ls/.test(sessionRs);
-  if (moveBlock && noPtyLsAfterMutations) {
-    pass("hostfs.no-pty-ls", "FS mutations do not inject ls into Terminal");
+  if (moveBlock && noPtyLsAfterMutations && sessionRs.includes("mv --")) {
+    pass("hostfs.no-pty-ls", "FS mutations do not inject ls; move uses quoted mv --");
   } else {
     fail("hostfs.no-pty-ls", "move/create still refresh Terminal via ls");
   }
@@ -954,6 +1035,17 @@ function exists(rel) {
         "app-shell locale test must assert menu visibility and html lang",
       );
     }
+    if (
+      shell.includes("theme-switcher-menu") &&
+      shell.includes('toHaveAttribute("data-theme"')
+    ) {
+      pass("test.theme-switch-e2e-asserts", "app-shell asserts theme menu + data-theme");
+    } else {
+      fail(
+        "test.theme-switch-e2e-asserts",
+        "app-shell theme test must assert menu visibility and data-theme",
+      );
+    }
   }
   const localeSwitcher = read("src/components/LocaleSwitcher.tsx");
   if (
@@ -963,6 +1055,29 @@ function exists(rel) {
     pass("ui.locale-switcher-portal", "menu portaled out of titlebar overflow");
   } else {
     fail("ui.locale-switcher-portal", "LocaleSwitcher must portal menu (titlebar clips)");
+  }
+  const themeSwitcher = read("src/components/ThemeSwitcher.tsx");
+  const appTsx = read("src/App.tsx");
+  if (
+    themeSwitcher.includes("createPortal") &&
+    themeSwitcher.includes("theme-switcher-trigger") &&
+    themeSwitcher.includes("setAppTheme") &&
+    appTsx.includes("ThemeSwitcher")
+  ) {
+    pass("ui.theme-switcher", "titlebar ThemeSwitcher wired + portal menu");
+  } else {
+    fail("ui.theme-switcher", "ThemeSwitcher missing or not mounted in App.tsx");
+  }
+  const appTheme = read("src/lib/appTheme.ts");
+  const appCss = read("src/App.css");
+  if (
+    appTheme.includes('THEME_STORAGE_KEY') &&
+    appCss.includes('[data-theme="light"]') &&
+    appCss.includes("--tw-canvas")
+  ) {
+    pass("ui.app-theme-tokens", "light theme CSS tokens + persistence module");
+  } else {
+    fail("ui.app-theme-tokens", "missing light theme tokens or appTheme module");
   }
 }
 

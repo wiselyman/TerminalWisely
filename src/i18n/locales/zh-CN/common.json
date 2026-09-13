@@ -24,6 +24,9 @@
   "language": "语言",
   "languageZh": "中文",
   "languageEn": "English",
+  "theme": "主题",
+  "themeDark": "深色",
+  "themeLight": "浅色",
   "bytes": "{{count}} 字节",
   "operationFailed": "操作失败",
   "genericAction": "此操作"
