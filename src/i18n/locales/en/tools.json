@@ -162,6 +162,8 @@
   "aiEngineer.notice.act_nudge": "Harness: no visible answer yet — reply or call a tool",
   "aiEngineer.notice.act_nudge_plan": "Harness: plan-only turn — answer or call tools",
   "aiEngineer.notice.act_nudge_truncated_answer": "Reply was cut off — auto-continuing…",
+  "aiEngineer.notice.assistant_incomplete": "Reply incomplete — send “continue” to finish",
+  "aiEngineer.notice.assistant_soft_continue": "If this reply looks unfinished, send “continue”",
   "aiEngineer.notice.act_nudge_conclude": "Harness: tool results ready — write the final answer",
   "aiEngineer.notice.verify_nudge": "Harness: mutation exited 0 — verify with evidence",
   "aiEngineer.notice.audit_nudge": "Harness: answer failed check — retracted; revising",
@@ -407,5 +409,9 @@
   "localFs.confirm": "Confirm",
   "localFs.working": "Working…",
   "localFs.needName": "Enter a name",
-  "localFs.needDest": "Enter a destination folder"
+  "localFs.needDest": "Enter a destination folder",
+  "sshLease.blockedReconnect": "AI is using this session. Stop AI before reconnecting SSH.",
+  "sshLease.disconnectBanner": "SSH disconnected while AI holds this session. Stop AI first — reconnect is disabled.",
+  "longJob.inProgress": "Host job in progress",
+  "aiEngineer.notice.run_stalled": "Agent stalled with no model progress — run failed. You can retry."
 }

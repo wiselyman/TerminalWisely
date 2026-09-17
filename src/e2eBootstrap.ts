@@ -47,6 +47,7 @@ export interface TwE2eApi {
   rejectPending: () => void;
   invokeEnterDirectory: (path: string) => Promise<string>;
   invokePreviewOpen: (path: string) => Promise<unknown>;
+  openMarkdownPreview: (path?: string) => Promise<void>;
   resetMocks: () => void;
   getLastUpload: () => Record<string, unknown> | null;
   getLastCreateSsh: () => Record<string, unknown> | null;
@@ -272,6 +273,12 @@ async function invokePreviewOpen(path: string) {
   });
 }
 
+async function openMarkdownPreview(path = "/tmp/e2e-note.md") {
+  const { usePreviewStore } = await import("./stores/previewStore");
+  await usePreviewStore.getState().openPreview(E2E_SSH_SESSION_ID, path);
+  usePreviewStore.getState().restorePreview();
+}
+
 function openSettings() {
   openAppSettings();
 }
@@ -323,6 +330,7 @@ export function runE2eBootstrap(): void {
     rejectPending,
     invokeEnterDirectory,
     invokePreviewOpen,
+    openMarkdownPreview,
     resetMocks: __e2eResetMocks,
     getLastUpload: __e2eLastUploadRequest,
     getLastCreateSsh: __e2eLastCreateSshRequest,

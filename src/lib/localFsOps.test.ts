@@ -52,6 +52,12 @@ describe("localFsOps", () => {
     expect(pasteTargetDir(null, null, "/home/u")).toBe("/home/u");
   });
 
+  it("paste fallback uses contents pane path when nothing selected", () => {
+    expect(pasteTargetDir(null, null, "/media/firefly/Movies")).toBe(
+      "/media/firefly/Movies",
+    );
+  });
+
   it("range and toggle selection", () => {
     const ordered = ["a", "b", "c", "d"];
     expect(rangeSelectPaths(ordered, "a", "c", new Set())).toEqual([

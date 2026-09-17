@@ -33,6 +33,7 @@ import {
 } from "../../lib/aiEngineer/turnMedia";
 import { WorkspacePanelBackdrop } from "../WorkspacePanelBackdrop";
 import { useWorkspacePanelEnter } from "../../lib/useWorkspacePanelEnter";
+import { clampWorkspacePanelWidth } from "../../lib/workspacePanelWidth";
 import {
   ChatHistoryIcon,
   NewChatIcon,
@@ -1276,14 +1277,20 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
             e.preventDefault();
             const startX = e.clientX;
             const startW = width;
+            let latest = startW;
+            const shell = document.querySelector(".app-shell") as HTMLElement | null;
             document.body.classList.add("find-panel-resizing");
             const onMove = (ev: MouseEvent) => {
-              setWidth(startW - (ev.clientX - startX));
+              latest = clampWorkspacePanelWidth(startW - (ev.clientX - startX));
+              // Live DOM/CSS only — commit store width on mouseup to avoid chat re-render jank.
+              if (panelRef.current) panelRef.current.style.width = `${latest}px`;
+              shell?.style.setProperty("--workspace-panel-width", `${latest}px`);
             };
             const onUp = () => {
               document.body.classList.remove("find-panel-resizing");
               window.removeEventListener("mousemove", onMove);
               window.removeEventListener("mouseup", onUp);
+              setWidth(latest);
             };
             window.addEventListener("mousemove", onMove);
             window.addEventListener("mouseup", onUp);
@@ -1917,9 +1924,12 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                                 | "aiEngineer.notice.act_nudge"
                                 | "aiEngineer.notice.act_nudge_plan"
                                 | "aiEngineer.notice.act_nudge_truncated_answer"
+                                | "aiEngineer.notice.assistant_incomplete"
+                                | "aiEngineer.notice.assistant_soft_continue"
                                 | "aiEngineer.notice.act_nudge_conclude"
                                 | "aiEngineer.notice.verify_nudge"
-                                | "aiEngineer.notice.audit_nudge")
+                                | "aiEngineer.notice.audit_nudge"
+                                | "aiEngineer.notice.run_stalled")
                             : line.content === "memory_context"
                               ? t("aiEngineer.noticeMemoryContext")
                               : line.content.startsWith("[USER CONTEXT]")

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app import paths
 from app.agent.graph import ensure_hydrated_wait_armed, start_run_via_graph
+from app.agent.stall import watch_run_for_stall
 from app.agent.loop import (
     deliver_approval_decision,
     deliver_tool_result,
@@ -192,6 +193,8 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
 
     loop_task = asyncio.create_task(start_run_via_graph(run, user_message))
     run.task = loop_task
+    stall_task = asyncio.create_task(watch_run_for_stall(run))
+    run.metadata["_stall_task"] = stall_task
     STORE.audit(
         "chat_start",
         {
@@ -264,6 +267,8 @@ async def chat_continue(body: ChatContinueRequest, _: AuthDep) -> ChatStartRespo
     run.append_event("session_continued", {"run_id": run.run_id})
     loop_task = asyncio.create_task(start_run_via_graph(run, user_message))
     run.task = loop_task
+    stall_task = asyncio.create_task(watch_run_for_stall(run))
+    run.metadata["_stall_task"] = stall_task
     STORE.audit(
         "chat_continue",
         {

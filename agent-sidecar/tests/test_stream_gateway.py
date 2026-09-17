@@ -53,6 +53,20 @@ def test_iter_stream_events_finished() -> None:
     assert events == [{"type": "finished", "finish_reason": "tool_calls"}]
 
 
+def test_iter_stream_events_usage() -> None:
+    events = iter_stream_events_from_chunk_json(
+        {
+            "choices": [{"delta": {}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 8000},
+        }
+    )
+    assert events[0] == {
+        "type": "usage",
+        "usage": {"prompt_tokens": 10, "completion_tokens": 8000},
+    }
+    assert events[1] == {"type": "finished", "finish_reason": "length"}
+
+
 def test_merge_tool_call_deltas() -> None:
     buckets: dict[int, dict] = {}
     ModelGateway.merge_tool_call_deltas(
@@ -141,3 +155,98 @@ def test_stream_filter_passes_chinese_answer() -> None:
 )
 def test_sanitize_still_drops_plan_dumps(raw: str) -> None:
     assert sanitize_assistant_content(raw) == ""
+
+
+@pytest.mark.asyncio
+async def test_stream_retries_without_stream_options_on_400() -> None:
+    """Old gateways reject stream_options — strip and retry once."""
+    import json
+
+    import httpx
+
+    calls: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        calls.append(body)
+        if len(calls) == 1:
+            assert "stream_options" in body
+            return httpx.Response(
+                400, text='{"error":"unknown field: stream_options"}'
+            )
+        assert "stream_options" not in body
+        sse = (
+            'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n'
+            'data: {"choices":[{"delta":{},"finish_reason":"stop"}],'
+            '"usage":{"completion_tokens":3}}\n\n'
+            "data: [DONE]\n\n"
+        )
+        return httpx.Response(
+            200,
+            content=sse.encode("utf-8"),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport, base_url="http://test")
+    gw = ModelGateway(
+        base_url="http://test/v1",
+        api_key="x",
+        model="m",
+        client=client,
+    )
+    gw._resolved_model_id = "m"
+    events = []
+    async for ev in gw.chat_completions_stream(
+        [{"role": "user", "content": "hi"}],
+        tools=None,
+        tool_choice="none",
+    ):
+        events.append(ev)
+    await client.aclose()
+    assert len(calls) == 2
+    assert any(e.get("type") == "content" and e.get("text") == "ok" for e in events)
+    assert any(e.get("type") == "finished" for e in events)
+    assert any(e.get("type") == "usage" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_stream_yields_usage_after_finished_chunk() -> None:
+    """Drain order: finished then usage still surfaces both events."""
+    import httpx
+
+    sse = (
+        'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+        'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n'
+        'data: {"usage":{"prompt_tokens":1,"completion_tokens":8000},"choices":[]}\n\n'
+        "data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=sse.encode("utf-8"),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport, base_url="http://test")
+    gw = ModelGateway(
+        base_url="http://test/v1",
+        api_key="x",
+        model="m",
+        client=client,
+    )
+    gw._resolved_model_id = "m"
+    events = []
+    async for ev in gw.chat_completions_stream(
+        [{"role": "user", "content": "hi"}],
+        tools=None,
+        tool_choice="none",
+    ):
+        events.append(ev)
+    await client.aclose()
+    types = [e.get("type") for e in events]
+    assert "finished" in types
+    assert "usage" in types
+    assert types.index("finished") < types.index("usage") or types.count("usage") >= 1

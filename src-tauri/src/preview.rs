@@ -605,3 +605,79 @@ fn preview_cache_dir(app: &AppHandle, session_id: &str) -> AppResult<PathBuf> {
         .map_err(|e| AppError::msg(e.to_string()))?;
     Ok(base.join("preview").join(session_id))
 }
+
+/// Cap for inline base64 image/media fetches used by markdown WYSIWYG.
+pub const MAX_INLINE_PREVIEW_BYTES: usize = 8 * 1024 * 1024;
+
+fn mime_hint_from_path(path: &str) -> String {
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
+pub async fn read_preview_bytes(
+    sessions: &SessionManager,
+    session_id: &str,
+    remote_path: &str,
+) -> AppResult<crate::types::PreviewReadBytesResult> {
+    let ssh = sessions.ssh_snapshot(session_id).await?;
+    let (bytes, _total) =
+        sftp::read_remote_file_bytes(&ssh.handle(), remote_path, MAX_INLINE_PREVIEW_BYTES).await?;
+    use base64::Engine;
+    Ok(crate::types::PreviewReadBytesResult {
+        base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        mime_hint: mime_hint_from_path(remote_path),
+    })
+}
+
+pub async fn write_preview_bytes(
+    sessions: &SessionManager,
+    session_id: &str,
+    remote_path: &str,
+    base64_data: &str,
+    sudo_password: Option<&str>,
+) -> AppResult<()> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_data)
+        .map_err(|e| AppError::msg(format!("invalid base64: {e}")))?;
+    let ssh = sessions.ssh_snapshot(session_id).await?;
+    match sftp::write_remote_bytes(&ssh.handle(), remote_path, &bytes).await {
+        Ok(()) => Ok(()),
+        Err(err) if preview_sudo::is_permission_denied(&err) => {
+            preview_sudo::write_remote_bytes_sudo(
+                &ssh.handle(),
+                remote_path,
+                sudo_password,
+                &bytes,
+            )
+            .await
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+mod mime_hint_tests {
+    use super::mime_hint_from_path;
+
+    #[test]
+    fn png_and_unknown() {
+        assert_eq!(mime_hint_from_path("/a/b.png"), "image/png");
+        assert_eq!(mime_hint_from_path("/a/b.bin"), "application/octet-stream");
+    }
+}
+

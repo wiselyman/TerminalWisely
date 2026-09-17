@@ -13,6 +13,7 @@ const BUILTIN_FALSE_POSITIVES = new Set([
   "setInterval",
   "setImmediate",
   "setSelectionRange",
+  "setProperty",
 ]);
 
 function analyzePanelSetters(src) {

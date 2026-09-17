@@ -43,6 +43,7 @@ function wrapApi(page: Page): TwE2eApi {
     rejectPending: () => call("rejectPending"),
     invokeEnterDirectory: (path) => call("invokeEnterDirectory", path) as Promise<string>,
     invokePreviewOpen: (path) => call("invokePreviewOpen", path),
+    openMarkdownPreview: (path) => call("openMarkdownPreview", path) as Promise<void>,
     resetMocks: () => call("resetMocks"),
     getLastUpload: () => call("getLastUpload") as Promise<Record<string, unknown> | null>,
     getLastCreateSsh: () => call("getLastCreateSsh") as Promise<Record<string, unknown> | null>,

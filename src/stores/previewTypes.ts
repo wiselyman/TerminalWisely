@@ -1,4 +1,5 @@
 import type { PreviewOpenResult } from "../types";
+import type { PreviewViewMode } from "../lib/previewMarkdownMode";
 
 export interface PreviewTab {
   id: string;
@@ -14,7 +15,7 @@ export interface PreviewTab {
   searchCaseSensitive: boolean;
   searchRegex: boolean;
   searchWholeWord: boolean;
-  markdownMode: "source" | "preview";
+  markdownMode: PreviewViewMode;
 }
 
 export function previewTabId(sessionId: string, path: string) {
@@ -36,7 +37,7 @@ export function createPreviewTab(sessionId: string, path: string): PreviewTab {
     searchCaseSensitive: false,
     searchRegex: false,
     searchWholeWord: false,
-    markdownMode: "source",
+    markdownMode: "wysiwyg",
   };
 }
 

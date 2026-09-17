@@ -65,6 +65,16 @@ TRUNCATED_ANSWER_INCOMPLETE_SUFFIX_EN = (
 )
 
 
+SOFT_CONTINUE_NOTICE = "assistant_soft_continue"
+
+# Soft recovery when the model early-stops (finish=stop, no budget/structure hit).
+# Missing sentence-final punctuation is a generic structural cue — no word lists.
+SOFT_CONTINUE_MIN_CHARS = 180
+_SOFT_CONTINUE_TERMINATORS = frozenset(
+    "。！？.!?…」』）)]}”’\""
+)
+
+
 def truncated_answer_nudge(partial: str | None) -> str:
     """Nudge with the last incomplete line so the model can resume mid-token."""
     raw = (partial or "").rstrip()
@@ -86,6 +96,33 @@ def incomplete_answer_suffix(partial: str | None) -> str:
     if cjk >= 8:
         return TRUNCATED_ANSWER_INCOMPLETE_SUFFIX_ZH
     return TRUNCATED_ANSWER_INCOMPLETE_SUFFIX_EN
+
+
+def ends_without_sentence_terminator(content: str | None) -> bool:
+    """True when the last non-space char is not a sentence / clause closer."""
+    raw = (content or "").rstrip()
+    if not raw:
+        return False
+    return raw[-1] not in _SOFT_CONTINUE_TERMINATORS
+
+
+def should_emit_soft_continue_hint(
+    content: str | None,
+    *,
+    budget_hit: bool,
+    structural_trunc: bool,
+) -> bool:
+    """Prose ended without A/B signals and without a sentence terminator.
+
+    Soft notice only (no auto-continue) — recovers early-EOS cuts that look
+    structurally fine (no unclosed fence/bold) but stop mid-clause.
+    """
+    if budget_hit or structural_trunc:
+        return False
+    raw = (content or "").strip()
+    if len(raw) < SOFT_CONTINUE_MIN_CHARS:
+        return False
+    return ends_without_sentence_terminator(raw)
 
 
 LOOP_ABORT_MESSAGE = (

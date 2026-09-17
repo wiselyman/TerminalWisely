@@ -62,6 +62,8 @@ import {
 } from "../lib/terminalHighlight";
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
+import { useAiEngineerStore } from "../stores/aiEngineerStore";
+import { shouldAutoReconnectSsh } from "../lib/aiEngineer/sshLease";
 import { isTabReordering } from "../lib/tabPointerReorder";
 import { isLocalFsTreeMoving } from "../lib/localFsPointerMove";
 import {
@@ -126,6 +128,7 @@ export function TerminalView({
   layoutRevision = "",
 }: TerminalViewProps) {
   const { t } = useTranslation("terminal");
+  const { t: tTools } = useTranslation("tools");
   const containerRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -144,6 +147,9 @@ export function TerminalView({
   const reconnectSession = useSessionStore((s) => s.reconnectSession);
   const isDisconnected = useSessionStore((s) =>
     s.disconnectedSessionIds.has(sessionId),
+  );
+  const aiSshLeased = useAiEngineerStore((s) =>
+    Boolean(s.leasedSessionIds[sessionId]),
   );
   const openPreview = usePreviewStore((s) => s.openPreview);
   const pushToast = useToastStore((s) => s.pushToast);
@@ -846,7 +852,13 @@ export function TerminalView({
   }, [active, isConnecting]);
 
   useEffect(() => {
-    if (!isDisconnected || kind !== "ssh") {
+    if (
+      !shouldAutoReconnectSsh({
+        kind,
+        isDisconnected,
+        leased: aiSshLeased,
+      })
+    ) {
       autoReconnectAttemptRef.current = 0;
       setAutoReconnecting(false);
       return;
@@ -887,7 +899,7 @@ export function TerminalView({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [isDisconnected, kind, reconnectSession, sessionId]);
+  }, [isDisconnected, kind, reconnectSession, sessionId, aiSshLeased]);
 
   useEffect(() => {
     if (isConnecting || !active) return;
@@ -1199,11 +1211,13 @@ export function TerminalView({
       {isDisconnected && kind === "ssh" && active && !isConnecting ? (
         <div className="terminal-disconnect-banner" role="status">
           <span>
-            {autoReconnecting
-              ? t("statusAutoReconnecting")
-              : t("statusDisconnected")}
+            {aiSshLeased
+              ? tTools("sshLease.disconnectBanner")
+              : autoReconnecting
+                ? t("statusAutoReconnecting")
+                : t("statusDisconnected")}
           </span>
-          {!autoReconnecting ? (
+          {!autoReconnecting && !aiSshLeased ? (
             <button
               type="button"
               className="terminal-disconnect-banner-btn"

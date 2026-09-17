@@ -162,6 +162,8 @@
   "aiEngineer.notice.act_nudge": "Harness：本轮尚无可见回答 — 请直接作答或调用工具",
   "aiEngineer.notice.act_nudge_plan": "Harness：只写了计划 — 请作答或调用工具",
   "aiEngineer.notice.act_nudge_truncated_answer": "回复被截断 — 正在自动续写…",
+  "aiEngineer.notice.assistant_incomplete": "回复未写完 — 可回复「继续」接着写",
+  "aiEngineer.notice.assistant_soft_continue": "若觉得没写完，可回复「继续」",
   "aiEngineer.notice.act_nudge_conclude": "Harness：工具结果已在 — 请写最终回答",
   "aiEngineer.notice.verify_nudge": "Harness：变更已 exit 0 — 请用证据验证",
   "aiEngineer.notice.audit_nudge": "Harness：结论未通过核实 — 已撤回，正在改写",
@@ -407,5 +409,9 @@
   "localFs.confirm": "确认",
   "localFs.working": "处理中…",
   "localFs.needName": "请输入名称",
-  "localFs.needDest": "请输入目标文件夹"
+  "localFs.needDest": "请输入目标文件夹",
+  "sshLease.blockedReconnect": "AI 正在使用此会话。请先 STOP AI，再重连 SSH。",
+  "sshLease.disconnectBanner": "AI 占用会话期间 SSH 已断开。请先 STOP AI — 重连已禁用。",
+  "longJob.inProgress": "主机任务进行中",
+  "aiEngineer.notice.run_stalled": "Agent 长时间无模型进度，运行已失败。可重试。"
 }

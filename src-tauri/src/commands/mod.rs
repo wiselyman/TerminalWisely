@@ -18,6 +18,7 @@ use crate::types::{
     HostStatsRequest, HostStatsSnapshot,
     ProcessListResult, SavedConnectionView, SessionCwdRequest, SessionInfo, SessionMetadataUpdated,
     SshConnectRequest, SshConnectResult,
+    PreviewReadBytesRequest, PreviewReadBytesResult, PreviewWriteBytesRequest,
     TransferRemoteRequest, UploadFileResult, UploadFilesRequest,
 };
 
@@ -114,6 +115,16 @@ pub async fn reconnect_ssh_session(
         .reconnect_ssh(app, &session_id, cols, rows)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_ai_ssh_lease(
+    session_id: String,
+    active: bool,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    sessions.set_ai_ssh_lease(&session_id, active).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -732,6 +743,32 @@ pub async fn preview_save(
         .save(&sessions, &request.handle_id, request.content, request.sudo_password)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_read_bytes(
+    request: PreviewReadBytesRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<PreviewReadBytesResult, String> {
+    crate::preview::read_preview_bytes(&sessions, &request.session_id, &request.path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn preview_write_bytes(
+    request: PreviewWriteBytesRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<(), String> {
+    crate::preview::write_preview_bytes(
+        &sessions,
+        &request.session_id,
+        &request.path,
+        &request.base64,
+        request.sudo_password.as_deref(),
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -7,6 +7,9 @@ import { uniqueTabTitle } from "../lib/tabTitle";
 import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
 import { focusManagedEntity, openManagedHome } from "./managedEntityStore";
+import { useLocalFsStore } from "./localFsStore";
+import { isSessionAiSshLeased } from "../lib/aiEngineer/sshLeaseRuntime";
+import { shouldAllowManualReconnectSsh } from "../lib/aiEngineer/sshLease";
 import type {
   DeviceRecord,
   SavedConnection,
@@ -336,6 +339,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeTabId: id,
       tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
     }));
+    // Keep Host FS browse state in lockstep with the tab (not wait for paint).
+    const fs = useLocalFsStore.getState();
+    if (fs.open && fs.sessionId !== id) {
+      fs.activateSession(id);
+    }
     const tab = get().tabs.find((t) => t.id === id);
     if (tab) {
       focusManagedEntity({
@@ -582,6 +590,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
 
   reconnectSession: async (sessionId, cols, rows, options) => {
+    if (!shouldAllowManualReconnectSsh(isSessionAiSshLeased(sessionId))) {
+      if (!options?.silent) {
+        useToastStore
+          .getState()
+          .pushToast(i18n.t("tools:sshLease.blockedReconnect"), false);
+      }
+      return false;
+    }
     try {
       await invoke("reconnect_ssh_session", { sessionId, cols, rows });
       get().clearSessionDisconnected(sessionId);

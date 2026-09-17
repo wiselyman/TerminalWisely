@@ -19,15 +19,29 @@ const AI_FIRST_OUTPUT_TIMEOUT: Duration = Duration::from_secs(45);
 const AI_IDLE_AFTER_OUTPUT: Duration = Duration::from_secs(60);
 /// Once streaming, allow long jobs (model may pass a lower bound later).
 const AI_TOTAL_TIMEOUT: Duration = Duration::from_secs(7200);
+/// `timeout_seconds >= this` → disable idle-after-output (sparse progress logs).
+const LONG_JOB_TIMEOUT_SECS: u64 = 600;
+const AI_FIRST_OUTPUT_LONG: Duration = Duration::from_secs(300);
 
 fn ai_exec_limits(timeout_seconds: Option<u64>) -> ExecCaptureLimits {
-    let total = timeout_seconds
-        .map(|s| Duration::from_secs(s.clamp(5, 86_400)))
-        .unwrap_or(AI_TOTAL_TIMEOUT);
+    let total_secs = timeout_seconds
+        .unwrap_or(AI_TOTAL_TIMEOUT.as_secs())
+        .clamp(5, 86_400);
+    let total = Duration::from_secs(total_secs);
+    let long_job = total_secs >= LONG_JOB_TIMEOUT_SECS;
+    let first = if long_job {
+        AI_FIRST_OUTPUT_LONG.min(total)
+    } else {
+        AI_FIRST_OUTPUT_TIMEOUT.min(total)
+    };
     ExecCaptureLimits {
-        first_output: Some(AI_FIRST_OUTPUT_TIMEOUT.min(total)),
+        first_output: Some(first),
         total: Some(total),
-        idle_after_output: Some(AI_IDLE_AFTER_OUTPUT.min(total)),
+        idle_after_output: if long_job {
+            None
+        } else {
+            Some(AI_IDLE_AFTER_OUTPUT.min(total))
+        },
         // Non-sudo AI path: never hang on interactive password prompts.
         abort_on_interactive_password: true,
     }
@@ -251,7 +265,8 @@ pub async fn ai_terminal_exec(
 
 #[cfg(test)]
 mod tests {
-    use super::peel_leading_sudo;
+    use super::{ai_exec_limits, peel_leading_sudo};
+    use std::time::Duration;
 
     #[test]
     fn peels_simple_sudo() {
@@ -272,5 +287,29 @@ mod tests {
         let (inner, had) = peel_leading_sudo("apt-get remove -y foo");
         assert!(!had);
         assert_eq!(inner, "apt-get remove -y foo");
+    }
+
+    #[test]
+    fn short_job_keeps_idle_after_output() {
+        let lim = ai_exec_limits(Some(120));
+        assert_eq!(
+            lim.idle_after_output,
+            Some(Duration::from_secs(60).min(Duration::from_secs(120)))
+        );
+    }
+
+    #[test]
+    fn long_job_disables_idle_after_output() {
+        let lim = ai_exec_limits(Some(3600));
+        assert_eq!(lim.idle_after_output, None);
+        assert_eq!(lim.total, Some(Duration::from_secs(3600)));
+        assert_eq!(lim.first_output, Some(Duration::from_secs(300)));
+    }
+
+    #[test]
+    fn default_timeout_is_long_job() {
+        let lim = ai_exec_limits(None);
+        assert_eq!(lim.idle_after_output, None);
+        assert_eq!(lim.total, Some(Duration::from_secs(7200)));
     }
 }

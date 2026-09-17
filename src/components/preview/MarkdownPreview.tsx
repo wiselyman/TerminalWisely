@@ -1,17 +1,22 @@
-import { useMemo } from "react";
-import { marked } from "marked";
 import type { SearchOptions } from "../../lib/previewSearch";
+import {
+  markdownModeFromViewMode,
+  type PreviewViewMode,
+} from "../../lib/previewMarkdownMode";
 import { EditableTextPreview } from "./EditableTextPreview";
+import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
 
 interface MarkdownPreviewProps {
   text: string;
   extension: string;
-  mode: "source" | "preview";
+  mode: PreviewViewMode;
   query: string;
   activeMatchIndex: number;
   searchOptions?: SearchOptions;
   editable?: boolean;
   tabId?: string;
+  sessionId?: string;
+  filePath?: string;
   onChange?: (value: string) => void;
 }
 
@@ -24,14 +29,13 @@ export function MarkdownPreview({
   searchOptions,
   editable = false,
   tabId,
+  sessionId,
+  filePath,
   onChange,
 }: MarkdownPreviewProps) {
-  const html = useMemo(() => {
-    if (mode !== "preview") return "";
-    return marked.parse(text, { async: false }) as string;
-  }, [mode, text]);
+  const mdMode = markdownModeFromViewMode(mode);
 
-  if (mode === "source") {
+  if (mdMode === "source") {
     return (
       <EditableTextPreview
         tabId={tabId}
@@ -46,10 +50,22 @@ export function MarkdownPreview({
     );
   }
 
+  if (!tabId || !sessionId || !filePath) {
+    return (
+      <div className="preview-markdown-wysiwyg-error" role="alert">
+        Missing preview context
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="preview-markdown-body"
-      dangerouslySetInnerHTML={{ __html: html }}
+    <MarkdownWysiwygEditor
+      tabId={tabId}
+      sessionId={sessionId}
+      filePath={filePath}
+      text={text}
+      editable={editable}
+      onChange={onChange}
     />
   );
 }

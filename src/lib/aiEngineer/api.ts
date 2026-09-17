@@ -210,6 +210,11 @@ export interface TraceSpanRow {
   duration_ms?: number | null;
   started_at?: number;
   ended_at?: number | null;
+  finish_reason?: string;
+  budget_hit?: boolean;
+  structural_trunc?: boolean;
+  max_tokens?: number;
+  visible_chars?: number;
 }
 
 export async function fetchRunTrace(

@@ -40,6 +40,10 @@ def parse_sse_data_lines(buffer: str) -> tuple[list[str], str]:
 def iter_stream_events_from_chunk_json(obj: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert one OpenAI stream chunk object into gateway stream events."""
     events: list[dict[str, Any]] = []
+    usage = obj.get("usage")
+    if isinstance(usage, dict) and usage:
+        events.append({"type": "usage", "usage": usage})
+
     choices = obj.get("choices") or []
     if not choices:
         return events
@@ -137,6 +141,7 @@ class ModelGateway:
         tool_choice: str | dict[str, Any] | None,
         stream: bool,
         max_tokens: int | None = None,
+        include_stream_usage: bool = True,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": model,
@@ -145,6 +150,9 @@ class ModelGateway:
             "stream": stream,
             "max_tokens": max_tokens if max_tokens is not None else paths.max_output_tokens(),
         }
+        if stream and include_stream_usage:
+            # Ask OpenAI-compatible servers to attach usage on the final chunk.
+            body["stream_options"] = {"include_usage": True}
         if tools:
             body["tools"] = tools
             if tool_choice is not None:
@@ -187,6 +195,7 @@ class ModelGateway:
         *,
         temperature: float = 0.2,
         tool_choice: str | dict[str, Any] | None = "auto",
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         headers, _ = self._auth_headers_and_key()
         url = f"{self.base_url}/chat/completions"
@@ -198,6 +207,7 @@ class ModelGateway:
             temperature=temperature,
             tool_choice=tool_choice,
             stream=False,
+            max_tokens=max_tokens,
         )
         # Keep model thinking capability; strip CoT only when presenting to the UI
         # (see extract_assistant_message → sanitize_assistant_content).
@@ -225,6 +235,7 @@ class ModelGateway:
                         temperature=temperature,
                         tool_choice=tool_choice,
                         stream=False,
+                        max_tokens=max_tokens,
                     )
                     resp = await client.post(url, headers=headers, json=body)
                     if resp.status_code < 400:
@@ -245,8 +256,9 @@ class ModelGateway:
         temperature: float = 0.2,
         tool_choice: str | dict[str, Any] | None = "auto",
         should_cancel: Callable[[], bool] | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield stream events: content / tool_call_delta / finished.
+        """Yield stream events: content / tool_call_delta / usage / finished.
 
         On hard stream failure, falls back once to non-stream completion and yields
         equivalent synthetic events.
@@ -254,40 +266,72 @@ class ModelGateway:
         headers, _ = self._auth_headers_and_key()
         url = f"{self.base_url}/chat/completions"
         model = await self._effective_model()
-        body = self._build_body(
-            messages,
-            tools,
-            model=model,
-            temperature=temperature,
-            tool_choice=tool_choice,
-            stream=True,
-        )
+        include_stream_usage = True
         client = await self._get_client()
+
+        async def _iter_sse(resp: httpx.Response) -> AsyncIterator[dict[str, Any]]:
+            buf = ""
+            saw_finished = False
+            async for raw in resp.aiter_text():
+                if should_cancel and should_cancel():
+                    break
+                buf += raw
+                payloads, buf = parse_sse_data_lines(buf)
+                for payload in payloads:
+                    if not payload or payload == "[DONE]":
+                        # Do NOT invent finish_reason=stop here — that clobbers a
+                        # prior finish_reason=length from the last content chunk.
+                        if payload == "[DONE]" and not saw_finished:
+                            yield {"type": "finished", "finish_reason": "stop"}
+                            saw_finished = True
+                        continue
+                    try:
+                        obj = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(obj, dict):
+                        continue
+                    for ev in iter_stream_events_from_chunk_json(obj):
+                        if ev.get("type") == "finished":
+                            saw_finished = True
+                        yield ev
+
         try:
-            async with client.stream("POST", url, headers=headers, json=body) as resp:
-                if resp.status_code >= 400:
-                    err_text = (await resp.aread()).decode("utf-8", errors="replace")[:500]
-                    raise ModelGatewayError(f"Model error {resp.status_code}: {err_text}")
-                buf = ""
-                async for raw in resp.aiter_text():
-                    if should_cancel and should_cancel():
-                        break
-                    buf += raw
-                    payloads, buf = parse_sse_data_lines(buf)
-                    for payload in payloads:
-                        if not payload or payload == "[DONE]":
-                            if payload == "[DONE]":
-                                yield {"type": "finished", "finish_reason": "stop"}
+            for attempt in range(2):
+                body = self._build_body(
+                    messages,
+                    tools,
+                    model=model,
+                    temperature=temperature,
+                    tool_choice=tool_choice,
+                    stream=True,
+                    max_tokens=max_tokens,
+                    include_stream_usage=include_stream_usage,
+                )
+                async with client.stream("POST", url, headers=headers, json=body) as resp:
+                    if resp.status_code >= 400:
+                        err_text = (await resp.aread()).decode(
+                            "utf-8", errors="replace"
+                        )[:500]
+                        low = err_text.lower()
+                        if (
+                            attempt == 0
+                            and include_stream_usage
+                            and resp.status_code in {400, 422}
+                            and "stream_options" in low
+                        ):
+                            logger.warning(
+                                "stream rejected stream_options (%s); retrying without",
+                                resp.status_code,
+                            )
+                            include_stream_usage = False
                             continue
-                        try:
-                            obj = json.loads(payload)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(obj, dict):
-                            continue
-                        for ev in iter_stream_events_from_chunk_json(obj):
-                            yield ev
-            return
+                        raise ModelGatewayError(
+                            f"Model error {resp.status_code}: {err_text}"
+                        )
+                    async for ev in _iter_sse(resp):
+                        yield ev
+                return
         except ModelGatewayError:
             raise
         except httpx.HTTPError as exc:
@@ -313,6 +357,7 @@ class ModelGateway:
             tools,
             temperature=temperature,
             tool_choice=tool_choice,
+            max_tokens=max_tokens,
         )
         message = (completion.get("choices") or [{}])[0].get("message") or {}
         content = message.get("content")
@@ -333,6 +378,9 @@ class ModelGateway:
                 "name": fn.get("name"),
                 "arguments": fn.get("arguments") or "",
             }
+        usage = completion.get("usage")
+        if isinstance(usage, dict) and usage:
+            yield {"type": "usage", "usage": usage}
         finish = (completion.get("choices") or [{}])[0].get("finish_reason") or "stop"
         yield {"type": "finished", "finish_reason": finish}
 

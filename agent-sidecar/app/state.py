@@ -351,6 +351,9 @@ class SessionStore:
         if not run:
             return None
         run.cancel_requested = True
+        stall = run.metadata.pop("_stall_task", None)
+        if stall is not None and hasattr(stall, "done") and not stall.done():
+            stall.cancel()
         if run.task and not run.task.done():
             run.task.cancel()
         # Unblock any waiters so the loop can exit.

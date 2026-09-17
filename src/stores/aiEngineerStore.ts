@@ -29,6 +29,11 @@ import {
   stripTrailingDanglingHeading,
 } from "../lib/aiEngineer/truncatedAssistant";
 import {
+  acquireAiSshLease,
+  releaseAiSshLease,
+  subscribeAiSshLease,
+} from "../lib/aiEngineer/sshLeaseRuntime";
+import {
   type PendingAttachment,
   toWireAttachments,
 } from "../lib/aiEngineer/attachments";
@@ -714,6 +719,8 @@ let activeRunId: string | null = null;
 /** Scope that owns the in-flight run; events for other scopes are ignored. */
 let activeRunScope: string | null = null;
 let activeRunThreadId: string | null = null;
+/** SSH/k8s session id that currently holds the AI SSH lease. */
+let activeLeaseSessionId: string | null = null;
 let lineSeq = 0;
 const nextId = () => {
   try {
@@ -781,6 +788,8 @@ type AiEngineerState = {
   pendingAttachments: PendingAttachment[];
   /** Live run timing spans (model / tool / approval). */
   runTraceSpans: TraceSpanRow[];
+  /** Session ids with an active AI SSH lease (no reconnect). */
+  leasedSessionIds: Record<string, true>;
   /** Bumped to focus the composer textarea (e.g. after Send to chat). */
   composerFocusNonce: number;
   openPanel: (sessionId: string, serverId?: string) => void;
@@ -863,6 +872,11 @@ function abortActiveRun(
   activeRunId = null;
   activeRunScope = null;
   activeRunThreadId = null;
+  const leaseId = activeLeaseSessionId;
+  activeLeaseSessionId = null;
+  if (leaseId) {
+    void releaseAiSshLease(leaseId);
+  }
 }
 
 function commitThreadMessages(
@@ -1003,6 +1017,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   activeInvestigation: null,
   pendingAttachments: [],
   runTraceSpans: [],
+  leasedSessionIds: {},
   composerFocusNonce: 0,
 
   openPanel: (sessionId, serverId) => {
@@ -1842,6 +1857,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       activeRunId = null;
       activeRunScope = runScope;
       activeRunThreadId = runThreadId;
+      activeLeaseSessionId = runSessionId;
+      void acquireAiSshLease(runSessionId);
 
       const sshTab = useSessionStore
         .getState()
@@ -1997,6 +2014,20 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             set({ modelPhase: "thinking" });
             return;
           }
+          if (event.type === "run_stalled") {
+            appendIfSameThread({
+              id: nextId(),
+              kind: "notice",
+              variant: "harness",
+              content: "run_stalled",
+            });
+            appendIfSameThread({
+              id: nextId(),
+              kind: "error",
+              content: "run_stalled",
+            });
+            return;
+          }
           if (event.type === "tool_result") {
             const ok = event.payload.ok !== false;
             patchToolLineByCallId(event.call_id, {
@@ -2109,10 +2140,79 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                     ]);
                     break;
                   }
-                  appendIfSameThread({ id: nextId(), kind: "assistant", content });
+                  // Prefer merge into the cut-off bubble over a second bubble.
+                  if (looksTruncatedAssistant(line.content)) {
+                    replaceMessagesIfSameThread([
+                      ...msgs.slice(0, i),
+                      {
+                        id: line.id,
+                        kind: "assistant",
+                        content:
+                          stripTrailingDanglingHeading(content) || content,
+                      },
+                      ...msgs.slice(i + 1),
+                    ]);
+                    break;
+                  }
+                  // Authoritative completed text replaces the prior bubble.
+                  replaceMessagesIfSameThread([
+                    ...msgs.slice(0, i),
+                    {
+                      id: line.id,
+                      kind: "assistant",
+                      content: stripTrailingDanglingHeading(content) || content,
+                    },
+                    ...msgs.slice(i + 1),
+                  ]);
                   break;
                 }
               }
+            }
+            // If the final bubble is still mid-sentence, append a visible footer
+            // and notice (sidecar may have missed auto-continue on an older build).
+            const INCOMPLETE_SUFFIX_ZH =
+              "\n\n…（回答未写完。回复「继续」可让我接着写。）";
+            const INCOMPLETE_SUFFIX_EN =
+              '\n\n…(Reply cut off. Send “continue” to finish the rest.)';
+            const after = get().messages;
+            for (let i = after.length - 1; i >= 0; i -= 1) {
+              const line = after[i];
+              if (line.kind === "user") break;
+              if (line.kind !== "assistant") continue;
+              if (!looksTruncatedAssistant(line.content)) break;
+              if (
+                line.content.includes("回答未写完") ||
+                line.content.includes("Reply cut off")
+              ) {
+                break;
+              }
+              const cjk = (line.content.match(/[\u4e00-\u9fff]/g) || []).length;
+              const suffix =
+                cjk >= 8 ? INCOMPLETE_SUFFIX_ZH : INCOMPLETE_SUFFIX_EN;
+              replaceMessagesIfSameThread([
+                ...after.slice(0, i),
+                {
+                  id: line.id,
+                  kind: "assistant",
+                  content: `${line.content}${suffix}`,
+                },
+                ...after.slice(i + 1),
+              ]);
+              const incompleteNotice = get().messages.some(
+                (m, idx) =>
+                  idx > i &&
+                  m.kind === "notice" &&
+                  m.content === "assistant_incomplete",
+              );
+              if (!incompleteNotice) {
+                appendIfSameThread({
+                  id: nextId(),
+                  kind: "notice",
+                  variant: "harness",
+                  content: "assistant_incomplete",
+                });
+              }
+              break;
             }
             replaceMessagesIfSameThread(withToolEvidenceFlags(get().messages));
             const { sidecar, sessionId } = get();
@@ -2125,6 +2225,44 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                   }
                 })
                 .catch(() => undefined);
+            }
+            return;
+          } else if (event.type === "assistant_incomplete") {
+            appendIfSameThread({
+              id: nextId(),
+              kind: "notice",
+              variant: "harness",
+              content: "assistant_incomplete",
+            });
+            return;
+          } else if (event.type === "assistant_soft_continue") {
+            appendIfSameThread({
+              id: nextId(),
+              kind: "notice",
+              variant: "harness",
+              content: "assistant_soft_continue",
+            });
+            return;
+          } else if (event.type === "model_sample_end") {
+            // Attach sample diagnostics onto the latest model span for Run trace.
+            const prev = get().runTraceSpans;
+            for (let i = prev.length - 1; i >= 0; i -= 1) {
+              const span = prev[i];
+              if (span.kind !== "model") continue;
+              const next = prev.map((s, idx) =>
+                idx === i
+                  ? {
+                      ...s,
+                      finish_reason: event.finish_reason,
+                      budget_hit: event.budget_hit,
+                      structural_trunc: event.structural_trunc,
+                      max_tokens: event.max_tokens,
+                      visible_chars: event.visible_chars,
+                    }
+                  : s,
+              );
+              set({ runTraceSpans: next });
+              break;
             }
             return;
           } else if (event.type === "assistant_delta") {
@@ -2164,8 +2302,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             const content = event.content ?? "";
             if (!content.trim()) return;
             const msgs = get().messages;
-            // Replace the latest assistant in this turn (streaming or not) so
-            // harness-cleaned text never appends beside the ungated stream.
+            // Sidecar assistant_message is authoritative full text for this turn.
+            // Always replace the latest assistant bubble — never merge a longer
+            // streamed preview over a shorter cleaned final (drops trailing chars).
             let lastAssistant = -1;
             for (let i = msgs.length - 1; i >= 0; i -= 1) {
               if (msgs[i].kind === "user") break;
@@ -2176,19 +2315,24 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             }
             if (lastAssistant >= 0) {
               const prev = msgs[lastAssistant];
-              const merged =
-                prev.kind === "assistant"
-                  ? mergeAssistantContinuation(prev.content, content)
-                  : stripTrailingDanglingHeading(content) || content;
+              if (prev.kind !== "assistant") {
+                /* unreachable */
+              } else {
+              const authoritative =
+                event.replace !== false
+                  ? stripTrailingDanglingHeading(content) || content
+                  : mergeAssistantContinuation(prev.content, content);
               replaceMessagesIfSameThread([
                 ...msgs.slice(0, lastAssistant),
                 {
                   id: prev.id,
                   kind: "assistant",
-                  content: stripTrailingDanglingHeading(merged) || merged,
+                  content:
+                    stripTrailingDanglingHeading(authoritative) || authoritative,
                 },
                 ...msgs.slice(lastAssistant + 1),
               ]);
+              }
             } else {
               appendIfSameThread({
                 id: nextId(),
@@ -2335,6 +2479,10 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         activeRunId = null;
         activeRunScope = null;
         activeRunThreadId = null;
+        if (activeLeaseSessionId === runSessionId) {
+          activeLeaseSessionId = null;
+          void releaseAiSshLease(runSessionId);
+        }
         if (
           get().chatScope === runScope &&
           get().activeThreadId === runThreadId
@@ -2382,5 +2530,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
 subscribeWorkspacePanelWidth((width) => {
   if (useAiEngineerStore.getState().width !== width) {
     useAiEngineerStore.setState({ width });
+  }
+});
+
+subscribeAiSshLease((leasedSessionIds) => {
+  if (useAiEngineerStore.getState().leasedSessionIds !== leasedSessionIds) {
+    useAiEngineerStore.setState({ leasedSessionIds });
   }
 });

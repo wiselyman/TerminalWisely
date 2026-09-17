@@ -372,3 +372,221 @@ async def test_loop_auto_continues_truncated_answer() -> None:
     ]
     assert any("traj_1.jpeg" in t for t in finals)
     assert any("traj_2.jpeg" in t or "评估完成" in t for t in finals)
+
+
+class _LengthFinishThenContinueModel:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+    ) -> Any:
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if self.calls == 1:
+            # Complete-looking prose, but provider says length + near-cap usage.
+            yield {
+                "type": "content",
+                "text": "进度如下：主模型已齐，ple-table 还在下，大约还要一段时间。",
+            }
+            yield {
+                "type": "usage",
+                "usage": {"prompt_tokens": 100, "completion_tokens": 8000},
+            }
+            yield {"type": "finished", "finish_reason": "length"}
+            return
+        yield {"type": "content", "text": "更准确说大约 1.5–2 小时。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_auto_continues_on_finish_length_signal() -> None:
+    """A: budget/finish_reason drives continue even without structural cut."""
+    run = AgentRun(session_id="s1", run_id="r-len")
+    model = _LengthFinishThenContinueModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="还剩多少")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    assert any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert any("1.5" in t or "小时" in t for t in finals)
+    assert any(e.type == "model_sample_end" for e in run.events)
+
+
+class _UsageAfterFinishModel:
+    """Usage arrives AFTER finished — loop must drain, not break early."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.max_tokens_seen: list[int | None] = []
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        self.max_tokens_seen.append(max_tokens)
+        if self.calls == 1:
+            yield {
+                "type": "content",
+                "text": "进度如下：主模型齐了，表还在下，大约还要一段时间。",
+            }
+            yield {"type": "finished", "finish_reason": "stop"}
+            # Late usage (OpenAI include_usage order) — near default 8192 cap.
+            yield {
+                "type": "usage",
+                "usage": {"prompt_tokens": 50, "completion_tokens": 8000},
+            }
+            return
+        yield {"type": "content", "text": "补充：大约 1.5 小时。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_drains_usage_after_finished_and_raises_budget() -> None:
+    run = AgentRun(session_id="s1", run_id="r-drain")
+    model = _UsageAfterFinishModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="还剩多少")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    ends = [e for e in run.events if e.type == "model_sample_end"]
+    assert ends
+    assert ends[0].payload.get("budget_hit") is True
+    # Second sample should request a raised max_tokens.
+    assert model.max_tokens_seen[0] is not None
+    assert model.max_tokens_seen[1] is not None
+    assert model.max_tokens_seen[1] > model.max_tokens_seen[0]
+
+
+class _ProseStopNoUsageModel:
+    """Clean prose + stop + no usage → must NOT auto-continue."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        yield {
+            "type": "content",
+            "text": "这台机器是 Debian 12，内核与磁盘均正常。",
+        }
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_does_not_fake_continue_on_prose_stop() -> None:
+    run = AgentRun(session_id="s1", run_id="r-prose")
+    model = _ProseStopNoUsageModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="状态？")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls == 1
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+
+
+class _LongProseSoftHintModel:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        if self.calls == 1:
+            # Mid-clause early stop (no sentence terminator) — must auto-continue.
+            body = ("说明一段足够长的正文用来触发续写。" * 12) + "KV cache 预留很大"
+            yield {"type": "content", "text": body}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {
+            "type": "content",
+            "text": "，但仍在可接受范围。总结完毕。",
+        }
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_auto_continues_mid_clause_prose() -> None:
+    """No sentence terminator → auto-continue (not soft-hint only)."""
+    run = AgentRun(session_id="s1", run_id="r-soft")
+    model = _LongProseSoftHintModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="详细说明")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    assert any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+
+
+class _FinishedProseNoSoftHintModel:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        body = ("说明一段足够长的正文，结论完整。" * 10).strip()
+        yield {"type": "content", "text": body}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_no_soft_hint_when_prose_has_terminator() -> None:
+    run = AgentRun(session_id="s1", run_id="r-soft-done")
+    model = _FinishedProseNoSoftHintModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="详细说明")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls == 1
+    assert not any(e.type == "assistant_soft_continue" for e in run.events)

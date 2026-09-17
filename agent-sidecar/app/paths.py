@@ -152,6 +152,16 @@ def max_run_seconds() -> float:
     return float(os.environ.get("TW_AI_MAX_RUN_SECONDS", "900"))
 
 
+def max_run_wall_seconds() -> float:
+    """Wall-clock cap for a whole run including host waits (default 12h)."""
+    return float(os.environ.get("TW_AI_MAX_RUN_WALL_SECONDS", "43200"))
+
+
+def stall_seconds() -> float:
+    """Fail RUNNING runs that never touch the model within this many seconds."""
+    return float(os.environ.get("TW_AI_STALL_SECONDS", "90"))
+
+
 def max_context_tokens() -> int:
     """Soft budget for prompt compaction (leave room under vLLM max-model-len)."""
     return int(os.environ.get("TW_AI_MAX_CONTEXT_TOKENS", "28000"))
@@ -170,6 +180,17 @@ def compact_retain_tail() -> int:
 def max_output_tokens() -> int:
     """Generation budget. 2048 was too small for thinking models that leak CoT."""
     return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS", "8192"))
+
+
+def max_output_tokens_hard_cap() -> int:
+    """Upper bound when auto-raising budget after a length-truncated sample."""
+    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS_CAP", "16384"))
+
+
+def raised_max_output_tokens(current: int | None = None) -> int:
+    """Next budget after a length hit: min(2x current-or-default, hard cap)."""
+    base = int(current) if current and current > 0 else max_output_tokens()
+    return min(max(base * 2, base + 1), max_output_tokens_hard_cap())
 
 
 def lease_ttl_seconds() -> float:

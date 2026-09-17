@@ -43,7 +43,8 @@ export function AiMarkdown({ content, className, onImageClick }: Props) {
 
   const initialHtml = useMemo(() => {
     try {
-      return marked.parse(content || "", { async: false }) as string;
+      const parsed = marked.parse(content || "", { async: false }) as string;
+      return decorateAnchors(decorateImages(parsed));
     } catch {
       return "";
     }
@@ -54,7 +55,7 @@ export function AiMarkdown({ content, className, onImageClick }: Props) {
     setHtml(initialHtml);
     void (async () => {
       const rewritten = await rewriteRemoteImages(initialHtml);
-      if (!cancelled) setHtml(rewritten);
+      if (!cancelled) setHtml(decorateAnchors(decorateImages(rewritten)));
     })();
     return () => {
       cancelled = true;
@@ -114,6 +115,26 @@ function decorateAnchors(raw: string): string {
   return raw.replace(/<a\s+([^>]*?)href=/gi, (full, attrs: string) => {
     if (/\bdata-testid=/.test(attrs)) return full;
     return `<a data-testid="ai-md-external-link" ${attrs}href=`;
+  });
+}
+
+/** Sync: constrain every img before async media rewrite finishes. */
+export function decorateImages(raw: string): string {
+  if (!raw.includes("<img")) return raw;
+  return raw.replace(/<img\b([^>]*)>/gi, (_full, attrs: string) => {
+    let next = attrs;
+    if (!/\bclass\s*=/.test(next)) {
+      next += ` class="ai-engineer-md-img"`;
+    } else if (!/ai-engineer-md-img/.test(next)) {
+      next = next.replace(
+        /class\s*=\s*(["'])/i,
+        (_m: string, q: string) => `class=${q}ai-engineer-md-img `,
+      );
+    }
+    if (!/\bdata-testid\s*=/.test(next)) {
+      next += ` data-testid="ai-md-image"`;
+    }
+    return `<img${next}>`;
   });
 }
 

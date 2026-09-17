@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { copyPdfjsAssetsPlugin } from "./vite.pdfjs";
+import { copyVditorAssetsPlugin } from "./vite.vditor";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -9,7 +10,7 @@ const e2e = process.env.VITE_E2E === "1" || process.env.VITE_E2E === "true";
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), copyPdfjsAssetsPlugin()],
+  plugins: [react(), copyPdfjsAssetsPlugin(), copyVditorAssetsPlugin()],
   resolve: e2e
     ? {
         alias: {

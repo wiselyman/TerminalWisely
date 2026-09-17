@@ -239,6 +239,27 @@ pub struct PreviewSaveRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewReadBytesRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewReadBytesResult {
+    pub base64: String,
+    pub mime_hint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewWriteBytesRequest {
+    pub session_id: String,
+    pub path: String,
+    pub base64: String,
+    #[serde(default)]
+    pub sudo_password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewOpenResult {
     pub handle_id: String,
     pub kind: String,

@@ -1,12 +1,42 @@
-/** Detect / merge assistant replies that stopped mid-sentence (UI helper). */
+/** Detect / merge assistant replies that stopped mid-structure (UI helper).
+ *
+ * Keep in sync with agent-sidecar `looks_like_truncated_answer`: structural only
+ * (fences, bold, tables, brackets, headings) — no language keyword lists.
+ */
 
-const CJK_INCOMPLETE_TAIL =
-  /(?:然后|接着|接下来|并且|以及|或者|因为|所以|但是|不过|如果|再去|再把|再从|先把|先从)[\u4e00-\u9fff]{0,2}\s*$/;
 const MD_HEADING_LINE = /^#{1,6}\s+\S/;
 const MD_HEADING_CAPTURE = /^(#{1,6}\s+)(.+?)\s*$/;
+const TABLE_SEP_CELL = /^:?-{3,}:?$/;
 
-function cjkCount(text: string): number {
-  return (text.match(/[\u4e00-\u9fff]/g) || []).length;
+function looksLikeIncompleteMdTable(raw: string, last: string): boolean {
+  if (!last.startsWith("|")) return false;
+  if (!last.endsWith("|")) return true;
+  const cells = last
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((c) => c.trim());
+  if (!cells.length) return true;
+  if (cells.every((c) => TABLE_SEP_CELL.test(c))) return true;
+  if (cells[cells.length - 1] === "" && raw.length >= 60) return true;
+  const tableLines = raw
+    .split("\n")
+    .map((ln) => ln.trim())
+    .filter((ln) => ln.startsWith("|"));
+  if (tableLines.length >= 2) {
+    const headerCells = tableLines[0]
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .map((c) => c.trim());
+    if (headerCells.length && cells.length < headerCells.length) return true;
+    if (tableLines.length === 2) {
+      const sepCells = tableLines[1]
+        .replace(/^\||\|$/g, "")
+        .split("|")
+        .map((c) => c.trim());
+      if (sepCells.every((c) => TABLE_SEP_CELL.test(c))) return true;
+    }
+  }
+  return false;
 }
 
 /** Drop a trailing markdown heading with no body (common local-model restart). */
@@ -59,28 +89,32 @@ export function looksTruncatedAssistant(text: string | undefined | null): boolea
   if (!probe) return false;
   const fences = probe.match(/```/g);
   if (fences && fences.length % 2 === 1) return true;
-  if (/[`（(]\s*[A-Za-z][A-Za-z0-9._/\-]{0,48}$/.test(probe)) return true;
+  const boldMarks = probe.match(/\*\*/g);
+  if (boldMarks && boldMarks.length % 2 === 1) return true;
+  if (
+    /[`（(\[]\s*(?:[A-Za-z][A-Za-z0-9._/\-]{0,48}|[\u4e00-\u9fff]{1,4})$/.test(
+      probe,
+    )
+  ) {
+    return true;
+  }
+  if (/[([{（][^)\]}）\n]{0,40}$/.test(probe)) return true;
   const lines = probe.split("\n");
   const last = (lines[lines.length - 1] || probe).trim();
   if (/[(（\[{：:,，、`]$/.test(last)) return true;
-  if (last && CJK_INCOMPLETE_TAIL.test(last)) return true;
-  // Mid ASCII box-drawing line (incomplete diagram).
+  if (last && looksLikeIncompleteMdTable(probe, last)) return true;
   if (last.startsWith("│") && probe.length >= 80) return true;
-  // Heading glued mid-line or dangling heading.
   if (/\S\s+#{1,6}\s+\S/.test(last) && probe.length >= 80) return true;
   if (last && MD_HEADING_LINE.test(last) && probe.length >= 80) return true;
-  if (probe.length < 60) return false;
-  if (probe.endsWith("```")) return false;
-  if (cjkCount(probe) >= 40 && last) {
-    if (
-      cjkCount(last) >= 8 &&
-      last.length >= 10 &&
-      !/^[#\-* >|]/.test(last) &&
-      !/[。！？….!?]/.test(last.slice(-1)) &&
-      !/[)）`'」』"]$/.test(last)
-    ) {
-      return true;
-    }
+  const headings = [
+    ...probe.matchAll(/^(#{1,6}\s+)(.+?)\s*$/gm),
+  ].map((m) => m[2].trim());
+  if (
+    headings.length >= 2 &&
+    headings[headings.length - 1] === headings[0] &&
+    MD_HEADING_LINE.test(last || "")
+  ) {
+    return true;
   }
   return false;
 }
@@ -99,7 +133,12 @@ function bodyHasHeadingTitle(body: string, title: string): boolean {
   });
 }
 
-/** Merge a continuation chunk into a truncated prior reply. */
+/** Merge a continuation chunk into a truncated prior reply.
+ *
+ * Trunc-continue `assistant_message` payloads are authoritative full text:
+ * if `next` already contains the prior opening or is nearly as long, replace
+ * instead of concatenating (avoids duplicated answers).
+ */
 export function mergeAssistantContinuation(
   previous: string,
   incoming: string,
@@ -108,6 +147,41 @@ export function mergeAssistantContinuation(
   const next = incoming || "";
   if (!prev) return stripTrailingDanglingHeading(next) || next;
   if (!next) return stripTrailingDanglingHeading(prev) || prev;
+
+  // Streamed previews often gain leading newlines and miss the final terminator
+  // that the sanitized assistant_message still has — prefer the cleaned final.
+  const prevCore = prev.replace(/^\s+/, "").replace(/\s+$/, "");
+  const nextCore = next.replace(/^\s+/, "").replace(/\s+$/, "");
+  if (prevCore && nextCore) {
+    const prevSansTerm = prevCore.replace(/[。！？.!?…]+$/u, "");
+    const nextSansTerm = nextCore.replace(/[。！？.!?…]+$/u, "");
+    if (
+      prevSansTerm === nextSansTerm ||
+      nextCore.startsWith(prevSansTerm) ||
+      prevCore.startsWith(nextSansTerm)
+    ) {
+      if (nextCore.length >= prevSansTerm.length) {
+        return stripTrailingDanglingHeading(nextCore) || nextCore;
+      }
+    }
+  }
+
+  const prevOpen = prev.slice(0, Math.min(120, prev.length)).trim();
+  // Authoritative rewrite / full-sample replace.
+  if (
+    prevOpen.length >= 40 &&
+    next.includes(prevOpen) &&
+    next.length >= Math.floor(prev.length * 0.6)
+  ) {
+    return stripTrailingDanglingHeading(next) || next;
+  }
+  if (
+    next.length >= Math.floor(prev.length * 0.9) &&
+    (next.startsWith(prev.slice(0, Math.min(48, prev.length))) ||
+      !looksTruncatedAssistant(next))
+  ) {
+    return stripTrailingDanglingHeading(next) || next;
+  }
 
   const nextTitle = leadingHeadingTitle(next);
   const restart =
@@ -130,10 +204,10 @@ export function mergeAssistantContinuation(
       return stripTrailingDanglingHeading(prev) || prev;
     }
     // Full rewrite that already contains the prior opening prose.
-    const prevOpen = prev.slice(0, Math.min(80, prev.length));
+    const open = prev.slice(0, Math.min(80, prev.length));
     if (
-      prevOpen.length >= 40 &&
-      cleanedNext.includes(prevOpen) &&
+      open.length >= 40 &&
+      cleanedNext.includes(open) &&
       !looksTruncatedAssistant(cleanedNext)
     ) {
       return stripTrailingDanglingHeading(cleanedNext) || cleanedNext;
@@ -157,6 +231,21 @@ export function mergeAssistantContinuation(
     return stripTrailingDanglingHeading(prev) || prev;
   }
 
+  // Short suffix only — append when prior is structurally truncated.
+  if (
+    next.length < Math.floor(prev.length * 0.5) &&
+    looksTruncatedAssistant(prev)
+  ) {
+    const needSep =
+      !prev.endsWith("\n") &&
+      !next.startsWith("\n") &&
+      /[`）)\w\u4e00-\u9fff]$/.test(prev) &&
+      /^#{1,6}\s/.test(next.trimStart());
+    const joined = needSep ? `${prev}\n\n${next}` : prev + next;
+    return stripTrailingDanglingHeading(joined) || joined;
+  }
+
+  // Prefer next when it looks like a completed rewrite of similar length.
   if (
     next.length >= Math.floor(prev.length * 0.85) &&
     !looksTruncatedAssistant(next)

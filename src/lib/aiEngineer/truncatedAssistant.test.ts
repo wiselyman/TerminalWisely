@@ -5,7 +5,7 @@ import {
   stripTrailingDanglingHeading,
 } from "./truncatedAssistant";
 
-describe("looksTruncatedAssistant", () => {
+describe("looksTruncatedAssistant (structural only)", () => {
   it("detects dangling paren + latin fragment", () => {
     const raw =
       "搞清楚了。给你说清楚装的是什么和怎么用。\n\n".repeat(2) +
@@ -13,14 +13,27 @@ describe("looksTruncatedAssistant", () => {
     expect(looksTruncatedAssistant(raw)).toBe(true);
   });
 
-  it("detects CJK mid-clause cut 然后进", () => {
+  it("detects unclosed bold", () => {
     const raw =
-      "当前是 plan 模式。\n\n".repeat(3) +
-      "跑完把输出贴给我，我帮你辨别结果，然后进";
+      "主模型 67/67 齐了。\n\n".repeat(2) +
+      "总量估计还有 40-60 GB，大约 **1.";
+    expect(looksTruncatedAssistant(raw)).toBe(true);
+    expect(
+      looksTruncatedAssistant("总量估计还有 40-60 GB，大约 **1.5–2 小时**。"),
+    ).toBe(false);
+  });
+
+  it("detects incomplete markdown table with blank cell", () => {
+    const raw =
+      "结论：不是慢，是网络层挂起。\n\n" +
+      "### 怎么办\n\n" +
+      "| 方案 | 动作 | 说明 |\n" +
+      "|------|------|------|\n" +
+      "| A. 重新下载（推荐） | kill 卡住的进程 → 重新 `hf download` |";
     expect(looksTruncatedAssistant(raw)).toBe(true);
     expect(
       looksTruncatedAssistant(
-        "跑完把输出贴给我，我帮你辨别结果，然后进入下一步训练。",
+        raw + " 断点续传。|\n| B. 再等 | 不动 | 多半回不来 |\n",
       ),
     ).toBe(false);
   });
@@ -33,18 +46,16 @@ describe("looksTruncatedAssistant", () => {
     expect(looksTruncatedAssistant(raw)).toBe(true);
   });
 
-  it("detects heading glued onto ASCII box line", () => {
-    const raw =
-      "## 第 1 步到底在做什么\n\n" +
-      "GROOT 看演示。\n\n".repeat(3) +
-      "┌────┐\n│ 预测动作 vs 真实动作 (数据里记录的) ## 第 1 步到底在做什么";
-    expect(looksTruncatedAssistant(raw)).toBe(true);
-  });
-
-  it("rejects a finished short answer", () => {
+  it("does not treat finished prose as truncated (no keyword heuristics)", () => {
     expect(looksTruncatedAssistant("这台机器是 Debian 12，内核正常。")).toBe(
       false,
     );
+    // Mid-prose without structural break is NOT flagged — budget signals handle that.
+    expect(
+      looksTruncatedAssistant(
+        "说明如下。\n\n".repeat(4) + "还剩 125 片，大约还要两小时左右",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -81,5 +92,28 @@ describe("mergeAssistantContinuation", () => {
     expect(merged).toContain("traj_1.jpeg");
     expect(merged).toContain("traj_2.jpeg");
     expect(merged).toContain("评估结束");
+  });
+
+  it("replaces instead of duplicating when next is authoritative full text", () => {
+    const prev =
+      "主模型齐了。\n\n".repeat(4) + "总量估计大约 **1.";
+    const next =
+      "主模型齐了。\n\n".repeat(4) +
+      "总量估计大约 **1.5–2 小时**，剩余分片会陆续到齐。";
+    const merged = mergeAssistantContinuation(prev, next);
+    expect(merged).toBe(next);
+    const first = "主模型齐了。\n\n".repeat(4);
+    expect(merged.split(first).length - 1).toBe(1);
+  });
+
+  it("prefers cleaned final with period over longer streamed preview", () => {
+    const body =
+      "说明如下。\n\n".repeat(8) +
+      "对生成速度略有影响但不致命。";
+    const streamed = `\n\n${body.slice(0, -1)}`;
+    expect(streamed.length).toBeGreaterThan(body.length);
+    const merged = mergeAssistantContinuation(streamed, body);
+    expect(merged.endsWith("。")).toBe(true);
+    expect(merged.trimStart()).toBe(body);
   });
 });

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
@@ -50,10 +50,19 @@ impl SessionHandle {
     }
 }
 
+/// Reject SSH reconnect while AI Engineer holds a lease on the session.
+pub fn assert_reconnect_allowed(leased: bool) -> AppResult<()> {
+    if leased {
+        return Err(AppError::code("ERR_AI_SSH_LEASE"));
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<String, SessionHandle>>>,
     transfers: TransferRegistry,
+    ai_ssh_leases: Arc<Mutex<HashSet<String>>>,
 }
 
 impl SessionManager {
@@ -61,7 +70,21 @@ impl SessionManager {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             transfers: TransferRegistry::new(),
+            ai_ssh_leases: Arc::new(Mutex::new(HashSet::new())),
         }
+    }
+
+    pub async fn set_ai_ssh_lease(&self, session_id: &str, active: bool) {
+        let mut g = self.ai_ssh_leases.lock().await;
+        if active {
+            g.insert(session_id.to_string());
+        } else {
+            g.remove(session_id);
+        }
+    }
+
+    pub async fn is_ai_ssh_leased(&self, session_id: &str) -> bool {
+        self.ai_ssh_leases.lock().await.contains(session_id)
     }
 
 
@@ -139,6 +162,7 @@ impl SessionManager {
     }
 
     pub async fn close(&self, session_id: &str) -> AppResult<()> {
+        self.set_ai_ssh_lease(session_id, false).await;
         let mut sessions = self.sessions.lock().await;
         if let Some(mut session) = sessions.remove(session_id) {
             session.close()?;
@@ -153,6 +177,7 @@ impl SessionManager {
         cols: u16,
         rows: u16,
     ) -> AppResult<()> {
+        assert_reconnect_allowed(self.is_ai_ssh_leased(session_id).await)?;
         let mut sessions = self.sessions.lock().await;
         let session = sessions
             .get_mut(session_id)
@@ -853,42 +878,66 @@ impl SessionManager {
         if new_path == resolved {
             return Ok(());
         }
-        if let Err(err) =
-            sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path).await
+        if sftp::rename_remote_path(&ssh.handle(), &resolved, &new_path)
+            .await
+            .is_ok()
         {
-            let quoted_src = shell_quote_remote_path(&resolved);
-            let quoted_dest = shell_quote_remote_path(&new_path);
-            // Prefer quoted `mv` for EXDEV / SSH_FX_FAILURE / names SFTP mishandles;
-            // escalate to sudo only when the shell reports permission denied.
-            let cmd = format!("mv -- {quoted_src} {quoted_dest}");
-            if preview_sudo::is_permission_denied(&err) {
-                preview_sudo::exec_remote_sudo(
+            return Ok(());
+        }
+
+        let quoted_src = shell_quote_remote_path(&resolved);
+        let quoted_dest = shell_quote_remote_path(&new_path);
+        // SFTP rename often fails across mounts (EXDEV) or on odd names — use shell.
+        // Cross-device `mv` may still fail; fall back to copy + remove.
+        let mv_cmd = format!("mv -- {quoted_src} {quoted_dest}");
+        let copy_rm_cmd =
+            format!("cp -a -- {quoted_src} {quoted_dest} && rm -rf -- {quoted_src}");
+
+        match crate::ssh::client::exec_command(&ssh.handle(), &mv_cmd).await {
+            Ok(_) => Ok(()),
+            Err(err) if preview_sudo::is_permission_denied(&err) => {
+                match preview_sudo::exec_remote_sudo(
                     &ssh.handle(),
-                    &cmd,
+                    &mv_cmd,
                     sudo_password,
                     "移动",
                     &resolved,
                 )
-                .await?;
-            } else if let Err(shell_err) =
-                crate::ssh::client::exec_command(&ssh.handle(), &cmd).await
-            {
-                if preview_sudo::is_permission_denied(&shell_err) {
-                    preview_sudo::exec_remote_sudo(
-                        &ssh.handle(),
-                        &cmd,
-                        sudo_password,
-                        "移动",
-                        &resolved,
-                    )
-                    .await?;
-                } else {
-                    return Err(shell_err);
+                .await
+                {
+                    Ok(()) => Ok(()),
+                    Err(sudo_err) if is_cross_device_move_error(&sudo_err) => {
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &copy_rm_cmd,
+                            sudo_password,
+                            "移动",
+                            &resolved,
+                        )
+                        .await
+                    }
+                    Err(sudo_err) => Err(sudo_err),
                 }
             }
+            Err(err) if is_cross_device_move_error(&err) => {
+                match crate::ssh::client::exec_command(&ssh.handle(), &copy_rm_cmd).await
+                {
+                    Ok(_) => Ok(()),
+                    Err(copy_err) if preview_sudo::is_permission_denied(&copy_err) => {
+                        preview_sudo::exec_remote_sudo(
+                            &ssh.handle(),
+                            &copy_rm_cmd,
+                            sudo_password,
+                            "移动",
+                            &resolved,
+                        )
+                        .await
+                    }
+                    Err(copy_err) => Err(copy_err),
+                }
+            }
+            Err(err) => Err(err),
         }
-
-        Ok(())
     }
 
     pub async fn create_path(
@@ -1327,6 +1376,14 @@ fn normalize_remote_path(path: &str) -> String {
     out
 }
 
+fn is_cross_device_move_error(err: &AppError) -> bool {
+    let s = err.to_string().to_ascii_lowercase();
+    s.contains("inter-device")
+        || s.contains("cross-device")
+        || s.contains("exdev")
+        || s.contains("invalid cross-device link")
+}
+
 fn unique_copy_name(base_name: &str) -> String {
     // Prefer "name copy" / "name copy 2" before extension when present.
     let (stem, ext) = match base_name.rsplit_once('.') {
@@ -1348,8 +1405,10 @@ fn unique_copy_name(base_name: &str) -> String {
 #[cfg(test)]
 mod fs_path_tests {
     use super::{
-        is_same_or_descendant_path, remote_basename, unique_copy_name, validate_fs_name,
+        is_cross_device_move_error, is_same_or_descendant_path, remote_basename,
+        unique_copy_name, validate_fs_name,
     };
+    use crate::error::AppError;
 
     #[test]
     fn rejects_bad_names() {
@@ -1386,6 +1445,15 @@ mod fs_path_tests {
             Some("Jimmy.O.Yang.Guess[TGx]")
         );
         assert_eq!(remote_basename("/"), None);
+    }
+
+    #[test]
+    fn detects_cross_device_mv_errors() {
+        assert!(is_cross_device_move_error(&AppError::msg(
+            "远程命令失败，退出码 1: mv: inter-device move failed: '/a' to '/b'"
+        )));
+        assert!(is_cross_device_move_error(&AppError::msg("EXDEV: Invalid cross-device link")));
+        assert!(!is_cross_device_move_error(&AppError::msg("Permission denied")));
     }
 }
 
@@ -1425,3 +1493,14 @@ fn remote_join_path(base: &str, segment: &str) -> String {
     )
 }
 
+
+#[cfg(test)]
+mod ai_ssh_lease_tests {
+    use super::assert_reconnect_allowed;
+
+    #[test]
+    fn reconnect_blocked_when_ai_lease_active() {
+        assert!(assert_reconnect_allowed(true).is_err());
+        assert!(assert_reconnect_allowed(false).is_ok());
+    }
+}

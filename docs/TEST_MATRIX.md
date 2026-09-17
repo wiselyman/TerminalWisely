@@ -77,7 +77,8 @@
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
 | 多 Tab 预览面板 | — | — | smoke | — | ✓ |
-| Text/Markdown/HTML/CSV 编辑 + 原生 PDF + OFV 只读（图/Office/压缩包/音视频） | `fileType.test` + `pdfjsOfv.test` + Rust preview | — | smoke | — | ✓ |
+| Text/Markdown/HTML/CSV 编辑 + 原生 PDF + OFV 只读（图/Office/压缩包/音视频） | `fileType.test` + `pdfjsOfv.test` + Rust preview + `previewMarkdownMode` + `markdownImagePath` | — | smoke | **✓** `preview-markdown-wysiwyg` | ✓ |
+| Markdown Typora 式 WYSIWYG（Vditor IR） | `previewMarkdownMode` + `markdownImagePath` + `previewRemoteBytes` | Rust `preview_read_bytes` | smoke vditor | **✓** | ✓ |
 | 预览内搜索 | `previewSearch.test` | — | smoke | — | ✓ |
 | 编辑保存 / sudo 重试 | Rust | — | — | — | ✓ |
 
@@ -151,6 +152,10 @@
 | Session resume | — | pytest resume | — | resume | ✓ |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |
+| AI SSH lease（禁重连） | `sshLease.test` + Rust `ai_ssh_lease_tests` | — | TerminalView 闸门 | — | ✓ |
+| Long-job exec idle 豁免 | Rust `ai_exec_limits` | — | timeout≥600 关 idle | — | ✓ |
+| Run stall 看门狗 | `test_stall_watch` | main stall wrap | run_stalled 通知 | — | ✓ |
+| Wall-clock run 预算 | paths `max_run_wall_seconds` | loop `_check_budgets` | — | — | ✓ |
 
 ## 10. AI chat 可观测性
 

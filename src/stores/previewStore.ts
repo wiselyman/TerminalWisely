@@ -14,6 +14,7 @@ import { useToastStore } from "./toastStore";
 import { flushPreviewEditor } from "../lib/previewEditorFlush";
 import { formatAppError } from "../lib/formatAppError";
 import { canPreviewPath } from "../lib/fileType";
+import type { PreviewViewMode } from "../lib/previewMarkdownMode";
 import i18n from "../i18n";
 
 const PREVIEW_WIDTH_KEY = "terminal-wisely.preview-width";
@@ -76,7 +77,7 @@ interface PreviewState {
   setSearchCaseSensitive: (value: boolean) => void;
   setSearchRegex: (value: boolean) => void;
   setSearchWholeWord: (value: boolean) => void;
-  setMarkdownMode: (mode: "source" | "preview") => void;
+  setMarkdownMode: (mode: PreviewViewMode) => void;
   setEditedContent: (content: string) => void;
   setSudoPassword: (password: string) => void;
   closeSudoPrompt: () => void;

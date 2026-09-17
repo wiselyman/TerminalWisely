@@ -20,6 +20,7 @@ import { useTaskManagerStore } from "../stores/taskManagerStore";
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
 import { useToastStore } from "../stores/toastStore";
+import { clampWorkspacePanelWidth } from "../lib/workspacePanelWidth";
 import { LocalFsContextMenu, type LocalFsContextMenuProps } from "./LocalFsContextMenu";
 import { LocalFsBackIcon, LocalFsCwdIcon, LocalFsHiddenIcon, LocalFsHomeIcon, LocalFsRefreshIcon, LocalFsSettingsIcon, LocalFsUpIcon, LocalFsViewGridIcon, LocalFsViewListIcon } from "./LocalFsIcons";
 import { LocalFsContentsView } from "./LocalFsContentsView";
@@ -177,6 +178,11 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     : t("localFs.title");
 
   useEffect(() => {
+    setAddressEditing(false);
+    setAddressPath(contentsPath ?? "");
+  }, [sessionId]);
+
+  useEffect(() => {
     if (!addressEditing && contentsPath) setAddressPath(contentsPath);
   }, [contentsPath, addressEditing]);
 
@@ -289,18 +295,21 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     const entry = destHint ? getEntryByPath(destHint) : selectedPath
       ? getEntryByPath(selectedPath)
       : null;
+    // Prefer explicit dest → selected dir/file parent → contents pane → tree root.
     const dest =
       destHint && entry?.kind === "directory"
         ? destHint
-        : pasteTargetDir(
-            selectedPath,
-            entry?.kind === "directory"
-              ? "directory"
-              : entry
-                ? "file"
-                : null,
-            rootPath,
-          );
+        : destHint && !entry
+          ? destHint
+          : pasteTargetDir(
+              selectedPath,
+              entry?.kind === "directory"
+                ? "directory"
+                : entry
+                  ? "file"
+                  : null,
+              contentsPath ?? rootPath,
+            );
     if (!dest) {
       pushToast(t("terminal:toastNeedDestDir"), false);
       return;
@@ -629,13 +638,22 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     });
   };
 
-  const openBackgroundMenu = (event: ReactMouseEvent) => {
+  const openBackgroundMenu = (
+    event: ReactMouseEvent,
+    parentDir?: string | null,
+  ) => {
     event.preventDefault();
     window.getSelection()?.removeAllRanges();
     const canPaste = Boolean(
       clipboard && clipboard.sessionId === sessionId && clipboard.paths.length,
     );
-    const parent = rootPath ?? ".";
+    // Contents pane must paste into the folder currently shown on the right —
+    // never silently fall back to the tree root (often `/`).
+    const parent =
+      (parentDir && parentDir.trim()) ||
+      contentsPath ||
+      rootPath ||
+      ".";
     setMenu({
       kind: "background",
       x: event.clientX,
@@ -672,14 +690,19 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     event.preventDefault();
     const startX = event.clientX;
     const startW = width;
+    let latest = startW;
+    const shell = document.querySelector(".app-shell") as HTMLElement | null;
     document.body.classList.add("find-panel-resizing");
     const onMove = (moveEvent: MouseEvent) => {
-      setWidth(startW + (startX - moveEvent.clientX));
+      latest = clampWorkspacePanelWidth(startW + (startX - moveEvent.clientX));
+      if (panelRef.current) panelRef.current.style.width = `${latest}px`;
+      shell?.style.setProperty("--workspace-panel-width", `${latest}px`);
     };
     const onUp = () => {
       document.body.classList.remove("find-panel-resizing");
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      setWidth(latest);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -927,7 +950,9 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
                     menu?.kind === "entry" ? menu.entry.path : null
                   }
                   onEntryContextMenu={openEntryMenu}
-                  onBackgroundContextMenu={openBackgroundMenu}
+                  onBackgroundContextMenu={(e) =>
+                    openBackgroundMenu(e, rootPath)
+                  }
                   onMovePaths={(paths, dest) => {
                     void handleMovePaths(paths, dest);
                   }}
@@ -967,7 +992,9 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
                     menu?.kind === "entry" ? menu.entry.path : null
                   }
                   onEntryContextMenu={openEntryMenu}
-                  onBackgroundContextMenu={openBackgroundMenu}
+                  onBackgroundContextMenu={(e) =>
+                    openBackgroundMenu(e, contentsPath)
+                  }
                   onOpenFile={handleOpenFile}
                   onMovePaths={(paths, dest) => {
                     void handleMovePaths(paths, dest);

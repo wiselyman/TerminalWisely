@@ -537,6 +537,14 @@ function App() {
     return () => window.clearInterval(timer);
   }, [activeTabId, loadSessionCwd, localFsOpen, localFsTab]);
 
+  useEffect(() => {
+    if (!localFsOpen || !activeTabId) return;
+    const { sessionId, activateSession } = useLocalFsStore.getState();
+    if (sessionId !== activeTabId) {
+      activateSession(activeTabId);
+    }
+  }, [activeTabId, localFsOpen]);
+
 
   useEffect(() => {
     if (!activeTabId || activeTabDisconnected) {

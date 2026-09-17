@@ -88,19 +88,139 @@ def test_truncated_answer_nudge_includes_tail() -> None:
     assert "traj" in text or "/tmp/x.jpeg" in text
 
 
-def test_looks_like_truncated_answer_cjk_mid_clause() -> None:
+def test_looks_like_truncated_answer_prose_only_not_flagged() -> None:
+    """Prose mid-cut without structural break is NOT heuristic-flagged (A uses budget)."""
     from app.llm.thinking import looks_like_truncated_answer
 
     raw = (
-        "当前会话是 plan 模式，我不能执行命令。\n\n"
-        "你在终端粘贴下面命令跑：\n\n"
-        "```bash\ncd ~/Isaac-GR00T\nuv run python scripts/x.py\n```\n\n"
-        "输出：模型预测的动作轨迹 vs 真实动作的对比图\n"
-        "跑完把输出贴给我，我帮你辨别结果，然后进"
+        "是的，这里的 70 指的是单流速度。\n\n" * 4
+        + "70 tok/s ≈ 单流 decode 上限。一旦你"
+    )
+    assert not looks_like_truncated_answer(raw)
+    assert not looks_like_truncated_answer(
+        "### 建议\n\n就建议 A: kill 卡住的进程再重启，22GB 已下"
+    )
+
+
+def test_looks_like_truncated_answer_unclosed_bracket_cjk() -> None:
+    """Structural: cut at 「连通性 [不」."""
+    from app.llm.thinking import looks_like_truncated_answer
+
+    raw = (
+        "### 我的建议\n\n"
+        "如果你确实想尝试直接 HF 看能不能更快，我可以先只测连通性 [不"
     )
     assert looks_like_truncated_answer(raw)
     assert not looks_like_truncated_answer(
-        "跑完把输出贴给我，我帮你辨别结果，然后进入下一步训练。"
+        "我可以先只测连通性（不下模型）。你要的话再说。"
+    )
+
+
+def test_looks_like_truncated_answer_incomplete_table() -> None:
+    """Structural: table cut with blank / missing cell."""
+    from app.llm.thinking import looks_like_truncated_answer
+
+    raw = (
+        "结论：不是慢，是网络层挂起。CDN 停推流了。\n\n"
+        "### 怎么办（要动进程，等你拍板）\n\n"
+        "| 方案 | 动作 | 说明 |\n"
+        "|------|------|------|\n"
+        "| A. 重新下载（推荐） | kill 卡住的进程 → 重新 `hf download` |"
+    )
+    assert looks_like_truncated_answer(raw)
+    raw_empty = raw + " |"
+    assert looks_like_truncated_answer(raw_empty)
+    done = (
+        raw
+        + " 断点续传，已下 23GB 还在。|\n"
+        + "| B. 再等 | 不动 | 多半回不来 |\n"
+    )
+    assert not looks_like_truncated_answer(done)
+
+
+def test_looks_like_truncated_answer_unclosed_bold_number() -> None:
+    """Structural: unclosed ** at 「大约 **1.」."""
+    from app.llm.thinking import looks_like_truncated_answer
+
+    raw = (
+        "主模型 67/67 齐了。\n\n" * 4
+        + "还剩 125 片（约 63% 未完成）。按你说的 7 MB/s 估算，"
+        "ple-table 单片不大，但 125 片总量估计还有 40-60 GB，大约 **1."
+    )
+    assert looks_like_truncated_answer(raw)
+    assert not looks_like_truncated_answer(
+        "总量估计还有 40-60 GB，大约 **1.5–2 小时**。"
+    )
+
+
+def test_output_budget_exhausted() -> None:
+    from app.llm.thinking import output_budget_exhausted
+
+    assert output_budget_exhausted("length", None, 8192)
+    assert output_budget_exhausted("max_tokens", None, 8192)
+    assert output_budget_exhausted("stop", {"completion_tokens": 8000}, 8192)
+    assert not output_budget_exhausted("stop", {"completion_tokens": 100}, 8192)
+    assert not output_budget_exhausted("stop", None, 8192)
+    assert not output_budget_exhausted("tool_calls", {"completion_tokens": 9000}, 8192)
+
+
+def test_reasoning_starved_visible_reply() -> None:
+    from app.llm.thinking import reasoning_starved_visible_reply
+
+    usage = {
+        "completion_tokens": 200,
+        "completion_tokens_details": {"reasoning_tokens": 120},
+    }
+    # Thin visible after heavy reasoning → continue.
+    assert reasoning_starved_visible_reply("stop", usage, "短", 8192)
+    # Mid-clause with room left → continue.
+    mid = ("说明如下。" * 20) + "KV cache 预留很大"
+    assert reasoning_starved_visible_reply("stop", usage, mid, 8192)
+    # Finished visible + low reasoning share → no.
+    assert not reasoning_starved_visible_reply(
+        "stop",
+        {
+            "completion_tokens": 200,
+            "completion_tokens_details": {"reasoning_tokens": 10},
+        },
+        mid + "。",
+        8192,
+    )
+    assert not reasoning_starved_visible_reply(
+        "tool_calls", usage, "短", 8192
+    )
+
+
+def test_raised_max_output_tokens() -> None:
+    from app import paths
+
+    assert paths.raised_max_output_tokens(8192) == min(16384, paths.max_output_tokens_hard_cap())
+    assert paths.raised_max_output_tokens(100) == 200
+
+
+def test_should_emit_soft_continue_hint() -> None:
+    from app.harness.verify import should_emit_soft_continue_hint
+
+    # Mid-clause cut (no sentence terminator) above the lowered threshold.
+    mid = ("说明如下。" * 40) + "KV cache 预留很大"
+    assert len(mid) >= 180
+    assert should_emit_soft_continue_hint(
+        mid, budget_hit=False, structural_trunc=False
+    )
+    # Finished prose with terminator — no soft hint.
+    done = ("说明如下。" * 40) + "这是硬件上限决定的。"
+    assert not should_emit_soft_continue_hint(
+        done, budget_hit=False, structural_trunc=False
+    )
+    assert not should_emit_soft_continue_hint(
+        mid, budget_hit=True, structural_trunc=False
+    )
+    assert not should_emit_soft_continue_hint(
+        "short mid cut 预留很大", budget_hit=False, structural_trunc=False
+    )
+    # Truncation path already owns recovery — soft hint stays off.
+    assert not should_emit_soft_continue_hint(
+        mid, budget_hit=False, structural_trunc=True
     )
 
 

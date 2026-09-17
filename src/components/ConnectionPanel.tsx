@@ -785,18 +785,21 @@ export function ConnectionPanel({
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = expandedWidth;
+    let latest = startWidth;
+    const shell = document.querySelector(".app-shell") as HTMLElement | null;
     document.body.classList.add("sidebar-resizing");
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      onExpandedWidthChange(
-        clampSidebarWidth(startWidth + (moveEvent.clientX - startX)),
-      );
+      latest = clampSidebarWidth(startWidth + (moveEvent.clientX - startX));
+      // Live CSS only — avoid React re-render of chat/terminal every frame.
+      shell?.style.setProperty("--sidebar-width", `${latest}px`);
     };
 
     const onMouseUp = () => {
       document.body.classList.remove("sidebar-resizing");
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      onExpandedWidthChange(latest);
     };
 
     window.addEventListener("mousemove", onMouseMove);

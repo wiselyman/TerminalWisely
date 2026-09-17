@@ -22,6 +22,11 @@ import { OfvReadonlyPreview } from "./preview/OfvReadonlyPreview";
 import { UnsupportedPreview } from "./preview/UnsupportedPreview";
 import { isReadonlyBinaryPreviewKind } from "../lib/fileType";
 import {
+  markdownModeFromViewMode,
+  viewModeForMarkdownToggle,
+} from "../lib/previewMarkdownMode";
+import { flushPreviewEditor } from "../lib/previewEditorFlush";
+import {
   PreviewChevronDownIcon,
   PreviewChevronUpIcon,
   PreviewCloseIcon,
@@ -107,7 +112,11 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
   const searchCaseSensitive = activeTab?.searchCaseSensitive ?? false;
   const searchRegex = activeTab?.searchRegex ?? false;
   const searchWholeWord = activeTab?.searchWholeWord ?? false;
-  const markdownMode = activeTab?.markdownMode ?? "source";
+  const markdownMode = activeTab?.markdownMode ?? "wysiwyg";
+  const mdViewMode =
+    data?.kind === "markdown"
+      ? markdownModeFromViewMode(markdownMode)
+      : null;
   const pushToast = useToastStore((s) => s.pushToast);
   const resizeRef = useRef<{
     startX: number;
@@ -172,11 +181,31 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
       ((data?.kind === "markdown" || data?.kind === "html") &&
         markdownMode === "source"));
 
+  const canEditMarkdown =
+    Boolean(data?.editable) && data?.kind === "markdown";
+
   const searchable =
     data?.kind === "text" ||
     data?.kind === "markdown" ||
     data?.kind === "html" ||
     data?.kind === "csv";
+
+  const canSave =
+    Boolean(data?.editable) &&
+    dirty &&
+    !saving &&
+    (data?.kind === "text" ||
+      data?.kind === "csv" ||
+      data?.kind === "markdown" ||
+      (data?.kind === "html" && markdownMode === "source"));
+
+  const panelSearchEnabled =
+    searchable &&
+    (data?.kind === "markdown"
+      ? mdViewMode === "source"
+      : data?.kind === "html"
+        ? markdownMode !== "preview"
+        : true);
 
   const searchOptions = useMemo(
     () => ({
@@ -191,12 +220,11 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
 
   const matches = useMemo(
     () =>
-      searchable && markdownMode !== "preview" && searchValid
+      panelSearchEnabled && searchValid
         ? findSearchMatches(displayContent, searchQuery, searchOptions)
         : [],
     [
-      searchable,
-      markdownMode,
+      panelSearchEnabled,
       displayContent,
       searchQuery,
       searchOptions,
@@ -221,13 +249,13 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
-        if (!canEditSource || !dirty || saving) return;
+        if (!canSave) return;
         event.preventDefault();
         void savePreview();
         return;
       }
 
-      if (!searchable || markdownMode === "preview") return;
+      if (!panelSearchEnabled) return;
 
       if (event.key === "F3") {
         event.preventDefault();
@@ -238,9 +266,9 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
-    canEditSource,
+    canSave,
     dirty,
-    markdownMode,
+    panelSearchEnabled,
     savePreview,
     saving,
     searchable,
@@ -305,17 +333,49 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               title={t("modeSource")}
               aria-label={t("modeSource")}
               aria-pressed={markdownMode === "source"}
-              onClick={() => setMarkdownMode("source")}
+              onClick={() => {
+                if (!activeTab) return;
+                const flushed = flushPreviewEditor(activeTab.id);
+                if (flushed != null) setEditedContent(flushed);
+                setMarkdownMode(
+                  data.kind === "markdown"
+                    ? viewModeForMarkdownToggle("source")
+                    : "source",
+                );
+              }}
             >
               <PreviewSourceIcon />
             </button>
             <button
               type="button"
-              className={`preview-toolbar-icon${markdownMode === "preview" ? " active" : ""}`}
-              title={t("modePreview")}
-              aria-label={t("modePreview")}
-              aria-pressed={markdownMode === "preview"}
-              onClick={() => setMarkdownMode("preview")}
+              className={`preview-toolbar-icon${
+                data.kind === "markdown"
+                  ? mdViewMode === "wysiwyg"
+                    ? " active"
+                    : ""
+                  : markdownMode === "preview"
+                    ? " active"
+                    : ""
+              }`}
+              title={data.kind === "markdown" ? t("modeWysiwyg") : t("modePreview")}
+              aria-label={
+                data.kind === "markdown" ? t("modeWysiwyg") : t("modePreview")
+              }
+              aria-pressed={
+                data.kind === "markdown"
+                  ? mdViewMode === "wysiwyg"
+                  : markdownMode === "preview"
+              }
+              onClick={() => {
+                if (!activeTab) return;
+                const flushed = flushPreviewEditor(activeTab.id);
+                if (flushed != null) setEditedContent(flushed);
+                setMarkdownMode(
+                  data.kind === "markdown"
+                    ? viewModeForMarkdownToggle("wysiwyg")
+                    : "preview",
+                );
+              }}
             >
               <PreviewRenderedIcon />
             </button>
@@ -323,7 +383,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
         ) : null}
 
         {searchable ? (
-          markdownMode !== "preview" ? (
+          panelSearchEnabled ? (
             <>
               <input
                 type="search"
@@ -402,17 +462,21 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               </button>
               </div>
             </>
+          ) : data?.kind === "markdown" ? (
+            <span className="preview-wysiwyg-search-hint">
+              {t("wysiwygSearchHint")}
+            </span>
           ) : (
             <div className="preview-panel-head-spacer" aria-hidden="true" />
           )
         ) : null}
 
         <div className="preview-panel-actions">
-          {canEditSource ? (
+          {canSave || canEditSource || canEditMarkdown ? (
             <button
               type="button"
               className={`preview-toolbar-icon preview-toolbar-icon-primary${dirty ? " dirty" : ""}`}
-              disabled={!dirty || saving}
+              disabled={!canSave}
               title={saving ? t("saveTitleBusy") : t("saveTitle")}
               aria-label={saving ? t("common:saving") : t("common:save")}
               onClick={() => void savePreview()}
@@ -479,13 +543,15 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
         {!loading && !error && data?.kind === "markdown" ? (
           <MarkdownPreview
             tabId={activeTab.id}
+            sessionId={activeTab.sessionId}
+            filePath={data.resolved_path || activeTab.path}
             text={displayContent}
             extension={data.extension}
             mode={markdownMode}
             query={searchQuery}
             activeMatchIndex={activeMatchIndex}
             searchOptions={searchOptions}
-            editable={canEditSource}
+            editable={canEditMarkdown}
             onChange={setEditedContent}
           />
         ) : null}
@@ -494,7 +560,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             tabId={activeTab.id}
             text={displayContent}
             extension={data.extension}
-            mode={markdownMode}
+            mode={markdownMode === "source" ? "source" : "preview"}
             query={searchQuery}
             activeMatchIndex={activeMatchIndex}
             searchOptions={searchOptions}

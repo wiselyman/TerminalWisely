@@ -14,14 +14,26 @@ from app.agent.prompts import build_system_prompt
 from app.broker import CommandBroker
 from app.harness.conclusion import build_conclusion
 from app.harness.network_guard import build_timed_rollback_plan, is_network_dangerous
+from app.llm.thinking import (
+    StreamContentFilter,
+    looks_like_idle_plan_dump,
+    looks_like_truncated_answer,
+    looks_like_truncated_plan,
+    output_budget_exhausted,
+    reasoning_starved_visible_reply,
+    strip_trailing_dangling_heading,
+)
 from app.harness.verify import (
     CONCLUDE_NUDGE,
     LOOP_ABORT_MESSAGE,
     claim_success_without_evidence,
+    ends_without_sentence_terminator,
     incomplete_answer_suffix,
     nudge_for_engineer_mode,
+    should_emit_soft_continue_hint,
     should_nudge_verify,
     truncated_answer_nudge,
+    SOFT_CONTINUE_MIN_CHARS,
 )
 from app.harness.approval_intent import sanitize_approval_intent
 from app.harness.command_display import (
@@ -43,13 +55,6 @@ from app.tools.linux_probe import (
     build_service_status_command,
 )
 from app.llm.gateway import ModelGateway, ModelGatewayError
-from app.llm.thinking import (
-    StreamContentFilter,
-    looks_like_idle_plan_dump,
-    looks_like_truncated_answer,
-    looks_like_truncated_plan,
-    strip_trailing_dangling_heading,
-)
 from app.llm.context import (
     compact_messages_for_model,
     truncate_tool_payload,
@@ -111,6 +116,56 @@ _UNTRUSTED_PREAMBLE = (
 )
 
 
+def _call_model_stream(
+    stream_fn: Any,
+    messages: list[dict[str, Any]],
+    *,
+    tools: list[dict[str, Any]] | None,
+    tool_choice: str | dict[str, Any] | None,
+    should_cancel: Any,
+    max_tokens: int,
+) -> Any:
+    """Invoke stream with max_tokens when the gateway/mock accepts it."""
+    try:
+        return stream_fn(
+            messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            should_cancel=should_cancel,
+            max_tokens=max_tokens,
+        )
+    except TypeError:
+        return stream_fn(
+            messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            should_cancel=should_cancel,
+        )
+
+
+async def _call_model_complete(
+    model: Any,
+    messages: list[dict[str, Any]],
+    *,
+    tools: list[dict[str, Any]] | None,
+    tool_choice: str | dict[str, Any] | None,
+    max_tokens: int,
+) -> dict[str, Any]:
+    try:
+        return await model.chat_completions(
+            messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            max_tokens=max_tokens,
+        )
+    except TypeError:
+        return await model.chat_completions(
+            messages,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+
+
 class ChatModel(Protocol):
     async def chat_completions(
         self,
@@ -119,6 +174,7 @@ class ChatModel(Protocol):
         *,
         temperature: float = 0.2,
         tool_choice: str | dict[str, Any] | None = "auto",
+        max_tokens: int | None = None,
     ) -> dict[str, Any]: ...
 
     def chat_completions_stream(  # type: ignore[misc]
@@ -129,6 +185,7 @@ class ChatModel(Protocol):
         temperature: float = 0.2,
         tool_choice: str | dict[str, Any] | None = "auto",
         should_cancel: Any = None,
+        max_tokens: int | None = None,
     ) -> Any: ...
 
     @staticmethod
@@ -332,12 +389,40 @@ class AgentLoop:
                         for m in reversed(self.run.messages):
                             if m.get("role") == "assistant":
                                 prev_c = str(m.get("content") or "").strip()
-                                if looks_like_truncated_answer(prev_c):
+                                if prev_c and (
+                                    looks_like_truncated_answer(prev_c)
+                                    or self.run.metadata.get("_trunc_answer_nudged")
+                                ):
                                     content = prev_c
                                 break
-                    truncated_answer = bool(
-                        self.run.metadata.pop("_finish_length", None)
-                    ) or looks_like_truncated_answer(content)
+                    # A: budget / reasoning-starved usage. B: structural cut or
+                    # mid-clause stop (no sentence terminator). No model names.
+                    budget_hit = bool(self.run.metadata.pop("_finish_length", None))
+                    sample_usage = self.run.metadata.pop("_sample_usage", None)
+                    if not isinstance(sample_usage, dict):
+                        sample_usage = None
+                    sample_max = int(
+                        self.run.metadata.get("_sample_max_tokens")
+                        or paths.max_output_tokens()
+                    )
+                    reasoning_hit = reasoning_starved_visible_reply(
+                        self.run.metadata.pop("_sample_finish_reason", None),
+                        sample_usage,
+                        content,
+                        sample_max,
+                    )
+                    structural_trunc = looks_like_truncated_answer(content)
+                    unfinished_prose = bool(content) and len(
+                        content.strip()
+                    ) >= SOFT_CONTINUE_MIN_CHARS and ends_without_sentence_terminator(
+                        content
+                    )
+                    truncated_answer = (
+                        budget_hit
+                        or reasoning_hit
+                        or structural_trunc
+                        or unfinished_prose
+                    )
                     nudges = int(self.run.metadata.get("_trunc_answer_nudges") or 0)
                     max_trunc_nudges = 5
                     if content and truncated_answer and nudges < max_trunc_nudges:
@@ -356,11 +441,15 @@ class AgentLoop:
                         ):
                             self.run.messages[-1]["content"] = emit
                         if emit:
+                            # Authoritative full text for this turn (FE replaces).
                             self.run.append_event(
-                                "assistant_message", {"content": emit}
+                                "assistant_message",
+                                {"content": emit, "replace": True},
                             )
                         self.run.metadata["_trunc_answer_nudges"] = nudges + 1
                         self.run.metadata["_trunc_answer_nudged"] = True
+                        if budget_hit or reasoning_hit:
+                            self.run.metadata["_raise_output_budget"] = True
                         # No growth after a continue → stronger "resume only" nudge.
                         nudge_text = truncated_answer_nudge(emit)
                         if nudges > 0 and not grew:
@@ -395,15 +484,49 @@ class AgentLoop:
                                 "assistant_incomplete", {"reason": "truncation"}
                             )
                     elif not truncated_answer:
+                        had_auto_continue = bool(
+                            self.run.metadata.get("_trunc_answer_nudged")
+                        )
                         self.run.metadata.pop("_trunc_answer_nudged", None)
                         self.run.metadata.pop("_trunc_answer_len", None)
+                        if (
+                            not had_auto_continue
+                            and should_emit_soft_continue_hint(
+                                content,
+                                budget_hit=False,
+                                structural_trunc=False,
+                            )
+                        ):
+                            self.run.append_event(
+                                "assistant_soft_continue",
+                                {"chars": len(content or "")},
+                            )
                     # Final user-facing text: never leave a dangling restart heading.
                     if content:
                         content = (
                             strip_trailing_dangling_heading(content) or content
                         )
+                        # Belt-and-suspenders: never conclude on a mid-sentence cut
+                        # without a visible footer (continue may have been skipped).
+                        if looks_like_truncated_answer(content):
+                            suffix = incomplete_answer_suffix(content)
+                            if suffix.strip() not in content:
+                                content = content + suffix
+                                if (
+                                    self.run.messages
+                                    and self.run.messages[-1].get("role")
+                                    == "assistant"
+                                ):
+                                    self.run.messages[-1]["content"] = content
+                                self.run.append_event(
+                                    "assistant_incomplete",
+                                    {"reason": "truncation"},
+                                )
                 if content:
-                    self.run.append_event("assistant_message", {"content": content})
+                    self.run.append_event(
+                        "assistant_message",
+                        {"content": content, "replace": True},
+                    )
 
                 if not tool_calls:
                     if (
@@ -657,11 +780,16 @@ class AgentLoop:
 
     async def _stream_assistant_turn_once(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Stream one model turn; emit assistant_delta for visible text."""
+        self.run.metadata["_model_touch_at"] = time.time()
         span_id = self._tracer.start("model", "chat_completions")
         try:
             return await self._stream_assistant_turn_once_inner()
         finally:
-            self._tracer.end(span_id)
+            diag = self.run.metadata.pop("_last_sample_diag", None)
+            if isinstance(diag, dict):
+                self._tracer.end(span_id, **diag)
+            else:
+                self._tracer.end(span_id)
 
     async def _stream_assistant_turn_once_inner(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Inner model turn (traced by wrapper)."""
@@ -696,11 +824,41 @@ class AgentLoop:
         )
         tools = None if tool_choice == "none" else self._tool_schemas()
 
+        sample_max = int(
+            self.run.metadata.get("_sample_max_tokens") or paths.max_output_tokens()
+        )
+        if self.run.metadata.pop("_raise_output_budget", None):
+            sample_max = paths.raised_max_output_tokens(sample_max)
+        self.run.metadata["_sample_max_tokens"] = sample_max
+
+        def _emit_sample_end(
+            *,
+            finish_reason: str | None,
+            usage: dict[str, Any] | None,
+            budget_hit: bool,
+            structural_trunc: bool,
+            content: str,
+        ) -> None:
+            payload = {
+                "finish_reason": finish_reason,
+                "usage": usage,
+                "max_tokens": sample_max,
+                "budget_hit": budget_hit,
+                "structural_trunc": structural_trunc,
+                "visible_chars": len((content or "").strip()),
+            }
+            self.run.append_event("model_sample_end", payload)
+            # Stash for the outer tracer.end if the wrapper re-opens — also keep
+            # on metadata so the next span end can pick attrs up.
+            self.run.metadata["_last_sample_diag"] = payload
+
         if stream_fn is None:
-            completion = await self.model.chat_completions(
+            completion = await _call_model_complete(
+                self.model,
                 sample_messages,
                 tools=tools,
                 tool_choice=tool_choice,
+                max_tokens=sample_max,
             )
             assistant = ModelGateway.extract_assistant_message(completion)
             tool_calls = normalize_tool_calls(list(assistant.get("tool_calls") or []))
@@ -709,16 +867,40 @@ class AgentLoop:
                 finish = (completion.get("choices") or [{}])[0].get("finish_reason")
             except Exception:  # noqa: BLE001
                 finish = None
-            if str(finish or "").lower() == "length":
+            usage = (
+                completion.get("usage")
+                if isinstance(completion.get("usage"), dict)
+                else None
+            )
+            content = str(assistant.get("content") or "")
+            budget_hit = output_budget_exhausted(finish, usage, sample_max)
+            structural = looks_like_truncated_answer(content)
+            if usage:
+                self.run.metadata["_sample_usage"] = usage
+            if finish:
+                self.run.metadata["_sample_finish_reason"] = str(finish)
+            if budget_hit or reasoning_starved_visible_reply(
+                finish, usage, content, sample_max
+            ):
                 self.run.metadata["_finish_length"] = True
+            _emit_sample_end(
+                finish_reason=str(finish) if finish else None,
+                usage=usage,
+                budget_hit=budget_hit,
+                structural_trunc=structural,
+                content=content,
+            )
             return assistant, tool_calls
 
         finish_reason: str | None = None
-        async for ev in stream_fn(
+        last_usage: dict[str, Any] | None = None
+        async for ev in _call_model_stream(
+            stream_fn,
             sample_messages,
             tools=tools,
             tool_choice=tool_choice,
             should_cancel=self._should_cancel,
+            max_tokens=sample_max,
         ):
             if self._should_cancel():
                 break
@@ -743,18 +925,28 @@ class AgentLoop:
                     name=ev.get("name") if isinstance(ev.get("name"), str) else None,
                     arguments=str(ev.get("arguments") or ""),
                 )
+            elif et == "usage":
+                usage_payload = ev.get("usage")
+                if isinstance(usage_payload, dict) and usage_payload:
+                    last_usage = usage_payload
             elif et == "finished":
                 fr = ev.get("finish_reason")
                 if isinstance(fr, str) and fr.strip():
                     finish_reason = fr.strip()
-                break
+                # Do NOT break: OpenAI-compatible servers often send usage AFTER
+                # the finished chunk. Drain until the generator ends / [DONE].
 
         flush_delta(force=True)
         content = filter_.finalize()
         tool_calls = normalize_tool_calls(
             [tool_buckets[i] for i in sorted(tool_buckets.keys())]
         )
-        if str(finish_reason or "").lower() == "length":
+        budget_hit = output_budget_exhausted(finish_reason, last_usage, sample_max)
+        if last_usage:
+            self.run.metadata["_sample_usage"] = last_usage
+        if finish_reason:
+            self.run.metadata["_sample_finish_reason"] = finish_reason
+        if budget_hit:
             self.run.metadata["_finish_length"] = True
         if looks_like_idle_plan_dump(filter_.raw) or looks_like_idle_plan_dump(content):
             self.run.metadata["_idle_plan"] = True
@@ -768,6 +960,31 @@ class AgentLoop:
             else:
                 self.run.metadata["_content_loop"] = True
                 content = ""
+        # Prefer the longer already-streamed text when sanitize shrinks a cut-off
+        # reply into a shorter "complete-looking" fragment (misses auto-continue).
+        visible = (filter_.visible or "").strip()
+        if (
+            visible
+            and looks_like_truncated_answer(visible)
+            and (
+                not content
+                or len(visible) > len(content)
+                or not looks_like_truncated_answer(content)
+            )
+        ):
+            content = visible
+        structural = looks_like_truncated_answer(content)
+        if reasoning_starved_visible_reply(
+            finish_reason, last_usage, content, sample_max
+        ):
+            self.run.metadata["_finish_length"] = True
+        _emit_sample_end(
+            finish_reason=finish_reason,
+            usage=last_usage,
+            budget_hit=bool(self.run.metadata.get("_finish_length")),
+            structural_trunc=structural,
+            content=content,
+        )
         return {"role": "assistant", "content": content}, tool_calls
 
     async def resume_after_tool(self) -> None:
@@ -2446,6 +2663,10 @@ class AgentLoop:
         elapsed = self._run_budget_elapsed()
         if elapsed > self.max_run_seconds:
             raise BudgetExceeded(f"max run time exceeded ({self.max_run_seconds}s)")
+        wall = time.time() - float(self.run.created_at)
+        wall_cap = paths.max_run_wall_seconds()
+        if wall > wall_cap:
+            raise BudgetExceeded(f"max wall-clock run time exceeded ({wall_cap}s)")
 
     def _answered_tool_ids(self) -> set[str]:
         return {

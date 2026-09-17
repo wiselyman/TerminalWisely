@@ -107,8 +107,9 @@ fn ssh_client_config() -> Arc<client::Config> {
     // interactive terminals rely on keepalive and disable inactivity GC.
     Arc::new(client::Config {
         inactivity_timeout: None,
-        keepalive_interval: Some(Duration::from_secs(20)),
-        keepalive_max: 12, // ~4 min of missed replies before drop
+        // Stronger keepalive so long AI host jobs don't drop the session (~5 min of misses).
+        keepalive_interval: Some(Duration::from_secs(10)),
+        keepalive_max: 30,
         window_size: 16 * 1024 * 1024,
         maximum_packet_size: 64 * 1024,
         ..Default::default()

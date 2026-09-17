@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from typing import Any
 
 _OPEN_CLOSE = (
     ("think", "think"),
@@ -245,18 +246,47 @@ def looks_like_truncated_plan(text: str | None) -> bool:
     return False
 
 
-_CJK_SENTENCE_END_RE = re.compile(r"[。！？…\.\!\?]$")
-# Multi-char discourse openers; optional 0–2 trailing CJK (「然后进」).
-# Do NOT list single chars like 用/到/进 alone — too many false positives.
-_CJK_INCOMPLETE_TAIL_RE = re.compile(
-    r"(?:"
-    r"然后|接着|接下来|并且|以及|或者|因为|所以|但是|不过|如果|"
-    r"再去|再把|再从|先把|先从"
-    r")[\u4e00-\u9fff]{0,2}\s*$"
-)
 _MD_HEADING_LINE_RE = re.compile(r"^#{1,6}\s+\S")
 _MD_HEADING_TITLE_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 _GLUED_HEADING_LINE_RE = re.compile(r"^(.*\S)\s+(#{1,6}\s+\S.*?)\s*$")
+_TABLE_SEP_CELL_RE = re.compile(r"^:?-{3,}:?$")
+
+
+def _looks_like_incomplete_md_table(raw: str, last: str) -> bool:
+    """True when the reply stops mid markdown table (empty/missing cells)."""
+    if not last.startswith("|"):
+        return False
+    # Unclosed row: "| a | b" without trailing pipe.
+    if not last.endswith("|"):
+        return True
+    cells = [c.strip() for c in last.strip().strip("|").split("|")]
+    if not cells:
+        return True
+    # Stopped on the separator line with no data rows yet.
+    if all(_TABLE_SEP_CELL_RE.match(c or "") for c in cells):
+        return True
+    # Trailing empty cell(s): "| A | action | |" or "| A | action |"
+    # (renderer shows a blank 说明 column — common local-model cut).
+    if cells[-1] == "" and len(raw) >= 60:
+        return True
+    table_lines = [
+        ln.strip() for ln in raw.splitlines() if ln.strip().startswith("|")
+    ]
+    if len(table_lines) >= 2:
+        header_cells = [
+            c.strip() for c in table_lines[0].strip().strip("|").split("|")
+        ]
+        if header_cells and len(cells) < len(header_cells):
+            return True
+        # Header + separator only — announced a table then stopped.
+        if len(table_lines) == 2 and all(
+            _TABLE_SEP_CELL_RE.match(c or "")
+            for c in [
+                x.strip() for x in table_lines[1].strip().strip("|").split("|")
+            ]
+        ):
+            return True
+    return False
 
 
 def strip_trailing_dangling_heading(text: str | None) -> str:
@@ -302,11 +332,11 @@ def strip_trailing_dangling_heading(text: str | None) -> str:
 
 
 def looks_like_truncated_answer(text: str | None) -> bool:
-    """True when a user-facing answer clearly stops mid-sentence / mid-token.
+    """True when a user-facing answer stops mid *structure* (not mid-prose guess).
 
-    Used to auto-continue after local models hit output caps or drop the stream.
-    Prefer structural signals; also catch common CJK mid-clause cuts
-    (e.g. ending with 「然后进」) and a dangling markdown heading with no body.
+    Used with finish_reason/usage budget signals. Do NOT add language/task
+    keyword lists here — those are hardcoding and never complete.
+    Structural only: fences, bold, tables, brackets, dangling headings.
     """
     raw = (text or "").rstrip()
     if not raw:
@@ -314,14 +344,23 @@ def looks_like_truncated_answer(text: str | None) -> bool:
     # Unclosed markdown code fence
     if raw.count("```") % 2 == 1:
         return True
-    # Dangling opener then a short latin fragment: (`getting  / (getting
-    if re.search(r"[`（(]\s*[A-Za-z][A-Za-z0-9._/\-]{0,48}$", raw):
+    # Unclosed bold (**…**)
+    if raw.count("**") % 2 == 1:
+        return True
+    # Dangling opener then a short fragment: (`getting  / [不 / （还
+    if re.search(
+        r"[`（(\[]\s*(?:[A-Za-z][A-Za-z0-9._/\-]{0,48}|[\u4e00-\u9fff]{1,4})$",
+        raw,
+    ):
+        return True
+    # Unclosed bracket / brace / paren on the last line.
+    if re.search(r"[\(\[\{（][^\)\]\}）\n]{0,40}$", raw):
         return True
     last = raw.splitlines()[-1].strip() if raw.splitlines() else raw
     if last.endswith(("(", "（", "[", "{", ":", "：", ",", "，", "、", "`")):
         return True
-    # 「然后进」 etc. — strong CJK mid-clause cut (before length gates).
-    if last and _CJK_INCOMPLETE_TAIL_RE.search(last):
+    # Incomplete markdown table (blank trailing cell / cut mid-row).
+    if last and _looks_like_incomplete_md_table(raw, last):
         return True
     # Mid box-drawing line — ASCII diagram cut before the closing border.
     if last.startswith("│") and len(raw) >= 80:
@@ -329,8 +368,7 @@ def looks_like_truncated_answer(text: str | None) -> bool:
     # Heading glued onto previous line: "...记录的) ## 第 1 步..."
     if re.search(r"\S\s+#{1,6}\s+\S", last) and len(raw) >= 80:
         return True
-    # Dangling markdown heading (model announced a section then stopped), or
-    # restarted the same top-level heading (rewrite loop cut short).
+    # Dangling markdown heading (section announced, no body), or restart loop.
     if last and _MD_HEADING_LINE_RE.match(last) and len(raw) >= 80:
         return True
     headings = re.findall(r"(?m)^#{1,6}\s+(.+?)\s*$", raw)
@@ -340,20 +378,102 @@ def looks_like_truncated_answer(text: str | None) -> bool:
         and _MD_HEADING_LINE_RE.match(last or "")
     ):
         return True
-    if len(raw) < 60:
+    return False
+
+
+def output_budget_exhausted(
+    finish_reason: str | None,
+    usage: dict[str, Any] | None,
+    max_tokens: int,
+) -> bool:
+    """True when the provider hit the generation cap (signal-based, not text guess)."""
+    fr = str(finish_reason or "").strip().lower()
+    if fr in {"tool_calls", "function_call"}:
         return False
-    # Closed fence / code-only ending is usually intentional.
-    if raw.endswith("```"):
+    if fr in {"length", "max_tokens", "max_completion_tokens"}:
+        return True
+    if max_tokens <= 0:
         return False
-    if _cjk_count(raw) >= 40 and last:
-        # Long prose line with no sentence-final punctuation.
-        if (
-            _cjk_count(last) >= 8
-            and len(last) >= 10
-            and not last.startswith(("#", "-", "*", ">", "|", "```"))
-            and not _CJK_SENTENCE_END_RE.search(last)
-            and not last.endswith((")", "）", "`", '"', "'", "」", "』"))
+    usage = usage or {}
+    try:
+        completion = int(
+            usage.get("completion_tokens")
+            or usage.get("output_tokens")
+            or 0
+        )
+    except (TypeError, ValueError):
+        completion = 0
+    if completion <= 0:
+        return False
+    # Near-cap: local gateways sometimes return stop while still at the limit.
+    return completion >= max(1, int(max_tokens * 0.95))
+
+
+def reasoning_tokens_from_usage(usage: dict[str, Any] | None) -> int:
+    """Read hidden-reasoning token counts from OpenAI-compatible usage payloads."""
+    usage = usage or {}
+    details = usage.get("completion_tokens_details") or usage.get(
+        "output_tokens_details"
+    )
+    if isinstance(details, dict):
+        for key in (
+            "reasoning_tokens",
+            "reasoning",
+            "thoughts_tokens",
+            "thinking_tokens",
         ):
+            try:
+                value = int(details.get(key) or 0)
+            except (TypeError, ValueError):
+                value = 0
+            if value > 0:
+                return value
+    for key in ("reasoning_tokens", "thinking_tokens"):
+        try:
+            value = int(usage.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value > 0:
+            return value
+    return 0
+
+
+def reasoning_starved_visible_reply(
+    finish_reason: str | None,
+    usage: dict[str, Any] | None,
+    content: str | None,
+    max_tokens: int,
+) -> bool:
+    """True when hidden reasoning dominated the sample and the visible reply is thin/cut.
+
+    Provider-agnostic: uses usage.completion_tokens_details.* only — no model names.
+    """
+    fr = str(finish_reason or "").strip().lower()
+    if fr in {"tool_calls", "function_call"}:
+        return False
+    usage = usage or {}
+    reasoning = reasoning_tokens_from_usage(usage)
+    if reasoning < 32:
+        return False
+    try:
+        completion = int(
+            usage.get("completion_tokens") or usage.get("output_tokens") or 0
+        )
+    except (TypeError, ValueError):
+        completion = 0
+    if completion <= 0:
+        return False
+    # Reasoning must be a major share of what was generated.
+    if reasoning < max(32, int(completion * 0.35)):
+        return False
+    visible = (content or "").strip()
+    if len(visible) < 120:
+        return True
+    # Still room in the request budget, but visible text stops mid-clause.
+    if max_tokens > 0 and completion < int(max_tokens * 0.95):
+        # Generic sentence closers only — no language keyword lists.
+        terminators = "。！？.!?…」』）)]}”’\""
+        if visible[-1] not in terminators:
             return True
     return False
 

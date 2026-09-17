@@ -49,3 +49,6 @@ testdata/
 # pdf.js CMaps/fonts copied by vite.pdfjs.ts (from node_modules)
 /public/pdfjs/
 
+# Vditor dist copied by vite.vditor.ts (from node_modules)
+/public/vditor/
+

@@ -14,6 +14,11 @@ export function AiEngineerRunTraceBar({
 
   const finished = spans.filter((s) => s.duration_ms != null);
   const totalMs = finished.reduce((sum, s) => sum + (s.duration_ms ?? 0), 0);
+  const openHostJob = spans.some(
+    (s) =>
+      s.duration_ms == null &&
+      (s.kind === "tool" || s.kind === "host" || s.name?.includes("terminal")),
+  );
 
   // Collapsed by default; running state only updates the summary label.
   return (
@@ -33,7 +38,9 @@ export function AiEngineerRunTraceBar({
         />
         <span>
           {busy
-            ? t("aiEngineer.trace.running", { count: spans.length })
+            ? openHostJob
+              ? `${t("aiEngineer.trace.running", { count: spans.length })} · ${t("longJob.inProgress")}`
+              : t("aiEngineer.trace.running", { count: spans.length })
             : t("aiEngineer.trace.done", {
                 count: spans.length,
                 ms: Math.round(totalMs),
@@ -50,6 +57,19 @@ export function AiEngineerRunTraceBar({
             ) : (
               <span className="ai-engineer-run-trace-ms">…</span>
             )}
+            {s.kind === "model" &&
+            (s.finish_reason || s.budget_hit != null || s.structural_trunc != null) ? (
+              <span className="ai-engineer-run-trace-diag">
+                {[
+                  s.finish_reason ? `finish=${s.finish_reason}` : null,
+                  s.budget_hit ? "budget" : null,
+                  s.structural_trunc ? "struct" : null,
+                  s.max_tokens != null ? `max=${s.max_tokens}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

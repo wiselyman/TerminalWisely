@@ -139,7 +139,9 @@ export function LocalFsContentsView({
         data-testid="local-fs-contents"
         onContextMenu={onBackgroundContextMenu}
       >
-        <p className="find-panel-empty">{t("localFs.emptyHint")}</p>
+        <p className="find-panel-empty">
+          {loadingRoot ? t("localFs.loading") : t("localFs.emptyHint")}
+        </p>
       </div>
     );
   }

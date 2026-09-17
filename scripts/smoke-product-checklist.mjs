@@ -78,16 +78,29 @@ function exists(rel) {
     const md = read("src/components/aiEngineer/AiMarkdown.tsx");
     const open = read("src/lib/aiEngineer/openExternalUrl.ts");
     const media = read("src/lib/aiEngineer/chatMedia.ts");
+    const css = read("src/App.css");
     if (
       md.includes('data-testid="ai-md-external-link"') &&
       md.includes("openExternalUrl") &&
       md.includes("cacheRemoteMedia") &&
+      md.includes("decorateImages") &&
       open.includes("openUrl") &&
       media.includes("ai_chat_cache_remote_media")
     ) {
       pass("ai.chat-images-links", "AiMarkdown openUrl + media cache");
     } else {
       fail("ai.chat-images-links", "missing chat image/link wiring");
+    }
+    if (
+      css.includes(".ai-engineer-md img") &&
+      css.includes("container-type: inline-size") &&
+      css.includes("max-width: min(100%, 82cqi)") &&
+      css.includes("max-width: min(100%, 82%)") &&
+      css.includes("margin: 0.65em auto")
+    ) {
+      pass("ai.chat-images-css", "markdown images scale with chat width");
+    } else {
+      fail("ai.chat-images-css", "missing responsive md image css");
     }
   }
 
@@ -362,6 +375,37 @@ function exists(rel) {
     pass("preview.pdfjs-assets", "vite copies cmaps/fonts/wasm/iccs + OFV inject");
   } else {
     fail("preview.pdfjs-assets", "vite.pdfjs / pdfjsOfv asset wiring incomplete");
+  }
+}
+
+// --- Preview: Markdown Typora-like WYSIWYG (Vditor IR) ---
+{
+  const pkg = JSON.parse(read("package.json"));
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const wysiwyg = read("src/components/preview/MarkdownWysiwygEditor.tsx");
+  const mdPreview = read("src/components/preview/MarkdownPreview.tsx");
+  const mode = read("src/lib/previewMarkdownMode.ts");
+  const viteVditor = read("vite.vditor.ts");
+  const viteCfg = read("vite.config.ts");
+  const rust = read("src-tauri/src/preview.rs");
+  const cmds = read("src-tauri/src/commands/mod.rs");
+  if (
+    deps.vditor &&
+    wysiwyg.includes('mode: "ir"') &&
+    wysiwyg.includes('data-testid="preview-markdown-wysiwyg"') &&
+    mdPreview.includes("MarkdownWysiwygEditor") &&
+    mode.includes('markdownMode: "wysiwyg"') === false &&
+    mode.includes('return "wysiwyg"') &&
+    viteVditor.includes("copyVditorAssetsPlugin") &&
+    viteCfg.includes("copyVditorAssetsPlugin") &&
+    rust.includes("preview_read_bytes") === false &&
+    rust.includes("read_preview_bytes") &&
+    cmds.includes("preview_read_bytes") &&
+    cmds.includes("preview_write_bytes")
+  ) {
+    pass("preview.markdown-wysiwyg", "Vditor IR + mode helpers + remote bytes");
+  } else {
+    fail("preview.markdown-wysiwyg", "markdown WYSIWYG wiring incomplete");
   }
 }
 

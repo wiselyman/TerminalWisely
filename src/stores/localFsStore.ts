@@ -49,6 +49,48 @@ function toSet(values: string[]): Set<string> {
   return new Set(values);
 }
 
+/** Per-session browsing state so tab switches restore the prior directory. */
+export interface LocalFsSessionSnapshot {
+  rootPath: string | null;
+  rootLabel: string;
+  childrenCache: Record<string, LocalFsEntry[]>;
+  expandedPaths: string[];
+  selectedPath: string | null;
+  selectedPaths: string[];
+  selectionAnchor: string | null;
+  contentsPath: string | null;
+  contentsHistory: string[];
+  clipboard: FsClipboard | null;
+}
+
+function captureSessionSnapshot(state: LocalFsState): LocalFsSessionSnapshot {
+  return {
+    rootPath: state.rootPath,
+    rootLabel: state.rootLabel,
+    childrenCache: state.childrenCache,
+    expandedPaths: state.expandedPaths,
+    selectedPath: state.selectedPath,
+    selectedPaths: state.selectedPaths,
+    selectionAnchor: state.selectionAnchor,
+    contentsPath: state.contentsPath,
+    contentsHistory: state.contentsHistory,
+    clipboard: state.clipboard,
+  };
+}
+
+const emptySessionBrowseState: LocalFsSessionSnapshot = {
+  rootPath: null,
+  rootLabel: "~",
+  childrenCache: {},
+  expandedPaths: [],
+  selectedPath: null,
+  selectedPaths: [],
+  selectionAnchor: null,
+  contentsPath: null,
+  contentsHistory: [],
+  clipboard: null,
+};
+
 export interface LocalFsState {
   open: boolean;
   sessionId: string | null;
@@ -72,7 +114,10 @@ export interface LocalFsState {
   splitTreeWidth: number;
   clipboard: FsClipboard | null;
   showHidden: boolean;
+  sessionSnapshots: Record<string, LocalFsSessionSnapshot>;
   openPanel: (sessionId: string, tab?: "files" | "find" | "taskManager") => void;
+  /** Save current browse path and restore the target session's last path. */
+  activateSession: (sessionId: string) => void;
   close: () => void;
   setWidth: (w: number) => void;
   setSplitTreeWidth: (w: number) => void;
@@ -137,6 +182,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
   splitTreeWidth: loadSplitTreeWidth(),
   clipboard: null,
   showHidden: loadShowHidden(),
+  sessionSnapshots: {},
 
   openPanel: (sessionId, tab = "files") => {
     const prev = get();
@@ -144,27 +190,70 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       set({ open: true, activeTab: tab, error: null });
       return;
     }
+    get().activateSession(sessionId);
+    set({ open: true, activeTab: tab, error: null });
+  },
+
+  activateSession: (sessionId) => {
+    const prev = get();
+    if (prev.sessionId === sessionId) return;
+
+    let sessionSnapshots = prev.sessionSnapshots;
+    if (prev.sessionId) {
+      sessionSnapshots = {
+        ...sessionSnapshots,
+        [prev.sessionId]: captureSessionSnapshot(prev),
+      };
+    }
+
+    const restored = sessionSnapshots[sessionId];
+    if (restored?.contentsPath || restored?.rootPath) {
+      const refreshPath = restored.contentsPath || restored.rootPath;
+      const cacheHit = Boolean(
+        refreshPath && restored.childrenCache[refreshPath],
+      );
+      set({
+        sessionId,
+        sessionSnapshots,
+        error: null,
+        loadingPaths: [],
+        loadingRoot: false,
+        ...restored,
+      });
+      // Warm cache: show immediately, skip SSH (was the main switch lag).
+      // Cold restore (path known, listing missing): fetch that dir only.
+      if (refreshPath && !cacheHit) {
+        void get().reloadDirectory(refreshPath);
+      }
+      return;
+    }
+
     set({
-      open: true,
       sessionId,
-      activeTab: tab,
+      sessionSnapshots,
       error: null,
-      rootPath: null,
-      rootLabel: "~",
-      childrenCache: {},
-      expandedPaths: [],
       loadingPaths: [],
-      selectedPath: null,
-      selectedPaths: [],
-      selectionAnchor: null,
-      contentsPath: null,
-      contentsHistory: [],
-      clipboard: null,
+      loadingRoot: true,
+      ...emptySessionBrowseState,
     });
     void get().initTree("~");
   },
 
-  close: () => set({ open: false, sessionId: null }),
+  close: () => {
+    const prev = get();
+    if (prev.sessionId) {
+      set({
+        open: false,
+        sessionId: null,
+        sessionSnapshots: {
+          ...prev.sessionSnapshots,
+          [prev.sessionId]: captureSessionSnapshot(prev),
+        },
+      });
+      return;
+    }
+    set({ open: false, sessionId: null });
+  },
 
   setWidth: (w) => {
     set({ width: w });
@@ -240,6 +329,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
 
     try {
       const result = await fetchDirectory(sessionId, path, showHidden);
+      if (get().sessionId !== sessionId) return;
       set({
         rootPath: result.path,
         childrenCache: { [result.path]: result.entries },
@@ -251,6 +341,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         loadingRoot: false,
       });
     } catch (err) {
+      if (get().sessionId !== sessionId) return;
       set({
         loadingRoot: false,
         error: formatAppError(err),
@@ -293,6 +384,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
 
     try {
       const result = await fetchDirectory(sessionId, raw, showHidden);
+      if (get().sessionId !== sessionId) return;
       const nextLoading = new Set(get().loadingPaths);
       nextLoading.delete(raw);
       nextLoading.delete(result.path);
@@ -308,6 +400,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         selectionAnchor: result.path,
       });
     } catch (err) {
+      if (get().sessionId !== sessionId) return;
       const nextLoading = new Set(get().loadingPaths);
       nextLoading.delete(raw);
       set({
@@ -359,6 +452,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
 
     try {
       const result = await fetchDirectory(sessionId, path, state.showHidden);
+      if (get().sessionId !== sessionId) return;
       const nextLoading = new Set(get().loadingPaths);
       nextLoading.delete(path);
       set({
@@ -369,6 +463,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         },
       });
     } catch (err) {
+      if (get().sessionId !== sessionId) return;
       const nextLoading = new Set(get().loadingPaths);
       nextLoading.delete(path);
       const nextExpanded = new Set(get().expandedPaths);
@@ -394,6 +489,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
 
     try {
       const root = await fetchDirectory(sessionId, initPath, showHidden);
+      if (get().sessionId !== sessionId) return;
       const cache: Record<string, LocalFsEntry[]> = {
         [root.path]: root.entries,
       };
@@ -406,6 +502,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
 
       for (const path of pathsToFetch) {
         if (path === root.path) continue;
+        if (get().sessionId !== sessionId) return;
         try {
           const result = await fetchDirectory(sessionId, path, showHidden);
           cache[result.path] = result.entries;
@@ -417,6 +514,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       const nextContents =
         contentsPath && cache[contentsPath] ? contentsPath : root.path;
 
+      if (get().sessionId !== sessionId) return;
       set({
         rootPath: root.path,
         childrenCache: cache,
@@ -425,6 +523,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         loadingRoot: false,
       });
     } catch (err) {
+      if (get().sessionId !== sessionId) return;
       set({
         loadingRoot: false,
         error: formatAppError(err),
@@ -444,6 +543,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
 
     try {
       const result = await fetchDirectory(sessionId, raw, get().showHidden);
+      if (get().sessionId !== sessionId) return;
       const resolved = result.path;
       const nextLoading = new Set(get().loadingPaths);
       nextLoading.delete(raw);
@@ -458,6 +558,15 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         expandedPaths = [...exp];
       }
 
+      const contentsPath = get().contentsPath;
+      const contentsNorm = contentsPath
+        ? normalizeRemotePath(contentsPath)
+        : null;
+      const rawNorm = normalizeRemotePath(raw);
+      const patchContents =
+        contentsNorm &&
+        (contentsNorm === rawNorm || contentsNorm === normalizeRemotePath(resolved));
+
       set({
         loadingPaths: [...nextLoading],
         childrenCache: {
@@ -465,8 +574,17 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
           [resolved]: result.entries,
         },
         expandedPaths,
+        ...(patchContents
+          ? {
+              contentsPath: resolved,
+              selectedPath: resolved,
+              selectedPaths: [resolved],
+              selectionAnchor: resolved,
+            }
+          : {}),
       });
     } catch (err) {
+      if (get().sessionId !== sessionId) return;
       const nextLoading = new Set(get().loadingPaths);
       nextLoading.delete(raw);
       set({

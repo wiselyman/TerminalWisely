@@ -6,8 +6,18 @@ import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./t
 import type { K8sClusterTarget } from "../k8s/types";
 
 export type AgentUiEvent =
-  | { type: "assistant_message"; content: string }
+  | { type: "assistant_message"; content: string; replace?: boolean }
   | { type: "assistant_delta"; text: string }
+  | { type: "assistant_soft_continue"; chars?: number }
+  | {
+      type: "model_sample_end";
+      finish_reason?: string;
+      budget_hit?: boolean;
+      structural_trunc?: boolean;
+      max_tokens?: number;
+      usage?: Record<string, unknown>;
+      visible_chars?: number;
+    }
   | { type: "user_message"; content: string }
   | {
       type: "tool_call";
@@ -50,6 +60,7 @@ export type AgentUiEvent =
       exec_command?: string;
     }
   | { type: "completed"; content?: string }
+  | { type: "assistant_incomplete"; reason?: string }
   | { type: "error"; message: string }
   | { type: "cancelled" }
   | { type: "status"; status: string; run_id?: string; phase?: string }
@@ -98,7 +109,8 @@ export type AgentUiEvent =
       timeout_seconds?: number;
       error?: string;
       host_may_still_be_running?: boolean;
-    };
+    }
+  | { type: "run_stalled"; stall_seconds?: number };
 
 export type AskUserHandler = (event: Extract<AgentUiEvent, { type: "ask_user" }>) => Promise<{
   selected_option_ids: string[];
@@ -181,7 +193,11 @@ async function handleProtocolEvent(opts: {
   const activeRunId = ev.run_id || runId;
 
   if (ev.type === "assistant_message") {
-    onEvent({ type: "assistant_message", content: String(p.content ?? "") });
+    onEvent({
+      type: "assistant_message",
+      content: String(p.content ?? ""),
+      replace: Boolean(p.replace),
+    });
   } else if (ev.type === "assistant_delta") {
     onEvent({ type: "assistant_delta", text: String(p.text ?? "") });
   } else if (ev.type === "assistant_retract") {
@@ -210,6 +226,31 @@ async function handleProtocolEvent(opts: {
     });
   } else if (ev.type === "completed") {
     onEvent({ type: "completed", content: String(p.content ?? "") });
+  } else if (ev.type === "assistant_incomplete") {
+    onEvent({
+      type: "assistant_incomplete",
+      reason: typeof p.reason === "string" ? p.reason : undefined,
+    });
+  } else if (ev.type === "assistant_soft_continue") {
+    onEvent({
+      type: "assistant_soft_continue",
+      chars: typeof p.chars === "number" ? p.chars : undefined,
+    });
+  } else if (ev.type === "model_sample_end") {
+    onEvent({
+      type: "model_sample_end",
+      finish_reason:
+        typeof p.finish_reason === "string" ? p.finish_reason : undefined,
+      budget_hit: Boolean(p.budget_hit),
+      structural_trunc: Boolean(p.structural_trunc),
+      max_tokens: typeof p.max_tokens === "number" ? p.max_tokens : undefined,
+      usage:
+        p.usage && typeof p.usage === "object"
+          ? (p.usage as Record<string, unknown>)
+          : undefined,
+      visible_chars:
+        typeof p.visible_chars === "number" ? p.visible_chars : undefined,
+    });
   } else if (ev.type === "cancelled") {
     onEvent({ type: "cancelled" });
   } else if (ev.type === "error") {
@@ -370,6 +411,13 @@ async function handleProtocolEvent(opts: {
         typeof p.error === "string"
           ? p.error
           : "TOOL_TIMEOUT — wait ended; host may still be running",
+    });
+    return "continue";
+  } else if (ev.type === "run_stalled") {
+    onEvent({
+      type: "run_stalled",
+      stall_seconds:
+        typeof p.stall_seconds === "number" ? p.stall_seconds : undefined,
     });
     return "continue";
   } else if (ev.type === "tool_result") {
