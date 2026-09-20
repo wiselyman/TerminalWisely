@@ -1,47 +1,65 @@
-import { unstable_batchedUpdates } from "react-dom";
+import { useDesktopStore } from "./desktopStore";
 import { useAiEngineerStore } from "./aiEngineerStore";
+import { useBrowserStore } from "./browserStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
+import { useSessionStore } from "./sessionStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import type { LocalFsState } from "./localFsStore";
 import type { ManagedEntityRef } from "../lib/management/types";
 import type { K8sClusterTarget } from "../lib/k8s/types";
+import { unstable_batchedUpdates } from "react-dom";
 
 export type WorkspacePanelId =
   | "aiEngineer"
+  | "desktop"
   | "localFs"
   | "taskManager"
-  | "find";
+  | "find"
+  | "browser";
 
 let animateNextWorkspacePanelEnter = true;
 
 function closeOtherWorkspacePanels(except?: WorkspacePanelId) {
   if (except !== "aiEngineer")
     useAiEngineerStore.getState().close({ force: true });
+  if (except !== "desktop") useDesktopStore.getState().close();
   if (except !== "localFs") useLocalFsStore.getState().close();
   if (except !== "taskManager") useTaskManagerStore.getState().close();
   if (except !== "find") useFindStore.getState().close();
+  if (except !== "browser") {
+    const browser = useBrowserStore.getState();
+    if (browser.open && !browser.minimized) {
+      void browser.minimize();
+    }
+  }
 }
 
 function isPanelOpen(id: WorkspacePanelId): boolean {
   switch (id) {
     case "aiEngineer":
       return useAiEngineerStore.getState().open;
+    case "desktop":
+      return useDesktopStore.getState().open;
     case "localFs":
       return useLocalFsStore.getState().open;
     case "taskManager":
       return useTaskManagerStore.getState().open;
     case "find":
       return useFindStore.getState().open;
+    case "browser":
+      return useBrowserStore.getState().open;
   }
 }
 
 function hasAnyWorkspacePanelOpen() {
   return (
     isPanelOpen("aiEngineer") ||
+    isPanelOpen("desktop") ||
     isPanelOpen("localFs") ||
     isPanelOpen("taskManager") ||
-    isPanelOpen("find")
+    isPanelOpen("find") ||
+    isPanelOpen("browser")
   );
 }
 
@@ -49,6 +67,9 @@ function closePanel(id: WorkspacePanelId) {
   switch (id) {
     case "aiEngineer":
       useAiEngineerStore.getState().close({ force: true });
+      break;
+    case "desktop":
+      useDesktopStore.getState().close();
       break;
     case "localFs":
       useLocalFsStore.getState().close();
@@ -58,6 +79,9 @@ function closePanel(id: WorkspacePanelId) {
       break;
     case "find":
       useFindStore.getState().close();
+      break;
+    case "browser":
+      void useBrowserStore.getState().close();
       break;
   }
 }
@@ -81,14 +105,31 @@ function openWorkspacePanel(
         { open: true },
       );
       break;
+    case "desktop":
+      useDesktopStore.getState().openDesktop(sessionId);
+      break;
     case "localFs":
-      useLocalFsStore.getState().openPanel(sessionId, localFsTab);
+      // Legacy: route to desktop + optional files app.
+      useDesktopStore.getState().openDesktop(sessionId);
+      if (localFsTab === "find") {
+        useDesktopStore.getState().launchApp("files", { filesTab: "find" });
+      } else if (localFsTab === "taskManager") {
+        useDesktopStore.getState().launchApp("processes");
+      } else if (localFsTab === "files") {
+        useDesktopStore.getState().launchApp("files", { filesTab: "files" });
+      }
       break;
     case "taskManager":
-      useTaskManagerStore.setState({ open: true });
+      useDesktopStore.getState().openDesktop(sessionId);
+      useDesktopStore.getState().launchApp("processes");
       break;
     case "find":
-      useFindStore.getState().openFind(sessionId);
+      useDesktopStore.getState().openDesktop(sessionId);
+      useDesktopStore.getState().launchApp("files", { filesTab: "find" });
+      break;
+    case "browser":
+      useDesktopStore.getState().openDesktop(sessionId);
+      useDesktopStore.getState().launchApp("browser");
       break;
   }
 }
@@ -101,6 +142,14 @@ export function collapseWorkspacePanel(id: WorkspacePanelId) {
 
 /** Bring AI panel to front without aborting a run (e.g. approval / ask-user). */
 export function revealAiEngineerPanel() {
+  const ai = useAiEngineerStore.getState();
+  // Never reopen a parked host's chat on top of a different active terminal.
+  if (ai.sessionId) {
+    const active = useSessionStore.getState().activeTabId;
+    if (active && active !== ai.sessionId) {
+      return;
+    }
+  }
   animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();
   unstable_batchedUpdates(() => {
     closeOtherWorkspacePanels("aiEngineer");
@@ -118,11 +167,12 @@ export function switchToAiEngineerPanel(
 ) {
   if (
     isPanelOpen("aiEngineer") &&
+    !isPanelOpen("desktop") &&
     !isPanelOpen("localFs") &&
     !isPanelOpen("taskManager") &&
-    !isPanelOpen("find")
+    !isPanelOpen("find") &&
+    !isPanelOpen("browser")
   ) {
-    // Already sole open panel — keep open until panel-right collapse.
     useAiEngineerStore.getState().bindManagedEntity(ref, {
       open: true,
       clusterTarget: opts?.clusterTarget,
@@ -146,13 +196,48 @@ export function shouldAnimateWorkspacePanelEnter() {
   return shouldAnimate;
 }
 
+/** Host-tab restore must not play the right-edge slide-in. */
+export function skipNextWorkspacePanelEnter() {
+  animateNextWorkspacePanelEnter = false;
+}
+
 export function switchWorkspacePanel(
   id: WorkspacePanelId,
   sessionId: string,
   serverId?: string,
   localFsTab?: LocalFsState["activeTab"],
 ) {
-  // Already open: keep it open until the user clicks panel-right collapse.
+  // Browser / legacy localFs shortcuts: keep desktop shell, launch the app.
+  if (id === "browser") {
+    if (!useDesktopStore.getState().open) {
+      animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();
+      unstable_batchedUpdates(() => {
+        closeOtherWorkspacePanels("desktop");
+        useDesktopStore.getState().openDesktop(sessionId);
+      });
+    }
+    useDesktopStore.getState().toggleDockApp("browser");
+    return;
+  }
+
+  if (id === "localFs" || id === "find" || id === "taskManager") {
+    if (!useDesktopStore.getState().open) {
+      animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();
+      unstable_batchedUpdates(() => {
+        closeOtherWorkspacePanels("desktop");
+        useDesktopStore.getState().openDesktop(sessionId);
+      });
+    }
+    if (id === "find" || localFsTab === "find") {
+      useDesktopStore.getState().launchApp("files", { filesTab: "find" });
+    } else if (id === "taskManager" || localFsTab === "taskManager") {
+      useDesktopStore.getState().launchApp("processes");
+    } else if (localFsTab === "files") {
+      useDesktopStore.getState().launchApp("files", { filesTab: "files" });
+    }
+    return;
+  }
+
   if (isPanelOpen(id)) return;
 
   animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();

@@ -9,16 +9,26 @@ test.describe("Local FS panel", () => {
     await api.openLocalFsPanel();
   });
 
-  test("opens local fs panel with file tree tabs", async ({ page }) => {
-    await expect(page.locator(".local-fs-panel")).toBeVisible({ timeout: 15_000 });
+  test("opens desktop + file manager float with file tree", async ({ page }) => {
+    await expect(page.getByTestId("host-desktop-panel")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("host-file-manager-panel")).toBeVisible();
+    await expect(page.getByTestId("host-file-manager-minimize")).toBeVisible();
+    await expect(page.getByTestId("host-file-manager-close")).toBeVisible();
+    await expect(page.getByTestId("local-fs-split")).toBeVisible();
   });
 
-  test("shows find and task manager sub-tabs", async ({ page }) => {
-    const panel = page.locator(".local-fs-panel");
+  test("file manager has path-bar search and chrome", async ({ page }) => {
+    const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel).toBeVisible();
-    await panel.getByRole("tab", { name: /Find|查找/i }).click();
-    await expect(panel.locator(".find-panel-head")).toBeVisible();
-    await panel.getByRole("tab", { name: /Processes|进程/i }).click();
-    await expect(panel.locator(".task-manager-toolbar")).toBeVisible();
+    await expect(page.getByTestId("file-manager-search")).toBeVisible();
+    await expect(page.getByTestId("local-fs-split")).toBeVisible();
+    await expect(page.getByTestId("local-fs-contents")).toBeVisible();
+
+    await page.getByTestId("host-file-manager-minimize").click();
+    await expect(panel).toHaveCount(0);
+    await page.getByTestId("dock-app-files").click();
+    await expect(page.getByTestId("host-file-manager-panel")).toBeVisible();
   });
 });

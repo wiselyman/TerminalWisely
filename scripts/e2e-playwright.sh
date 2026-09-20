@@ -82,5 +82,5 @@ if grep -q "Port ${PREVIEW_PORT} is already in use" /tmp/e2e-preview.log 2>/dev/
 fi
 
 echo "=== Playwright ==="
-npx playwright test --config playwright.config.ts
+npx playwright test --config playwright.config.ts "$@"
 echo "Playwright E2E passed."

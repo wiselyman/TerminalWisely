@@ -16,6 +16,7 @@ import { getTerminalSession } from "../lib/terminalSelectionDrag";
 import type { FindFileEntry, LocalFsEntry, PathSizeResult, ProcessEntry } from "../types";
 import { useFindStore } from "../stores/findStore";
 import { useLocalFsStore } from "../stores/localFsStore";
+import { useDesktopStore } from "../stores/desktopStore";
 import { useTaskManagerStore } from "../stores/taskManagerStore";
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
@@ -41,6 +42,11 @@ import { openAppSettings } from "../stores/downloadSettingsStore";
 type Props = {
   sessionId: string;
   sessionTitle?: string | null;
+  /**
+   * side — legacy right workspace panel (unused by desktop mode).
+   * embedded — body only; parent supplies float chrome (FileManagerPanel).
+   */
+  presentation?: "side" | "embedded";
 };
 
 function basename(path: string) {
@@ -73,9 +79,14 @@ function matchesProcessFilter(process: ProcessEntry, query: string) {
   return false;
 }
 
-export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
-  const { t } = useTranslation(["tools", "terminal", "shell"]);
+export function LocalFsPanel({
+  sessionId,
+  sessionTitle,
+  presentation = "side",
+}: Props) {
+  const { t } = useTranslation(["tools", "terminal", "shell", "common"]);
   const panelRef = useWorkspacePanelEnter<HTMLElement>();
+  const isEmbedded = presentation === "embedded";
   const pushToast = useToastStore((s) => s.pushToast);
   const openPreview = usePreviewStore((s) => s.openPreview);
   const openSendTo = useSessionStore((s) => s.openSendTo);
@@ -140,6 +151,7 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     error: findError,
     lastRunAt,
     runFind,
+    resetResults,
     focusNonce,
   } = useFindStore();
   const {
@@ -197,6 +209,11 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
       findNameInputRef.current?.focus();
     }
   }, [activeTab, focusNonce, sessionId]);
+
+  useEffect(() => {
+    if (!isEmbedded) return;
+    findNameInputRef.current?.focus();
+  }, [focusNonce, isEmbedded]);
 
   const navigateToAddress = (path: string) => {
     const target = normalizeRemotePath(path);
@@ -708,7 +725,26 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
     window.addEventListener("mouseup", onUp);
   };
 
+  useEffect(() => {
+    if (isEmbedded && activeTab !== "files") {
+      setActiveTab("files");
+      useDesktopStore.getState().setFilesTab("files");
+    }
+  }, [isEmbedded, activeTab, setActiveTab]);
+
+  const clearInlineSearch = () => {
+    setNamePattern("");
+    resetResults();
+  };
+
   const handleRunFind = () => {
+    if (isEmbedded) {
+      const scope = contentsPath || rootPath || ".";
+      useFindStore.setState({
+        searchPath: scope,
+        followTerminalCwd: false,
+      });
+    }
     void runFind(sessionId);
   };
 
@@ -734,15 +770,35 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
       ? t("find.hintBeforeRun")
       : `${t("find.resultCount", { count: entries.length })}${truncated ? t("find.resultTruncated") : ""}`;
 
+  const searchMode =
+    isEmbedded && lastRunAt != null && Boolean(namePattern.trim());
+  const searchEntries = useMemo((): LocalFsEntry[] | null => {
+    if (!searchMode) return null;
+    return entries.map((entry) => ({
+      name: findEntryLabel(entry),
+      path: entry.path,
+      kind: entry.kind,
+      size_bytes: entry.size_bytes,
+    }));
+  }, [entries, searchMode]);
+
+  const showFilesUi = isEmbedded || activeTab === "files";
+
   return (
     <>
-      <WorkspacePanelBackdrop panelId="localFs" />
+      {!isEmbedded ? <WorkspacePanelBackdrop panelId="localFs" /> : null}
       <aside
-        ref={panelRef}
-        className="local-fs-panel find-panel open"
-        style={{ width }}
+        ref={isEmbedded ? undefined : panelRef}
+        className={
+          isEmbedded
+            ? "local-fs-panel find-panel open local-fs-embedded"
+            : "local-fs-panel find-panel open"
+        }
+        style={isEmbedded ? undefined : { width }}
         aria-label={panelTitle}
+        data-testid={isEmbedded ? "host-file-manager-body" : undefined}
       >
+        {!isEmbedded ? (
         <div
           className="find-panel-resizer"
           role="separator"
@@ -750,56 +806,62 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
           aria-label={t("localFs.resizeAria")}
           onMouseDown={startResize}
         />
-        <div className="find-panel-head">
-          <div className="find-panel-title-wrap">
-            <h2 className="find-panel-title">{panelTitle}</h2>
-          </div>
-          <WorkspacePanelHeadActions panelId="localFs" sessionId={sessionId}>
-            <div className="workspace-panel-inline-tabs" role="tablist" aria-label={t("localFs.tabsAria")}>
-              <button
-                type="button"
-                role="tab"
-                className={`workspace-panel-icon-btn${activeTab === "files" ? " active" : ""}`}
-                aria-label={t("localFs.tabFiles")}
-                title={t("localFs.tabFiles")}
-                aria-selected={activeTab === "files"}
-                onClick={() => setActiveTab("files")}
-              >
-                <LocalFilesIcon />
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`workspace-panel-icon-btn${activeTab === "find" ? " active" : ""}`}
-                aria-label={t("localFs.tabFind")}
-                title={t("localFs.tabFind")}
-                aria-selected={activeTab === "find"}
-                onClick={() => setActiveTab("find")}
-              >
-                <FindInFilesIcon />
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`workspace-panel-icon-btn${activeTab === "taskManager" ? " active" : ""}`}
-                aria-label={t("localFs.tabProcesses")}
-                title={t("localFs.tabProcesses")}
-                aria-selected={activeTab === "taskManager"}
-                onClick={() => setActiveTab("taskManager")}
-              >
-                <TaskManagerIcon />
-              </button>
+        ) : null}
+        {!isEmbedded ? (
+          <div className="find-panel-head">
+            <div className="find-panel-title-wrap">
+              <h2 className="find-panel-title">{panelTitle}</h2>
             </div>
-          </WorkspacePanelHeadActions>
-        </div>
+            <WorkspacePanelHeadActions panelId="localFs" sessionId={sessionId}>
+              <div className="workspace-panel-inline-tabs" role="tablist" aria-label={t("localFs.tabsAria")}>
+                <button
+                  type="button"
+                  role="tab"
+                  className={`workspace-panel-icon-btn${activeTab === "files" ? " active" : ""}`}
+                  aria-label={t("localFs.tabFiles")}
+                  title={t("localFs.tabFiles")}
+                  aria-selected={activeTab === "files"}
+                  onClick={() => setActiveTab("files")}
+                >
+                  <LocalFilesIcon />
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className={`workspace-panel-icon-btn${activeTab === "find" ? " active" : ""}`}
+                  aria-label={t("localFs.tabFind")}
+                  title={t("localFs.tabFind")}
+                  aria-selected={activeTab === "find"}
+                  onClick={() => setActiveTab("find")}
+                >
+                  <FindInFilesIcon />
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className={`workspace-panel-icon-btn${activeTab === "taskManager" ? " active" : ""}`}
+                  aria-label={t("localFs.tabProcesses")}
+                  title={t("localFs.tabProcesses")}
+                  aria-selected={activeTab === "taskManager"}
+                  onClick={() => setActiveTab("taskManager")}
+                >
+                  <TaskManagerIcon />
+                </button>
+              </div>
+            </WorkspacePanelHeadActions>
+          </div>
+        ) : null}
 
-        {activeTab === "files" ? (
+        {showFilesUi ? (
         <div className="local-fs-toolbar">
           <div className="local-fs-tool-group">
             <button
               type="button"
               className="local-fs-tool-btn"
-              onClick={() => void goBack()}
+              onClick={() => {
+                clearInlineSearch();
+                void goBack();
+              }}
               disabled={!canGoBack || loadingRoot}
               title={t("localFs.goBack")}
               aria-label={t("localFs.goBack")}
@@ -809,7 +871,10 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
             <button
               type="button"
               className="local-fs-tool-btn"
-              onClick={() => void goUp()}
+              onClick={() => {
+                clearInlineSearch();
+                void goUp();
+              }}
               disabled={!canGoUp || loadingRoot}
               title={t("localFs.goUp")}
               aria-label={t("localFs.goUp")}
@@ -819,7 +884,10 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
             <button
               type="button"
               className={`local-fs-tool-btn${rootLabel === "~" ? " is-active" : ""}`}
-              onClick={() => void initTree("~")}
+              onClick={() => {
+                clearInlineSearch();
+                void initTree("~");
+              }}
               title={t("localFs.home")}
               aria-label={t("localFs.home")}
             >
@@ -828,7 +896,10 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
             <button
               type="button"
               className={`local-fs-tool-btn local-fs-root-btn${rootLabel === "/" ? " is-active" : ""}`}
-              onClick={() => void initTree("/")}
+              onClick={() => {
+                clearInlineSearch();
+                void initTree("/");
+              }}
               title={t("localFs.root")}
               aria-label={t("localFs.root")}
             >
@@ -837,17 +908,26 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
             <button
               type="button"
               className="local-fs-tool-btn"
-              onClick={() => void refreshTree()}
-              disabled={loadingRoot}
-              title={t("localFs.refresh")}
-              aria-label={t("localFs.refresh")}
+              onClick={() => {
+                if (searchMode) {
+                  handleRunFind();
+                  return;
+                }
+                void refreshTree();
+              }}
+              disabled={loadingRoot || (searchMode && findLoading)}
+              title={searchMode ? t("find.run") : t("localFs.refresh")}
+              aria-label={searchMode ? t("find.run") : t("localFs.refresh")}
             >
               <LocalFsRefreshIcon />
             </button>
             <button
               type="button"
               className="local-fs-tool-btn"
-              onClick={() => void navigateToTerminalCwd()}
+              onClick={() => {
+                clearInlineSearch();
+                void navigateToTerminalCwd();
+              }}
               disabled={loadingRoot}
               title={t("localFs.currentDir")}
               aria-label={t("localFs.currentDir")}
@@ -904,14 +984,64 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
               disabled={loadingRoot}
               onFocus={() => setAddressEditing(true)}
               onBlur={() => setAddressEditing(false)}
-              onSubmit={navigateToAddress}
+              onSubmit={(path) => {
+                clearInlineSearch();
+                navigateToAddress(path);
+              }}
             />
           </div>
+          {isEmbedded ? (
+            <div className="local-fs-search-bar">
+              <input
+                ref={findNameInputRef}
+                type="search"
+                data-testid="file-manager-search"
+                value={namePattern}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setNamePattern(next);
+                  if (!next.trim()) {
+                    resetResults();
+                  }
+                }}
+                placeholder={t("find.namePlaceholder")}
+                aria-label={t("find.nameAria")}
+                disabled={findLoading}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleRunFind();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    clearInlineSearch();
+                  }
+                }}
+              />
+              {namePattern || searchMode ? (
+                <button
+                  type="button"
+                  className="local-fs-search-clear"
+                  data-testid="file-manager-search-clear"
+                  title={t("common:close")}
+                  aria-label={t("find.clearSearch")}
+                  onClick={() => clearInlineSearch()}
+                >
+                  ×
+                </button>
+              ) : null}
+              {searchMode || findLoading ? (
+                <span className="local-fs-search-meta" data-testid="file-manager-search-meta">
+                  {findLoading ? t("find.running") : findResultSummary}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         ) : null}
 
         {/* Home sits above the file tree (no chevron), same slot as IDE workspace root. */}
-        {activeTab === "files" && rootPath ? (
+        {showFilesUi && rootPath ? (
           <div
             className={`local-fs-tree-root${contentsPath === rootPath || selectedPath === rootPath ? " is-selected" : ""}`}
             onContextMenu={(e) => {
@@ -927,7 +1057,10 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
               type="button"
               className="local-fs-tree-root-label"
               title={rootPath}
-              onClick={() => void openDirectory(rootPath)}
+              onClick={() => {
+                clearInlineSearch();
+                void openDirectory(rootPath);
+              }}
             >
               {rootLabel === "~" ? t("localFs.home") : rootLabel}
               {loadingRoot ? (
@@ -937,9 +1070,12 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
           </div>
         ) : null}
 
-        {activeTab === "files" ? (
+        {showFilesUi ? (
           <>
             {error ? <p className="find-panel-error">{error}</p> : null}
+            {isEmbedded && findError ? (
+              <p className="find-panel-error">{findError}</p>
+            ) : null}
             <div className="local-fs-split" data-testid="local-fs-split">
               <div
                 className="local-fs-split-tree"
@@ -999,13 +1135,19 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
                   onMovePaths={(paths, dest) => {
                     void handleMovePaths(paths, dest);
                   }}
+                  entriesOverride={searchEntries}
+                  loadingOverride={searchMode ? findLoading : undefined}
+                  emptyLabel={
+                    searchMode && lastRunAt != null ? t("find.empty") : undefined
+                  }
+                  onLeaveSearch={clearInlineSearch}
                 />
               </div>
             </div>
           </>
         ) : null}
 
-        {activeTab === "find" ? (
+        {!isEmbedded && activeTab === "find" ? (
           <>
             <div className="find-panel-toolbar">
               <label className="find-panel-field find-panel-scope-field">
@@ -1125,7 +1267,7 @@ export function LocalFsPanel({ sessionId, sessionTitle }: Props) {
           </>
         ) : null}
 
-        {activeTab === "taskManager" ? (
+        {activeTab === "taskManager" && !isEmbedded ? (
           <>
             <div className="task-manager-toolbar">
               <input

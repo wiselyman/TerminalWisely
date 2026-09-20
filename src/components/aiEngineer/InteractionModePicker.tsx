@@ -133,6 +133,7 @@ export function InteractionModePicker({
         aria-label={t("aiEngineer.interactionModeLabel")}
         aria-expanded={open}
         disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onOpenChange(!open)}
       >
         <ModeGlyph mode={mode} />
@@ -170,6 +171,7 @@ export function InteractionModePicker({
                     aria-checked={selected}
                     className={`ai-engineer-interaction-option${selected ? " selected" : ""}`}
                     title={t(`aiEngineer.interactionMode.${m}.desc`)}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       onChange(m);
                       onOpenChange(false);

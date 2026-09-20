@@ -203,7 +203,6 @@ export function TerminalView({
   const contextMenuSelectionRef = useRef("");
   /** Last non-empty selection — xterm often clears selection before contextmenu. */
   const lastSelectionRef = useRef("");
-  const [hasTextSelection, setHasTextSelection] = useState(false);
   setFsContextMenuRef.current = setFsContextMenu;
   setBlankContextMenuRef.current = setBlankContextMenu;
   setFsDialogRef.current = setFsDialog;
@@ -385,9 +384,6 @@ export function TerminalView({
         const text = terminal.getSelection();
         lastSelectionRef.current = text;
         contextMenuSelectionRef.current = text;
-        setHasTextSelection(text.trim().length > 0);
-      } else {
-        setHasTextSelection(false);
       }
     });
 
@@ -1145,37 +1141,6 @@ export function TerminalView({
       className={`terminal-view ${active ? "active" : ""} ${isDragOver ? "drag-over" : ""}${isConnecting ? " terminal-view-connecting" : ""}`}
       data-testid="terminal-view"
     >
-      {active && hasTextSelection ? (
-        <div className="k8s-terminal-selection-bar" data-testid="terminal-selection-bar">
-          <button
-            type="button"
-            className="k8s-refresh-btn"
-            data-testid="terminal-send-selection-chat"
-            title={t("sendToChat")}
-            aria-label={t("sendToChat")}
-            onClick={() => {
-              const text =
-                (terminalRef.current?.hasSelection()
-                  ? terminalRef.current.getSelection()
-                  : "") ||
-                lastSelectionRef.current ||
-                contextMenuSelectionRef.current;
-              const trimmed = text.trim();
-              if (!trimmed) return;
-              const tab = useSessionStore
-                .getState()
-                .tabs.find((item) => item.id === sessionId);
-              sendConsoleSelectionToChat(
-                sessionId,
-                trimmed,
-                tab?.server_id ?? undefined,
-              );
-            }}
-          >
-            {t("sendToChat")}
-          </button>
-        </div>
-      ) : null}
       <div
         ref={containerRef}
         className="terminal-view-inner"

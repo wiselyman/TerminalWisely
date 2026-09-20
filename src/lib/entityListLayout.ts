@@ -198,17 +198,62 @@ export function migrateStoredLayout(
   return null;
 }
 
-export function readStoredEntityLayout(scope: EntityLayoutScope): EntityListLayout | null {
+export function layoutHasGroupedMembership(layout: EntityListLayout): boolean {
+  if (layout.groups.length === 0) return false;
+  const groupIds = new Set(layout.groups.map((g) => g.id));
+  for (const groupId of Object.values(layout.assignments)) {
+    if (groupId && groupIds.has(groupId)) return true;
+  }
+  for (const group of layout.groups) {
+    if ((layout.order[group.id]?.length ?? 0) > 0) return true;
+  }
+  return false;
+}
+
+function readSidebarV2Layout(scope: EntityLayoutScope): EntityListLayout | null {
   try {
-    const raw = localStorage.getItem(ENTITY_LAYOUT_KEYS[scope]);
-    if (raw) {
-      return migrateStoredLayout(JSON.parse(raw), scope);
-    }
     const sidebarRaw = localStorage.getItem(SIDEBAR_LAYOUT_KEY);
     if (!sidebarRaw) return null;
     const parsed = JSON.parse(sidebarRaw) as Record<string, unknown>;
     if (parsed.version !== 2 || !parsed.scopes || !parsed.groups) return null;
     return migrateV2SidebarScope(parsed, scope);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prefer a healthy v2 sidebar snapshot when the per-scope v3 key exists but
+ * only kept empty custom groups (all members forced into 未分组).
+ */
+export function preferHealthierLayout(
+  primary: EntityListLayout | null,
+  fallback: EntityListLayout | null,
+  entityIds: string[],
+): EntityListLayout | null {
+  if (!primary) return fallback;
+  if (!fallback) return primary;
+  const primaryStripped =
+    entityIds.length > 0
+      ? layoutLooksStripped(primary, entityIds)
+      : !layoutHasGroupedMembership(primary);
+  if (!primaryStripped) return primary;
+  if (!layoutHasGroupedMembership(fallback)) return primary;
+  return fallback;
+}
+
+export function readStoredEntityLayout(
+  scope: EntityLayoutScope,
+  entityIds: string[] = [],
+): EntityListLayout | null {
+  try {
+    let primary: EntityListLayout | null = null;
+    const raw = localStorage.getItem(ENTITY_LAYOUT_KEYS[scope]);
+    if (raw) {
+      primary = migrateStoredLayout(JSON.parse(raw), scope);
+    }
+    const sidebar = readSidebarV2Layout(scope);
+    return preferHealthierLayout(primary, sidebar, entityIds);
   } catch {
     return null;
   }
@@ -241,11 +286,19 @@ export function loadEntityListLayout(
   entityIds: string[],
 ): EntityListLayout {
   try {
-    const hadScopeKey = Boolean(localStorage.getItem(ENTITY_LAYOUT_KEYS[scope]));
-    const stored = readStoredEntityLayout(scope);
+    const scopeRaw = localStorage.getItem(ENTITY_LAYOUT_KEYS[scope]);
+    const hadScopeKey = Boolean(scopeRaw);
+    const scopePrimary = scopeRaw
+      ? migrateStoredLayout(JSON.parse(scopeRaw), scope)
+      : null;
+    const stored = readStoredEntityLayout(scope, entityIds);
     if (stored) {
       const finalized = finalizeLayoutForEntities(stored, entityIds);
-      if (!hadScopeKey) {
+      const recoveredFromSidebar =
+        Boolean(scopePrimary) &&
+        layoutLooksStripped(scopePrimary!, entityIds.length ? entityIds : Object.keys(scopePrimary!.assignments)) &&
+        layoutHasGroupedMembership(finalized);
+      if (!hadScopeKey || recoveredFromSidebar) {
         saveEntityListLayout(scope, finalized);
       }
       return finalized;

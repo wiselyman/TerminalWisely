@@ -6,7 +6,9 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**SSH terminal + Kubernetes workbench + AI Linux / K8S Engineers.** Connect to your servers, browse clusters from local kubeconfig or SSH kubectl, work with files in a visual workspace, and describe problems in plain language — the built-in agent investigates on the **live session or selected cluster**, runs read-only checks automatically, and asks before anything mutates.
+**Current version: [v0.0.1](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.1)**
+
+**SSH terminal + host Desktop / Browser + Kubernetes workbench + AI Linux / K8S Engineers.** Connect to your servers, open a desktop surface (files, processes, browser) through the live SSH session, browse clusters from local kubeconfig or SSH kubectl, edit Markdown like Typora, and describe problems in plain language — the built-in agent investigates on the **live session or selected cluster**, runs read-only checks automatically, and asks before anything mutates.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
@@ -21,9 +23,11 @@
 | Area | Highlights |
 |------|------------|
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
+| **Host Desktop** | Dock apps on the connected host: Files, Processes, Browser; layout remembered per host |
+| **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
 | **Kubernetes** | Sidebar Hosts ↔ K8s; add cluster via + (file or paste kubeconfig) or SSH kubectl; resource tree, YAML, logs, Pod shell. One-click install of kubectl/Helm into the app data dir (or use PATH / SSH). Practical Lens-inspired subset — not a full Lens IDE |
-| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview, download, compress, cross-server send |
-| **AI Engineer** | Linux mode on SSH hosts; K8S mode on selected clusters; separate chat history |
+| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; Markdown Typora-like WYSIWYG; download, compress, cross-server send |
+| **AI Engineer** | Linux mode on SSH hosts; K8S mode on selected clusters; long runs keep the SSH lease; separate chat history |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
 | **Insight** | Host CPU, memory, disk I/O, and network on the status bar |
@@ -63,7 +67,7 @@ Open **AI Engineer** from the title bar. The mode follows the sidebar:
 
 - **Upload** — drop files onto the terminal or tab → SFTP to the current directory  
 - **Navigate** — click directory names in `ls` output  
-- **Preview & edit** — click file paths; syntax highlight and search for text  
+- **Preview & edit** — click file paths; Markdown is Typora-like WYSIWYG; syntax highlight and search for text  
 - **Download** — Ctrl/Cmd + click a path, or use the context menu  
 - **Send elsewhere** — right-click a path, or drag to another SSH tab  
 - **Command Nav** — 90+ ops snippets inserted into the shell (never auto-run)
@@ -73,9 +77,10 @@ Open **AI Engineer** from the title bar. The mode follows the sidebar:
 ## Quick start
 
 1. Add an SSH host in the sidebar and connect — or switch the activity bar to **K8s** and click **+** to add a cluster (kubeconfig file or paste).  
-2. Optional: open **AI Engineer** → Settings → add a model profile (Base URL + model id; Ollama often needs no key).  
-3. Use the terminal or K8s workbench as usual; ask the AI when you want help.  
-4. Approve or reject any command the agent marks as a system change.
+2. Optional: open **Desktop** or **Browser** on the connected host to manage files/processes or open remote HTTP UIs.  
+3. Optional: open **AI Engineer** → Settings → add a model profile (Base URL + model id; Ollama often needs no key).  
+4. Use the terminal or K8s workbench as usual; ask the AI when you want help.  
+5. Approve or reject any command the agent marks as a system change.
 
 Kubernetes notes: local cluster ops prefer kubectl/Helm installed into the app data directory (one-click from the UI), with PATH as fallback; SSH jump hosts still use the remote PATH. The K8s UI is a practical Lens-inspired subset — not a full Lens IDE.
 

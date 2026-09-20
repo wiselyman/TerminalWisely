@@ -15,10 +15,12 @@ type Props = {
 
 const PANEL_ROOT_SELECTOR = [
   ".ai-engineer-panel",
+  ".host-desktop-panel",
   ".local-fs-panel",
   ".find-panel",
   ".task-manager-panel",
   ".cmd-nav-panel",
+  ".browser-panel",
 ].join(", ");
 
 /** Cursor-style panel-right collapse for every right workspace panel. */

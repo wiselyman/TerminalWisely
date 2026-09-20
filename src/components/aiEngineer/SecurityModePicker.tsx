@@ -134,6 +134,7 @@ export function SecurityModePicker({
         aria-label={t("aiEngineer.settings.securityMode")}
         aria-expanded={open}
         disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onOpenChange(!open)}
       >
         <span className="ai-engineer-security-btn-icon" aria-hidden>
@@ -179,6 +180,7 @@ export function SecurityModePicker({
                     role="menuitemradio"
                     aria-checked={selected}
                     className={`ai-engineer-security-option ${optionTone}${selected ? " selected" : ""}`}
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       onChange(m);
                       onOpenChange(false);

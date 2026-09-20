@@ -53,8 +53,9 @@ TRUNCATED_ANSWER_NUDGE = (
     "[HARNESS] Your previous reply was cut off mid-sentence (output length limit "
     "or incomplete ending). Continue EXACTLY from the last incomplete word/line — "
     "do NOT restart with the same markdown heading, do NOT rewrite earlier "
-    "sections, do NOT open a new '# …' title. Finish the remaining points for "
-    "the user in their language. Output plain continuation text only (no tools)."
+    "sections, do NOT open a new '# …' title. You MUST finish the remaining "
+    "content for the user in their language in this sample — do not stop to ask "
+    "them to reply 「继续」/continue. Output plain continuation text only (no tools)."
 )
 
 TRUNCATED_ANSWER_INCOMPLETE_SUFFIX_ZH = (
@@ -69,10 +70,11 @@ SOFT_CONTINUE_NOTICE = "assistant_soft_continue"
 
 # Soft recovery when the model early-stops (finish=stop, no budget/structure hit).
 # Missing sentence-final punctuation is a generic structural cue — no word lists.
-SOFT_CONTINUE_MIN_CHARS = 180
-_SOFT_CONTINUE_TERMINATORS = frozenset(
-    "。！？.!?…」』）)]}”’\""
-)
+# Do NOT treat )]} as terminators: answers often cut after a parenthetical size/path
+# like "`/data/foo` (12G)" which is still mid-reply.
+# Keep the floor low — post-tool wrap-ups are often short but still cut mid-clause.
+SOFT_CONTINUE_MIN_CHARS = 24
+_SOFT_CONTINUE_TERMINATORS = frozenset("。！？.!?…」』”’\"'")
 
 
 def truncated_answer_nudge(partial: str | None) -> str:
@@ -82,6 +84,17 @@ def truncated_answer_nudge(partial: str | None) -> str:
     if len(last) > 160:
         last = last[-160:]
     base = TRUNCATED_ANSWER_NUDGE
+    # Mid-table cuts: ask for remaining rows only so markdown stays one table.
+    table_lines = [
+        ln for ln in raw.splitlines() if ln.strip().startswith("|")
+    ]
+    if len(table_lines) >= 2 or (last.startswith("|") and last.count("|") >= 2):
+        base = (
+            base
+            + " If you were mid markdown table, emit ONLY the remaining table "
+            "rows (lines starting with |). Do NOT repeat the header/separator "
+            "and do NOT wrap rows in a new code fence."
+        )
     if not last:
         return base
     return (

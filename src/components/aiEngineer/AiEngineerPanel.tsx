@@ -15,10 +15,35 @@ import {
 } from "lucide-react";
 import { riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import {
+  panelFiberChatScopeKey,
   normalizeInteractionMode,
   normalizeSecurityMode,
   useAiEngineerStore,
 } from "../../stores/aiEngineerStore";
+import { rememberAiFiber } from "../../stores/hostWorkspaceMemory";
+import {
+  AI_CHAT_SCROLL_FIX_ID,
+  COMPOSER_CHROME_SCROLL_LOCK_MS,
+  OPEN_CHAT_FOLLOW_MS,
+  isChatNearBottom,
+  isChatScrollGeometryReady,
+  runPreservingChatScroll,
+  scheduleComposerChromeScrollLock,
+  scheduleOpenChatPin,
+  scrollChatToBottom,
+  scrollTopAfterContentHeightChange,
+  scrollTopAfterViewportResize,
+  shouldClearStickOnUserIntent,
+  shouldFollowChatOnViewportResize,
+  shouldForceStickOnChatOpen,
+  shouldHoldChatScrollForComposerChrome,
+  shouldHoldStickWhileBusyFollow,
+  shouldParkChatScrollerAtBottom,
+  shouldPinChatOnStreamUpdate,
+  shouldPreventComposerChromeFocusScroll,
+  shouldUpdateStickFromScrollEvent,
+  streamFollowPinKey,
+} from "../../lib/aiEngineer/chatScroll";
 import { AiEngineerSettings } from "./AiEngineerSettings";
 import { AiEngineerRunTraceBar } from "./AiEngineerRunTraceBar";
 import { AiBusyDots } from "./AiBusyDots";
@@ -89,6 +114,11 @@ import {
   shouldShowChatBusyLine,
 } from "../../lib/aiEngineer/runBusyPhase";
 import { isAwaitingApprovedExecStuck } from "../../lib/aiEngineer/approvalOptimisticExec";
+import {
+  approvalBadgeForTool,
+  shouldCollapseExecCommand,
+  shouldOmitResolvedApprovalCard,
+} from "../../lib/aiEngineer/approvalCommandDedupe";
 import { formatAppError } from "../../lib/formatAppError";
 import { useSudoPromptStore } from "../../stores/sudoPromptStore";
 import {
@@ -103,7 +133,12 @@ import {
 type Props = {
   sessionId: string;
   serverId?: string;
+  /** False = keep fiber mounted but invisible (another host owns the AI surface). */
+  surfaceActive?: boolean;
 };
+
+const EMPTY_CHAT_MESSAGES: import("../../stores/aiEngineerStore").ChatLine[] =
+  [];
 
 type AttachmentPreview = {
   title: string;
@@ -126,16 +161,6 @@ function AttachTileGlyph({
   }
   // remote_file + local_text (+ unknown text-like)
   return <FileText size={22} strokeWidth={1.6} aria-hidden />;
-}
-
-function scrollMessagesToEnd(el: HTMLElement) {
-  // Prefer last-child geometry — more reliable than scrollHeight alone in flex layouts.
-  const last = el.lastElementChild as HTMLElement | null;
-  if (last) {
-    el.scrollTop = Math.max(0, last.offsetTop + last.offsetHeight - el.clientHeight + 8);
-  } else {
-    el.scrollTop = el.scrollHeight;
-  }
 }
 
 function formatElapsed(ms: number): string {
@@ -269,6 +294,8 @@ function ToolExecCard({
   t,
   live,
   dimmed,
+  risk,
+  approved,
 }: {
   line: ToolLine;
   t: (key: string, opts?: Record<string, unknown>) => string;
@@ -276,6 +303,9 @@ function ToolExecCard({
   live?: boolean;
   /** Another tool is live — collapse and de-emphasize this card. */
   dimmed?: boolean;
+  /** From prior approval — shown on the exec card, not a separate block. */
+  risk?: string;
+  approved?: boolean;
 }) {
   const outputRef = useRef<HTMLPreElement>(null);
   const [, tick] = useState(0);
@@ -285,13 +315,13 @@ function ToolExecCard({
     line.name === "terminal_exec" ||
     line.name === "ai_exec" ||
     line.name.startsWith("k8s_");
-  // Live card stays open; dimmed peers stay collapsed so only one "current" read.
+  // Live card stays open. Do NOT auto-collapse dimmed peers — collapsing
+  // mid-list drops height above the fold and yanks older messages into view.
   const [expanded, setExpanded] = useState(() => running || Boolean(live));
 
   useEffect(() => {
     if (live || running) setExpanded(true);
-    else if (dimmed) setExpanded(false);
-  }, [live, running, dimmed]);
+  }, [live, running]);
 
   useEffect(() => {
     if (!running) return;
@@ -406,6 +436,7 @@ function ToolExecCard({
     <div
       className={`ai-engineer-exec-card${expanded ? " is-expanded" : " is-collapsed"}${hovered ? " is-hovered" : ""}${live || running ? " is-live" : ""}${dimmed ? " is-dimmed" : ""}`}
       data-ai-exec="1"
+      data-chat-node-id={line.id}
       data-ai-exec-status={line.status ?? "idle"}
       data-ai-exec-live={liveStatus}
       data-ai-exec-current={live || running ? "1" : undefined}
@@ -450,6 +481,23 @@ function ToolExecCard({
         <span className="ai-engineer-exec-title" title={title}>
           {title}
         </span>
+        {approved ? (
+          <span
+            className="ai-engineer-exec-approved"
+            data-testid="ai-engineer-exec-approved"
+          >
+            {t("aiEngineer.approved")}
+          </span>
+        ) : null}
+        {risk ? (
+          <span
+            className="ai-engineer-exec-risk"
+            title={risk}
+            data-testid="ai-engineer-exec-risk"
+          >
+            {t(riskLabelKey(risk))}
+          </span>
+        ) : null}
         {!running && statusChipLabel ? (
           <span
             className={`ai-engineer-exec-status is-${liveStatus}`}
@@ -478,14 +526,44 @@ function ToolExecCard({
       {expanded ? (
         <div className="ai-engineer-exec-body">
           {displayCommand ? (
-            <div className="ai-engineer-exec-command">
-              <span className="ai-engineer-exec-prompt" aria-hidden>
-                $
-              </span>
-              <code className="ai-engineer-exec-command-code">
-                {highlightShell(displayCommand)}
-              </code>
-            </div>
+            shouldCollapseExecCommand(displayCommand, {
+              running,
+              live,
+            }) ? (
+              <details
+                className="ai-engineer-exec-command is-collapsible"
+                data-testid="ai-engineer-exec-command-collapsed"
+              >
+                <summary className="ai-engineer-exec-command-summary">
+                  <span className="ai-engineer-exec-prompt" aria-hidden>
+                    $
+                  </span>
+                  <code className="ai-engineer-exec-command-code">
+                    {displayCommand.split("\n")[0].slice(0, 96)}
+                    {displayCommand.length > 96 || displayCommand.includes("\n")
+                      ? " …"
+                      : ""}
+                  </code>
+                </summary>
+                <div className="ai-engineer-exec-command">
+                  <span className="ai-engineer-exec-prompt" aria-hidden>
+                    $
+                  </span>
+                  <code className="ai-engineer-exec-command-code">
+                    {highlightShell(displayCommand)}
+                  </code>
+                </div>
+              </details>
+            ) : (
+              <div className="ai-engineer-exec-command">
+                <span className="ai-engineer-exec-prompt" aria-hidden>
+                  $
+                </span>
+                <code className="ai-engineer-exec-command-code">
+                  {highlightShell(displayCommand)}
+                </code>
+              </div>
+            )
           ) : null}
           {hasOutput ? (
             <pre ref={outputRef} className="ai-engineer-exec-output">
@@ -593,9 +671,17 @@ function ChatCopyButton({
   );
 }
 
-export function AiEngineerPanel({ sessionId, serverId }: Props) {
+export function AiEngineerPanel({
+  sessionId,
+  serverId,
+  surfaceActive = true,
+}: Props) {
   const { t } = useTranslation("tools");
-  const open = useAiEngineerStore((s) => s.open);
+  const storeOpen = useAiEngineerStore((s) => s.open);
+  const liveSessionId = useAiEngineerStore((s) => s.sessionId);
+  // Per-host fiber: only the active host's panel is interactive/visible.
+  const open = surfaceActive && storeOpen && liveSessionId === sessionId;
+  const panelScope = panelFiberChatScopeKey(sessionId, serverId);
   const width = useAiEngineerStore((s) => s.width);
   const setWidth = useAiEngineerStore((s) => s.setWidth);
   const ready = useAiEngineerStore((s) => s.ready);
@@ -610,7 +696,15 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const modelPhase = useAiEngineerStore((s) => s.modelPhase);
   const input = useAiEngineerStore((s) => s.input);
   const setInput = useAiEngineerStore((s) => s.setInput);
-  const messages = useAiEngineerStore((s) => s.messages);
+  // Isolate transcript per host: parked fibers read threadsByScope, not live messages.
+  // Stable empty fallback — a fresh [] each selector call triggers React #185.
+  const messages = useAiEngineerStore((s) => {
+    if (s.chatScope === panelScope) return s.messages;
+    const bundle = s.threadsByScope[panelScope];
+    if (!bundle) return EMPTY_CHAT_MESSAGES;
+    const thread = bundle.threads.find((t) => t.id === bundle.activeThreadId);
+    return thread?.messages ?? EMPTY_CHAT_MESSAGES;
+  });
   const sendMessage = useAiEngineerStore((s) => s.sendMessage);
   const stopActiveRun = useAiEngineerStore((s) => s.stopActiveRun);
   const flushMidRunContext = useAiEngineerStore((s) => s.flushMidRunContext);
@@ -648,11 +742,25 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const messagesInnerRef = useRef<HTMLDivElement>(null);
+  /** Follow the stream only while the user is already near the bottom. */
+  const stickToBottomRef = useRef(true);
+  /** Ignore scroll events caused by our own programmatic pins. */
+  const ignoreScrollUntilRef = useRef(0);
+  /** After open / host restore: keep forcing stick through layout + hydrate noise. */
+  const openFollowUntilRef = useRef(0);
+  /** After composer chrome click: fight async WKWebView scroll yanks. */
+  const chromeLockUntilRef = useRef(0);
+  const chromeLockTopRef = useRef(0);
+  const chromeLockCancelRef = useRef<(() => void) | null>(null);
+  const busyFollowRef = useRef(false);
+  /** Near-bottom intent remembered BEFORE maximize can yank scrollTop. */
+  const rememberedNearBottomRef = useRef(true);
+  const freezeScrollTopRef = useRef(0);
   const [confirmDraft, setConfirmDraft] = useState("");
   const [askDraft, setAskDraft] = useState("");
   const [rememberRead, setRememberRead] = useState(false);
   const [approvePermanently, setApprovePermanently] = useState(false);
-  const [showApprovalAdvanced, setShowApprovalAdvanced] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
@@ -929,9 +1037,36 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
   const activeProfileLabel = formatActiveAiProfileLabel(settings);
 
   useEffect(() => {
+    if (storeOpen && liveSessionId === sessionId) {
+      rememberAiFiber(sessionId);
+    }
+  }, [storeOpen, liveSessionId, sessionId]);
+
+  useEffect(() => {
     if (!open) return;
     if (engineerMode === "k8s" && clusterId) {
+      const live = useAiEngineerStore.getState();
+      // Same cluster already bound — skip re-entry (avoids hydrate write churn).
+      if (
+        live.clusterId === clusterId &&
+        live.sessionId === sessionId &&
+        live.chatScope === panelScope &&
+        live.engineerMode === "k8s"
+      ) {
+        return;
+      }
       bindK8sContext(clusterId, clusterName ?? undefined, clusterTarget);
+      return;
+    }
+    // Soft-hide restore / warm reopen: already bound to this host — do not
+    // re-enter bindContext (avoids switch-abort races and disk hydrate flash).
+    const live = useAiEngineerStore.getState();
+    if (
+      live.sessionId === sessionId &&
+      live.chatScope === panelScope &&
+      (live.serverId ?? null) === (serverId ?? null) &&
+      live.engineerMode === "linux"
+    ) {
       return;
     }
     bindContext(sessionId, serverId);
@@ -939,6 +1074,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
     open,
     sessionId,
     serverId,
+    panelScope,
     engineerMode,
     clusterId,
     clusterName,
@@ -1026,6 +1162,8 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
       setModelMenuPos(null);
       return;
     }
+    // Menu portal/layout can yank transcript scroll after the click handler.
+    beginComposerChromeScrollLock();
     const MENU_WIDTH = 248;
     const MENU_MARGIN = 8;
     const place = () => {
@@ -1044,6 +1182,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
         window.innerWidth - MENU_WIDTH - MENU_MARGIN,
       );
       setModelMenuPos({ top, left });
+      beginComposerChromeScrollLock();
     };
     place();
     requestAnimationFrame(place);
@@ -1056,7 +1195,6 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
       setConfirmDraft("");
       setRememberRead(false);
       setApprovePermanently(false);
-      setShowApprovalAdvanced(false);
     }
   }, [pendingApproval?.approvalId]);
 
@@ -1106,54 +1244,329 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
     }
   };
 
-  // Pin to latest message on open / history restore (before paint when possible).
-  useLayoutEffect(() => {
-    if (!open || findOpen) return;
+  const pinChatToBottom = () => {
     const el = messagesRef.current;
     if (!el) return;
-    scrollMessagesToEnd(el);
-  }, [open, messages.length, ready, activeThreadId, findOpen, busy, modelPhase]);
+    ignoreScrollUntilRef.current = Date.now() + 250;
+    scrollChatToBottom(el);
+    rememberedNearBottomRef.current = true;
+  };
 
-  useEffect(() => {
-    if (!open || findOpen) return;
+  /** Snapshot + rAF lock so model/security menus cannot yank transcript scroll. */
+  const beginComposerChromeScrollLock = () => {
     const el = messagesRef.current;
     if (!el) return;
-
-    let cancelled = false;
-    const pin = () => {
-      if (!cancelled) scrollMessagesToEnd(el);
+    const alreadyLocked = Date.now() < chromeLockUntilRef.current;
+    if (!alreadyLocked) {
+      const near = isChatNearBottom(el);
+      if (near) stickToBottomRef.current = true;
+      chromeLockTopRef.current = near
+        ? Math.max(0, el.scrollHeight - el.clientHeight)
+        : el.scrollTop;
+    }
+    chromeLockUntilRef.current = Date.now() + COMPOSER_CHROME_SCROLL_LOCK_MS;
+    ignoreScrollUntilRef.current = Math.max(
+      ignoreScrollUntilRef.current,
+      chromeLockUntilRef.current,
+    );
+    const restore = () => {
+      const scroller = messagesRef.current;
+      if (!scroller) return;
+      if (stickToBottomRef.current) {
+        scrollChatToBottom(scroller);
+        chromeLockTopRef.current = scroller.scrollTop;
+        return;
+      }
+      if (Math.abs(scroller.scrollTop - chromeLockTopRef.current) > 1) {
+        scroller.scrollTop = chromeLockTopRef.current;
+      }
     };
-    pin();
-    const raf = window.requestAnimationFrame(pin);
-    // Brief ResizeObserver: markdown height settles after first paint; don't keep
-    // pinning forever or it fights manual scroll-up.
-    const ro = new ResizeObserver(pin);
-    ro.observe(el);
-    const stopRo = window.setTimeout(() => ro.disconnect(), 400);
-    const t1 = window.setTimeout(pin, 50);
-    const t2 = window.setTimeout(pin, 250);
+    restore();
+    chromeLockCancelRef.current?.();
+    chromeLockCancelRef.current = scheduleComposerChromeScrollLock({
+      isActive: () => Date.now() < chromeLockUntilRef.current,
+      restore,
+    }).cancel;
+  };
+
+  const runWithComposerChromeScrollGuard = (action: () => void) => {
+    beginComposerChromeScrollLock();
+    runPreservingChatScroll(messagesRef.current, action);
+    // Extend the same lock (do not re-snapshot — React/menu may have yanked).
+    beginComposerChromeScrollLock();
+  };
+
+  // Open / ready / thread: force stick and keep pinning until layout settles.
+  // Parked fibers must NOT keep mid scrollTop — that is the host-switch mid bug.
+  useLayoutEffect(() => {
+    if (!shouldForceStickOnChatOpen({ open, findOpen, ready })) return;
+    stickToBottomRef.current = true;
+    openFollowUntilRef.current = Date.now() + OPEN_CHAT_FOLLOW_MS;
+    const handle = scheduleOpenChatPin({
+      pin: pinChatToBottom,
+      isNearBottom: () => {
+        const scroller = messagesRef.current;
+        return scroller ? isChatNearBottom(scroller) : false;
+      },
+      isGeometryReady: () => {
+        const scroller = messagesRef.current;
+        return scroller ? isChatScrollGeometryReady(scroller) : false;
+      },
+      maxFrames: 48,
+    });
+    // Late markdown/hydrate after first paint + mid-window catch-up.
+    const t1 = window.setTimeout(() => {
+      if (stickToBottomRef.current) pinChatToBottom();
+    }, 120);
+    const t2 = window.setTimeout(() => {
+      if (Date.now() <= openFollowUntilRef.current && stickToBottomRef.current) {
+        pinChatToBottom();
+      }
+    }, 600);
+    const t3 = window.setTimeout(() => {
+      if (Date.now() <= openFollowUntilRef.current && stickToBottomRef.current) {
+        pinChatToBottom();
+      }
+    }, 1400);
     return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-      window.clearTimeout(stopRo);
+      handle.cancel();
       window.clearTimeout(t1);
       window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
-  }, [
-    open,
-    findOpen,
-    messages.length,
-    messages[messages.length - 1]?.kind === "assistant"
-      ? (messages[messages.length - 1] as { content: string }).content.length
-      : 0,
-    busy,
-    modelPhase,
-    pendingAsk,
-    pendingApproval,
-    ready,
-    activeThreadId,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, findOpen, ready, activeThreadId, sessionId]);
+
+  // Soft-hide / host switch: pin parked fiber to bottom so reopen never
+  // inherits a mid scrollTop (visibility/opacity unpark cannot restore mid).
+  useLayoutEffect(() => {
+    if (!shouldParkChatScrollerAtBottom({ open, ready })) return;
+    stickToBottomRef.current = true;
+    pinChatToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ready, sessionId, messages.length]);
+
+  // Message list grew during open-follow (disk hydrate / resume marker) → re-pin.
+  useLayoutEffect(() => {
+    if (!open || !ready) return;
+    if (Date.now() > openFollowUntilRef.current) return;
+    stickToBottomRef.current = true;
+    pinChatToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, open, ready]);
+
+  // Stream tokens / tool chunks: pin in useLayoutEffect (before paint).
+  // ResizeObserver alone runs after paint → one frame of 往上跳 per token.
+  const streamPinKey = useMemo(() => streamFollowPinKey(messages), [messages]);
+  useLayoutEffect(() => {
+    if (!open || !ready) return;
+    if (
+      !shouldPinChatOnStreamUpdate({
+        stickToBottom: stickToBottomRef.current,
+        withinOpenFollowWindow: Date.now() < openFollowUntilRef.current,
+      })
+    ) {
+      return;
+    }
+    // Chrome lock holding a mid snapshot must not fight stream follow.
+    if (
+      Date.now() < chromeLockUntilRef.current &&
+      !stickToBottomRef.current
+    ) {
+      return;
+    }
+    pinChatToBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamPinKey, open, ready]);
+
+  // Stick: wheel/touch clear immediately; scroll updates proximity outside pin ignore.
+  // While busy+stick, ignore proximity rewrites (late markdown must not kill follow).
+  busyFollowRef.current = busy;
+  useEffect(() => {
+    if (!open || !ready) return;
+    const el = messagesRef.current;
+    if (!el) return;
+    const clearStickFromIntent = () => {
+      if (!shouldClearStickOnUserIntent()) return;
+      openFollowUntilRef.current = 0;
+      chromeLockUntilRef.current = 0;
+      chromeLockCancelRef.current?.();
+      chromeLockCancelRef.current = null;
+      stickToBottomRef.current = false;
+      rememberedNearBottomRef.current = false;
+      freezeScrollTopRef.current = el.scrollTop;
+    };
+    const onScroll = () => {
+      if (
+        shouldHoldChatScrollForComposerChrome({
+          withinChromeScrollLock: Date.now() < chromeLockUntilRef.current,
+        })
+      ) {
+        if (stickToBottomRef.current) {
+          scrollChatToBottom(el);
+        } else if (Math.abs(el.scrollTop - chromeLockTopRef.current) > 1) {
+          el.scrollTop = chromeLockTopRef.current;
+        }
+        return;
+      }
+      if (
+        shouldHoldStickWhileBusyFollow({
+          busy: busyFollowRef.current,
+          stickToBottom: stickToBottomRef.current,
+        })
+      ) {
+        rememberedNearBottomRef.current = true;
+        return;
+      }
+      if (
+        !shouldUpdateStickFromScrollEvent({
+          withinProgrammaticPinIgnore:
+            Date.now() < ignoreScrollUntilRef.current,
+          withinOpenFollowWindow: Date.now() < openFollowUntilRef.current,
+        })
+      ) {
+        return;
+      }
+      const near = isChatNearBottom(el);
+      stickToBottomRef.current = near;
+      // Maximize/WK may yank scrollTop before resize fires — never clear
+      // rememberedNearBottom from scroll proximity alone (wheel/touch does).
+      if (near) {
+        rememberedNearBottomRef.current = true;
+      } else {
+        freezeScrollTopRef.current = el.scrollTop;
+      }
+    };
+    el.addEventListener("wheel", clearStickFromIntent, { passive: true });
+    el.addEventListener("touchmove", clearStickFromIntent, { passive: true });
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", clearStickFromIntent);
+      el.removeEventListener("touchmove", clearStickFromIntent);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [open, ready, sessionId]);
+
+  // Content height via ResizeObserver (markdown / tool expand).
+  // !stick → never write scrollTop (except during open-follow window).
+  useEffect(() => {
+    if (!open || !ready) return;
+    const el = messagesRef.current;
+    const inner = messagesInnerRef.current;
+    if (!el || !inner || typeof ResizeObserver === "undefined") return;
+    let lastHeight = inner.scrollHeight;
+    const ro = new ResizeObserver(() => {
+      const nextHeight = inner.scrollHeight;
+      const follow =
+        stickToBottomRef.current || Date.now() < openFollowUntilRef.current;
+      if (follow) stickToBottomRef.current = true;
+      const decision = scrollTopAfterContentHeightChange({
+        stickToBottom: follow,
+        previousScrollTop: el.scrollTop,
+        previousHeight: lastHeight,
+        nextHeight,
+        clientHeight: el.clientHeight,
+      });
+      lastHeight = nextHeight;
+      if (decision.action === "pin") {
+        pinChatToBottom();
+      }
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ready, sessionId]);
+
+  // Viewport / maximize: pin if following (stick OR remembered near-bottom).
+  // Never re-read "near bottom" after WK may already have yanked scrollTop.
+  // ResizeObserver alone is unreliable on Tauri maximize — also listen window + onResized.
+  useEffect(() => {
+    if (!open || !ready) return;
+    const el = messagesRef.current;
+    if (!el) return;
+    let lastClientHeight = el.clientHeight;
+    let pinTimers: number[] = [];
+
+    const applyViewportResize = (force: boolean) => {
+      const scroller = messagesRef.current;
+      if (!scroller) return;
+      // Ignore scroll proximity rewrites while we fight the native yank.
+      ignoreScrollUntilRef.current = Date.now() + 400;
+      const nextClientHeight = scroller.clientHeight;
+      const follow = shouldFollowChatOnViewportResize({
+        stickToBottom: stickToBottomRef.current,
+        rememberedNearBottom: rememberedNearBottomRef.current,
+      });
+      const decision = scrollTopAfterViewportResize({
+        stickToBottom: follow,
+        wasNearBottom: follow,
+        previousScrollTop: follow
+          ? scroller.scrollTop
+          : freezeScrollTopRef.current,
+        previousClientHeight: lastClientHeight,
+        nextClientHeight,
+        scrollHeight: scroller.scrollHeight,
+        force,
+      });
+      lastClientHeight = nextClientHeight;
+      if (decision.action === "pin") {
+        stickToBottomRef.current = true;
+        rememberedNearBottomRef.current = true;
+        pinChatToBottom();
+        // Fight async WKWebView scroll restore after native maximize.
+        requestAnimationFrame(() => {
+          if (stickToBottomRef.current) pinChatToBottom();
+          requestAnimationFrame(() => {
+            if (stickToBottomRef.current) pinChatToBottom();
+          });
+        });
+        for (const ms of [50, 160, 320]) {
+          pinTimers.push(
+            window.setTimeout(() => {
+              if (stickToBottomRef.current) pinChatToBottom();
+            }, ms),
+          );
+        }
+        return;
+      }
+      if (decision.action === "freeze") {
+        if (Math.abs(scroller.scrollTop - decision.scrollTop) > 1) {
+          scroller.scrollTop = decision.scrollTop;
+        }
+      }
+    };
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => applyViewportResize(false));
+      ro.observe(el);
+      const panel = el.closest(".ai-engineer-panel");
+      if (panel) ro.observe(panel);
+    }
+
+    const onWindowResize = () => applyViewportResize(true);
+    window.addEventListener("resize", onWindowResize);
+
+    let unlistenResized: (() => void) | undefined;
+    void (async () => {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        unlistenResized = await getCurrentWindow().onResized(() => {
+          applyViewportResize(true);
+        });
+      } catch {
+        // browser E2E / non-Tauri
+      }
+    })();
+
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", onWindowResize);
+      unlistenResized?.();
+      for (const t of pinTimers) window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ready, sessionId]);
 
   const busyPhase = useMemo(
     () =>
@@ -1226,6 +1639,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
 
   const submit = () => {
     if (busy) return;
+    stickToBottomRef.current = true;
     void sendMessage({
       sessionId,
       serverId,
@@ -1254,19 +1668,23 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
       ? t("aiEngineer.inputPlaceholderK8s")
       : t("aiEngineer.inputPlaceholder");
 
-  if (!open) return null;
-
+  // Keep the transcript DOM mounted while soft-hidden (host-tab switch sets
+  // open=false). Returning null remounts markdown and makes chat text flash.
   return (
     <>
-      <WorkspacePanelBackdrop
-        panelId="aiEngineer"
-        dismissible={!busy && !settingsOpen}
-      />
+      {open ? (
+        <WorkspacePanelBackdrop
+          panelId="aiEngineer"
+          dismissible={!busy && !settingsOpen}
+        />
+      ) : null}
       <aside
         ref={panelRef}
-        className="ai-engineer-panel find-panel"
+        className={`ai-engineer-panel find-panel${open ? "" : " ai-engineer-panel-parked"}`}
         style={{ width }}
         aria-label={panelTitle}
+        aria-hidden={!open}
+        inert={!open ? true : undefined}
       >
         <div
           className="find-panel-resizer"
@@ -1826,7 +2244,15 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
           ) : null}
           {ready ? (
             <div className="ai-engineer-chat">
-              <div className="ai-engineer-messages" ref={messagesRef}>
+              <div
+                className="ai-engineer-messages"
+                ref={messagesRef}
+                tabIndex={-1}
+              >
+                <div
+                  className="ai-engineer-messages-inner"
+                  ref={messagesInnerRef}
+                >
                 {activePlan && activePlan.length > 0 ? (
                   <div className="ai-engineer-plan" aria-label={t("aiEngineer.planTitle")}>
                     <div className="ai-engineer-plan-title">{t("aiEngineer.planTitle")}</div>
@@ -1939,6 +2365,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                       <div
                         key={rowKey}
                         className={`ai-engineer-notice ai-engineer-notice-${line.variant}`}
+                        data-chat-node-id={line.id}
                         data-testid={
                           line.variant === "harness"
                             ? "ai-engineer-harness-notice"
@@ -2010,6 +2437,7 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                   if (line.kind === "tool") {
                     const key = line.callId || line.id;
                     const live = hasLiveTool && key === liveToolKey;
+                    const badge = approvalBadgeForTool(line, messages);
                     return (
                       <ToolExecCard
                         key={rowKey}
@@ -2017,6 +2445,8 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                         t={t}
                         live={live}
                         dimmed={hasLiveTool && !live}
+                        risk={badge.risk}
+                        approved={badge.approved}
                       />
                     );
                   }
@@ -2091,6 +2521,11 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                       !line.decision;
                     const canApprove =
                       isActive && (!dual || confirmDraft.trim() === phrase);
+                    // After approve, the exec card owns the command + risk —
+                    // do not keep a second "批准·已批准" block above it.
+                    if (shouldOmitResolvedApprovalCard(line, messages)) {
+                      return null;
+                    }
                     return (
                       <div
                         key={rowKey}
@@ -2130,10 +2565,13 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                             <code>{line.command}</code>
                           </pre>
                         </section>
-                        {line.execCommand && line.execCommand !== line.command ? (
+                        {line.execCommand &&
+                        line.execCommand !== line.command ? (
                           <p className="ai-engineer-approval-reason">
                             {t("aiEngineer.execWrapped")}
-                            <code className="ai-engineer-tool-detail">{line.execCommand}</code>
+                            <code className="ai-engineer-tool-detail">
+                              {line.execCommand}
+                            </code>
                           </p>
                         ) : null}
                         <section className="ai-engineer-approval-section ai-engineer-approval-section-meta">
@@ -2185,33 +2623,24 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                               </label>
                             ) : null}
                             {isActive && !dual && threadSecurityMode !== "production" ? (
-                              <div className="ai-engineer-approval-advanced">
-                                <button
-                                  type="button"
-                                  className="ai-engineer-approval-advanced-toggle"
-                                  data-testid="ai-engineer-approval-advanced"
-                                  onClick={() => setShowApprovalAdvanced((v) => !v)}
-                                >
-                                  {t("aiEngineer.approvalAdvanced")}
-                                </button>
-                                {showApprovalAdvanced ? (
-                                  <label className="ai-engineer-remember-read">
-                                    <span className="ai-engineer-check">
-                                      <input
-                                        type="checkbox"
-                                        checked={approvePermanently}
-                                        onChange={(e) =>
-                                          setApprovePermanently(e.target.checked)
-                                        }
-                                      />
-                                      <span className="ai-engineer-check-box" aria-hidden />
-                                    </span>
-                                    <span className="ai-engineer-remember-read-text">
-                                      {t("aiEngineer.approvePermanently")}
-                                    </span>
-                                  </label>
-                                ) : null}
-                              </div>
+                              <label
+                                className="ai-engineer-remember-read"
+                                data-testid="ai-engineer-approval-permanent"
+                              >
+                                <span className="ai-engineer-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={approvePermanently}
+                                    onChange={(e) =>
+                                      setApprovePermanently(e.target.checked)
+                                    }
+                                  />
+                                  <span className="ai-engineer-check-box" aria-hidden />
+                                </span>
+                                <span className="ai-engineer-remember-read-text">
+                                  {t("aiEngineer.approvePermanently")}
+                                </span>
+                              </label>
                             ) : null}
                             <div className="ai-engineer-approval-actions">
                             <button
@@ -2230,7 +2659,6 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                                 setConfirmDraft("");
                                 setRememberRead(false);
                                 setApprovePermanently(false);
-                                setShowApprovalAdvanced(false);
                               }}
                             >
                               {t("aiEngineer.approveOnce")}
@@ -2252,7 +2680,6 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                                   setConfirmDraft("");
                                   setRememberRead(false);
                                   setApprovePermanently(false);
-                                  setShowApprovalAdvanced(false);
                                 }}
                               >
                                 {t("aiEngineer.approveSession")}
@@ -2268,7 +2695,6 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                                 setConfirmDraft("");
                                 setRememberRead(false);
                                 setApprovePermanently(false);
-                                setShowApprovalAdvanced(false);
                               }}
                             >
                               {t("aiEngineer.reject")}
@@ -2403,6 +2829,12 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                     {busyLabel}
                   </div>
                 ) : null}
+                <div
+                  className="ai-engineer-scroll-anchor"
+                  data-scroll-fix={AI_CHAT_SCROLL_FIX_ID}
+                  aria-hidden
+                />
+                </div>
               </div>
               <div className="ai-engineer-composer-stack">
               <AiEngineerRunTraceBar spans={runTraceSpans} busy={busy} />
@@ -2521,17 +2953,30 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                         aria-expanded={modelOpen}
                         data-testid="ai-engineer-model-picker"
                         disabled={!ready}
-                        onClick={() => {
-                          if (!modelConfigured) {
-                            openSettings();
-                            return;
+                        onPointerDown={(e) => {
+                          if (shouldPreventComposerChromeFocusScroll()) {
+                            e.preventDefault();
                           }
-                          setModelOpen((v) => !v);
-                          setHistoryOpen(false);
-                          setSecurityOpen(false);
-                          setInteractionOpen(false);
-                          setAttachMenuOpen(false);
-                          setOutlineOpen(false);
+                          beginComposerChromeScrollLock();
+                        }}
+                        onMouseDown={(e) => {
+                          if (shouldPreventComposerChromeFocusScroll()) {
+                            e.preventDefault();
+                          }
+                        }}
+                        onClick={() => {
+                          runWithComposerChromeScrollGuard(() => {
+                            if (!modelConfigured) {
+                              openSettings();
+                              return;
+                            }
+                            setModelOpen((v) => !v);
+                            setHistoryOpen(false);
+                            setSecurityOpen(false);
+                            setInteractionOpen(false);
+                            setAttachMenuOpen(false);
+                            setOutlineOpen(false);
+                          });
                         }}
                       >
                         {modelConfigured ? (
@@ -2583,11 +3028,18 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                                         : ""
                                     }`}
                                     role="menuitem"
+                                    onMouseDown={(e) => {
+                                      if (shouldPreventComposerChromeFocusScroll()) {
+                                        e.preventDefault();
+                                      }
+                                    }}
                                     onClick={() => {
-                                      void saveSettings({
-                                        active_profile_id: p.id,
+                                      runWithComposerChromeScrollGuard(() => {
+                                        void saveSettings({
+                                          active_profile_id: p.id,
+                                        });
+                                        setModelOpen(false);
                                       });
-                                      setModelOpen(false);
                                     }}
                                   >
                                     <span className="ai-engineer-model-name">
@@ -2604,9 +3056,16 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                                 className="ai-engineer-menu-item ai-engineer-menu-manage"
                                 role="menuitem"
                                 data-testid="ai-engineer-manage-models"
+                                onMouseDown={(e) => {
+                                  if (shouldPreventComposerChromeFocusScroll()) {
+                                    e.preventDefault();
+                                  }
+                                }}
                                 onClick={() => {
-                                  setModelOpen(false);
-                                  openSettings();
+                                  runWithComposerChromeScrollGuard(() => {
+                                    setModelOpen(false);
+                                    openSettings();
+                                  });
                                 }}
                               >
                                 {t("aiEngineer.manageModels")}
@@ -2645,12 +3104,25 @@ export function AiEngineerPanel({ sessionId, serverId }: Props) {
                         aria-label={t("aiEngineer.attachMenu")}
                         aria-expanded={attachMenuOpen}
                         disabled={!ready || !modelConfigured}
+                        onPointerDown={(e) => {
+                          if (shouldPreventComposerChromeFocusScroll()) {
+                            e.preventDefault();
+                          }
+                          beginComposerChromeScrollLock();
+                        }}
+                        onMouseDown={(e) => {
+                          if (shouldPreventComposerChromeFocusScroll()) {
+                            e.preventDefault();
+                          }
+                        }}
                         onClick={() => {
-                          setAttachMenuOpen((v) => !v);
-                          setModelOpen(false);
-                          setSecurityOpen(false);
-                          setInteractionOpen(false);
-                          setHistoryOpen(false);
+                          runWithComposerChromeScrollGuard(() => {
+                            setAttachMenuOpen((v) => !v);
+                            setModelOpen(false);
+                            setSecurityOpen(false);
+                            setInteractionOpen(false);
+                            setHistoryOpen(false);
+                          });
                         }}
                       >
                         <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>

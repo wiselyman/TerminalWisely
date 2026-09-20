@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from typing import Any
@@ -110,9 +111,214 @@ def _cjk_count(text: str) -> int:
 _CMD_LINE_RE = re.compile(
     r"(?:^|\n)\s*(?:sudo\s+)?(?:lscpu|free|df|ps|cat|head|tail|uname|lsblk|"
     r"hostnamectl|uptime|whoami|id|ss|netstat|systemctl|journalctl|dmesg|"
-    r"apt(?:-get)?|dpkg|rpm|yum|dnf|which|type)\b",
+    r"apt(?:-get)?|dpkg|rpm|yum|dnf|which|type|find|lsof|du|ncdu)\b",
     re.IGNORECASE,
 )
+
+_SHELL_PROBE_LINE_RE = re.compile(
+    r"(?m)^\s*(?:sudo\s+)?(?:find|lsof|du|ncdu|journalctl)\b",
+    re.IGNORECASE,
+)
+_SHEBANG_RE = re.compile(r"(?m)^#!\s*/(?:usr/)?bin/(?:env\s+)?(?:ba)?sh\b")
+
+
+def looks_like_shell_script_dump(text: str | None) -> bool:
+    """True when the model pasted an investigation script instead of calling tools."""
+    raw = (text or "").strip()
+    if len(raw) < 80:
+        return False
+    if _SHEBANG_RE.search(raw):
+        return True
+    probes = len(_SHELL_PROBE_LINE_RE.findall(raw))
+    lines = raw.count("\n") + 1
+    # Dense pastes often omit blank/comment lines (5–6 lines, ≥3 find/lsof/du).
+    # Do not require lines≥8 or we mis-route into truncated_answer + tool_choice=none.
+    if probes >= 3 and len(raw) >= 120:
+        return True
+    if probes >= 2 and lines >= 8 and len(raw) >= 200:
+        return True
+    if "```" in raw and probes >= 2 and lines >= 6:
+        return True
+    return False
+
+
+def is_command_dump_echo_loop(text: str | None) -> bool:
+    """True when the same substantial probe script is pasted ≥2 times.
+
+    Distinct from a short command *preamble* before terminal_exec (those stay
+    allowed via ``is_repetition_loop`` exemptions).
+    """
+    raw = (text or "").strip()
+    if len(raw) < 360:
+        return False
+    if not looks_like_shell_script_dump(raw):
+        return False
+    # Prefer paragraph identity (full script blocks separated by blank lines).
+    blocks = [p.strip() for p in re.split(r"\n{2,}", raw) if len(p.strip()) >= 120]
+    if len(blocks) >= 2:
+        top_n = Counter(blocks).most_common(1)[0][1]
+        if top_n >= 2:
+            return True
+    # Sliding window on the first probe-heavy chunk.
+    for size in (200, 280):
+        if len(raw) < size * 2:
+            continue
+        window = raw[:size]
+        if raw.count(window) >= 2:
+            return True
+    return False
+
+
+_TOOL_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{1,63}$")
+_FENCED_JSON_RE = re.compile(
+    r"```(?:json|tool_?call|tool)?\s*\n?(.*?)```",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _coerce_tool_call_dict(obj: Any) -> dict[str, Any] | None:
+    """Normalize one JSON object into an OpenAI-style tool_call, or None."""
+    if not isinstance(obj, dict):
+        return None
+    name = obj.get("name") or obj.get("tool")
+    fn = obj.get("function")
+    if not name and isinstance(fn, dict):
+        name = fn.get("name")
+    # Bare *arguments* dump (common local-model failure):
+    #   {"command":"…","intent":"…","timeout_seconds":60}
+    # with no tool name wrapper — map by schema shape, not by task.
+    if not (isinstance(name, str) and _TOOL_NAME_RE.match(name.strip())):
+        cmd = obj.get("command")
+        if isinstance(cmd, str) and cmd.strip():
+            from app.tools.schema import TOOL_K8S_EXEC, TOOL_TERMINAL_EXEC
+
+            pod = obj.get("pod")
+            if isinstance(pod, str) and pod.strip():
+                name = TOOL_K8S_EXEC
+            else:
+                name = TOOL_TERMINAL_EXEC
+            args: Any = {
+                k: v
+                for k, v in obj.items()
+                if k not in {"name", "tool", "function", "id", "type", "index"}
+            }
+            return {
+                "id": str(obj.get("id") or "").strip() or None,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": json.dumps(args, ensure_ascii=False),
+                },
+            }
+        return None
+    name = name.strip()
+    args = obj.get("arguments")
+    if args is None and isinstance(fn, dict):
+        args = fn.get("arguments")
+    if args is None and isinstance(obj.get("parameters"), (dict, str)):
+        args = obj.get("parameters")
+    if args is None:
+        # Bare {"name":"terminal_exec","command":"..."} style.
+        rest = {
+            k: v
+            for k, v in obj.items()
+            if k
+            not in {
+                "name",
+                "tool",
+                "function",
+                "id",
+                "type",
+                "index",
+            }
+        }
+        args = rest if rest else {}
+    if isinstance(args, dict):
+        args_s = json.dumps(args, ensure_ascii=False)
+    elif isinstance(args, str):
+        args_s = args
+    else:
+        return None
+    return {
+        "id": str(obj.get("id") or "").strip() or None,
+        "type": "function",
+        "function": {"name": name, "arguments": args_s},
+    }
+
+
+def extract_tool_calls_from_content(text: str | None) -> list[dict[str, Any]]:
+    """Recover tool calls when the model pasted JSON instead of using tool_calls.
+
+    Local models often dump ``{"name":"terminal_exec","arguments":{...}}`` (with
+    or without a markdown fence) as *content*. That must become a real tool call
+    — never a truncated-answer continue (which locks ``tool_choice=none``).
+    """
+    raw = (text or "").strip()
+    if len(raw) < 16 or "{" not in raw:
+        return []
+    candidates: list[str] = []
+    for m in _FENCED_JSON_RE.finditer(raw):
+        blob = (m.group(1) or "").strip()
+        if blob:
+            candidates.append(blob)
+    # Whole text / first JSON object span.
+    candidates.append(raw)
+    brace = raw.find("{")
+    if brace > 0:
+        candidates.append(raw[brace:])
+
+    parsed_objs: list[Any] = []
+    for blob in candidates:
+        try:
+            parsed_objs.append(json.loads(blob))
+            break
+        except Exception:  # noqa: BLE001
+            # Try first balanced-ish object via greedy brace slice.
+            start = blob.find("{")
+            end = blob.rfind("}")
+            if start >= 0 and end > start:
+                try:
+                    parsed_objs.append(json.loads(blob[start : end + 1]))
+                    break
+                except Exception:  # noqa: BLE001
+                    continue
+
+    if not parsed_objs:
+        return []
+    obj = parsed_objs[0]
+    out: list[dict[str, Any]] = []
+    if isinstance(obj, dict) and isinstance(obj.get("tool_calls"), list):
+        for item in obj["tool_calls"]:
+            tc = _coerce_tool_call_dict(item)
+            if tc:
+                out.append(tc)
+        return out
+    if isinstance(obj, list):
+        for item in obj:
+            tc = _coerce_tool_call_dict(item)
+            if tc:
+                out.append(tc)
+        return out
+    tc = _coerce_tool_call_dict(obj)
+    if tc:
+        out.append(tc)
+    return out
+
+
+def looks_like_tool_call_json_dump(text: str | None) -> bool:
+    """True when content is (or starts as) a pasted tool-call JSON blob."""
+    if extract_tool_calls_from_content(text):
+        return True
+    raw = (text or "").strip()
+    if len(raw) < 20 or "{" not in raw:
+        return False
+    # Incomplete dump mid-stream: still must not enter truncated_answer continue.
+    lowered = raw.lower()
+    has_name = '"name"' in lowered or '"tool"' in lowered or '"function"' in lowered
+    has_args = '"arguments"' in lowered or '"parameters"' in lowered
+    # Bare terminal_exec args: {"command":"…","intent":"…"}
+    has_cmd_args = '"command"' in lowered and '"intent"' in lowered
+    return (has_name and has_args and raw.count("{") >= 1) or has_cmd_args
 
 
 def is_repetition_loop(text: str | None) -> bool:
@@ -357,7 +563,11 @@ def looks_like_truncated_answer(text: str | None) -> bool:
     if re.search(r"[\(\[\{（][^\)\]\}）\n]{0,40}$", raw):
         return True
     last = raw.splitlines()[-1].strip() if raw.splitlines() else raw
-    if last.endswith(("(", "（", "[", "{", ":", "：", ",", "，", "、", "`")):
+    # Closed markdown fences end with ``` — that is complete, not a cut.
+    # Only a lone dangling ` (inline code cut) counts as truncated.
+    if last.endswith(("(", "（", "[", "{", ":", "：", ",", "，", "、")):
+        return True
+    if last.endswith("`") and not last.rstrip().endswith("```"):
         return True
     # Incomplete markdown table (blank trailing cell / cut mid-row).
     if last and _looks_like_incomplete_md_table(raw, last):
@@ -471,8 +681,8 @@ def reasoning_starved_visible_reply(
         return True
     # Still room in the request budget, but visible text stops mid-clause.
     if max_tokens > 0 and completion < int(max_tokens * 0.95):
-        # Generic sentence closers only — no language keyword lists.
-        terminators = "。！？.!?…」』）)]}”’\""
+        # Sentence closers only — not )]} (parenthetical size/path cuts).
+        terminators = "。！？.!?…」』”’\"'"
         if visible[-1] not in terminators:
             return True
     return False
@@ -695,6 +905,7 @@ class StreamContentFilter:
         if len(self._raw) > 200 and (
             looks_like_idle_plan_dump(self._raw)
             or looks_like_response_echo_loop(self._raw)
+            or is_command_dump_echo_loop(self._raw)
             or (
                 is_repetition_loop(self._raw)
                 and (
@@ -762,6 +973,8 @@ class StreamContentFilter:
                 looks_like_idle_plan_dump(self._visible)
                 or looks_like_response_echo_loop(self._visible)
                 or looks_like_response_echo_loop(self._raw)
+                or is_command_dump_echo_loop(self._visible)
+                or is_command_dump_echo_loop(self._raw)
                 or (len(self._visible) > 280 and is_repetition_loop(self._visible))
             ):
                 self.loop_detected = True

@@ -16,7 +16,10 @@ import { K8sClusterStatusBar } from "./components/k8s/K8sClusterStatusBar";
 import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
 import { LocalFsTool } from "./components/LocalFsTool";
-import { LocalFsPanel } from "./components/LocalFsPanel";
+import { BrowserPanel } from "./components/browser/BrowserPanel";
+import { DesktopPanel } from "./components/desktop/DesktopPanel";
+import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
+import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
 import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
@@ -44,12 +47,19 @@ import {
 } from "./stores/sudoPromptStore";
 import { useSessionStore } from "./stores/sessionStore";
 import { useAiEngineerStore } from "./stores/aiEngineerStore";
-import { shouldShowAiEngineerPanel } from "./lib/aiEngineer/panelVisibility";
+import {
+  shouldKeepAiEngineerPanelMounted,
+  shouldShowAiEngineerPanel,
+} from "./lib/aiEngineer/panelVisibility";
+import { useAiFiberSessions } from "./lib/aiEngineer/useAiFiberSessions";
+import { markHostAiShell } from "./stores/hostWorkspaceMemory";
 import { useHostStatsStore } from "./stores/hostStatsStore";
 import { switchWorkspacePanel, switchToAiEngineerPanel } from "./stores/workspacePanelSwitch";
 import { useFindStore } from "./stores/findStore";
 import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useLocalFsStore } from "./stores/localFsStore";
+import { useBrowserStore } from "./stores/browserStore";
+import { useDesktopStore } from "./stores/desktopStore";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
 import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
@@ -295,7 +305,6 @@ function App() {
   const aiEngineerOpen = useAiEngineerStore((s) => s.open);
   const aiEngineerSessionId = useAiEngineerStore((s) => s.sessionId);
   const aiEngineerServerId = useAiEngineerStore((s) => s.serverId);
-  const aiEngineerReady = useAiEngineerStore((s) => s.ready);
   const engineerMode = useAiEngineerStore((s) => s.engineerMode);
   const sidebarView = useSidebarViewStore((s) => s.view);
   const setSidebarView = useSidebarViewStore((s) => s.setView);
@@ -310,29 +319,47 @@ function App() {
   /** K8s workbench only when not on shared Home. */
   const showK8sWorkbench = sidebarView === "k8s" && !homeOpen;
   const showHostsSession = sidebarView === "hosts" && !homeOpen;
-  const aiPanelSessionId =
-    engineerMode === "k8s" && aiEngineerOpen && aiEngineerSessionId
-      ? aiEngineerSessionId
-      : activeTabId ??
-        (aiEngineerOpen && !aiEngineerReady && aiEngineerSessionId
-          ? aiEngineerSessionId
-          : null);
+  const aiPanelSessionId = aiEngineerSessionId;
   const showAiEngineerPanel = shouldShowAiEngineerPanel({
     open: aiEngineerOpen,
     sessionId: aiPanelSessionId,
     sidebarView,
     hasSelectedCluster: selectedCluster != null,
+    activeTabId: sidebarView === "hosts" ? activeTabId : null,
   });
-  const localFsOpen = useLocalFsStore((s) => s.open);
-  const localFsTab = useLocalFsStore((s) => s.activeTab);
+  const aiFiberSessions = useAiFiberSessions();
+  const aiPanelsToMount = useMemo(() => {
+    const ids = new Set<string>(aiFiberSessions);
+    if (aiPanelSessionId) ids.add(aiPanelSessionId);
+    return [...ids];
+  }, [aiFiberSessions, aiPanelSessionId]);
+  // Soft-hide on host switch keeps the fiber tree warm (see AiEngineerPanel).
+  const keepAiPanelMounted =
+    aiPanelsToMount.length > 0 &&
+    (showAiEngineerPanel ||
+      shouldKeepAiEngineerPanelMounted({
+        sessionId: aiPanelSessionId,
+        show: showAiEngineerPanel,
+        sidebarView,
+        open: aiEngineerOpen,
+      }) ||
+      aiFiberSessions.length > 0);
+  const desktopOpen = useDesktopStore((s) => s.open);
+  const desktopFilesOpen = useDesktopStore((s) => s.apps.files.open);
+  const desktopFilesMinimized = useDesktopStore((s) => s.apps.files.minimized);
+  const desktopProcessesOpen = useDesktopStore((s) => s.apps.processes.open);
+  const desktopProcessesMinimized = useDesktopStore(
+    (s) => s.apps.processes.minimized,
+  );
+  const browserOpen = useBrowserStore((s) => s.open);
   const fetchProcesses = useTaskManagerStore((s) => s.fetchProcesses);
   const loadSessionCwd = useFindStore((s) => s.loadSessionCwd);
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
-  const workspacePanelWidth = useTaskManagerStore((s) => s.width);
+  const workspacePanelWidth = useDesktopStore((s) => s.width);
   const workspacePanelOpen =
     showAiEngineerPanel ||
-    (sidebarView === "hosts" && activeTabId != null && localFsOpen);
+    (sidebarView === "hosts" && activeTabId != null && desktopOpen);
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -384,6 +411,18 @@ function App() {
     if (!aiEngineerOpen) return;
     useAiEngineerStore.getState().close({ force: true });
   }, [sidebarView, selectedCluster, aiEngineerOpen]);
+
+  // Host tab changed while AI still bound to another session — soft-hide so
+  // the previous host's transcript cannot paint over the new terminal.
+  useEffect(() => {
+    if (sidebarView !== "hosts") return;
+    if (!activeTabId) return;
+    const ai = useAiEngineerStore.getState();
+    if (!ai.open || !ai.sessionId) return;
+    if (ai.sessionId === activeTabId) return;
+    markHostAiShell(ai.sessionId);
+    useAiEngineerStore.setState({ open: false });
+  }, [sidebarView, activeTabId]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -480,9 +519,15 @@ function App() {
   );
 
   useEffect(() => {
-    const taskTabOpen = localFsOpen && localFsTab === "taskManager";
-    if (!taskTabOpen || !activeTabId || !activeTab || activeTabDisconnected) {
-      if (activeTabDisconnected && taskTabOpen) {
+    const processesVisible =
+      desktopProcessesOpen && !desktopProcessesMinimized;
+    if (
+      !processesVisible ||
+      !activeTabId ||
+      !activeTab ||
+      activeTabDisconnected
+    ) {
+      if (activeTabDisconnected && processesVisible) {
         useTaskManagerStore.setState({
           loading: false,
           portsLoading: false,
@@ -514,11 +559,19 @@ function App() {
       window.clearInterval(basicTimer);
       window.clearInterval(portsTimer);
     };
-  }, [activeTab, activeTabDisconnected, activeTabId, fetchProcesses, localFsOpen, localFsTab]);
+  }, [
+    activeTab,
+    activeTabDisconnected,
+    activeTabId,
+    fetchProcesses,
+    desktopProcessesOpen,
+    desktopProcessesMinimized,
+  ]);
 
   useEffect(() => {
-    const findTabOpen = localFsOpen && localFsTab === "find";
-    if (!findTabOpen || !activeTabId) return;
+    const findVisible =
+      desktopFilesOpen && !desktopFilesMinimized;
+    if (!findVisible || !activeTabId) return;
 
     const { activeSessionId, activateSession } = useFindStore.getState();
     if (activeSessionId !== activeTabId) {
@@ -535,15 +588,33 @@ function App() {
     }, 2000);
 
     return () => window.clearInterval(timer);
-  }, [activeTabId, loadSessionCwd, localFsOpen, localFsTab]);
+  }, [
+    activeTabId,
+    loadSessionCwd,
+    desktopFilesOpen,
+    desktopFilesMinimized,
+  ]);
 
   useEffect(() => {
-    if (!localFsOpen || !activeTabId) return;
+    if (!browserOpen || !activeTabId) return;
+    // Panel owns measure→ensure→dock; only rebind session on tab switch.
+    const { sessionId, ensureForSession } = useBrowserStore.getState();
+    if (sessionId !== activeTabId) {
+      void ensureForSession(activeTabId, null);
+    }
+  }, [browserOpen, activeTabId]);
+
+  useEffect(() => {
+    if (!desktopOpen || !activeTabId) return;
+    const desktop = useDesktopStore.getState();
+    if (desktop.sessionId !== activeTabId) {
+      desktop.openDesktop(activeTabId);
+    }
     const { sessionId, activateSession } = useLocalFsStore.getState();
     if (sessionId !== activeTabId) {
       activateSession(activeTabId);
     }
-  }, [activeTabId, localFsOpen]);
+  }, [activeTabId, desktopOpen]);
 
 
   useEffect(() => {
@@ -1071,7 +1142,7 @@ function App() {
 
               <div className="chrome-titlebar-actions">
                 <AiEngineerTool
-                  active={aiEngineerOpen}
+                  active={showAiEngineerPanel}
                   disabled={
                     sidebarView === "k8s"
                       ? !selectedCluster
@@ -1102,11 +1173,11 @@ function App() {
                 />
                 {sidebarView === "hosts" ? (
                 <LocalFsTool
-                  active={localFsOpen}
+                  active={desktopOpen}
                   disabled={!activeTabReady}
                   onClick={() => {
                     if (activeTabId) {
-                      switchWorkspacePanel("localFs", activeTabId, undefined, localFsTab);
+                      switchWorkspacePanel("desktop", activeTabId);
                     }
                   }}
                 />
@@ -1187,20 +1258,48 @@ function App() {
           onInstalled={() => markUpdateInstalled()}
         />
       ) : null}
-      {showAiEngineerPanel && aiPanelSessionId ? (
-        <AiEngineerPanel
-          sessionId={aiPanelSessionId}
-          serverId={
-            engineerMode === "k8s"
-              ? undefined
-              : activeTabId === aiPanelSessionId
-                ? activeTabServerId || undefined
-                : (aiEngineerServerId ?? undefined)
-          }
+      {keepAiPanelMounted
+        ? aiPanelsToMount.map((fiberSessionId) => {
+            const tab = tabs.find((t) => t.id === fiberSessionId);
+            return (
+              <AiEngineerPanel
+                key={fiberSessionId}
+                sessionId={fiberSessionId}
+                serverId={
+                  engineerMode === "k8s" && fiberSessionId === aiPanelSessionId
+                    ? undefined
+                    : (tab?.server_id ??
+                      (fiberSessionId === aiPanelSessionId
+                        ? (aiEngineerServerId ?? undefined)
+                        : undefined))
+                }
+                surfaceActive={
+                  showAiEngineerPanel && fiberSessionId === aiPanelSessionId
+                }
+              />
+            );
+          })
+        : null}
+      {sidebarView === "hosts" && activeTabId && desktopOpen ? (
+        <DesktopPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? undefined}
         />
       ) : null}
-      {sidebarView === "hosts" && activeTabId && localFsOpen ? (
-        <LocalFsPanel
+      {sidebarView === "hosts" && activeTabId && desktopFilesOpen ? (
+        <FileManagerPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? undefined}
+        />
+      ) : null}
+      {sidebarView === "hosts" && activeTabId && desktopProcessesOpen ? (
+        <ProcessManagerPanel
+          sessionId={activeTabId}
+          sessionTitle={activeSessionTitle ?? undefined}
+        />
+      ) : null}
+      {sidebarView === "hosts" && activeTabId && browserOpen ? (
+        <BrowserPanel
           sessionId={activeTabId}
           sessionTitle={activeSessionTitle ?? undefined}
         />

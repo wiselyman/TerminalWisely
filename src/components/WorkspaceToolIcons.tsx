@@ -98,6 +98,18 @@ export function HostWorkspaceIcon() {
   );
 }
 
+/** lucide: globe — host browser via SSH SOCKS */
+export function HostBrowserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a14 14 0 0 1 0 18" />
+      <path d="M12 3a14 14 0 0 0 0 18" />
+    </svg>
+  );
+}
+
 /** lucide: plus — 新对话 */
 export function NewChatIcon() {
   return (

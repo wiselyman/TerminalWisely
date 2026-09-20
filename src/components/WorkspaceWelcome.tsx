@@ -4,6 +4,8 @@ import { SidebarActionIcon, type SidebarActionKind } from "./SidebarIcons";
 const FEATURE_KEYS = [
   "aiEngineer",
   "k8s",
+  "hostDesktop",
+  "hostBrowser",
   "policySafe",
   "dragUpload",
   "clickBrowse",

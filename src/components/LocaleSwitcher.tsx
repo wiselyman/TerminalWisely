@@ -5,27 +5,7 @@ import {
   setAppLocale,
   type AppLocale,
 } from "../i18n";
-
-function GlobeIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18" />
-      <path d="M12 3a14 14 0 0 1 0 18" />
-      <path d="M12 3a14 14 0 0 0 0 18" />
-    </svg>
-  );
-}
+import { LocaleFlagMark } from "../lib/localeFlag";
 
 type MenuPos = { top: number; right: number };
 
@@ -107,7 +87,8 @@ export function LocaleSwitcher() {
               }
               onClick={() => choose("zh-CN")}
             >
-              {t("languageZh")}
+              <LocaleFlagMark locale="zh-CN" className="locale-switcher-flag" />
+              <span>{t("languageZh")}</span>
             </button>
             <button
               type="button"
@@ -121,7 +102,8 @@ export function LocaleSwitcher() {
               }
               onClick={() => choose("en")}
             >
-              {t("languageEn")}
+              <LocaleFlagMark locale="en" className="locale-switcher-flag" />
+              <span>{t("languageEn")}</span>
             </button>
           </div>,
           document.body,
@@ -140,7 +122,10 @@ export function LocaleSwitcher() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <GlobeIcon />
+        <LocaleFlagMark
+          locale={current}
+          className="locale-switcher-trigger-flag"
+        />
       </button>
       {menu}
     </div>

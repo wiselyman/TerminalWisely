@@ -6,7 +6,9 @@
 
 [English](./README.md) | **中文**
 
-**SSH 终端 + Kubernetes 工作台 + AI Linux / K8S Engineer。** 连接服务器，从本机 kubeconfig 或 SSH kubectl 浏览集群，在可视化工作区里管理文件，用自然语言描述问题——内置 Agent 在**当前会话或所选集群**上排查，只读检查自动执行，任何会改动系统的操作都会先请你批准。
+**当前版本：[v0.0.1](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.1)**
+
+**SSH 终端 + 主机 Desktop / Browser + Kubernetes 工作台 + AI Linux / K8S Engineer。** 连接服务器，在已连接主机上打开桌面（文件、进程、浏览器），从本机 kubeconfig 或 SSH kubectl 浏览集群，用类 Typora 方式编辑 Markdown，用自然语言描述问题——内置 Agent 在**当前会话或所选集群**上排查，只读检查自动执行，任何会改动系统的操作都会先请你批准。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
@@ -21,9 +23,11 @@
 | 模块 | 能力 |
 |------|------|
 | **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
+| **主机 Desktop** | 已连接主机上的 Dock：Files、Processes、Browser；按主机记忆布局 |
+| **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **Kubernetes** | 侧栏 Hosts ↔ K8s；+ 添加集群（文件或粘贴 kubeconfig）或 SSH kubectl；资源树、YAML、日志、Pod Shell。可一键把最新 kubectl/Helm 装到应用数据目录（也可用 PATH / SSH）。受 Lens 启发的实用子集，非完整 Lens IDE |
-| **文件** | 拖拽上传、`ls` 点击进目录或预览、下载、压缩、跨服务器发送 |
-| **AI 工程师** | Hosts 为 Linux 模式；K8s 为 K8S 模式；聊天历史按主机/集群隔离 |
+| **文件** | 拖拽上传、`ls` 点击进目录或预览；Markdown 类 Typora 所见即所得；下载、压缩、跨服务器发送 |
+| **AI 工程师** | Hosts 为 Linux 模式；K8s 为 K8S 模式；长任务续租 SSH；聊天历史按主机/集群隔离 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
 | **可观测** | 状态栏显示 CPU、内存、磁盘读写、网络 |
@@ -63,7 +67,7 @@
 
 - **上传** — 文件拖到终端或标签 → SFTP 到当前目录  
 - **进目录** — 点击 `ls` 里的目录名  
-- **预览编辑** — 点击文件路径；文本支持高亮与搜索  
+- **预览编辑** — 点击文件路径；Markdown 为类 Typora 所见即所得；文本支持高亮与搜索  
 - **下载** — Ctrl/Cmd + 点击路径，或右键菜单  
 - **跨服发送** — 右键路径，或拖到另一个 SSH 标签  
 - **命令导航** — 90+ 运维命令片段插入终端（不自动执行）
@@ -73,9 +77,10 @@
 ## 快速开始
 
 1. 侧栏添加 SSH 主机并连接——或切到 **K8s** 点 **+** 添加集群（kubeconfig 文件或粘贴）。  
-2. 可选：打开 **AI 工程师** → 设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。  
-3. 照常使用终端或 K8s 工作台；需要排障时用自然语言提问。  
-4. 对标记为「系统变更」的命令选择批准或拒绝。
+2. 可选：在已连接主机上打开 **Desktop** 或 **Browser**，管理文件/进程或访问远端 HTTP。  
+3. 可选：打开 **AI 工程师** → 设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。  
+4. 照常使用终端或 K8s 工作台；需要排障时用自然语言提问。  
+5. 对标记为「系统变更」的命令选择批准或拒绝。
 
 Kubernetes 说明：本机操作优先用应用目录中一键安装的 kubectl/Helm（也可回退 PATH）；SSH 跳板机仍用远端 PATH。K8s 界面是受 Lens 启发的实用子集，不是完整 Lens IDE。
 

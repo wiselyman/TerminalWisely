@@ -342,7 +342,12 @@ class _TruncatedThenContinueModel:
                 + "画轨迹对比图 -> 存到 /tmp/stand_alone_inference/traj_1.jpeg 、"
             )
             yield {"type": "content", "text": body}
-            yield {"type": "finished", "finish_reason": "stop"}
+            # Hard budget signal — structural alone must not auto-continue.
+            yield {
+                "type": "usage",
+                "usage": {"prompt_tokens": 100, "completion_tokens": 32000},
+            }
+            yield {"type": "finished", "finish_reason": "length"}
             return
         yield {
             "type": "content",
@@ -453,10 +458,14 @@ class _UsageAfterFinishModel:
                 "text": "进度如下：主模型齐了，表还在下，大约还要一段时间。",
             }
             yield {"type": "finished", "finish_reason": "stop"}
-            # Late usage (OpenAI include_usage order) — near default 8192 cap.
+            # Late usage (OpenAI include_usage order) — near the requested sample cap.
+            cap = int(max_tokens or 8192)
             yield {
                 "type": "usage",
-                "usage": {"prompt_tokens": 50, "completion_tokens": 8000},
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": max(1, int(cap * 0.96)),
+                },
             }
             return
         yield {"type": "content", "text": "补充：大约 1.5 小时。"}
@@ -534,7 +543,7 @@ class _LongProseSoftHintModel:
     ) -> Any:
         self.calls += 1
         if self.calls == 1:
-            # Mid-clause early stop (no sentence terminator) — must auto-continue.
+            # Mid-clause early stop (no sentence terminator) — soft hint only.
             body = ("说明一段足够长的正文用来触发续写。" * 12) + "KV cache 预留很大"
             yield {"type": "content", "text": body}
             yield {"type": "finished", "finish_reason": "stop"}
@@ -547,8 +556,8 @@ class _LongProseSoftHintModel:
 
 
 @pytest.mark.asyncio
-async def test_loop_auto_continues_mid_clause_prose() -> None:
-    """No sentence terminator → auto-continue (not soft-hint only)."""
+async def test_loop_mid_clause_prose_auto_continues() -> None:
+    """Long mid-clause early stop → auto-continue (must finish, not soft-hint)."""
     run = AgentRun(session_id="s1", run_id="r-soft")
     model = _LongProseSoftHintModel()
     loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
@@ -559,6 +568,13 @@ async def test_loop_auto_continues_mid_clause_prose() -> None:
         e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
         for e in run.events
     )
+    assert not any(e.type == "assistant_soft_continue" for e in run.events)
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert any("总结完毕" in t or "可接受" in t for t in finals)
 
 
 class _FinishedProseNoSoftHintModel:
@@ -590,3 +606,497 @@ async def test_loop_no_soft_hint_when_prose_has_terminator() -> None:
     assert run.status == RunStatus.COMPLETED
     assert model.calls == 1
     assert not any(e.type == "assistant_soft_continue" for e in run.events)
+
+
+class _EndlessProbeModel:
+    """Keeps issuing different terminal_exec probes until harness forces none."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+        self._cmds = [
+            "ls /sys/devices/system/cpu/cpufreq/",
+            "cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq",
+            "cat /sys/devices/system/cpu/cpufreq/policy0/cpuinfo_max_freq",
+            "cat /sys/devices/system/cpu/cpufreq/policy0/cpuinfo_min_freq",
+            "ls /sys/devices/system/cpu/cpufreq/policy0/",
+            "cat /sys/devices/system/cpu/cpufreq/policy1/scaling_cur_freq",
+        ]
+
+    async def chat_completions(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("non-stream should not be used")
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if tool_choice == "none" or tools is None:
+            yield {
+                "type": "content",
+                "text": "当前约 2.8 GHz（等于上限），未见锁在更低档。",
+            }
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        cmd = self._cmds[min(self.calls - 1, len(self._cmds) - 1)]
+        import json
+
+        yield {
+            "type": "tool_call_delta",
+            "index": 0,
+            "id": f"call_probe_{self.calls}",
+            "name": "terminal_exec",
+            "arguments": json.dumps({"command": cmd}),
+        }
+        yield {"type": "finished", "finish_reason": "tool_calls"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_probe_streak_forces_conclude_without_more_tools() -> None:
+    from app.agent.loop import deliver_tool_result
+    from app.harness.guards.probe_streak import PROBE_STREAK_FORCE_THRESHOLD
+
+    run = AgentRun(session_id="s-probe", run_id="r-probe")
+    model = _EndlessProbeModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=32, max_run_seconds=60)
+
+    async def _feed() -> None:
+        delivered = 0
+        for _ in range(400):
+            if run.status in (RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED):
+                return
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "2808000\n",
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+                delivered += 1
+                await asyncio.sleep(0)
+                continue
+            await asyncio.sleep(0.01)
+        raise AssertionError(f"feeder timed out after {delivered} delivers")
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="CPU主频多少，有没有锁频")
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert any(
+        e.type == "harness_nudge" and e.payload.get("kind") == "probe_streak"
+        for e in run.events
+    )
+    assert "none" in model.tool_choices
+    # Must stop probing once forced — not burn the whole cmd list.
+    assert model.calls <= PROBE_STREAK_FORCE_THRESHOLD + 2
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert any("2.8" in t or "锁" in t for t in finals)
+
+
+class _EndlessEchoModel:
+    """Streams the same prose forever until the consumer breaks."""
+
+    def __init__(self) -> None:
+        self.chunks = 0
+
+    async def chat_completions(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("non-stream should not be used")
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        block = (
+            "But the user has already requested to answer in Chinese, I need to "
+            "summarize all the information of large files. From the `du` output "
+            "just now, the largest files/directories are:\n"
+            "1. /data/models - 34G\n"
+            "2. /home/wiselyman/venvs - 9.0G\n"
+            "Let me check the specific files under the /data/models directory.\n"
+        )
+        # Cap absurdly high — harness must break earlier via content-loop grace.
+        for _ in range(500):
+            if should_cancel and should_cancel():
+                break
+            self.chunks += 1
+            yield {"type": "content", "text": block}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_content_echo_loop_aborts_stream_instead_of_spinning() -> None:
+    run = AgentRun(session_id="s-echo", run_id="r-echo")
+    model = _EndlessEchoModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="磁盘都被什么占了")
+    assert run.status == RunStatus.COMPLETED
+    # Must not drain hundreds of echo chunks.
+    assert model.chunks < 40
+    assert bool(run.metadata.get("_content_loop")) or any(
+        e.type == "act_nudge" for e in run.events
+    ) or any(
+        e.type == "assistant_message"
+        and "LOOP" not in str(e.payload.get("content") or "").upper()
+        for e in run.events
+    )
+
+
+_DENSE_SHELL_DUMP = (
+    "我来检查主机上可能无效的大文件。\n"
+    "lsof +L1 2>/dev/null | head -20\n"
+    "find / -xdev -type f -size +100M 2>/dev/null | head -20\n"
+    'find / -name "core*" -type f -size +10M 2>/dev/null | head -10\n'
+    'find /var/log -name "*.log" -type f -size +100M 2>/dev/null | head -10\n'
+    'find / -name "*.bak" -type f -size +10M 2>/dev/null | head -10\n'
+)
+
+
+class _ShellDumpThenToolModel:
+    """Pastes a dense find/lsof script; after act nudge, calls the tool then answers."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+
+    async def chat_completions(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("non-stream should not be used")
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if self.calls == 1:
+            # finish_reason=length used to force truncated_answer + tool_choice=none.
+            yield {"type": "content", "text": _DENSE_SHELL_DUMP}
+            yield {"type": "finished", "finish_reason": "length"}
+            return
+        if self.calls == 2:
+            assert tool_choice != "none", "shell dump must not lock tools off"
+            yield {
+                "type": "tool_call_delta",
+                "index": 0,
+                "id": "call_find_1",
+                "name": "terminal_exec",
+                "arguments": '{"command":"echo ok"}',
+            }
+            yield {"type": "finished", "finish_reason": "tool_calls"}
+            return
+        yield {"type": "content", "text": "未发现无效大文件。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_shell_script_dump_forces_act_not_truncated_continue() -> None:
+    from app.agent.loop import deliver_tool_result
+
+    model = _ShellDumpThenToolModel()
+    run = AgentRun(session_id="s-shell", run_id="r-shell")
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=30)
+
+    async def _feed() -> None:
+        for _ in range(300):
+            if run.status in (RunStatus.COMPLETED, RunStatus.FAILED):
+                return
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "ok\n",
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+                await asyncio.sleep(0)
+                continue
+            await asyncio.sleep(0.01)
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="现在主机上有什么无效的大文件")
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert model.tool_choices[0] == "auto"
+    assert model.tool_choices[1] != "none"
+    assert any(
+        e.type == "act_nudge"
+        and e.payload.get("kind") in {"act", "idle_plan", "truncated_plan"}
+        for e in run.events
+    )
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+
+
+class _ToolJsonDumpModel:
+    """Pastes a fenced tool-call JSON as content (no tool_calls API)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+
+    async def chat_completions(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("non-stream should not be used")
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if self.calls == 1:
+            # Read-only command so the loop hits WAITING_TOOL (not approval).
+            dump = (
+                "```json\n"
+                "{\n"
+                '  "name": "terminal_exec",\n'
+                '  "arguments": {\n'
+                '    "command": "echo ok"\n'
+                "  }\n"
+                "}\n"
+                "```"
+            )
+            yield {"type": "content", "text": dump}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {"type": "content", "text": "完成。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_tool_json_content_recovers_as_tool_call() -> None:
+    from app.agent.loop import deliver_tool_result
+
+    model = _ToolJsonDumpModel()
+    run = AgentRun(session_id="s-tj", run_id="r-tj")
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=30)
+
+    async def _feed() -> None:
+        for _ in range(300):
+            if run.status in (RunStatus.COMPLETED, RunStatus.FAILED):
+                return
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "ok\n",
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+                await asyncio.sleep(0)
+                continue
+            await asyncio.sleep(0.01)
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="跑一下 echo")
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+    assert any(
+        m.get("role") == "assistant" and m.get("tool_calls") for m in run.messages
+    )
+
+
+class _BareArgsJsonDumpModel:
+    """Pastes bare {"command","intent","timeout_seconds"} without tool name."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("non-stream should not be used")
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        if self.calls == 1:
+            dump = (
+                "find / -xdev -type f -size +100M | head\n"
+                "```json\n"
+                "{\n"
+                '  "command": "echo ok",\n'
+                '  "intent": "probe",\n'
+                '  "timeout_seconds": 60\n'
+                "}\n"
+                "```"
+            )
+            yield {"type": "content", "text": dump}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {"type": "content", "text": "完成。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_bare_command_intent_json_recovers_as_tool_call() -> None:
+    from app.agent.loop import deliver_tool_result
+
+    model = _BareArgsJsonDumpModel()
+    run = AgentRun(session_id="s-bare", run_id="r-bare")
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=30)
+
+    async def _feed() -> None:
+        for _ in range(300):
+            if run.status in (RunStatus.COMPLETED, RunStatus.FAILED):
+                return
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "ok\n",
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+                await asyncio.sleep(0)
+                continue
+            await asyncio.sleep(0.01)
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="这台电脑上有哪些大文件")
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert any(
+        m.get("role") == "assistant" and m.get("tool_calls") for m in run.messages
+    )
+    assert not any(e.type == "assistant_soft_continue" for e in run.events)
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+
+
+class _StructuralTableStopModel:
+    """Stops mid markdown table once, then finishes on continue."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        if self.calls == 1:
+            body = (
+                "| size | path |\n"
+                "| --- | --- |\n"
+                "| 101M | /a |\n"
+                "| 106M | /llvm/bin/llvm-split"
+            )
+            yield {"type": "content", "text": body}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {
+            "type": "content",
+            "text": " x4 |\n| 106M | /llvm/bin/llvm-dwp x4 |\n\n以上为主要大文件。",
+        }
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_loop_structural_table_stop_auto_continues() -> None:
+    """Mid markdown table with finish=stop → auto-continue until finished."""
+    run = AgentRun(session_id="s1", run_id="r-table")
+    model = _StructuralTableStopModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="大文件有哪些")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    assert any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+    assert not any(e.type == "assistant_soft_continue" for e in run.events)
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert any("主要大文件" in t or "llvm-dwp" in t for t in finals)

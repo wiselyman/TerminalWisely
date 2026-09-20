@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageSquare } from "lucide-react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useTranslation } from "react-i18next";
 import {
   k8sNodeShellStart,
   k8sPodShellInput,
@@ -58,7 +56,6 @@ export function K8sPodShellTerminal({
   onError,
   onSendSelection,
 }: Props) {
-  const { t } = useTranslation(["k8s", "terminal"]);
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const shellIdRef = useRef<string | null>(null);
@@ -72,7 +69,6 @@ export function K8sPodShellTerminal({
   onExitRef.current = onExit;
   onReadyRef.current = onReady;
   onSendSelectionRef.current = onSendSelection;
-  const [hasSelection, setHasSelection] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; text: string } | null>(
     null,
   );
@@ -127,7 +123,6 @@ export function K8sPodShellTerminal({
       term.onSelectionChange(() => {
         const text = term?.hasSelection() ? term.getSelection() : "";
         selectionRef.current = text;
-        setHasSelection(text.trim().length > 0);
       });
 
       const onMouseDown = (event: MouseEvent) => {
@@ -265,24 +260,6 @@ export function K8sPodShellTerminal({
 
   return (
     <div className="k8s-terminal-shell-wrap">
-      {onSendSelection && hasSelection ? (
-        <div className="k8s-terminal-selection-bar">
-          <button
-            type="button"
-            className="k8s-refresh-btn"
-            data-testid="k8s-pod-shell-send-chat"
-            title={t("terminal:sendToChat")}
-            aria-label={t("terminal:sendToChat")}
-            onClick={() => {
-              const text = selectionRef.current.trim();
-              if (!text) return;
-              onSendSelectionRef.current?.(text);
-            }}
-          >
-            <MessageSquare size={14} strokeWidth={2} />
-          </button>
-        </div>
-      ) : null}
       <div
         className="k8s-pod-shell-terminal"
         data-testid="k8s-pod-shell-terminal"

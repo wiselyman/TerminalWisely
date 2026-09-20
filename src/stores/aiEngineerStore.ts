@@ -26,8 +26,10 @@ import { buildOptimisticToolAfterApproval } from "../lib/aiEngineer/approvalOpti
 import {
   looksTruncatedAssistant,
   mergeAssistantContinuation,
+  resolveAuthoritativeAssistantContent,
   stripTrailingDanglingHeading,
 } from "../lib/aiEngineer/truncatedAssistant";
+import { applyAssistantDeltaToMessages } from "../lib/aiEngineer/assistantStreamResume";
 import {
   acquireAiSshLease,
   releaseAiSshLease,
@@ -56,6 +58,7 @@ import {
   saveScopeBundleToDisk,
   type DiskScopeBundle,
 } from "../lib/aiEngineer/chatHistoryDisk";
+import { needsDiskMessageHydration } from "../lib/aiEngineer/chatScopeHydrate";
 import type { K8sClusterTarget } from "../lib/k8s/types";
 import type { ManagedEntityRef } from "../lib/management/types";
 import { revealAiEngineerPanel } from "./workspacePanelSwitch";
@@ -134,6 +137,9 @@ export type ChatLine =
       lastOutputAt?: number;
       exitCode?: number;
       ok?: boolean;
+      /** Carried from the approval card once the user approved. */
+      risk?: string;
+      approvalDecision?: "approved" | "rejected";
     }
   | { id: string; kind: "error"; content: string }
   | {
@@ -714,6 +720,28 @@ export function k8sSyntheticSessionId(clusterId: string): string {
   return `k8s:${clusterId.replace(/\//g, "|")}`;
 }
 
+/** Reverse of k8sSyntheticSessionId — used by parked AI fibers to resolve scope. */
+export function clusterIdFromK8sSyntheticSessionId(
+  sessionId: string,
+): string | null {
+  if (!sessionId.startsWith("k8s:")) return null;
+  return sessionId.slice(4).replace(/\|/g, "/");
+}
+
+/**
+ * Chat scope for a mounted AI panel fiber. K8s fibers use cluster: scope;
+ * linux fibers use server:/session: — must match store chatScope or the
+ * messages selector returns a fresh [] every render (React #185).
+ */
+export function panelFiberChatScopeKey(
+  sessionId: string,
+  serverId?: string | null,
+): string {
+  const clusterId = clusterIdFromK8sSyntheticSessionId(sessionId);
+  if (clusterId) return aiChatScopeKey(sessionId, null, clusterId);
+  return aiChatScopeKey(sessionId, serverId);
+}
+
 let chatAbort: AbortController | null = null;
 let activeRunId: string | null = null;
 /** Scope that owns the in-flight run; events for other scopes are ignored. */
@@ -1148,7 +1176,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       (prev.serverId ?? null) === (serverId ?? null) &&
       prev.engineerMode === "linux"
     ) {
-      applyScopeAfterDiskLoad(get, set, nextScope);
+      // Warm reopen: keep transcript if bodies are already in memory. Index
+      // hydrate leaves titles with empty messages — still load from disk.
+      if (needsDiskMessageHydration(prev.messages)) {
+        applyScopeAfterDiskLoad(get, set, nextScope);
+      }
       return;
     }
 
@@ -1187,16 +1219,27 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       pendingApproval: switchingAway ? null : prev.pendingApproval,
       activeInvestigation: switchingAway ? null : prev.activeInvestigation,
     });
-    applyScopeAfterDiskLoad(get, set, nextScope);
+    // Threads from history index often exist with empty bodies — that is NOT
+    // "has memory". Load scope bodies whenever the visible transcript is empty.
+    if (needsDiskMessageHydration(loaded.messages)) {
+      applyScopeAfterDiskLoad(get, set, nextScope);
+    }
   },
 
   close: (_opts) => {
     const persisted = persistCurrentThread(get);
+    const sessionId = get().sessionId;
     set({
       ...persisted,
       open: false,
       settingsOpen: false,
     });
+    // Explicit dismiss — drop the parked fiber for this host.
+    if (sessionId) {
+      void import("./hostWorkspaceMemory").then((m) => {
+        m.forgetAiFiber(sessionId);
+      });
+    }
   },
 
   setWidth: (w) => {
@@ -1605,6 +1648,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         command: approvalLine.command,
         execCommand: approvalLine.execCommand,
         intent: approvalLine.intent,
+        risk: approvalLine.risk,
       });
       if (
         optimistic &&
@@ -2088,6 +2132,22 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 retractProvisionalAssistant(get().messages),
               );
             }
+            // Truncated-answer continues must NOT insert a notice between
+            // assistant halves — that splits markdown tables into two bubbles.
+            // Surface progress via modelPhase only.
+            if (
+              event.type === "act_nudge" &&
+              (event.kind || "").trim() === "truncated_answer"
+            ) {
+              set({ modelPhase: "streaming" });
+              return;
+            }
+            // Model-only verify nudge — do not leak exit codes / harness jargon
+            // into the customer-facing transcript.
+            if (event.type === "verify_nudge") {
+              set({ modelPhase: "thinking" });
+              return;
+            }
             appendIfSameThread({
               id: nextId(),
               kind: "notice",
@@ -2100,7 +2160,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                     ? { kind: event.kind }
                     : event.type === "audit_nudge"
                       ? { reason: event.reason }
-                      : { risk: event.risk },
+                      : undefined,
               ),
             });
             return;
@@ -2168,52 +2228,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 }
               }
             }
-            // If the final bubble is still mid-sentence, append a visible footer
-            // and notice (sidecar may have missed auto-continue on an older build).
-            const INCOMPLETE_SUFFIX_ZH =
-              "\n\n…（回答未写完。回复「继续」可让我接着写。）";
-            const INCOMPLETE_SUFFIX_EN =
-              '\n\n…(Reply cut off. Send “continue” to finish the rest.)';
-            const after = get().messages;
-            for (let i = after.length - 1; i >= 0; i -= 1) {
-              const line = after[i];
-              if (line.kind === "user") break;
-              if (line.kind !== "assistant") continue;
-              if (!looksTruncatedAssistant(line.content)) break;
-              if (
-                line.content.includes("回答未写完") ||
-                line.content.includes("Reply cut off")
-              ) {
-                break;
-              }
-              const cjk = (line.content.match(/[\u4e00-\u9fff]/g) || []).length;
-              const suffix =
-                cjk >= 8 ? INCOMPLETE_SUFFIX_ZH : INCOMPLETE_SUFFIX_EN;
-              replaceMessagesIfSameThread([
-                ...after.slice(0, i),
-                {
-                  id: line.id,
-                  kind: "assistant",
-                  content: `${line.content}${suffix}`,
-                },
-                ...after.slice(i + 1),
-              ]);
-              const incompleteNotice = get().messages.some(
-                (m, idx) =>
-                  idx > i &&
-                  m.kind === "notice" &&
-                  m.content === "assistant_incomplete",
-              );
-              if (!incompleteNotice) {
-                appendIfSameThread({
-                  id: nextId(),
-                  kind: "notice",
-                  variant: "harness",
-                  content: "assistant_incomplete",
-                });
-              }
-              break;
-            }
+            // Never append “回复「继续」” footers/notices here — that dodges
+            // finishing. Sidecar auto-continues; FE must not train users on
+            // manual continue as the happy path.
             replaceMessagesIfSameThread(withToolEvidenceFlags(get().messages));
             const { sidecar, sessionId } = get();
             const rid = activeRunId;
@@ -2228,20 +2245,10 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             }
             return;
           } else if (event.type === "assistant_incomplete") {
-            appendIfSameThread({
-              id: nextId(),
-              kind: "notice",
-              variant: "harness",
-              content: "assistant_incomplete",
-            });
+            // Exhausted auto-continue only — keep transcript clean (no 继续 spam).
             return;
           } else if (event.type === "assistant_soft_continue") {
-            appendIfSameThread({
-              id: nextId(),
-              kind: "notice",
-              variant: "harness",
-              content: "assistant_soft_continue",
-            });
+            // Soft hints removed: sidecar must auto-finish instead.
             return;
           } else if (event.type === "model_sample_end") {
             // Attach sample diagnostics onto the latest model span for Run trace.
@@ -2268,35 +2275,13 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           } else if (event.type === "assistant_delta") {
             const text = event.text ?? "";
             if (!text) return;
-            const msgs = get().messages;
-            const last = msgs[msgs.length - 1];
-            if (last?.kind === "assistant" && last.streaming) {
-              replaceMessagesIfSameThread([
-                ...msgs.slice(0, -1),
-                { ...last, content: last.content + text },
-              ]);
-            } else if (
-              last?.kind === "assistant" &&
-              looksTruncatedAssistant(last.content)
-            ) {
-              // Resume into the cut-off bubble instead of starting a second one.
-              // Never glue a restarted "## …" heading onto the truncated tail.
-              replaceMessagesIfSameThread([
-                ...msgs.slice(0, -1),
-                {
-                  ...last,
-                  content: mergeAssistantContinuation(last.content, text),
-                  streaming: true,
-                },
-              ]);
-            } else {
-              appendIfSameThread({
-                id: nextId(),
-                kind: "assistant",
-                content: text,
-                streaming: true,
-              });
-            }
+            replaceMessagesIfSameThread(
+              applyAssistantDeltaToMessages(get().messages, text, {
+                looksTruncated: looksTruncatedAssistant,
+                merge: mergeAssistantContinuation,
+                newId: nextId,
+              }),
+            );
             set({ modelPhase: "streaming" });
           } else if (event.type === "assistant_message") {
             const content = event.content ?? "";
@@ -2318,10 +2303,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               if (prev.kind !== "assistant") {
                 /* unreachable */
               } else {
-              const authoritative =
-                event.replace !== false
-                  ? stripTrailingDanglingHeading(content) || content
-                  : mergeAssistantContinuation(prev.content, content);
+              const authoritative = resolveAuthoritativeAssistantContent(
+                prev.content,
+                content,
+                { replace: event.replace !== false },
+              );
               replaceMessagesIfSameThread([
                 ...msgs.slice(0, lastAssistant),
                 {
@@ -2396,10 +2382,20 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                     existing.startedAt ??
                     (isExec && event.awaiting_host ? Date.now() : undefined),
                   ok: event.denied ? false : existing.ok,
+                  risk: existing.risk,
+                  approvalDecision: existing.approvalDecision,
                 });
                 return;
               }
             }
+            const linkedApproval = callId
+              ? get().messages.find(
+                  (line): line is Extract<ChatLine, { kind: "approval" }> =>
+                    line.kind === "approval" &&
+                    line.callId === callId &&
+                    line.decision === "approved",
+                )
+              : undefined;
             appendIfSameThread({
               id: nextId(),
               kind: "tool",
@@ -2414,6 +2410,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               status,
               startedAt: isExec && event.awaiting_host ? Date.now() : undefined,
               ok: event.denied ? false : undefined,
+              risk: linkedApproval?.risk,
+              approvalDecision: linkedApproval ? "approved" : undefined,
             });
           } else if (event.type === "plan_progress") {
             set({ activePlan: event.plan.length > 0 ? event.plan : null });

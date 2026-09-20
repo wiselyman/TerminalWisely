@@ -772,6 +772,265 @@ pub async fn preview_write_bytes(
 }
 
 #[tauri::command]
+pub async fn browser_ensure(
+    app: AppHandle,
+    request: crate::browser::BrowserEnsureRequest,
+    sessions: State<'_, SessionManager>,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<crate::browser::BrowserEnsureResult, String> {
+    browsers
+        .ensure_tab(
+            &app,
+            &sessions,
+            &request.session_id,
+            request.tab_id.as_deref().unwrap_or("default"),
+            request.bounds(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_navigate(
+    app: AppHandle,
+    request: crate::browser::BrowserNavigateRequest,
+    sessions: State<'_, SessionManager>,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .navigate(
+            &app,
+            &sessions,
+            &request.session_id,
+            request.tab_id.as_deref().unwrap_or("default"),
+            &request.url,
+            request.bounds(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_activate_tab(
+    app: AppHandle,
+    request: crate::browser::BrowserTabRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<crate::browser::BrowserEnsureResult, String> {
+    browsers
+        .activate_tab(
+            &app,
+            &request.session_id,
+            &request.tab_id,
+            request.bounds(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_close_tab(
+    app: AppHandle,
+    request: crate::browser::BrowserTabRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .close_tab(&app, &request.session_id, &request.tab_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_hide_session(
+    app: AppHandle,
+    request: crate::browser::BrowserShutdownRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .hide_session(&app, &request.session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_shutdown(
+    app: AppHandle,
+    request: crate::browser::BrowserShutdownRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .shutdown_session(&app, &request.session_id)
+        .await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn browser_set_webview_bounds(
+    app: AppHandle,
+    request: crate::browser::BrowserBoundsRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .set_bounds(
+            &app,
+            &request.webview_label,
+            request.x,
+            request.y,
+            request.width,
+            request.height,
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_set_visible(
+    app: AppHandle,
+    request: crate::browser::BrowserVisibleRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .set_visible(&app, &request.webview_label, request.visible)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Hide every host-browser child surface (host tab switch / shell restore).
+#[tauri::command]
+pub fn browser_hide_all(app: AppHandle) {
+    crate::browser::hide_all_browser_surfaces(&app);
+}
+
+#[tauri::command]
+pub async fn browser_back(
+    app: AppHandle,
+    request: crate::browser::BrowserWebviewLabelRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .go_back(&app, &request.webview_label)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_forward(
+    app: AppHandle,
+    request: crate::browser::BrowserWebviewLabelRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .go_forward(&app, &request.webview_label)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_reload(
+    app: AppHandle,
+    request: crate::browser::BrowserWebviewLabelRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    browsers
+        .reload(&app, &request.webview_label)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrowserHistoryListRequest {
+    pub profile_key: Option<String>,
+}
+
+#[tauri::command]
+pub fn browser_history_list(
+    app: AppHandle,
+    request: BrowserHistoryListRequest,
+) -> Result<Vec<crate::browser::BrowserHistoryEntry>, String> {
+    crate::browser::history_list(&app, request.profile_key.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrowserHistoryRecordRequest {
+    pub profile_key: String,
+    pub url: String,
+    pub title: String,
+}
+
+#[tauri::command]
+pub fn browser_history_record(
+    app: AppHandle,
+    request: BrowserHistoryRecordRequest,
+) -> Result<(), String> {
+    crate::browser::history_record(
+        &app,
+        &request.profile_key,
+        &request.url,
+        &request.title,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrowserHistoryClearRequest {
+    pub profile_key: Option<String>,
+}
+
+#[tauri::command]
+pub fn browser_history_clear(
+    app: AppHandle,
+    request: BrowserHistoryClearRequest,
+) -> Result<(), String> {
+    crate::browser::history_clear(&app, request.profile_key.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrowserBookmarksListRequest {
+    pub profile_key: Option<String>,
+}
+
+#[tauri::command]
+pub fn browser_bookmarks_list(
+    app: AppHandle,
+    request: BrowserBookmarksListRequest,
+) -> Result<Vec<crate::browser::BrowserBookmark>, String> {
+    crate::browser::bookmarks_list(&app, request.profile_key.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrowserBookmarkUpsertRequest {
+    pub profile_key: String,
+    pub url: String,
+    pub title: String,
+}
+
+#[tauri::command]
+pub fn browser_bookmark_upsert(
+    app: AppHandle,
+    request: BrowserBookmarkUpsertRequest,
+) -> Result<crate::browser::BrowserBookmark, String> {
+    crate::browser::bookmark_upsert(
+        &app,
+        &request.profile_key,
+        &request.url,
+        &request.title,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BrowserBookmarkRemoveRequest {
+    pub id: String,
+}
+
+#[tauri::command]
+pub fn browser_bookmark_remove(
+    app: AppHandle,
+    request: BrowserBookmarkRemoveRequest,
+) -> Result<(), String> {
+    crate::browser::bookmark_remove(&app, &request.id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn open_preview_handle(
     app: AppHandle,
     request: crate::types::OpenPreviewHandleRequest,

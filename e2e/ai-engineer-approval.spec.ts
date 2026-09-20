@@ -28,9 +28,8 @@ test.describe("AI approval flow", () => {
     await expect(page.getByTestId("ai-engineer-approval-once")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-approval-session")).toBeVisible();
     await page.getByTestId("ai-engineer-approval-once").click();
-    await expect(page.getByTestId("ai-engineer-approval-card")).toHaveClass(
-      /is-resolved/,
-    );
+    // Approved card is omitted once the optimistic exec card owns the command.
+    await expect(page.getByTestId("ai-engineer-approval-card")).toHaveCount(0);
     // Optimistic exec card closes the “approved but starting…” ambiguity.
     await expect(page.getByTestId("ai-engineer-exec-live")).toBeVisible();
     // Clearing pendingApproval runs reset useEffect — must not ReferenceError.
@@ -43,9 +42,8 @@ test.describe("AI approval flow", () => {
     const api = await twE2e(page);
     await api.simulateApproval("touch /tmp/session-allow");
     await page.getByTestId("ai-engineer-approval-session").click();
-    await expect(page.getByTestId("ai-engineer-approval-card")).toHaveClass(
-      /is-resolved/,
-    );
+    await expect(page.getByTestId("ai-engineer-approval-card")).toHaveCount(0);
+    await expect(page.getByTestId("ai-engineer-exec-live")).toBeVisible();
     await expectAiPanelAlive(page);
   });
 

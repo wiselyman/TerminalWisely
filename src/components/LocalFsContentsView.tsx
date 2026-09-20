@@ -29,6 +29,12 @@ type Props = {
   onBackgroundContextMenu: (event: ReactMouseEvent) => void;
   onOpenFile: (entry: LocalFsEntry) => void;
   onMovePaths?: (paths: string[], destDir: string) => void;
+  /** When set (e.g. inline Find results), replace directory listing. */
+  entriesOverride?: LocalFsEntry[] | null;
+  loadingOverride?: boolean;
+  emptyLabel?: string;
+  /** Called before navigating into a directory while showing search results. */
+  onLeaveSearch?: () => void;
 };
 
 export function LocalFsContentsView({
@@ -37,6 +43,10 @@ export function LocalFsContentsView({
   onBackgroundContextMenu,
   onOpenFile,
   onMovePaths,
+  entriesOverride = null,
+  loadingOverride,
+  emptyLabel,
+  onLeaveSearch,
 }: Props) {
   const { t } = useTranslation("tools");
   const moveCleanupRef = useRef<(() => void) | null>(null);
@@ -56,14 +66,22 @@ export function LocalFsContentsView({
   } = useLocalFsStore();
 
   const selectedSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const searchMode = entriesOverride != null;
   const entries = useMemo(() => {
+    if (entriesOverride != null) return entriesOverride;
     if (!contentsPath) return [];
     return childrenCache[contentsPath] ?? [];
-  }, [childrenCache, contentsPath]);
+  }, [childrenCache, contentsPath, entriesOverride]);
   const orderedPaths = useMemo(() => entries.map((e) => e.path), [entries]);
   const isLoading =
-    loadingRoot ||
-    (contentsPath != null && loadingPaths.includes(contentsPath));
+    loadingOverride ??
+    (loadingRoot ||
+      (contentsPath != null && loadingPaths.includes(contentsPath)));
+
+  const openDir = (path: string) => {
+    if (searchMode) onLeaveSearch?.();
+    void openDirectory(path);
+  };
 
   useEffect(() => {
     return () => {
@@ -90,7 +108,7 @@ export function LocalFsContentsView({
       return;
     }
     if (entry.kind === "directory") {
-      void openDirectory(entry.path);
+      openDir(entry.path);
       return;
     }
     setSelectedPath(entry.path);
@@ -132,7 +150,7 @@ export function LocalFsContentsView({
     [onEntryContextMenu, selectedSet, setSelectedPath],
   );
 
-  if (!contentsPath) {
+  if (!contentsPath && !searchMode) {
     return (
       <div
         className="local-fs-contents"
@@ -165,7 +183,9 @@ export function LocalFsContentsView({
         data-testid="local-fs-contents"
         onContextMenu={onBackgroundContextMenu}
       >
-        <p className="find-panel-empty">{t("localFs.empty")}</p>
+        <p className="find-panel-empty">
+          {emptyLabel ?? (searchMode ? t("find.empty") : t("localFs.empty"))}
+        </p>
       </div>
     );
   }
@@ -199,7 +219,7 @@ export function LocalFsContentsView({
                 onClick={(e) => selectEntry(e, entry)}
                 onDoubleClick={() => {
                   if (isDir) {
-                    void openDirectory(entry.path);
+                    openDir(entry.path);
                     return;
                   }
                   onOpenFile(entry);
@@ -251,7 +271,7 @@ export function LocalFsContentsView({
               onClick={(e) => selectEntry(e, entry)}
               onDoubleClick={() => {
                 if (isDir) {
-                  void openDirectory(entry.path);
+                  openDir(entry.path);
                   return;
                 }
                 onOpenFile(entry);

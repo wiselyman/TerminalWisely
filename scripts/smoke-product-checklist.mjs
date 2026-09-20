@@ -142,13 +142,27 @@ function exists(rel) {
     ["ai_chat_history_load_scope", "store.disk-load-scope-cmd"],
     ["fillScopeMessagesFromDisk", "store.fill-scope-msgs"],
     ["applyScopeAfterDiskLoad", "store.apply-scope-after-disk"],
+    ["needsDiskMessageHydration", "store.needs-disk-hydrate"],
   ]) {
     const hay =
       needle.startsWith("CHAT_HISTORY") || needle.startsWith("ai_chat")
         ? disk
-        : store;
+        : needle === "needsDiskMessageHydration"
+          ? store + read("src/lib/aiEngineer/chatScopeHydrate.ts")
+          : store;
     if (hay.includes(needle)) pass(id, needle);
     else fail(id, `missing ${needle}`);
+  }
+  const compact = read("src-tauri/src/webkit_localstorage.rs");
+  const libRs = read("src-tauri/src/lib.rs");
+  if (
+    compact.includes("VACUUM") &&
+    compact.includes("freelist_count") &&
+    libRs.includes("compact_bloated_webkit_localstorage")
+  ) {
+    pass("store.webkit-ls-compact", "startup VACUUM for bloated WebKit localStorage");
+  } else {
+    fail("store.webkit-ls-compact", "missing webkit localStorage compact");
   }
   for (const [needle, id] of [
     ["createThread", "store.createThread"],
@@ -717,16 +731,102 @@ function exists(rel) {
   } else {
     fail("agent.book-roadmap", "missing status bar / memory / artifact wiring");
   }
+  const probe = read("agent-sidecar/app/harness/guards/probe_streak.py");
+  const loopPy = read("agent-sidecar/app/agent/loop.py");
+  const pathsPy = read("agent-sidecar/app/paths.py");
+  if (
+    probe.includes("PROBE_STREAK_FORCE_THRESHOLD") &&
+    probe.includes("probe_tool_streak") &&
+    loopPy.includes("FORCE_TOOL_CHOICE_NONE_KEY") &&
+    loopPy.includes("probe_streak") &&
+    exists("agent-sidecar/tests/test_probe_streak.py")
+  ) {
+    pass("agent.probe-streak", "consecutive probe tools force conclude");
+  } else {
+    fail("agent.probe-streak", "missing probe streak harness");
+  }
+  if (
+    pathsPy.includes("prefer_complete_max_output_tokens") &&
+    pathsPy.includes('"32768"') &&
+    pathsPy.includes('"65536"') &&
+    loopPy.includes("prefer_complete_max_output_tokens")
+  ) {
+    pass("agent.prefer-complete-output", "high max_tokens before auto-continue");
+  } else {
+    fail("agent.prefer-complete-output", "missing prefer-complete output budget");
+  }
 }
 
 // --- AI chat wiring (run trace / mid-run context) ---
 {
   const panel = read("src/components/aiEngineer/AiEngineerPanel.tsx");
+  const chatScroll = read("src/lib/aiEngineer/chatScroll.ts");
   if (panel.includes("AiEngineerRunTraceBar") && panel.includes("ai-engineer-composer")) {
     pass("ai.panel-chat", "chat panel + composer");
   } else {
     fail("ai.panel-chat", "missing RunTraceBar or composer in AiEngineerPanel");
   }
+  if (
+    chatScroll.includes('AI_CHAT_SCROLL_FIX_ID = "2026-09-20-maximize-follow"') &&
+    chatScroll.includes("OPEN_CHAT_FOLLOW_MS") &&
+    chatScroll.includes("COMPOSER_CHROME_SCROLL_LOCK_MS") &&
+    chatScroll.includes("isChatScrollGeometryReady") &&
+    chatScroll.includes("scheduleComposerChromeScrollLock") &&
+    chatScroll.includes("streamFollowPinKey") &&
+    chatScroll.includes("shouldParkChatScrollerAtBottom") &&
+    chatScroll.includes("shouldPinChatOnStreamUpdate") &&
+    chatScroll.includes("scrollTopAfterViewportResize") &&
+    chatScroll.includes("shouldHoldStickWhileBusyFollow") &&
+    chatScroll.includes("shouldFollowChatOnViewportResize") &&
+    panel.includes("AI_CHAT_SCROLL_FIX_ID") &&
+    panel.includes("data-scroll-fix={AI_CHAT_SCROLL_FIX_ID}") &&
+    panel.includes("scheduleOpenChatPin") &&
+    panel.includes("openFollowUntilRef") &&
+    panel.includes("runPreservingChatScroll") &&
+    panel.includes("beginComposerChromeScrollLock") &&
+    panel.includes("streamFollowPinKey") &&
+    panel.includes("shouldParkChatScrollerAtBottom") &&
+    panel.includes("scrollTopAfterViewportResize") &&
+    panel.includes("shouldHoldStickWhileBusyFollow") &&
+    panel.includes("shouldFollowChatOnViewportResize") &&
+    panel.includes("rememberedNearBottomRef") &&
+    panel.includes("shouldPreventComposerChromeFocusScroll") &&
+    panel.includes("shouldForceStickOnChatOpen") &&
+    !panel.includes("beginViewportFreeze") &&
+    !panel.includes("AI_CHAT_REVEAL_PIN_MS") &&
+    !chatScroll.includes("beginViewportFreeze") &&
+    chatScroll.includes("shouldPinChatAfterViewportResize") &&
+    chatScroll.includes("runPreservingChatScroll") &&
+    /shouldPinChatAfterViewportResize[\s\S]*return opts\.stickToBottom/.test(
+      chatScroll,
+    ) &&
+    read("src/components/aiEngineer/AiMarkdown.tsx").includes(
+      "asyncHtml ?? initialHtml",
+    )
+  ) {
+    pass(
+      "ai.chat-scroll-final",
+      "maximize-follow: remembered near-bottom + window/Tauri resize pin",
+    );
+  } else {
+    fail(
+      "ai.chat-scroll-final",
+      "scroll chaos remnants or missing 2026-09-20-maximize-follow stamp",
+    );
+  }
+
+  const appCss = read("src/App.css");
+  if (
+    appCss.includes(".ai-engineer-panel.ai-engineer-panel-parked") &&
+    appCss.includes("opacity: 0 !important") &&
+    appCss.includes("visibility: visible !important") &&
+    !appCss.includes("visibility: hidden !important")
+  ) {
+    pass("ai.chat-scroll-park-css", "park uses opacity not visibility:hidden");
+  } else {
+    fail("ai.chat-scroll-park-css", "parked panel still uses visibility:hidden or missing opacity");
+  }
+
   if (panel.includes("ai-engineer-composer-stack")) {
     pass("ai.composer-stack", "composer-stack present");
   } else {
@@ -833,12 +933,17 @@ function exists(rel) {
   const ctxMenu = read("src/components/k8s/K8sSelectionContextMenu.tsx");
   if (
     term.includes("onSendSelection") &&
-    term.includes("k8s-cluster-terminal-send-chat") &&
+    term.includes('testIdPrefix="k8s-cluster-terminal"') &&
     term.includes("contextMenuSelectionRef") &&
+    term.includes("K8sSelectionContextMenu") &&
+    !term.includes("k8s-terminal-selection-bar") &&
     podShell.includes("onSendSelection") &&
-    podShell.includes("k8s-pod-shell-send-chat") &&
+    podShell.includes('testIdPrefix="k8s-pod-shell"') &&
     podShell.includes("contextMenuSelectionRef") &&
+    podShell.includes("K8sSelectionContextMenu") &&
+    !podShell.includes("k8s-terminal-selection-bar") &&
     ctxMenu.includes("sendToChat") &&
+    ctxMenu.includes("${testIdPrefix}-send-chat") &&
     wb.includes("k8s-logs-pre") &&
     wb.includes("setLogsMenu")
   ) {
@@ -1092,14 +1197,206 @@ function exists(rel) {
     }
   }
   const localeSwitcher = read("src/components/LocaleSwitcher.tsx");
+  const localeFlagLib = read("src/lib/localeFlag.tsx");
   if (
     localeSwitcher.includes("createPortal") &&
-    localeSwitcher.includes("locale-switcher-trigger")
+    localeSwitcher.includes("locale-switcher-trigger") &&
+    localeSwitcher.includes("LocaleFlagMark") &&
+    localeFlagLib.includes("locale-flag-mark") &&
+    localeFlagLib.includes('viewBox="0 0 24 16"') &&
+    localeFlagLib.includes("chineseFlagStarPaths") &&
+    localeFlagLib.includes("#de2910") &&
+    !localeFlagLib.includes("🇨🇳") &&
+    !localeFlagLib.includes("🇺🇸")
   ) {
     pass("ui.locale-switcher-portal", "menu portaled out of titlebar overflow");
+    pass("ui.locale-flags", "zh-CN/en use flat rectangular SVG marks");
   } else {
     fail("ui.locale-switcher-portal", "LocaleSwitcher must portal menu (titlebar clips)");
+    fail("ui.locale-flags", "LocaleSwitcher missing flat SVG flag UI");
   }
+}
+
+{
+  const app = read("src/App.tsx");
+  const switcher = read("src/stores/workspacePanelSwitch.ts");
+  const cargo = read("src-tauri/Cargo.toml");
+  const browserRs = read("src-tauri/src/browser.rs");
+  const socks = read("src-tauri/src/ssh/socks.rs");
+  const tunnel = read("src-tauri/src/ssh/tunnel.rs");
+  const httpProxy = read("src-tauri/src/ssh/http_proxy.rs");
+  const caps = read("src-tauri/capabilities/default.json");
+  if (
+    app.includes("DesktopPanel") &&
+    !app.includes("BrowserTool") &&
+    app.includes('switchWorkspacePanel("desktop"') &&
+    switcher.includes('"desktop"') &&
+    exists("src/components/browser/BrowserPanel.tsx") &&
+    exists("src/stores/browserStore.ts") &&
+    exists("src/stores/desktopStore.ts") &&
+    read("src/components/desktop/desktopApps.ts").includes("dock-app-browser")
+  ) {
+    pass("ui.host-browser-panel", "Host desktop dock opens the browser (no titlebar globe)");
+  } else {
+    fail("ui.host-browser-panel", "missing desktop browser wiring, or titlebar BrowserTool is back");
+  }
+  if (
+    exists("src-tauri/src/ssh/tunnel.rs") &&
+    exists("src-tauri/src/ssh/http_proxy.rs") &&
+    httpProxy.includes("Connection Established") &&
+    browserRs.includes("ensure_tab") &&
+    browserRs.includes("activate_tab") &&
+    socks.includes("into_stream()") &&
+    socks.includes("copy_bidirectional") &&
+    tunnel.includes("into_stream()") &&
+    browserRs.includes("HttpProxy") &&
+    browserRs.includes("webview_url_for") &&
+    browserRs.includes("start_via_socks") &&
+    httpProxy.includes("allow_local_port") &&
+    browserRs.includes("SocksBridge") &&
+    browserRs.includes("http://127.0.0.1:") &&
+    browserRs.includes(".proxy_url(") &&
+    browserRs.includes("WebviewBuilder") &&
+    browserRs.includes(".user_agent(") &&
+    browserRs.includes("host_browser_user_agent") &&
+    browserRs.includes("Chrome/131.") &&
+    browserRs.includes("add_child") &&
+    browserRs.includes("browser-history.json") &&
+    browserRs.includes("hide_all_browser_surfaces") &&
+    browserRs.includes("hide_browser_surface") &&
+    browserRs.includes("tab_id:") &&
+    browserRs.includes("#{}") &&
+    read("src/stores/hostWorkspaceMemory.ts").includes("parkBrowserOverlays") &&
+    read("src/stores/browserStore.ts").includes("browser_hide_session") &&
+    read("src/lib/browserTabs.ts").includes("applyBrowserPageEvent") &&
+    read("src/stores/browserStore.ts").includes("markBucketWarm") &&
+    read("src/stores/browserStore.ts").includes("result.created") &&
+    browserRs.includes("wake_browser_surface") &&
+    browserRs.includes("set_visible") &&
+    browserRs.includes("apply_webview_bounds") &&
+    caps.includes("host-browser-*")
+  ) {
+    pass("ui.host-browser-socks", "SSH SOCKS + HTTP CONNECT, session-scoped webviews");
+  } else {
+    fail("ui.host-browser-socks", "missing HTTP proxy / child webview wiring");
+  }
+  if (
+    exists("src/components/browser/BrowserDock.tsx") &&
+    read("src/stores/browserStore.ts").includes("minimize:") &&
+    read("src/components/browser/BrowserPanel.tsx").includes("host-browser-minimize")
+  ) {
+    pass("ui.host-browser-dock", "host browser minimize + dock restore");
+  } else {
+    fail("ui.host-browser-dock", "missing browser minimize/dock");
+  }
+  if (exists("e2e/host-browser.spec.ts")) {
+    pass("test.e2e.host-browser", "e2e/host-browser.spec.ts");
+  } else {
+    fail("test.e2e.host-browser", "missing host-browser E2E");
+  }
+  const browserStoreSrc = read("src/stores/browserStore.ts");
+  const browserPanelSrc = read("src/components/browser/BrowserPanel.tsx");
+  if (
+    browserStoreSrc.includes("sessionBuckets") &&
+    browserStoreSrc.includes("newTab:") &&
+    browserPanelSrc.includes("host-browser-tabs") &&
+    browserPanelSrc.includes("ChatHistoryIcon") &&
+    browserPanelSrc.includes("host-browser-library-toggle") &&
+    !browserPanelSrc.includes("host-browser-go")
+  ) {
+    pass("ui.host-browser-tabs", "per-host tabs + Enter navigate + library icon");
+  } else {
+    fail("ui.host-browser-tabs", "missing browser tabs / library icon / Go removal");
+  }
+  if (
+    browserRs.includes("FIT_WIDTH_EVAL") &&
+    browserRs.includes("PAGE_META_EVAL") &&
+    browserRs.includes("host-browser-load") &&
+    browserStoreSrc.includes("host-browser-load") &&
+    browserPanelSrc.includes("host-browser-progress") &&
+    browserPanelSrc.includes("host-browser-tab-favicon") &&
+    browserPanelSrc.includes("HostBrowserIcon") &&
+    browserPanelSrc.includes("hideTitleText") &&
+    exists("src/lib/browserPageChrome.ts")
+  ) {
+    pass(
+      "ui.host-browser-load-chrome",
+      "load progress + fit-width + favicon + globe title + window controls",
+    );
+  } else {
+    fail("ui.host-browser-load-chrome", "missing load progress / favicon / compact chrome");
+  }
+  if (
+    exists("src/stores/hostWorkspaceMemory.ts") &&
+    read("src/stores/sessionStore.ts").includes("restoreHostWorkspace") &&
+    read("src/stores/sessionStore.ts").includes("unstable_batchedUpdates") &&
+    read("src/stores/sessionStore.ts").includes("migrateHostWorkspace") &&
+    read("src/stores/hostWorkspaceMemory.ts").includes("markHostAiShell") &&
+    read("src/stores/desktopStore.ts").includes("applySessionUi") &&
+    read("src/lib/aiEngineer/panelVisibility.ts").includes(
+      "shouldKeepAiEngineerPanelMounted",
+    ) &&
+    read("src/lib/aiEngineer/panelVisibility.ts").includes("activeTabId") &&
+    app.includes("keepAiPanelMounted") &&
+    app.includes("markHostAiShell") &&
+    app.includes("activeTabId: sidebarView === \"hosts\" ? activeTabId : null") &&
+    read("src/stores/workspacePanelSwitch.ts").includes(
+      "Never reopen a parked host",
+    ) &&
+    read("src/components/aiEngineer/AiEngineerPanel.tsx").includes(
+      "ai-engineer-panel-parked",
+    ) &&
+    read("src/App.css").includes("opacity: 0 !important") &&
+    read("src/App.css").includes("visibility: visible !important") &&
+    read("src/components/aiEngineer/AiEngineerPanel.tsx").includes(
+      "shouldParkChatScrollerAtBottom",
+    ) &&
+    read("src/components/aiEngineer/AiMarkdown.tsx").includes(
+      "asyncHtml ?? initialHtml",
+    ) &&
+    read("src/stores/hostWorkspaceMemory.ts").includes(
+      "skipNextWorkspacePanelEnter",
+    ) &&
+    read("src/components/aiEngineer/AiEngineerPanel.tsx").includes(
+      "already bound to this host",
+    )
+  ) {
+    pass("ui.host-workspace-memory", "per-host shell snapshot on tab switch");
+    pass(
+      "ui.host-ai-fiber-no-flash",
+      "parked AI fibers stay warm across host tab switches",
+    );
+  } else {
+    fail("ui.host-workspace-memory", "missing host workspace memory wiring");
+    fail("ui.host-ai-fiber-no-flash", "AI fiber park still uses display:none or empty markdown seed");
+  }
+  if (
+    exists("src/components/desktop/DesktopPanel.tsx") &&
+    exists("src/components/desktop/DesktopDock.tsx") &&
+    exists("src/components/desktop/DesktopAppWindow.tsx") &&
+    exists("src/components/desktop/FileManagerPanel.tsx") &&
+    exists("src/components/desktop/ProcessManagerPanel.tsx") &&
+    exists("e2e/host-desktop.spec.ts") &&
+    read("src/stores/desktopStore.ts").includes("setAppMaximized") &&
+    read("src/stores/desktopStore.ts").includes("toggleDockApp") &&
+    read("src/components/desktop/DesktopAppWindow.tsx").includes(
+      "preview-float-backdrop",
+    ) &&
+    read("src/components/desktop/DesktopAppWindow.tsx").includes(
+      "preview-float-window",
+    ) &&
+    exists("src/lib/floatStacking.ts") &&
+    read("src/lib/floatStacking.ts").includes("DESKTOP_APP_FLOAT_Z_BASE = 34000") &&
+    read("src/lib/floatStacking.ts").includes("PREVIEW_FLOAT_Z = 35000")
+  ) {
+    pass("ui.host-desktop", "desktop dock apps open as Markdown-style floats");
+  } else {
+    fail("ui.host-desktop", "missing host desktop mode wiring");
+  }
+}
+
+{
+  // keep theme switcher block below from breaking — reinstate after locale block split
   const themeSwitcher = read("src/components/ThemeSwitcher.tsx");
   const appTsx = read("src/App.tsx");
   if (

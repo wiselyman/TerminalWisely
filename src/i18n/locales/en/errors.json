@@ -1,8 +1,8 @@
 {
   "renderCrashTitle": "Something went wrong rendering the UI",
   "reload": "Reload",
-  "quotaExceededHint": "Local storage is full (chat history too large). Clear the chat cache below and reload. Recent chats may need restoring from a backup.",
-  "clearChatCacheReload": "Clear chat cache and reload",
+  "quotaExceededHint": "Local storage quota is full — usually the old WebView cache file never shrank after chat moved to disk. Chat history is safe in the SQLite DB. Clear below, fully quit the app, and reopen.",
+  "clearChatCacheReload": "Clear WebView cache and reload",
   "connectFailed": "Connection failed",
   "authFailed": "Wrong password or authentication failed. Check and try again",
   "clipboardDenied": "Clipboard access denied. Try again or use ⌘/Ctrl+C and ⌘/Ctrl+V",

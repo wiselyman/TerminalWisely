@@ -12,6 +12,7 @@ mod path_size;
 mod passwd;
 mod preview;
 mod preview_sudo;
+mod browser;
 mod process;
 mod session;
 mod shell;
@@ -22,10 +23,14 @@ mod types;
 mod updater_support;
 mod app_menu;
 mod k8s;
+mod webkit_localstorage;
 
 use session::SessionManager;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::image::Image;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+static MAIN_WAS_MINIMIZED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_os = "linux")]
 fn apply_linux_webkit_workarounds() {
@@ -182,6 +187,9 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     apply_linux_webkit_workarounds();
 
+    // Before WKWebView locks the DB: reclaim freelist left after chat migration.
+    webkit_localstorage::compact_bloated_webkit_localstorage();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -191,6 +199,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(SessionManager::new())
         .manage(preview::PreviewManager::new())
+        .manage(browser::BrowserManager::new())
         .setup(|app| {
             apply_window_icon(app)?;
             app_menu::install(app)?;
@@ -214,10 +223,24 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                if window.label() == "main" {
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
                     ai_engineer::stop_sidecar();
                 }
+                tauri::WindowEvent::Resized(_) => {
+                    let minimized = window.is_minimized().unwrap_or(false);
+                    let was_minimized = MAIN_WAS_MINIMIZED.swap(minimized, Ordering::SeqCst);
+                    let app = window.app_handle().clone();
+                    if minimized {
+                        browser::hide_all_browser_surfaces(&app);
+                    } else if was_minimized {
+                        let _ = app.emit("host-browser-main-restored", ());
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -269,6 +292,24 @@ pub fn run() {
             commands::preview_save,
             commands::preview_read_bytes,
             commands::preview_write_bytes,
+            commands::browser_ensure,
+            commands::browser_navigate,
+            commands::browser_activate_tab,
+            commands::browser_close_tab,
+            commands::browser_hide_session,
+            commands::browser_shutdown,
+            commands::browser_set_webview_bounds,
+            commands::browser_set_visible,
+            commands::browser_hide_all,
+            commands::browser_back,
+            commands::browser_forward,
+            commands::browser_reload,
+            commands::browser_history_list,
+            commands::browser_history_record,
+            commands::browser_history_clear,
+            commands::browser_bookmarks_list,
+            commands::browser_bookmark_upsert,
+            commands::browser_bookmark_remove,
             commands::probe_path,
             commands::get_path_size,
             commands::open_preview_path,

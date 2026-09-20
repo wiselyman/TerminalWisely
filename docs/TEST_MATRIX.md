@@ -44,6 +44,7 @@
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
 | 语言切换 | — | Playwright `app-shell`/`settings-i18n`（menu portal + html lang） | smoke `locale-switcher` | — | ✓ |
+| 语言国旗 UI（zh-CN/en） | `localeFlag.test` | Playwright `app-shell` / `host-browser` | smoke `ui.locale-flags`（扁平矩形 SVG） | — | ✓ |
 | 主题切换（深色/浅色） | `appTheme` | Playwright `app-shell`（data-theme） | smoke `theme-switcher` | — | ✓ |
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
@@ -92,17 +93,46 @@
 | 远程 find | — | — | smoke | — | ✓ |
 | 路径补全 | Rust | — | — | — | ✓ |
 
-## 6. 本地文件面板 (Local FS)
+## 6. 本地文件面板 (Local FS) / Host Desktop
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| Host 左树+右内容（列表/网格） | `localFsTree` + `openDirectory`（点行开内容、三角展开；后退/上一级；地址栏跟 contentsPath） | — | smoke | — | ✓ |
+| Host Desktop 侧栏 + Dock（Markdown 式浮窗 / 最大化） | `workspacePanelSwitch` + `desktopStore` + `floatStacking` | — | smoke `ui.host-desktop` | **✓** `host-desktop` | ✓ |
+| Dock → 文件管理器浮窗（含检索） | — | — | smoke | **✓** `local-fs` | ✓ |
+| Dock → 进程管理器浮窗 | — | — | smoke | **✓** `local-fs-actions` | ✓ |
+| Host 左树+右内容（列表/网格） | `localFsTree` + `openDirectory` | — | smoke | — | ✓ |
 | Host 树新建/拖移/剪贴板/多选 | `localFsOps` + Rust `fs_path_tests` | create/copy/move | smoke menu | — | ✓ |
 | Host 树局部重载 | `localFsStore.reloadDirectory` | — | — | — | ✓ |
 | Host 树 pointer 拖移 | `localFsPointerMove` | — | smoke | — | ✓ |
-| Find in files | — | — | smoke | **✓** | ✓ |
-| 任务管理器 (进程/kill) | — | — | smoke | **✓** | ✓ |
+| Find in files（路径栏检索 → 文件列表） | — | — | smoke | **✓** | ✓ |
+| 任务管理器 (进程/kill) | `taskManagerColumns.test` | — | smoke | **✓** | ✓ |
 | 发送到 AI Chat | — | — | smoke | — | ✓ |
+
+## 6b. Host Browser (SSH SOCKS5)
+
+| 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
+|------|:----:|:----:|:----:|:---:|:----:|
+| Profile key / webview label | `browserProfile.test` | Rust `browser::tests` | smoke `ui.host-browser-*` / `ui.host-browser-dock` | **✓** `host-browser` | ✓ |
+| SOCKS5 CONNECT → direct-tcpip | Rust `socks::tests` | curl via bridge | smoke | — | ✓（真机可选） |
+| 回环 URL（`127.0.0.1` / localhost）走本地 TCP tunnel，地址栏仍显示原端口 | Rust `browser::tests` loopback retarget | — | smoke `webview_url_for` | — | ✓ |
+| 多页签（按 host `sessionId` 隔离） | `browserTabs.test` | — | smoke tabs | **✓** tab new | ✓ |
+| 切主机 tab 恢复工作区壳（终端/桌面/AI） | `hostWorkspaceMemory.test` + `panelVisibility` keep-mounted | — | smoke | — | ✓ |
+| 切主机不泄漏上一台聊天（activeTab 门闩 + reveal 拒异会话） | `panelVisibility` + `workspacePanelSwitch` reveal | — | smoke | — | ✓ |
+| 双主机 AI 切 tab 不闪（park=visibility + markdown sync seed + batched restore） | `hostWorkspaceMemory` + smoke park CSS | — | smoke `ui.host-ai-fiber-no-flash` | — | ✓ |
+| 连第二台后再回第一台 AI 仍在（addConnectingTab capture + markHostAiShell） | `hostWorkspaceMemory.test` | — | smoke `ui.host-workspace-memory` | — | ✓ |
+| Host Browser 跨主机隔离（session 级 webview/tunnel） | `browserProfile` session key + `browserStore` warm bucket + `hostWorkspaceMemory` | — | smoke `ui.host-browser-socks` | **✓** `host-browser` | ✓ |
+| AI 跨主机 fiber（不闪） | `useAiFiberSessions` + panel `surfaceActive` + scope messages | — | smoke `ui.host-workspace-memory` | — | ✓ |
+| Host Browser HTTPS CONNECT 全双工 | Rust `socks::tests` into_stream + HTTP CONNECT | — | smoke | — | ✓ |
+| Host Browser 现代 Chrome UA（绕过企业「浏览器版本过低」） | Rust `host_browser_user_agent` | — | smoke `ui.host-browser-socks` | — | ✓ |
+| WebKit localStorage 空洞压缩（迁库后 QuotaExceeded） | Rust `webkit_localstorage` | — | 启动时 VACUUM | — | ✓ |
+| Enter 导航 / 历史图标 | — | — | — | **✓** Enter + library toggle | ✓ |
+| 隔离 Webview（无 `proxy_url`） | — | — | smoke | — | ✓ |
+| 历史 / 自动提示 / 书签 | `browserHistory.test` | store JSON | smoke history/bookmarks keys | **✓** toolbar + suggest | ✓ |
+| 后退 / 前进 / 刷新 / URL 同步 | — | `on_page_load` emit | — | **✓** nav buttons | ✓ |
+| 加载进度条（直到 PageLoad Finished） | `browserPageChrome.test` | `host-browser-load` | smoke `ui.host-browser-load-chrome` | **✓** progress | ✓ |
+| 窄面板 fit-width（宽站如百度居中可见） | `computeFitWidthZoom` | Rust `FIT_WIDTH_EVAL` | smoke | — | ✓ |
+| 紧凑标题栏（地球 icon + 最小/最大/关闭）+ 页签 favicon | `fallbackFaviconUrl` + `PAGE_META_EVAL` | — | smoke | **✓** favicon + icon-title | ✓ |
+| Tab 切换 / 断线 shutdown | FE browserStore | — | — | mock panel open | ✓ |
 
 ## 7. 主机监控
 
@@ -174,6 +204,14 @@
 | web_search / web_fetch + SSRF | pytest | — | — | — | — |
 | Chat images + external links (cache, openUrl, image_generate, HTML extract) | Vitest `openExternalUrl`/`chatMedia`/`turnMedia`; Rust `media_cache`; pytest `test_web_fetch_image`/`test_html_images` | smoke `ai-md-external-link` | — | — | — |
 | Compaction / token meter | pytest | — | — | — | — |
+| Probe streak → force conclude（连续探查工具后强制收束） | `test_probe_streak` + `test_stream_loop` | — | smoke | — | — |
+| Content echo loop → abort stream（复读环掐流） | `test_content_loop_abort` + `test_stream_loop` | — | — | — | — |
+| Shell script dump → act（粘贴 find/lsof 不当 truncated 续写） | `test_thinking_sanitize` + `test_stream_loop` | — | smoke | — | — |
+| 括号截断续写（路径+容量 `(12G)` 不当作句号） | `test_thinking_sanitize` ends_without… | — | smoke | — | — |
+| 聊天滚动（maximize-follow：记住贴底意图；最大化/窗口 resize 贴底；中位 wheel 冻结；流式 sync markdown；busy stick；park-bottom）+ soft-hide 保 busy | `chatScroll.test` + Playwright `ai-chat-scroll-maximize` | — | smoke `ai.chat-scroll-final` | ✓ | — |
+| Tool JSON as content → recover tool_calls（闭合 fence 不误判截断） | `test_thinking_sanitize` + `test_stream_loop` + `truncatedAssistant.test` | — | smoke | — | — |
+| Approval merges into exec card（批准后隐藏批准卡，风险/已批准挂到执行卡） | `approvalCommandDedupe.test` + `approvalOptimisticExec.test` | — | smoke | — | — |
+| Auto-continue until finished（禁止用「请回复继续」躲避未写完） | `test_stream_loop` | — | smoke | — | — |
 | Ops plan / update_plan | pytest | — | — | — | — |
 | Mock Ollama 场景 | pytest director | — | — | k8s_e2e | — |
 

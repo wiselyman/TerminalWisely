@@ -2,67 +2,31 @@ import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEv
 import { useTranslation } from "react-i18next";
 import type { ProcessEntry } from "../types";
 import { formatFileSize } from "../lib/fileType";
+import {
+  clampTaskManagerColWidth,
+  emptyTaskManagerColumnWidths,
+  parseTaskManagerColumnWidths,
+  resolveTaskManagerColWidth,
+  TASK_MANAGER_ACTIONS_COL_WIDTH,
+  TASK_MANAGER_COL_MIN,
+  TASK_MANAGER_COL_PERCENTS,
+  TASK_MANAGER_COLUMNS_STORAGE_KEY,
+  type TaskManagerColKey,
+  type TaskManagerColumnWidths,
+} from "../lib/taskManagerColumns";
 
 export type ProcessSortKey = "name" | "cpu" | "memory" | "port";
 export type SortDirection = "asc" | "desc";
 
-type ResizableColumnKey = "name" | "port" | "memory" | "cpu";
+type ResizableColumnKey = TaskManagerColKey;
 
-const COLUMN_WIDTHS_KEY = "terminal-wisely.task-manager-columns";
-const ACTIONS_COLUMN_WIDTH = 28;
-
-const DEFAULT_COLUMN_WIDTHS = {
-  port: 56,
-  memory: 80,
-  cpu: 52,
-} as const;
-
-const MIN_COLUMN_WIDTHS: Record<ResizableColumnKey, number> = {
-  name: 80,
-  port: 48,
-  memory: 64,
-  cpu: 44,
-};
-
-const MAX_COLUMN_WIDTHS = {
-  memory: 96,
-  cpu: 64,
-} as const;
-
-interface ColumnWidths {
-  name: number | null;
-  port: number;
-  memory: number;
-  cpu: number;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function loadColumnWidths(): ColumnWidths {
+function loadColumnWidths(): TaskManagerColumnWidths {
   try {
-    const raw = localStorage.getItem(COLUMN_WIDTHS_KEY);
-    if (!raw) {
-      return { name: null, ...DEFAULT_COLUMN_WIDTHS };
-    }
-    const parsed = JSON.parse(raw) as Partial<ColumnWidths>;
-    return {
-      name: typeof parsed.name === "number" ? parsed.name : null,
-      port: parsed.port ?? DEFAULT_COLUMN_WIDTHS.port,
-      memory: clamp(
-        Math.max(parsed.memory ?? DEFAULT_COLUMN_WIDTHS.memory, DEFAULT_COLUMN_WIDTHS.memory),
-        MIN_COLUMN_WIDTHS.memory,
-        MAX_COLUMN_WIDTHS.memory,
-      ),
-      cpu: clamp(
-        Math.max(parsed.cpu ?? DEFAULT_COLUMN_WIDTHS.cpu, DEFAULT_COLUMN_WIDTHS.cpu),
-        MIN_COLUMN_WIDTHS.cpu,
-        MAX_COLUMN_WIDTHS.cpu,
-      ),
-    };
+    return parseTaskManagerColumnWidths(
+      localStorage.getItem(TASK_MANAGER_COLUMNS_STORAGE_KEY),
+    );
   } catch {
-    return { name: null, ...DEFAULT_COLUMN_WIDTHS };
+    return emptyTaskManagerColumnWidths();
   }
 }
 
@@ -137,8 +101,8 @@ export function TaskManagerTable({
     return next;
   }, [processes, sortDirection, sortKey]);
 
-  const persistColumnWidths = useCallback((next: ColumnWidths) => {
-    localStorage.setItem(COLUMN_WIDTHS_KEY, JSON.stringify(next));
+  const persistColumnWidths = useCallback((next: TaskManagerColumnWidths) => {
+    localStorage.setItem(TASK_MANAGER_COLUMNS_STORAGE_KEY, JSON.stringify(next));
   }, []);
 
   const startColumnResize = useCallback(
@@ -147,11 +111,16 @@ export function TaskManagerTable({
       event.stopPropagation();
 
       const table = (event.currentTarget as HTMLElement).closest("table");
+      const measured =
+        table
+          ?.querySelector(
+            column === "name"
+              ? ".task-manager-col-name"
+              : `.task-manager-col-${column}`,
+          )
+          ?.getBoundingClientRect().width ?? TASK_MANAGER_COL_MIN[column];
       const startWidth =
-        column === "name" && columnWidths.name == null
-          ? (table?.querySelector(".task-manager-col-name")?.getBoundingClientRect().width ??
-            160)
-          : columnWidths[column] ?? MIN_COLUMN_WIDTHS[column];
+        columnWidths[column] != null ? columnWidths[column]! : measured;
 
       resizeRef.current = {
         column,
@@ -164,8 +133,8 @@ export function TaskManagerTable({
         const state = resizeRef.current;
         if (!state) return;
         const delta = moveEvent.clientX - state.startX;
-        const next = Math.max(
-          MIN_COLUMN_WIDTHS[state.column],
+        const next = clampTaskManagerColWidth(
+          state.column,
           state.startWidth + delta,
         );
         setColumnWidths((current) => ({
@@ -191,6 +160,11 @@ export function TaskManagerTable({
     [columnWidths, persistColumnWidths],
   );
 
+  const headerWidth = (column: ResizableColumnKey) => {
+    const resolved = resolveTaskManagerColWidth(column, columnWidths);
+    return typeof resolved === "number" ? { width: resolved } : undefined;
+  };
+
   const renderHeader = (
     column: ResizableColumnKey,
     label: string,
@@ -199,12 +173,8 @@ export function TaskManagerTable({
     showSpinner = false,
   ) => (
     <th
-      className={`task-manager-th-resizable ${extraClass}`.trim()}
-      style={
-        column === "name" && columnWidths.name == null
-          ? undefined
-          : { width: columnWidths[column] ?? undefined }
-      }
+      className={`task-manager-th-resizable task-manager-col-${column} ${extraClass}`.trim()}
+      style={headerWidth(column)}
     >
       <button type="button" className="task-manager-sort" onClick={() => onSort(sort)}>
         {label} {sortIndicator(sortKey === sort, sortDirection)}
@@ -229,6 +199,13 @@ export function TaskManagerTable({
     return (
       <div className="task-manager-table-wrap task-manager-table-wrap-loading">
         <table className="task-manager-table task-manager-table-skeleton" aria-busy="true">
+          <colgroup>
+            <col style={{ width: TASK_MANAGER_COL_PERCENTS.name }} />
+            <col style={{ width: TASK_MANAGER_COL_PERCENTS.port }} />
+            <col style={{ width: TASK_MANAGER_COL_PERCENTS.memory }} />
+            <col style={{ width: TASK_MANAGER_COL_PERCENTS.cpu }} />
+            <col style={{ width: TASK_MANAGER_ACTIONS_COL_WIDTH }} />
+          </colgroup>
           <thead>
             <tr>
               <th>{t("taskManager.colName")}</th>
@@ -266,12 +243,24 @@ export function TaskManagerTable({
         <colgroup>
           <col
             className="task-manager-col-name"
-            style={columnWidths.name != null ? { width: columnWidths.name } : undefined}
+            style={{ width: resolveTaskManagerColWidth("name", columnWidths) }}
           />
-          <col style={{ width: columnWidths.port }} />
-          <col style={{ width: columnWidths.memory }} />
-          <col style={{ width: columnWidths.cpu }} />
-          <col style={{ width: ACTIONS_COLUMN_WIDTH }} />
+          <col
+            className="task-manager-col-port"
+            style={{ width: resolveTaskManagerColWidth("port", columnWidths) }}
+          />
+          <col
+            className="task-manager-col-memory"
+            style={{ width: resolveTaskManagerColWidth("memory", columnWidths) }}
+          />
+          <col
+            className="task-manager-col-cpu"
+            style={{ width: resolveTaskManagerColWidth("cpu", columnWidths) }}
+          />
+          <col
+            className="task-manager-col-actions"
+            style={{ width: TASK_MANAGER_ACTIONS_COL_WIDTH }}
+          />
         </colgroup>
         <thead>
           <tr>

@@ -8,10 +8,8 @@ describe("panelSetterHygiene", () => {
   it("passes when setters are declared via useState", () => {
     const src = `
       const [approvePermanently, setApprovePermanently] = useState(false);
-      const [showApprovalAdvanced, setShowApprovalAdvanced] = useState(false);
       useEffect(() => {
         setApprovePermanently(false);
-        setShowApprovalAdvanced(false);
       }, []);
       data-testid="ai-engineer-approval-once"
       data-testid="ai-engineer-approval-session"

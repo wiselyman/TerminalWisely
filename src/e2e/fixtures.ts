@@ -158,5 +158,6 @@ export const e2eSystemdUnits = [
 ];
 
 export const e2eFindResults = [
-  { path: "/var/log/app.log", line: 42, text: "ERROR e2e match" },
+  { path: "/var/log/app.log", kind: "file" as const, size_bytes: 2048 },
+  { path: "/home/e2e/logs", kind: "directory" as const, size_bytes: null },
 ];

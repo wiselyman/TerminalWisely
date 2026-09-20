@@ -10,13 +10,22 @@ test.describe("Local FS actions", () => {
     await api.openLocalFsPanel();
   });
 
-  test("shows find and processes tabs", async ({ page }) => {
-    const panel = page.locator(".local-fs-panel");
-    await expect(panel).toBeVisible();
-    await panel.getByRole("tab", { name: /Find|查找/i }).click();
-    await expect(panel.locator(".find-panel-head")).toBeVisible();
-    await panel.getByRole("tab", { name: /Processes|进程/i }).click();
-    await expect(panel.locator(".task-manager-toolbar")).toBeVisible();
+  test("shows find tab and process manager from dock", async ({ page }) => {
+    const files = page.getByTestId("host-file-manager-panel");
+    await expect(files).toBeVisible();
+    await expect(page.getByTestId("file-manager-search")).toBeVisible();
+    await page.getByTestId("file-manager-search").fill("*.log");
+    await page.getByTestId("file-manager-search").press("Enter");
+    await expect(page.getByTestId("local-fs-contents")).toBeVisible();
+
+    // File-manager float covers the panel dock; minimize first (same as host-desktop e2e).
+    await page.getByTestId("host-file-manager-minimize").click();
+    await expect(files).toHaveCount(0);
+    await page.getByTestId("dock-app-processes").click();
+    await expect(page.getByTestId("host-process-manager-panel")).toBeVisible();
+    await expect(
+      page.getByTestId("host-process-manager-filter"),
+    ).toBeVisible();
   });
 
   test("kill process invokes backend", async ({ page }) => {

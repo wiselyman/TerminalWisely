@@ -1,9 +1,11 @@
 import { create } from "zustand";
+import { useDesktopStore } from "./desktopStore";
 import { useAiEngineerStore } from "./aiEngineerStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
 import { useManagedEntityStore } from "./managedEntityStore";
 import { useTaskManagerStore } from "./taskManagerStore";
+import { useBrowserStore } from "./browserStore";
 
 export type SidebarView = "hosts" | "k8s";
 
@@ -20,9 +22,11 @@ function loadView(): SidebarView {
 
 /** Hosts-only right panels must not linger after switching to K8s. */
 function closeHostsWorkspacePanels() {
+  useDesktopStore.getState().close();
   useLocalFsStore.getState().close();
   useTaskManagerStore.getState().close();
   useFindStore.getState().close();
+  void useBrowserStore.getState().close();
 }
 
 interface SidebarViewState {

@@ -6,7 +6,9 @@ import {
   createDefaultLayout,
   deleteEntityGroup,
   isDefaultGroupId,
+  loadEntityListLayout,
   moveEntityToSection,
+  preferHealthierLayout,
   reorderEntityGroups,
   reorderEntityItem,
   syncLayoutWithEntities,
@@ -124,6 +126,29 @@ describe("entityListLayout", () => {
     expect(synced.order[groupId]).toEqual(["b"]);
   });
 
+  it("preferHealthierLayout recovers stripped v3 hosts from sidebar snapshot", () => {
+    const groupId = "grp-home";
+    const stripped = {
+      version: 3 as const,
+      groupOrder: [groupId, UNGROUPED_SECTION],
+      groups: [{ id: groupId, name: "家", collapsed: true }],
+      defaultGroupCollapsed: false,
+      assignments: { a: null, b: null },
+      order: { [groupId]: [], [UNGROUPED_SECTION]: ["a", "b"] },
+    };
+    const healthy = {
+      version: 3 as const,
+      groupOrder: [groupId, UNGROUPED_SECTION],
+      groups: [{ id: groupId, name: "家", collapsed: false }],
+      defaultGroupCollapsed: true,
+      assignments: { a: groupId, b: groupId },
+      order: { [groupId]: ["a", "b"], [UNGROUPED_SECTION]: [] },
+    };
+    const picked = preferHealthierLayout(stripped, healthy, ["a", "b"]);
+    expect(picked?.assignments.a).toBe(groupId);
+    expect(picked?.order[groupId]).toEqual(["a", "b"]);
+  });
+
   it("reload preserves grouped assignments after migration shape", () => {
     let layout = addEntityGroup(createDefaultLayout(ids), "Prod");
     const groupId = layout.groups[0]!.id;
@@ -159,5 +184,38 @@ describe("entityListLayout", () => {
     expect(migrated?.version).toBe(3);
     expect(migrated?.assignments.a).toBe(groupId);
     expect(migrated?.order[groupId]).toEqual(["a"]);
+  });
+
+  it("loadEntityListLayout rewrites stripped hosts from sidebar v2", () => {
+    const groupId = "grp-home";
+    const stripped = {
+      version: 3,
+      groupOrder: [groupId, UNGROUPED_SECTION],
+      groups: [{ id: groupId, name: "家", collapsed: true }],
+      defaultGroupCollapsed: false,
+      assignments: { a: null, b: null },
+      order: { [groupId]: [], [UNGROUPED_SECTION]: ["a", "b"] },
+    };
+    const sidebar = {
+      version: 2,
+      groups: [{ id: groupId, name: "家", collapsed: false }],
+      groupOrder: [groupId, UNGROUPED_SECTION],
+      scopes: {
+        hosts: {
+          assignments: { a: groupId, b: groupId },
+          order: { [groupId]: ["a", "b"], [UNGROUPED_SECTION]: [] },
+        },
+        k8s: { assignments: {}, order: { [UNGROUPED_SECTION]: [] } },
+      },
+    };
+    localStorage.setItem("tw.entityLayout.hosts", JSON.stringify(stripped));
+    localStorage.setItem("tw.entityLayout.sidebar", JSON.stringify(sidebar));
+    const loaded = loadEntityListLayout("hosts", ["a", "b"]);
+    expect(loaded.assignments.a).toBe(groupId);
+    expect(loaded.order[groupId]).toEqual(["a", "b"]);
+    const rewritten = JSON.parse(
+      localStorage.getItem("tw.entityLayout.hosts") || "{}",
+    );
+    expect(rewritten.assignments.a).toBe(groupId);
   });
 });

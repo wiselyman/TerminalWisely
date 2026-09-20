@@ -201,6 +201,126 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   reconnect_ssh_session: () => sshSessionResult(),
   set_ai_ssh_lease: () => null,
   close_session: () => null,
+  browser_ensure: (args) => {
+    const req =
+      (args as { request?: { session_id?: string } }).request ??
+      (args as { session_id?: string });
+    const sessionId = String(req.session_id ?? E2E_SSH_SESSION_ID);
+    return {
+      session_id: sessionId,
+      profile_key: "e2e@127.0.0.1:22",
+      socks_port: 1080,
+      webview_label: "host-browser-e2e-127-0-0-1-22",
+      created: true,
+    };
+  },
+  browser_navigate: (args) => {
+    const req =
+      (args as { request?: Record<string, unknown> }).request ??
+      (args as Record<string, unknown>);
+    const url = String(req.url ?? "");
+    const tabId = String(req.tab_id ?? "default");
+    const profileKey = String(req.profile_key ?? "e2e@127.0.0.1:22");
+    // Match browser_ensure mock label so FE load listener accepts the event.
+    const label = "host-browser-e2e-127-0-0-1-22";
+    void import("./tauriEventMock").then(({ __emitTauriEvent }) => {
+      __emitTauriEvent("host-browser-load", {
+        webview_label: label,
+        profile_key: profileKey,
+        tab_id: tabId,
+        url,
+        phase: "started",
+      });
+      queueMicrotask(() => {
+        __emitTauriEvent("host-browser-load", {
+          webview_label: label,
+          profile_key: profileKey,
+          tab_id: tabId,
+          url,
+          phase: "finished",
+        });
+        let favicon = "";
+        try {
+          if (url.startsWith("http")) favicon = `${new URL(url).origin}/favicon.ico`;
+        } catch {
+          favicon = "";
+        }
+        __emitTauriEvent("host-browser-page", {
+          webview_label: label,
+          profile_key: profileKey,
+          tab_id: tabId,
+          url,
+          title: url.includes("baidu") ? "百度一下" : url,
+          favicon,
+        });
+      });
+    });
+    return null;
+  },
+  browser_shutdown: () => null,
+  browser_set_webview_bounds: () => null,
+  browser_set_visible: () => null,
+  browser_hide_all: () => null,
+  browser_hide_session: () => null,
+  browser_activate_tab: () => ({
+    session_id: "e2e-session",
+    profile_key: "e2e@mock:22",
+    socks_port: 0,
+    webview_label: "host-browser-e2e",
+    created: false,
+  }),
+  browser_close_tab: () => null,
+  browser_back: () => null,
+  browser_forward: () => null,
+  browser_reload: (args) => {
+    const req =
+      (args as { request?: Record<string, unknown> }).request ??
+      (args as Record<string, unknown>);
+    const label = String(req.webview_label ?? "host-browser-e2e");
+    void import("./tauriEventMock").then(({ __emitTauriEvent }) => {
+      __emitTauriEvent("host-browser-load", {
+        webview_label: label,
+        profile_key: "e2e@127.0.0.1:22",
+        tab_id: "default",
+        url: "http://127.0.0.1:8080/",
+        phase: "started",
+      });
+      queueMicrotask(() => {
+        __emitTauriEvent("host-browser-load", {
+          webview_label: label,
+          profile_key: "e2e@127.0.0.1:22",
+          tab_id: "default",
+          url: "http://127.0.0.1:8080/",
+          phase: "finished",
+        });
+      });
+    });
+    return null;
+  },
+  browser_history_list: () => [
+    {
+      url: "http://127.0.0.1:8080/",
+      title: "Local",
+      profile_key: "e2e@127.0.0.1:22",
+      visited_at: Date.now(),
+    },
+  ],
+  browser_history_record: () => null,
+  browser_history_clear: () => null,
+  browser_bookmarks_list: () => [],
+  browser_bookmark_upsert: (args) => {
+    const req =
+      (args as { request?: Record<string, string> }).request ??
+      (args as Record<string, string>);
+    return {
+      id: "e2e-bm-1",
+      url: String(req.url ?? ""),
+      title: String(req.title ?? req.url ?? ""),
+      profile_key: String(req.profile_key ?? "e2e@127.0.0.1:22"),
+      created_at: Date.now(),
+    };
+  },
+  browser_bookmark_remove: () => null,
   terminal_input: () => null,
   resize_terminal: () => null,
   insert_terminal_command: () => null,
@@ -242,7 +362,11 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   extract_archive: () => null,
   get_path_size: () => ({ path: "/home/e2e", kind: "directory", size_bytes: 4096 }),
   complete_path: () => [],
-  find_files: () => e2eFindResults,
+  find_files: () => ({
+    entries: e2eFindResults,
+    truncated: false,
+    start_path: "/home/e2e",
+  }),
   list_local_roots: () => e2eLocalRoots,
   list_local_directory: () => e2eLocalDir,
   list_remote_directory: () => e2eRemoteDir,

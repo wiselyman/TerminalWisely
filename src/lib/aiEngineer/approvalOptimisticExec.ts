@@ -6,6 +6,7 @@ export type ApprovalForOptimisticExec = {
   execCommand?: string;
   intent?: string;
   toolName?: string;
+  risk?: string;
 };
 
 export type OptimisticToolLine = {
@@ -16,6 +17,8 @@ export type OptimisticToolLine = {
   detail: string;
   status: "running";
   startedAt: number;
+  risk?: string;
+  approvalDecision?: "approved";
 };
 
 /** Build a provisional running tool line from an approved card (needs callId). */
@@ -31,6 +34,7 @@ export function buildOptimisticToolAfterApproval(
     ""
   ).trim();
   if (!detail) return null;
+  const risk = (approval.risk || "").trim() || undefined;
   return {
     kind: "tool",
     name: (approval.toolName || "terminal_exec").trim() || "terminal_exec",
@@ -39,6 +43,8 @@ export function buildOptimisticToolAfterApproval(
     detail,
     status: "running",
     startedAt: opts?.now ?? Date.now(),
+    risk,
+    approvalDecision: "approved",
   };
 }
 

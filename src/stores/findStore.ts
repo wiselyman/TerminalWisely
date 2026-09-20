@@ -272,9 +272,9 @@ export const useFindStore = create<FindState>((set, get) => ({
         },
       });
       set({
-        entries: result.entries,
-        truncated: result.truncated,
-        sessionCwd: result.start_path,
+        entries: Array.isArray(result.entries) ? result.entries : [],
+        truncated: Boolean(result.truncated),
+        sessionCwd: result.start_path || state.sessionCwd,
         loading: false,
         error: null,
         lastRunAt: Date.now(),

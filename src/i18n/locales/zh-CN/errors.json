@@ -1,8 +1,8 @@
 {
   "renderCrashTitle": "界面渲染出错",
   "reload": "重新加载",
-  "quotaExceededHint": "本地存储空间已满（聊天记录过大）。可先点下方清理缓存后重载；近期对话可能需从备份恢复。",
-  "clearChatCacheReload": "清理聊天缓存并重载",
+  "quotaExceededHint": "本地存储配额已满——多半是聊天迁到磁盘后，旧的 WebView 缓存文件没有收缩。聊天记录在 SQLite 里还在。请点下方清理后完全退出再打开。",
+  "clearChatCacheReload": "清理 WebView 缓存并重载",
   "connectFailed": "连接失败",
   "authFailed": "密码错误或认证失败，请检查后重试",
   "clipboardDenied": "无法访问剪贴板，请重试或使用 ⌘/Ctrl+C 与 ⌘/Ctrl+V",

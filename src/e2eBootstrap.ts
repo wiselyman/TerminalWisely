@@ -27,6 +27,10 @@ import { focusManagedEntity } from "./stores/managedEntityStore";
 import { useSessionStore } from "./stores/sessionStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { openAppSettings } from "./stores/downloadSettingsStore";
+import {
+  captureHostWorkspace,
+  restoreHostWorkspace,
+} from "./stores/hostWorkspaceMemory";
 import type { K8sResourceCategory } from "./lib/k8s/types";
 import type { TabSession } from "./types";
 
@@ -38,8 +42,23 @@ export interface TwE2eApi {
   closeTab: (sessionId: string) => Promise<void>;
   setActiveTab: (sessionId: string) => void;
   openLocalFsPanel: () => void;
+  openBrowserPanel: () => void;
   openAiChat: () => Promise<void>;
   openAiChatForSsh: () => Promise<void>;
+  /** Mark the live AI run as busy (no sidecar stream) for host-switch tests. */
+  simulateAiBusy: () => void;
+  /**
+   * Grow a streaming assistant bubble (seed tall history first). Used to verify
+   * stick-to-bottom pins before paint during token growth.
+   */
+  simulateStreamingAssistantGrow: (opts?: {
+    seedRows?: number;
+    chunk?: string;
+    reset?: boolean;
+  }) => void;
+  getAiBusy: () => boolean;
+  /** Distance from bottom of the active (unparked) AI messages scroller. */
+  getAiChatScrollDist: () => number;
   emitTerminalPrompt: (text?: string) => void;
   simulateTerminalDrop: (paths: string[]) => Promise<void>;
   simulateApproval: (command?: string) => void;
@@ -129,6 +148,8 @@ function openSshTab() {
 }
 
 function openSecondSshTab() {
+  const prev = useSessionStore.getState().activeTabId;
+  if (prev) captureHostWorkspace(prev);
   mountSshTab({
     id: E2E_SSH_SESSION_ID_2,
     title: "e2e2@127.0.0.1",
@@ -140,6 +161,8 @@ function openSecondSshTab() {
     os_id: "linux",
     os_name: "Linux",
   });
+  // Match real tab switches: soft-hide prior host AI without aborting the run.
+  restoreHostWorkspace(E2E_SSH_SESSION_ID_2);
 }
 
 async function closeTab(sessionId: string) {
@@ -154,10 +177,19 @@ function openLocalFsPanel() {
   switchWorkspacePanel("localFs", E2E_SSH_SESSION_ID, "e2e@127.0.0.1:22", "files");
 }
 
+function openBrowserPanel() {
+  switchWorkspacePanel("browser", E2E_SSH_SESSION_ID);
+}
+
 async function openAiChat() {
+  await openK8sWorkbench();
+  const cluster = useK8sStore.getState().selectedCluster;
+  if (!cluster) {
+    throw new Error("openAiChat: no k8s cluster selected");
+  }
   useAiEngineerStore.getState().bindManagedEntity(
-    { kind: "cluster", id: "e2e-k3s-local", label: "e2e-k3s" },
-    { open: true },
+    { kind: "cluster", id: cluster.id, label: cluster.display_name || cluster.id },
+    { open: true, clusterTarget: cluster },
   );
   await useAiEngineerStore.getState().ensureReady();
 }
@@ -174,6 +206,68 @@ async function openAiChatForSsh() {
     { open: true },
   );
   await useAiEngineerStore.getState().ensureReady();
+}
+
+function simulateAiBusy() {
+  // Busy without a visible streaming bubble so the footer busy-phase line shows
+  // (shouldShowChatBusyLine hides when streaming assistant text is visible).
+  useAiEngineerStore.setState({
+    busy: true,
+    modelPhase: "thinking",
+  });
+}
+
+function simulateStreamingAssistantGrow(opts?: {
+  seedRows?: number;
+  chunk?: string;
+  reset?: boolean;
+}) {
+  const seedRows = opts?.seedRows ?? 20;
+  const chunk = opts?.chunk ?? "\nmore output line";
+  const reset = opts?.reset ?? false;
+  const state = useAiEngineerStore.getState();
+  const STREAM_ID = "e2e-stream-assistant";
+  let messages = state.messages;
+  if (reset || !messages.some((m) => m.id === STREAM_ID)) {
+    const seeds = Array.from({ length: seedRows }, (_, i) => ({
+      id: `e2e-seed-${i}`,
+      kind: "assistant" as const,
+      content: `seed row ${i}\n${"x".repeat(120)}`,
+      streaming: false,
+    }));
+    messages = [
+      ...seeds,
+      {
+        id: STREAM_ID,
+        kind: "assistant" as const,
+        content: "stream start",
+        streaming: true,
+      },
+    ];
+  } else {
+    messages = messages.map((m) =>
+      m.id === STREAM_ID && m.kind === "assistant"
+        ? { ...m, content: `${m.content}${chunk}`, streaming: true }
+        : m,
+    );
+  }
+  useAiEngineerStore.setState({
+    busy: true,
+    modelPhase: "streaming",
+    messages,
+  });
+}
+
+function getAiBusy() {
+  return useAiEngineerStore.getState().busy;
+}
+
+function getAiChatScrollDist() {
+  const el = document.querySelector(
+    ".ai-engineer-panel:not(.ai-engineer-panel-parked) .ai-engineer-messages",
+  ) as HTMLElement | null;
+  if (!el) return Number.POSITIVE_INFINITY;
+  return el.scrollHeight - el.scrollTop - el.clientHeight;
 }
 
 function terminalDropTarget(): HTMLElement {
@@ -319,8 +413,13 @@ export function runE2eBootstrap(): void {
     closeTab,
     setActiveTab,
     openLocalFsPanel,
+    openBrowserPanel,
     openAiChat,
     openAiChatForSsh,
+    simulateAiBusy,
+    simulateStreamingAssistantGrow,
+    getAiBusy,
+    getAiChatScrollDist,
     emitTerminalPrompt: (text = "e2e@127.0.0.1:~$ ") => {
       __e2eEmitTerminalOutput(`${text}\r\n`);
     },

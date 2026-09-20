@@ -101,7 +101,9 @@ export function looksTruncatedAssistant(text: string | undefined | null): boolea
   if (/[([{（][^)\]}）\n]{0,40}$/.test(probe)) return true;
   const lines = probe.split("\n");
   const last = (lines[lines.length - 1] || probe).trim();
-  if (/[(（\[{：:,，、`]$/.test(last)) return true;
+  // Closed fences end with ``` — complete. Lone trailing ` = cut inline code.
+  if (/[(（\[{：:,，、]$/.test(last)) return true;
+  if (/`$/.test(last) && !/```$/.test(last)) return true;
   if (last && looksLikeIncompleteMdTable(probe, last)) return true;
   if (last.startsWith("│") && probe.length >= 80) return true;
   if (/\S\s+#{1,6}\s+\S/.test(last) && probe.length >= 80) return true;
@@ -123,6 +125,30 @@ function leadingHeadingTitle(text: string): string | null {
   const first = (text.trimStart().split("\n")[0] || "").trim();
   const m = first.match(MD_HEADING_CAPTURE);
   return m ? m[2].trim() : null;
+}
+
+/** Glue a table-row continuation so markdown stays one table. */
+export function joinMarkdownTableContinuation(
+  previous: string,
+  incoming: string,
+): string | null {
+  const prev = previous || "";
+  if (!prev || !incoming) return null;
+  const lines = prev.split("\n");
+  const last = lines[lines.length - 1] || "";
+  const lastTrim = last.trim();
+  if (!lastTrim.startsWith("|")) return null;
+  // Mid-cell cut: prior row has no closing pipe; glue the suffix (keep spaces).
+  if (!lastTrim.endsWith("|")) {
+    return prev + incoming.replace(/^\n+/, "");
+  }
+  // Complete row then more rows — keep a single newline between them.
+  const nextRows = incoming.replace(/^\s+/, "");
+  if (nextRows.startsWith("|")) {
+    const sep = prev.endsWith("\n") ? "" : "\n";
+    return prev + sep + nextRows;
+  }
+  return null;
 }
 
 function bodyHasHeadingTitle(body: string, title: string): boolean {
@@ -147,6 +173,11 @@ export function mergeAssistantContinuation(
   const next = incoming || "";
   if (!prev) return stripTrailingDanglingHeading(next) || next;
   if (!next) return stripTrailingDanglingHeading(prev) || prev;
+
+  const tableJoinEarly = joinMarkdownTableContinuation(prev, next);
+  if (tableJoinEarly != null && looksTruncatedAssistant(prev)) {
+    return stripTrailingDanglingHeading(tableJoinEarly) || tableJoinEarly;
+  }
 
   // Streamed previews often gain leading newlines and miss the final terminator
   // that the sanitized assistant_message still has — prefer the cleaned final.
@@ -236,6 +267,10 @@ export function mergeAssistantContinuation(
     next.length < Math.floor(prev.length * 0.5) &&
     looksTruncatedAssistant(prev)
   ) {
+    const tableJoin = joinMarkdownTableContinuation(prev, next);
+    if (tableJoin != null) {
+      return stripTrailingDanglingHeading(tableJoin) || tableJoin;
+    }
     const needSep =
       !prev.endsWith("\n") &&
       !next.startsWith("\n") &&
@@ -261,4 +296,32 @@ export function mergeAssistantContinuation(
     /^#{1,6}\s/.test(next.trimStart());
   const joined = needSep ? `${prev}\n\n${next}` : prev + next;
   return stripTrailingDanglingHeading(joined) || joined;
+}
+
+/**
+ * Choose final assistant text for an `assistant_message` event.
+ * Trunc-continue samples often emit only the suffix — never wipe a longer
+ * truncated prior with a short replace.
+ */
+export function resolveAuthoritativeAssistantContent(
+  previous: string,
+  incoming: string,
+  opts?: { replace?: boolean },
+): string {
+  const prev = previous || "";
+  const nextRaw = incoming || "";
+  const next = stripTrailingDanglingHeading(nextRaw) || nextRaw;
+  if (!prev) return next;
+  if (opts?.replace === false) {
+    return mergeAssistantContinuation(prev, nextRaw);
+  }
+  const prevOpen = prev.slice(0, Math.min(60, prev.length)).trim();
+  if (
+    looksTruncatedAssistant(prev) &&
+    next.length < Math.floor(prev.length * 0.85) &&
+    !(prevOpen.length >= 20 && next.includes(prevOpen))
+  ) {
+    return mergeAssistantContinuation(prev, nextRaw);
+  }
+  return next;
 }

@@ -102,6 +102,20 @@ def test_looks_like_truncated_answer_prose_only_not_flagged() -> None:
     )
 
 
+def test_ends_without_sentence_terminator_parenthetical_size_cut() -> None:
+    """Closing ) after a size/path is NOT a finished answer — even when short."""
+    from app.harness.verify import (
+        SOFT_CONTINUE_MIN_CHARS,
+        ends_without_sentence_terminator,
+    )
+
+    cut = "已删除。`/data/models/` 现在为空，仅 12K (空目录)"
+    assert ends_without_sentence_terminator(cut)
+    assert len(cut.strip()) >= SOFT_CONTINUE_MIN_CHARS
+    assert not ends_without_sentence_terminator("模型已停，文件已删干净。")
+    assert not ends_without_sentence_terminator("Done.")
+
+
 def test_looks_like_truncated_answer_unclosed_bracket_cjk() -> None:
     """Structural: cut at 「连通性 [不」."""
     from app.llm.thinking import looks_like_truncated_answer
@@ -194,7 +208,12 @@ def test_reasoning_starved_visible_reply() -> None:
 def test_raised_max_output_tokens() -> None:
     from app import paths
 
-    assert paths.raised_max_output_tokens(8192) == min(16384, paths.max_output_tokens_hard_cap())
+    assert paths.max_output_tokens() >= 16384
+    assert paths.max_output_tokens_hard_cap() >= paths.max_output_tokens()
+    assert paths.prefer_complete_max_output_tokens() == paths.max_output_tokens_hard_cap()
+    assert paths.raised_max_output_tokens(8192) == min(
+        16384, paths.max_output_tokens_hard_cap()
+    )
     assert paths.raised_max_output_tokens(100) == 200
 
 
@@ -369,3 +388,126 @@ def test_response_echo_loop_keeps_first_answer() -> None:
     f = StreamContentFilter()
     f.feed(raw)
     assert not f.loop_detected
+
+
+def test_shell_script_dump_and_echo_loop() -> None:
+    from app.llm.thinking import (
+        is_command_dump_echo_loop,
+        looks_like_shell_script_dump,
+        StreamContentFilter,
+    )
+
+    block = (
+        "我来检查主机上可能无效的大文件。\n"
+        "# 检查已删除但仍被进程占用的文件\n"
+        "lsof +L1 2>/dev/null | head -20\n\n"
+        "# 检查孤立的大文件（超过100MB）\n"
+        "find / -xdev -type f -size +100M -exec ls -lh {} \\; 2>/dev/null | "
+        "sort -k5 -h -r | head -20\n\n"
+        "# 检查核心转储文件\n"
+        'find / -name "core*" -type f -size +10M 2>/dev/null | head -10\n\n'
+        "# 检查孤立的大日志文件\n"
+        'find /var/log -name "*.log" -type f -size +100M 2>/dev/null | head -10\n\n'
+        "# 检查孤立的大备份文件\n"
+        'find / -name "*.bak" -o -name "*.old" -type f -size +10M 2>/dev/null | head -10\n'
+    )
+    assert looks_like_shell_script_dump(block)
+    # Dense paste without comment/blank lines (the live death-loop shape).
+    dense = (
+        "我来检查主机上可能无效的大文件。\n"
+        "lsof +L1 2>/dev/null | head -20\n"
+        "find / -xdev -type f -size +100M 2>/dev/null | head -20\n"
+        'find / -name "core*" -type f -size +10M 2>/dev/null | head -10\n'
+        'find /var/log -name "*.log" -type f -size +100M 2>/dev/null | head -10\n'
+        'find / -name "*.bak" -type f -size +10M 2>/dev/null | head -10\n'
+    )
+    assert looks_like_shell_script_dump(dense)
+    assert not is_command_dump_echo_loop(block)
+    echoed = (block + "\n") * 3
+    assert is_command_dump_echo_loop(echoed)
+    f = StreamContentFilter()
+    for i in range(0, len(echoed), 60):
+        f.feed(echoed[i : i + 60])
+    assert f.loop_detected
+
+
+def test_short_command_preamble_still_not_echo_loop() -> None:
+    from app.llm.thinking import is_command_dump_echo_loop, looks_like_shell_script_dump
+
+    raw = (
+        "lscpu | grep -E \"Model name|Architecture\"\n"
+        "free -h\n"
+        "df -h /\n"
+        "lscpu | grep -E \"Model name|Architecture\"\n"
+        "free -h\n"
+        "df -h /\n"
+    )
+    assert not looks_like_shell_script_dump(raw)
+    assert not is_command_dump_echo_loop(raw)
+
+
+def test_closed_code_fence_not_truncated() -> None:
+    from app.llm.thinking import looks_like_truncated_answer
+
+    fenced = (
+        "```json\n"
+        "{\n"
+        '  "name": "terminal_exec",\n'
+        '  "arguments": {\n'
+        '    "command": "systemctl stop teamviewer"\n'
+        "  }\n"
+        "}\n"
+        "```"
+    )
+    assert not looks_like_truncated_answer(fenced)
+    assert looks_like_truncated_answer("说明如下：`getting")
+
+
+def test_extract_tool_calls_from_fenced_json() -> None:
+    from app.llm.thinking import (
+        extract_tool_calls_from_content,
+        looks_like_tool_call_json_dump,
+    )
+
+    fenced = (
+        "```json\n"
+        "{\n"
+        '  "name": "terminal_exec",\n'
+        '  "arguments": {\n'
+        '    "command": "systemctl stop teamviewer"\n'
+        "  }\n"
+        "}\n"
+        "```"
+    )
+    recovered = extract_tool_calls_from_content(fenced)
+    assert len(recovered) == 1
+    assert recovered[0]["function"]["name"] == "terminal_exec"
+    assert "systemctl stop teamviewer" in recovered[0]["function"]["arguments"]
+    assert looks_like_tool_call_json_dump(fenced)
+    # Incomplete dump still flagged (must not enter trunc-continue).
+    assert looks_like_tool_call_json_dump(
+        '```json\n{"name": "terminal_exec", "arguments": {"command":'
+    )
+
+
+def test_extract_bare_command_intent_args_as_terminal_exec() -> None:
+    from app.llm.thinking import (
+        extract_tool_calls_from_content,
+        looks_like_tool_call_json_dump,
+    )
+
+    raw = (
+        "find / -xdev -type f -size +100M -exec ls -lh {} \\; 2>/dev/null | sort -k5 -h\n"
+        "```json\n"
+        "{\n"
+        '  "command": "find / -xdev -type f -size +100M | head",\n'
+        '  "intent": "查找本地磁盘上大于 100MB 的大文件并按大小排序",\n'
+        '  "timeout_seconds": 60\n'
+        "}\n"
+        "```"
+    )
+    recovered = extract_tool_calls_from_content(raw)
+    assert len(recovered) == 1
+    assert recovered[0]["function"]["name"] == "terminal_exec"
+    assert "find /" in recovered[0]["function"]["arguments"]
+    assert looks_like_tool_call_json_dump(raw)

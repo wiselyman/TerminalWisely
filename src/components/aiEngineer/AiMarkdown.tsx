@@ -39,7 +39,6 @@ function placeholderSvgDataUri(): string {
 /** Lightweight markdown render for AI chat bubbles (reuses app `marked`). */
 export function AiMarkdown({ content, className, onImageClick }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [html, setHtml] = useState("");
 
   const initialHtml = useMemo(() => {
     try {
@@ -50,12 +49,21 @@ export function AiMarkdown({ content, className, onImageClick }: Props) {
     }
   }, [content]);
 
+  // Seed from parsed HTML synchronously — empty useState("") flashes blank on remount
+  // (host-tab fiber swaps must not blink the transcript).
+  // Async image rewrite overlays only; sync `initialHtml` must paint same commit
+  // so stream layout-pin measures real height (not stale useEffect html).
+  const [asyncHtml, setAsyncHtml] = useState<string | null>(null);
+  const html = asyncHtml ?? initialHtml;
+
   useEffect(() => {
     let cancelled = false;
-    setHtml(initialHtml);
+    setAsyncHtml(null);
     void (async () => {
       const rewritten = await rewriteRemoteImages(initialHtml);
-      if (!cancelled) setHtml(decorateAnchors(decorateImages(rewritten)));
+      if (!cancelled) {
+        setAsyncHtml(decorateAnchors(decorateImages(rewritten)));
+      }
     })();
     return () => {
       cancelled = true;

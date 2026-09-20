@@ -57,6 +57,20 @@ describe("looksTruncatedAssistant (structural only)", () => {
       ),
     ).toBe(false);
   });
+
+  it("does not treat a closed markdown fence as truncated", () => {
+    const fenced =
+      "```json\n" +
+      "{\n" +
+      '  "name": "terminal_exec",\n' +
+      '  "arguments": {\n' +
+      '    "command": "systemctl stop teamviewer"\n' +
+      "  }\n" +
+      "}\n" +
+      "```";
+    expect(looksTruncatedAssistant(fenced)).toBe(false);
+    expect(looksTruncatedAssistant("说明如下：`getting")).toBe(true);
+  });
 });
 
 describe("stripTrailingDanglingHeading", () => {
@@ -79,6 +93,16 @@ describe("mergeAssistantContinuation", () => {
       "说明如下。\n\n### 部署\n用 API 接控制器 (`getting";
     const next = "_started.md`)。完成。";
     expect(mergeAssistantContinuation(prev, next)).toBe(prev + next);
+  });
+
+  it("glues markdown table row continuations", () => {
+    const prev =
+      "| size | path |\n| --- | --- |\n| 101M | /a |\n| 106M | /llvm/bin/llvm-split";
+    const next = " x4 |\n| 106M | /llvm/bin/llvm-dwp x4 |";
+    const merged = mergeAssistantContinuation(prev, next);
+    expect(merged).toContain("| 106M | /llvm/bin/llvm-split x4 |");
+    expect(merged).toContain("| 106M | /llvm/bin/llvm-dwp x4 |");
+    expect(merged).toContain("| size | path |");
   });
 
   it("appends body when model restarts heading after a cut-off", () => {

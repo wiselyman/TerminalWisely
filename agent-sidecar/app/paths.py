@@ -178,13 +178,31 @@ def compact_retain_tail() -> int:
 
 
 def max_output_tokens() -> int:
-    """Generation budget. 2048 was too small for thinking models that leak CoT."""
-    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS", "8192"))
+    """Generation budget for a single sample.
+
+    Prefer finishing the user-visible answer in one shot — remediation
+    (auto-continue) is a fallback, not the happy path. Override with
+    TW_AI_MAX_OUTPUT_TOKENS.
+    """
+    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS", "32768"))
 
 
 def max_output_tokens_hard_cap() -> int:
     """Upper bound when auto-raising budget after a length-truncated sample."""
-    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS_CAP", "16384"))
+    return int(os.environ.get("TW_AI_MAX_OUTPUT_TOKENS_CAP", "65536"))
+
+
+def prefer_complete_max_output_tokens() -> int:
+    """Budget for user-facing answers (after tools / conclude / no-tool sample).
+
+    Defaults to the hard cap so long answers finish in one sample instead of
+    cutting mid-reply and auto-continuing. Override with
+    TW_AI_PREFER_COMPLETE_OUTPUT_TOKENS.
+    """
+    prefer = int(os.environ.get("TW_AI_PREFER_COMPLETE_OUTPUT_TOKENS", "0") or "0")
+    if prefer > 0:
+        return min(max(prefer, max_output_tokens()), max_output_tokens_hard_cap())
+    return max_output_tokens_hard_cap()
 
 
 def raised_max_output_tokens(current: int | None = None) -> int:

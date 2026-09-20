@@ -32,6 +32,8 @@ describe("buildOptimisticToolAfterApproval", () => {
       detail: "wrapped-script",
       status: "running",
       startedAt: 1000,
+      risk: undefined,
+      approvalDecision: "approved",
     });
   });
 

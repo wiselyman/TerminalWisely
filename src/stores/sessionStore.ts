@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { unstable_batchedUpdates } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import i18n from "../i18n";
 import { formatAppError } from "../lib/formatAppError";
@@ -8,6 +9,12 @@ import { createTransferId } from "../lib/transferId";
 import { useToastStore } from "./toastStore";
 import { focusManagedEntity, openManagedHome } from "./managedEntityStore";
 import { useLocalFsStore } from "./localFsStore";
+import {
+  captureHostWorkspace,
+  discardHostWorkspace,
+  migrateHostWorkspace,
+  restoreHostWorkspace,
+} from "./hostWorkspaceMemory";
 import { isSessionAiSshLeased } from "../lib/aiEngineer/sshLeaseRuntime";
 import { shouldAllowManualReconnectSsh } from "../lib/aiEngineer/sshLease";
 import type {
@@ -212,34 +219,53 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   addTab: (info) => {
-    set((state) => ({
-      tabs: [
-        ...state.tabs.map((tab) => ({ ...tab, active: false })),
-        { ...info, active: true, connectionStatus: "ready" as const },
-      ],
-      activeTabId: info.id,
-    }));
+    const prev = get().activeTabId;
+    unstable_batchedUpdates(() => {
+      if (prev && prev !== info.id) {
+        captureHostWorkspace(prev);
+      }
+      set((state) => ({
+        tabs: [
+          ...state.tabs.map((tab) => ({ ...tab, active: false })),
+          { ...info, active: true, connectionStatus: "ready" as const },
+        ],
+        activeTabId: info.id,
+      }));
+      restoreHostWorkspace(info.id, {
+        serverId: info.server_id,
+        label: info.title,
+      });
+    });
   },
 
   addConnectingTab: (info) => {
-    set((state) => {
-      const title = uniqueTabTitle(info.title, state.tabs, info.id);
-      return {
-        tabs: [
-          ...state.tabs.map((tab) => ({ ...tab, active: false })),
-          {
-            ...info,
-            title,
-            active: true,
-            connectionStatus: "connecting" as const,
-          },
-        ],
-        activeTabId: info.id,
-      };
+    const prev = get().activeTabId;
+    unstable_batchedUpdates(() => {
+      if (prev && prev !== info.id) {
+        captureHostWorkspace(prev);
+      }
+      set((state) => {
+        const title = uniqueTabTitle(info.title, state.tabs, info.id);
+        return {
+          tabs: [
+            ...state.tabs.map((tab) => ({ ...tab, active: false })),
+            {
+              ...info,
+              title,
+              active: true,
+              connectionStatus: "connecting" as const,
+            },
+          ],
+          activeTabId: info.id,
+        };
+      });
+      // Pending tab has no shell yet — soft-hide previous host panels.
+      restoreHostWorkspace(info.id);
     });
   },
 
   promoteConnectingTab: (pendingId, session) => {
+    migrateHostWorkspace(pendingId, session.id);
     set((state) => {
       const tabs = state.tabs.map((tab) => {
         if (tab.id !== pendingId) return tab;
@@ -281,6 +307,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       get().removeConnectingTab(id);
       return;
     }
+
+    try {
+      const { useBrowserStore } = await import("./browserStore");
+      if (useBrowserStore.getState().sessionId === id) {
+        await useBrowserStore.getState().close();
+      } else {
+        await invoke("browser_shutdown", { request: { session_id: id } }).catch(
+          () => undefined,
+        );
+      }
+      useBrowserStore.getState().discardSessionBucket(id);
+    } catch {
+      // ignore
+    }
+    discardHostWorkspace(id);
 
     try {
       await invoke("close_session", { sessionId: id });
@@ -335,28 +376,54 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   setActiveTab: (id) => {
-    set((state) => ({
-      activeTabId: id,
-      tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
-    }));
-    // Keep Host FS browse state in lockstep with the tab (not wait for paint).
-    const fs = useLocalFsStore.getState();
-    if (fs.open && fs.sessionId !== id) {
-      fs.activateSession(id);
+    const prev = get().activeTabId;
+    if (prev === id) {
+      set((state) => ({
+        activeTabId: id,
+        tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
+      }));
+      return;
     }
-    const tab = get().tabs.find((t) => t.id === id);
-    if (tab) {
-      focusManagedEntity({
-        kind: "server",
-        id: tab.server_id || tab.id,
-        label: tab.title,
-        sessionId: tab.id,
-        serverId: tab.server_id,
-      });
-    }
+    // Tab + AI/desktop restore must paint together — a split update flashes the
+    // wrong host's chat (or a blank panel) for one frame.
+    unstable_batchedUpdates(() => {
+      if (prev) {
+        captureHostWorkspace(prev);
+      }
+      set((state) => ({
+        activeTabId: id,
+        tabs: state.tabs.map((tab) => ({ ...tab, active: tab.id === id })),
+      }));
+      if (id) {
+        const tab = get().tabs.find((t) => t.id === id);
+        restoreHostWorkspace(id, {
+          serverId: tab?.server_id,
+          label: tab?.title,
+        });
+      }
+      // Keep Host FS browse state in lockstep with the tab (not wait for paint).
+      const fs = useLocalFsStore.getState();
+      if (fs.open && fs.sessionId !== id) {
+        fs.activateSession(id);
+      }
+      const tab = get().tabs.find((t) => t.id === id);
+      if (tab) {
+        focusManagedEntity({
+          kind: "server",
+          id: tab.server_id || tab.id,
+          label: tab.title,
+          sessionId: tab.id,
+          serverId: tab.server_id,
+        });
+      }
+    });
   },
 
   activateHome: () => {
+    const prev = get().activeTabId;
+    if (prev) {
+      captureHostWorkspace(prev);
+    }
     openManagedHome();
     set((state) => ({
       activeTabId: null,
@@ -573,6 +640,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setStatusMessage: (message) => set({ statusMessage: message }),
 
   setSessionDisconnected: (sessionId) => {
+    void (async () => {
+      try {
+        const { useBrowserStore } = await import("./browserStore");
+        if (useBrowserStore.getState().sessionId === sessionId) {
+          await useBrowserStore.getState().close();
+        } else {
+          await invoke("browser_shutdown", {
+            request: { session_id: sessionId },
+          }).catch(() => undefined);
+        }
+      } catch {
+        // ignore
+      }
+    })();
     set((state) => {
       if (state.disconnectedSessionIds.has(sessionId)) return state;
       const disconnectedSessionIds = new Set(state.disconnectedSessionIds);

@@ -34,8 +34,16 @@ function wrapApi(page: Page): TwE2eApi {
     openLocalFsPanel: async () => {
       await call("openLocalFsPanel");
     },
+    openBrowserPanel: async () => {
+      await call("openBrowserPanel");
+    },
     openAiChat: () => call("openAiChat") as Promise<void>,
     openAiChatForSsh: () => call("openAiChatForSsh") as Promise<void>,
+    simulateAiBusy: () => call("simulateAiBusy"),
+    simulateStreamingAssistantGrow: (opts) =>
+      call("simulateStreamingAssistantGrow", opts),
+    getAiBusy: () => call("getAiBusy") as Promise<boolean>,
+    getAiChatScrollDist: () => call("getAiChatScrollDist") as Promise<number>,
     emitTerminalPrompt: (text) => call("emitTerminalPrompt", text),
     simulateTerminalDrop: (paths) => call("simulateTerminalDrop", paths) as Promise<void>,
     simulateApproval: (command) => call("simulateApproval", command),
