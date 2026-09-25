@@ -8,7 +8,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { rangeSelectPaths, togglePathInSelection } from "../lib/localFsOps";
+import {
+  pathsIntersectingMarquee,
+  rangeSelectPaths,
+  togglePathInSelection,
+} from "../lib/localFsOps";
 import { startLocalFsPointerMove } from "../lib/localFsPointerMove";
 import type { LocalFsEntry } from "../types";
 import { useLocalFsStore } from "../stores/localFsStore";
@@ -22,6 +26,8 @@ function formatSize(sizeBytes: number | null | undefined) {
     return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
+
+const MARQUEE_THRESHOLD_PX = 4;
 
 type Props = {
   contextMenuPath?: string | null;
@@ -50,7 +56,15 @@ export function LocalFsContentsView({
 }: Props) {
   const { t } = useTranslation("tools");
   const moveCleanupRef = useRef<(() => void) | null>(null);
+  const marqueeCleanupRef = useRef<(() => void) | null>(null);
+  const contentsRef = useRef<HTMLDivElement | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [marquee, setMarquee] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   const {
     contentsPath,
@@ -87,6 +101,8 @@ export function LocalFsContentsView({
     return () => {
       moveCleanupRef.current?.();
       moveCleanupRef.current = null;
+      marqueeCleanupRef.current?.();
+      marqueeCleanupRef.current = null;
     };
   }, []);
 
@@ -140,6 +156,109 @@ export function LocalFsContentsView({
     });
   };
 
+  const beginMarquee = (event: ReactPointerEvent) => {
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(".local-fs-contents-item")) return;
+
+    const root = contentsRef.current;
+    if (!root) return;
+
+    const additive = event.metaKey || event.ctrlKey;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const base = additive ? [...selectedPaths] : [];
+    let active = false;
+    const pointerId = event.pointerId;
+
+    const collectItems = () => {
+      const nodes = root.querySelectorAll<HTMLElement>(
+        ".local-fs-contents-item[data-path]",
+      );
+      return Array.from(nodes).flatMap((node) => {
+        const path = node.dataset.path?.trim();
+        if (!path) return [];
+        const r = node.getBoundingClientRect();
+        return [
+          {
+            path,
+            rect: {
+              left: r.left,
+              top: r.top,
+              right: r.right,
+              bottom: r.bottom,
+            },
+          },
+        ];
+      });
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      if (!active) {
+        if (Math.hypot(dx, dy) < MARQUEE_THRESHOLD_PX) return;
+        active = true;
+        try {
+          root.setPointerCapture(pointerId);
+        } catch {
+          // ignore
+        }
+      }
+      const left = Math.min(startX, ev.clientX);
+      const top = Math.min(startY, ev.clientY);
+      const right = Math.max(startX, ev.clientX);
+      const bottom = Math.max(startY, ev.clientY);
+      const rootRect = root.getBoundingClientRect();
+      setMarquee({
+        left: left - rootRect.left + root.scrollLeft,
+        top: top - rootRect.top + root.scrollTop,
+        width: right - left,
+        height: bottom - top,
+      });
+      const hit = pathsIntersectingMarquee(collectItems(), {
+        left,
+        top,
+        right,
+        bottom,
+      });
+      const next = additive
+        ? [...new Set([...base, ...hit])]
+        : hit;
+      setSelectedPaths(next, hit[hit.length - 1] ?? null);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      marqueeCleanupRef.current = null;
+      setMarquee(null);
+      try {
+        root.releasePointerCapture(pointerId);
+      } catch {
+        // ignore
+      }
+      if (!active) {
+        setSelectedPaths([]);
+      }
+    };
+
+    marqueeCleanupRef.current?.();
+    marqueeCleanupRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setMarquee(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
   const onItemContextMenu = useCallback(
     (event: ReactMouseEvent, entry: LocalFsEntry) => {
       if (!selectedSet.has(entry.path)) {
@@ -150,12 +269,28 @@ export function LocalFsContentsView({
     [onEntryContextMenu, selectedSet, setSelectedPath],
   );
 
+  const marqueeEl = marquee ? (
+    <div
+      className="local-fs-marquee"
+      data-testid="local-fs-marquee"
+      style={{
+        left: marquee.left,
+        top: marquee.top,
+        width: marquee.width,
+        height: marquee.height,
+      }}
+      aria-hidden
+    />
+  ) : null;
+
   if (!contentsPath && !searchMode) {
     return (
       <div
+        ref={contentsRef}
         className="local-fs-contents"
         data-testid="local-fs-contents"
         onContextMenu={onBackgroundContextMenu}
+        onPointerDown={beginMarquee}
       >
         <p className="find-panel-empty">
           {loadingRoot ? t("localFs.loading") : t("localFs.emptyHint")}
@@ -167,9 +302,11 @@ export function LocalFsContentsView({
   if (isLoading && entries.length === 0) {
     return (
       <div
+        ref={contentsRef}
         className="local-fs-contents"
         data-testid="local-fs-contents"
         onContextMenu={onBackgroundContextMenu}
+        onPointerDown={beginMarquee}
       >
         <p className="find-panel-empty">{t("localFs.loading")}</p>
       </div>
@@ -179,9 +316,11 @@ export function LocalFsContentsView({
   if (entries.length === 0) {
     return (
       <div
+        ref={contentsRef}
         className="local-fs-contents"
         data-testid="local-fs-contents"
         onContextMenu={onBackgroundContextMenu}
+        onPointerDown={beginMarquee}
       >
         <p className="find-panel-empty">
           {emptyLabel ?? (searchMode ? t("find.empty") : t("localFs.empty"))}
@@ -193,13 +332,16 @@ export function LocalFsContentsView({
   if (viewMode === "grid") {
     return (
       <div
+        ref={contentsRef}
         className="local-fs-contents local-fs-contents-grid"
         data-testid="local-fs-contents"
         role="listbox"
         aria-multiselectable
         aria-label={t("localFs.title")}
         onContextMenu={onBackgroundContextMenu}
+        onPointerDown={beginMarquee}
       >
+        {marqueeEl}
         <div className="local-fs-grid">
           {entries.map((entry) => {
             const isDir = entry.kind === "directory";
@@ -242,13 +384,16 @@ export function LocalFsContentsView({
 
   return (
     <div
+      ref={contentsRef}
       className="local-fs-contents local-fs-contents-list"
       data-testid="local-fs-contents"
       role="listbox"
       aria-multiselectable
       aria-label={t("localFs.title")}
       onContextMenu={onBackgroundContextMenu}
+      onPointerDown={beginMarquee}
     >
+      {marqueeEl}
       <div className="local-fs-list-header" aria-hidden>
         <span>{t("localFs.colName")}</span>
         <span>{t("localFs.colSize")}</span>

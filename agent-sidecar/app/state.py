@@ -18,6 +18,7 @@ from app.models.approval import ActionApproval, PrivilegeLease, TargetSessionIde
 from app.session.log import SessionLog
 from app.session.store import (
     clone_log,
+    find_session_log_by_run_id,
     list_run_ids_for_session,
     load_session_log,
     save_session_log,
@@ -139,6 +140,7 @@ class AgentRun:
         ev = PullEvent(type=type_, payload=payload or {}, seq=len(self.events))
         self.events.append(ev)
         self.updated_at = time.time()
+        self.metadata["_last_progress_at"] = self.updated_at
         for waiter in list(self._event_waiters):
             waiter.set()
         return ev
@@ -287,10 +289,16 @@ class SessionStore:
         """Start a new run seeded from a prior run's SessionLog (memory or disk)."""
         source_log: SessionLog | None = None
         prior = self._runs.get(resume_run_id)
-        if prior is not None and prior.session_id == session_id:
+        # run_id is globally unique — use in-memory log even when the SSH tab
+        # session_id remapped (server-scoped FE thread keeps lastRunId).
+        if prior is not None:
             source_log = prior.session_log
         else:
             source_log = load_session_log(session_id, resume_run_id)
+            if source_log is None:
+                found = find_session_log_by_run_id(resume_run_id)
+                if found is not None:
+                    source_log = found[1]
         if source_log is None:
             return None
 
@@ -322,7 +330,7 @@ class SessionStore:
             security_mode=security_mode or paths.security_mode(),
             interaction_mode=normalize_interaction_mode(
                 interaction_mode
-                or (prior.interaction_mode if prior and prior.session_id == session_id else None)
+                or (prior.interaction_mode if prior else None)
             ),
             identity=identity or TargetSessionIdentity(session_id=session_id),
             metadata=meta,

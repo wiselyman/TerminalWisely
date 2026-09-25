@@ -135,6 +135,7 @@
   "aiEngineer.toolRunning": "正在执行",
   "aiEngineer.toolDone": "已完成",
   "aiEngineer.toolFailed": "失败",
+  "aiEngineer.toolFilterMiss": "部分无匹配",
   "aiEngineer.toolDenied": "已拒绝",
   "aiEngineer.toolCancelled": "已停止",
   "aiEngineer.toolWaitingOutput": "等待输出…",
@@ -154,6 +155,8 @@
   "aiEngineer.copyReplyFailed": "复制失败",
   "aiEngineer.toolSpawnInvestigator": "调查员",
   "aiEngineer.toolUpdatePlan": "计划更新",
+  "aiEngineer.webSearchPending": "正在搜索…",
+  "aiEngineer.webFetchPending": "正在拉取网页…",
   "aiEngineer.noticeCompaction": "上下文已压缩 — 较早对话已摘要",
   "aiEngineer.noticeResumed": "已从先前会话日志续跑",
   "aiEngineer.noticeMemoryContext": "已为本次运行注入已验证案例记忆",
@@ -460,5 +463,6 @@
   "sshLease.blockedReconnect": "AI 正在使用此会话。请先 STOP AI，再重连 SSH。",
   "sshLease.disconnectBanner": "AI 占用会话期间 SSH 已断开。请先 STOP AI — 重连已禁用。",
   "longJob.inProgress": "主机任务进行中",
-  "aiEngineer.notice.run_stalled": "Agent 长时间无模型进度，运行已失败。可重试。"
+  "aiEngineer.notice.resume_miss": "无法恢复先前 SessionLog（缺少工具证据）。再发送一次将仅用当前聊天文字继续。",
+  "aiEngineer.notice.run_stalled": "模型侧长时间无进度（且无主机工具等待）— 运行已失败。可重试。"
 }

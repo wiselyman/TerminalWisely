@@ -934,6 +934,52 @@ pub fn ensure_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
     restart_sidecar(app)
 }
 
+/// Push current stored settings into a live sidecar (no process restart).
+/// Returns Ok(true) when /v1/runtime/config succeeded.
+fn hot_reload_sidecar_config(app: &AppHandle) -> AppResult<bool> {
+    let was_healthy = {
+        let guard = state().lock().map_err(|e| AppError::msg(e.to_string()))?;
+        match guard.as_ref() {
+            Some(state) => wait_healthy(&state.info.base_url, 1),
+            None => false,
+        }
+    };
+    if !was_healthy {
+        return Ok(false);
+    }
+    let settings = load_settings_for_sidecar(app).unwrap_or_default();
+    let body = serde_json::json!({
+        "provider": settings.provider,
+        "model": settings.model,
+        "base_url": settings.base_url,
+        "ollama_base_url": settings.ollama_base_url,
+        "api_key": settings.api_key.clone().unwrap_or_default(),
+        "security_mode": if settings.security_mode.is_empty() {
+            "safe".to_string()
+        } else {
+            settings.security_mode.clone()
+        },
+    });
+    let resp = sidecar_http(
+        app,
+        SidecarHttpRequest {
+            method: "POST".into(),
+            path: "/v1/runtime/config".into(),
+            body: Some(body.to_string()),
+            timeout_ms: Some(3_000),
+        },
+    )?;
+    Ok((200..300).contains(&resp.status))
+}
+
+/// Prefer in-process config reload; restart only when the sidecar is down/unhealthy.
+pub fn apply_settings_to_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
+    match hot_reload_sidecar_config(app) {
+        Ok(true) => ensure_sidecar(app),
+        _ => restart_sidecar(app),
+    }
+}
+
 /// Kill any live sidecar and spawn a fresh one (picks up new API key / model env).
 pub fn restart_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
     {
@@ -1220,7 +1266,7 @@ pub fn sidecar_sse_stream(
             let Ok(size) = usize::from_str_radix(size_hex, 16) else {
                 break;
             };
-            if size == 0 {
+            if (size == 0) {
                 break;
             }
             let mut chunk = vec![0u8; size];
@@ -1245,6 +1291,14 @@ pub fn sidecar_sse_stream(
                 return Ok(());
             }
         }
+    }
+    // Connection closed mid-frame: flush any trailing SSE event so the final
+    // assistant_message / completed is not stranded in the buffer.
+    if !sse_buf.trim().is_empty() {
+        if !sse_buf.ends_with("\n\n") && !sse_buf.ends_with("\r\n\r\n") {
+            sse_buf.push_str("\n\n");
+        }
+        let _ = drain_sse_buffer(&mut sse_buf, &mut on_event);
     }
     let _ = on_event(json!({
         "type": "stream_end",

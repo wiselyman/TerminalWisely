@@ -34,7 +34,7 @@ export function shouldPreventComposerChromeFocusScroll(): boolean {
 }
 
 /** How long to fight async focus/layout scroll after opening composer menus. */
-export const COMPOSER_CHROME_SCROLL_LOCK_MS = 600;
+export const COMPOSER_CHROME_SCROLL_LOCK_MS = 1400;
 
 /**
  * rAF loop: keep `scrollTop` at the locked value (or pin bottom if sticky)
@@ -53,7 +53,8 @@ export function scheduleComposerChromeScrollLock(opts: {
   const caf =
     opts.cancelAnimationFrame ??
     ((id: number) => window.cancelAnimationFrame(id));
-  const maxFrames = opts.maxFrames ?? 48;
+  // ~1.5s at 60fps — covers async saveSettings + label layout after model switch.
+  const maxFrames = opts.maxFrames ?? 90;
   let frames = 0;
   let id = 0;
   let cancelled = false;
@@ -84,6 +85,16 @@ export function shouldHoldChatScrollForComposerChrome(opts: {
   return opts.withinChromeScrollLock;
 }
 
+/**
+ * Content/viewport ResizeObservers must not fight the chrome lock with their
+ * own pin/freeze — restore the snapshotted top (or sticky bottom) instead.
+ */
+export function shouldDeferResizeScrollDuringComposerChrome(opts: {
+  withinChromeScrollLock: boolean;
+}): boolean {
+  return opts.withinChromeScrollLock;
+}
+
 /** True when the viewport is already near the bottom (user following the stream). */
 export function isChatNearBottom(el: HTMLElement, thresholdPx = 120): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= thresholdPx;
@@ -100,8 +111,22 @@ export function isChatScrollGeometryReady(
   return el.clientHeight >= minClientHeightPx && el.scrollHeight > 0;
 }
 
-/** Wheel / touch always clears stick (even during programmatic pin ignore). */
-export function shouldClearStickOnUserIntent(): boolean {
+/** Wheel / touch clears stick — but ignore trackpad noise while force-following. */
+export const STREAM_WHEEL_RELEASE_DELTA_PX = 48;
+
+export function shouldClearStickOnUserIntent(opts?: {
+  deltaY?: number;
+  forceFollow?: boolean;
+}): boolean {
+  const abs = Math.abs(opts?.deltaY ?? 0);
+  if (opts?.forceFollow) {
+    // Tiny inertia / layout-induced wheel must not abandon a long table stream.
+    return abs >= STREAM_WHEEL_RELEASE_DELTA_PX;
+  }
+  // Still ignore pure zero-delta noise when deltaY is provided.
+  if (opts && "deltaY" in opts) {
+    return abs >= 4;
+  }
   return true;
 }
 
@@ -244,12 +269,52 @@ export function streamFollowPinKey(
   return `${last.kind}:${n}`;
 }
 
-/** Pin on stream updates only while following (stick or open-follow window). */
+/** After busy ends: keep pinning for late markdown/images/tables. */
+export const RUN_SETTLE_FOLLOW_MS = 8000;
+
+/**
+ * Force follow through the run and a short settle window after it ends.
+ * Cleared only when the user wheels/touches away.
+ */
+export function shouldForceChatFollow(opts: {
+  busy: boolean;
+  userReleasedFollow: boolean;
+  withinSettleFollowWindow?: boolean;
+}): boolean {
+  if (opts.userReleasedFollow) return false;
+  return opts.busy || Boolean(opts.withinSettleFollowWindow);
+}
+
+/**
+ * One follow intent for stream, content growth, and viewport resize.
+ * Stick, remembered near-bottom, open-follow, or run-settle — never re-read
+ * scroll proximity after the browser may have yanked scrollTop.
+ */
+export function shouldFollowChatTranscript(opts: {
+  stickToBottom: boolean;
+  rememberedNearBottom?: boolean;
+  withinOpenFollowWindow?: boolean;
+  withinSettleFollowWindow?: boolean;
+  forceFollow?: boolean;
+}): boolean {
+  return (
+    opts.stickToBottom ||
+    Boolean(opts.rememberedNearBottom) ||
+    Boolean(opts.withinOpenFollowWindow) ||
+    Boolean(opts.withinSettleFollowWindow) ||
+    Boolean(opts.forceFollow)
+  );
+}
+
+/** Pin on stream updates only while following. */
 export function shouldPinChatOnStreamUpdate(opts: {
   stickToBottom: boolean;
   withinOpenFollowWindow: boolean;
+  rememberedNearBottom?: boolean;
+  withinSettleFollowWindow?: boolean;
+  forceFollow?: boolean;
 }): boolean {
-  return opts.stickToBottom || opts.withinOpenFollowWindow;
+  return shouldFollowChatTranscript(opts);
 }
 
 /**
@@ -272,15 +337,19 @@ export function scrollTopAfterViewportResize(opts: {
   scrollHeight: number;
   /** Window/Tauri resize: always re-evaluate even if clientHeight delta is tiny. */
   force?: boolean;
+  /** While the agent is streaming, following must pin — never freeze mid. */
+  busy?: boolean;
 }): { action: "pin" | "freeze" | "none"; scrollTop: number } {
+  const follow = opts.stickToBottom || opts.wasNearBottom;
+  const maxTop = Math.max(0, opts.scrollHeight - opts.nextClientHeight);
   if (
     !opts.force &&
     Math.abs(opts.nextClientHeight - opts.previousClientHeight) <= 1
   ) {
     return { action: "none", scrollTop: opts.previousScrollTop };
   }
-  const maxTop = Math.max(0, opts.scrollHeight - opts.nextClientHeight);
-  if (opts.stickToBottom || opts.wasNearBottom) {
+  // Busy + following: pin or none, never freeze a mid snapshot.
+  if (follow || (opts.busy && follow)) {
     return { action: "pin", scrollTop: maxTop };
   }
   return {
@@ -289,12 +358,42 @@ export function scrollTopAfterViewportResize(opts: {
   };
 }
 
-/** While busy + stick: scroll proximity must not clear stick (wheel/touch still can). */
+/** While busy + following: scroll proximity must not clear stick (wheel/touch still can). */
 export function shouldHoldStickWhileBusyFollow(opts: {
   busy: boolean;
   stickToBottom: boolean;
+  rememberedNearBottom?: boolean;
 }): boolean {
-  return opts.busy && opts.stickToBottom;
+  return (
+    opts.busy &&
+    (opts.stickToBottom || Boolean(opts.rememberedNearBottom))
+  );
+}
+
+/**
+ * Busy or run-settle: keep stick forced. Unlike proximity hold, do not require
+ * stick/remembered — layout yanks often clear stick while the user still follows.
+ */
+export function shouldHoldStickWhileForcedFollow(opts: {
+  forceFollow: boolean;
+}): boolean {
+  return opts.forceFollow;
+}
+
+/**
+ * Composer chrome lock must pin when following — freezing a mid snapshot while
+ * remembered/settle say "follow" is what leaves the viewport mid-transcript.
+ */
+export function shouldPinDuringComposerChromeLock(opts: {
+  stickToBottom: boolean;
+  rememberedNearBottom?: boolean;
+  forceFollow?: boolean;
+}): boolean {
+  return (
+    opts.stickToBottom ||
+    Boolean(opts.rememberedNearBottom) ||
+    Boolean(opts.forceFollow)
+  );
 }
 
 /**
@@ -324,4 +423,4 @@ export function shouldParkChatScrollerAtBottom(opts: {
 }
 
 /** Stamp so builds can verify this scroll model is loaded. */
-export const AI_CHAT_SCROLL_FIX_ID = "2026-09-20-maximize-follow" as const;
+export const AI_CHAT_SCROLL_FIX_ID = "2026-09-23-table-stream" as const;

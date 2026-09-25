@@ -47,6 +47,34 @@ def load_session_log(session_id: str, run_id: str) -> SessionLog | None:
     return SessionLog.from_jsonl_text(text)
 
 
+def find_session_log_by_run_id(run_id: str) -> tuple[str, SessionLog] | None:
+    """
+    Locate a persisted run by run_id across session folders.
+
+    FE scopes threads by server_id, but SessionLog paths use the SSH tab
+    session_id — reconnect changes session_id while lastRunId stays put.
+    """
+    safe_run = "".join(c if c.isalnum() or c in "-_" else "_" for c in run_id)[:120]
+    if not safe_run:
+        return None
+    root = sessions_root()
+    if not root.is_dir():
+        return None
+    for path in root.glob(f"*/{safe_run}.jsonl"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        session_folder = path.parent.name
+        log = (
+            SessionLog.from_jsonl_text(text)
+            if text.strip()
+            else SessionLog()
+        )
+        return session_folder, log
+    return None
+
+
 def list_run_ids_for_session(session_id: str) -> list[dict]:
     """List persisted runs for a session (newest mtime first)."""
     safe_session = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)[:120]

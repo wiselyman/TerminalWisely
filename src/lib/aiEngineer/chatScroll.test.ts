@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AI_CHAT_SCROLL_FIX_ID,
   COMPOSER_CHROME_SCROLL_LOCK_MS,
+  RUN_SETTLE_FOLLOW_MS,
   isChatNearBottom,
   isChatScrollGeometryReady,
   runPreservingChatScroll,
@@ -12,19 +13,24 @@ import {
   scrollTopAfterViewportResize,
   scrollTopForAiFiberReveal,
   shouldClearStickOnUserIntent,
+  shouldForceChatFollow,
   shouldForceStickOnChatOpen,
   shouldHoldChatScrollForComposerChrome,
+  shouldDeferResizeScrollDuringComposerChrome,
   shouldFollowChatOnViewportResize,
+  shouldFollowChatTranscript,
   shouldHoldStickWhileBusyFollow,
+  shouldHoldStickWhileForcedFollow,
   shouldParkChatScrollerAtBottom,
   shouldPinChatAfterViewportResize,
   shouldPinChatOnStreamUpdate,
+  shouldPinDuringComposerChromeLock,
   shouldPreventComposerChromeFocusScroll,
   shouldUpdateStickFromScrollEvent,
   streamFollowPinKey,
 } from "./chatScroll";
 
-describe("chatScroll maximize-follow model", () => {
+describe("chatScroll stream-follow model", () => {
   it("scrollChatToBottom uses scrollHeight, not offsetTop", () => {
     const el = {
       scrollHeight: 2000,
@@ -147,6 +153,13 @@ describe("chatScroll maximize-follow model", () => {
   it("wheel clears stick; open-follow blocks stick update from scroll", () => {
     expect(shouldClearStickOnUserIntent()).toBe(true);
     expect(
+      shouldClearStickOnUserIntent({ deltaY: -12, forceFollow: true }),
+    ).toBe(false);
+    expect(
+      shouldClearStickOnUserIntent({ deltaY: -80, forceFollow: true }),
+    ).toBe(true);
+    expect(shouldClearStickOnUserIntent({ deltaY: -12 })).toBe(true);
+    expect(
       shouldUpdateStickFromScrollEvent({
         withinProgrammaticPinIgnore: true,
         withinOpenFollowWindow: false,
@@ -257,8 +270,58 @@ describe("chatScroll maximize-follow model", () => {
     ).toEqual({ action: "pin", scrollTop: 1600 });
   });
 
-  it("exposes maximize-follow fix id", () => {
-    expect(AI_CHAT_SCROLL_FIX_ID).toBe("2026-09-20-maximize-follow");
+  it("exposes sync-md fix id", () => {
+    expect(AI_CHAT_SCROLL_FIX_ID).toBe("2026-09-23-table-stream");
+    expect(RUN_SETTLE_FOLLOW_MS).toBeGreaterThanOrEqual(6000);
+  });
+
+  it("stream follow uses stick or remembered near-bottom", () => {
+    expect(
+      shouldFollowChatTranscript({
+        stickToBottom: false,
+        rememberedNearBottom: true,
+        withinOpenFollowWindow: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldPinChatOnStreamUpdate({
+        stickToBottom: false,
+        rememberedNearBottom: true,
+        withinOpenFollowWindow: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldFollowChatTranscript({
+        stickToBottom: false,
+        rememberedNearBottom: false,
+        withinOpenFollowWindow: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("busy follow never freezes viewport when still following", () => {
+    expect(
+      scrollTopAfterViewportResize({
+        stickToBottom: true,
+        wasNearBottom: true,
+        previousScrollTop: 400,
+        previousClientHeight: 400,
+        nextClientHeight: 700,
+        scrollHeight: 2000,
+        busy: true,
+      }),
+    ).toEqual({ action: "pin", scrollTop: 1300 });
+    expect(
+      scrollTopAfterViewportResize({
+        stickToBottom: false,
+        wasNearBottom: false,
+        previousScrollTop: 400,
+        previousClientHeight: 400,
+        nextClientHeight: 700,
+        scrollHeight: 2000,
+        busy: true,
+      }).action,
+    ).toBe("freeze");
   });
 
   it("runPreservingChatScroll restores scrollTop if action yanks it", () => {
@@ -297,9 +360,25 @@ describe("chatScroll maximize-follow model", () => {
     active = false;
     top = 50;
     queue.shift()!(0);
-    expect(queue).toHaveLength(0);
+    expect(top).toBe(50);
     handle.cancel();
-    expect(COMPOSER_CHROME_SCROLL_LOCK_MS).toBeGreaterThan(0);
+  });
+
+  it("composer chrome lock outlasts async model save", () => {
+    expect(COMPOSER_CHROME_SCROLL_LOCK_MS).toBeGreaterThanOrEqual(1200);
+  });
+
+  it("defer resize scroll while composer chrome locked", () => {
+    expect(
+      shouldDeferResizeScrollDuringComposerChrome({
+        withinChromeScrollLock: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferResizeScrollDuringComposerChrome({
+        withinChromeScrollLock: false,
+      }),
+    ).toBe(false);
     expect(
       shouldHoldChatScrollForComposerChrome({ withinChromeScrollLock: true }),
     ).toBe(true);
@@ -327,8 +406,70 @@ describe("chatScroll maximize-follow model", () => {
       shouldHoldStickWhileBusyFollow({ busy: true, stickToBottom: false }),
     ).toBe(false);
     expect(
+      shouldHoldStickWhileBusyFollow({
+        busy: true,
+        stickToBottom: false,
+        rememberedNearBottom: true,
+      }),
+    ).toBe(true);
+    expect(
       shouldHoldStickWhileBusyFollow({ busy: false, stickToBottom: true }),
     ).toBe(false);
+  });
+
+  it("force follow covers busy and settle; user release wins", () => {
+    expect(
+      shouldForceChatFollow({
+        busy: true,
+        userReleasedFollow: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldForceChatFollow({
+        busy: false,
+        userReleasedFollow: false,
+        withinSettleFollowWindow: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldForceChatFollow({
+        busy: true,
+        userReleasedFollow: true,
+        withinSettleFollowWindow: true,
+      }),
+    ).toBe(false);
+    expect(shouldHoldStickWhileForcedFollow({ forceFollow: true })).toBe(true);
+    expect(shouldHoldStickWhileForcedFollow({ forceFollow: false })).toBe(
+      false,
+    );
+  });
+
+  it("chrome lock pins when remembered or settle follows", () => {
+    expect(
+      shouldPinDuringComposerChromeLock({
+        stickToBottom: false,
+        rememberedNearBottom: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldPinDuringComposerChromeLock({
+        stickToBottom: false,
+        forceFollow: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldPinDuringComposerChromeLock({
+        stickToBottom: false,
+        rememberedNearBottom: false,
+        forceFollow: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldFollowChatTranscript({
+        stickToBottom: false,
+        withinSettleFollowWindow: true,
+      }),
+    ).toBe(true);
   });
 
   it("parked fiber should pin scroller to bottom (never inherit mid)", () => {

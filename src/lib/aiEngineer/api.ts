@@ -47,6 +47,15 @@ const E2E_DEFAULT_SETTINGS: AiSettingsView = {
       base_url: "",
       has_api_key: false,
     },
+    {
+      id: "e2e-alt",
+      name: "E2E Alt",
+      provider: "ollama",
+      model: "alt-test",
+      ollama_base_url: "http://127.0.0.1:11434",
+      base_url: "",
+      has_api_key: false,
+    },
   ],
   security_mode: "safe",
 };
@@ -228,6 +237,25 @@ export async function fetchRunTrace(
   );
   if (!res.ok) throw new Error(`Trace fetch failed (${res.status})`);
   return res.json() as Promise<{ spans: TraceSpanRow[] }>;
+}
+
+export interface RunTranscriptMessage {
+  role?: string;
+  content?: string | unknown;
+  tool_calls?: unknown;
+}
+
+export async function fetchRunTranscript(
+  sidecar: SidecarInfo,
+  sessionId: string,
+  runId: string,
+): Promise<{ messages: RunTranscriptMessage[]; status?: string }> {
+  const res = await sidecarFetch(
+    sidecar,
+    `/v1/runs/${encodeURIComponent(runId)}/transcript?session_id=${encodeURIComponent(sessionId)}`,
+  );
+  if (!res.ok) throw new Error(`Transcript fetch failed (${res.status})`);
+  return res.json() as Promise<{ messages: RunTranscriptMessage[]; status?: string }>;
 }
 
 export interface UserSkillRow {

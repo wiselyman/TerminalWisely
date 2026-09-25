@@ -116,6 +116,139 @@ def test_ends_without_sentence_terminator_parenthetical_size_cut() -> None:
     assert not ends_without_sentence_terminator("Done.")
 
 
+def test_ends_without_sentence_terminator_complete_checklist() -> None:
+    """Finished markdown bullets / status emoji must not soft-continue forever."""
+    from app.harness.verify import ends_without_sentence_terminator
+
+    summary = (
+        "你当前跑模型推理，nvcc 12.0.140 完全够用，不需要升级。\n\n"
+        "总结：\n"
+        "- 驱动 595.84 ✅ 最新\n"
+        "- CUDA 13.2 (运行时) ✅ 最新\n"
+        "- nvcc 12.0.140 ⚠️ 旧，但不影响你当前的模型推理"
+    )
+    assert not ends_without_sentence_terminator(summary)
+    assert not ends_without_sentence_terminator(
+        "总结：\n1. 驱动正常\n2. 运行时已就绪"
+    )
+
+
+def test_ends_without_sentence_terminator_long_cjk_line_without_period() -> None:
+    """Long finished CJK prose missing final 。 must not soft-continue."""
+    from app.harness.verify import ends_without_sentence_terminator
+
+    line = (
+        "RTX 5060 Ti 是 2025 年的中端显卡，16GB GDDR7 显存，"
+        "跑 7B/13B/14B 很舒服，性价比不错"
+    )
+    assert len(line) >= 60
+    assert not ends_without_sentence_terminator(f"## 一句话总结\n\n{line}")
+    # Mid-clause comma at EOL still unfinished.
+    assert ends_without_sentence_terminator(line + "，")
+
+
+def test_continuation_overshoots_phantom_ack_and_second_summary() -> None:
+    from app.harness.verify import (
+        continuation_overshoots_finished_prose,
+        should_stop_truncated_continue,
+        trim_overcontinued_answer,
+    )
+
+    prev = (
+        "RTX 5060 Ti 是 2025 年的中端卡，16GB GDDR7，"
+        "跑 7B/13B/14B 很舒服，性价比不错"
+    )
+    joined = (
+        prev
+        + "。好的，那就不需要额外安装了。\n\n"
+        "总结：\n"
+        "- 驱动 ✅ 最新\n"
+        "- 运行时 ✅ 最新"
+    )
+    assert continuation_overshoots_finished_prose(prev, joined)
+    assert should_stop_truncated_continue(
+        nudges=1, grew=True, previous=prev, emit=joined
+    )
+    assert trim_overcontinued_answer(prev, joined) == prev + "。"
+
+
+def test_should_stop_truncated_continue_on_echo() -> None:
+    from app.harness.verify import (
+        collapse_repeated_paragraphs,
+        continuation_is_redundant,
+        should_stop_truncated_continue,
+    )
+
+    para = (
+        "你当前跑模型推理，nvcc 12.0.140 完全够用，不需要升级。"
+        "驱动与运行时已经支持最新功能。"
+    )
+    joined = f"{para}\n\n总结：\n- 驱动 ✅\n\n{para}\n\n总结：\n- 驱动 ✅"
+    assert continuation_is_redundant(para, joined)
+    assert should_stop_truncated_continue(
+        nudges=1, grew=True, previous=para, emit=joined
+    )
+    assert should_stop_truncated_continue(
+        nudges=1, grew=False, previous=para, emit=para
+    )
+    collapsed = collapse_repeated_paragraphs(joined)
+    assert collapsed.count(para) == 1
+
+
+def test_ends_without_sentence_terminator_path_arrow() -> None:
+    from app.harness.verify import ends_without_sentence_terminator
+    from app.llm.thinking import looks_like_truncated_answer
+
+    cut = "具体操作如下。\n\n" * 3 + "Clash Verge -> 设置 ->"
+    assert ends_without_sentence_terminator(cut)
+    assert looks_like_truncated_answer(cut)
+
+
+def test_colon_lead_in_is_not_truncated_answer() -> None:
+    from app.harness.verify import (
+        ends_without_sentence_terminator,
+        looks_like_action_lead_in,
+    )
+    from app.llm.thinking import looks_like_truncated_answer
+
+    lead = "规则已移入主 rules 段。现在重载配置并验证："
+    assert looks_like_action_lead_in(lead)
+    assert not ends_without_sentence_terminator(lead)
+    assert not looks_like_truncated_answer(lead)
+
+
+def test_join_answer_continuation_restated_dangling_line() -> None:
+    """Continue restates the colon-cut line then finishes — one full answer."""
+    from app.harness.verify import join_answer_continuation
+
+    prev = (
+        "**还没修好。** Merge.yaml 文件内容是对的。\n\n"
+        "1. 打开 Profiles\n"
+        "2. 重新选中当前配置\n\n"
+        "或者我试试通过 API 强制重载："
+    )
+    nxt = (
+        "或者我试试通过 API 强制重载配置。你在 Clash Verge GUI 里点一下"
+        "当前配置的应用按钮，就能让 Merge 重新生效。生效后就会直连。"
+    )
+    out = join_answer_continuation(prev, nxt)
+    assert "Profiles" in out
+    assert "重新生效" in out
+    assert "就会直连" in out
+    assert "强制重载：或者我试试" not in out
+    assert out.count("强制重载") == 1
+
+
+def test_join_answer_continuation_pure_suffix() -> None:
+    from app.harness.verify import join_answer_continuation
+
+    prev = "说明一段足够长的正文。" * 4 + "存到 /tmp/a.jpeg 、"
+    nxt = "以及 /tmp/b.jpeg。评估完成。"
+    out = join_answer_continuation(prev, nxt)
+    assert "a.jpeg" in out and "b.jpeg" in out
+    assert out.endswith("评估完成。")
+
+
 def test_looks_like_truncated_answer_unclosed_bracket_cjk() -> None:
     """Structural: cut at 「连通性 [不」."""
     from app.llm.thinking import looks_like_truncated_answer
@@ -511,3 +644,142 @@ def test_extract_bare_command_intent_args_as_terminal_exec() -> None:
     assert recovered[0]["function"]["name"] == "terminal_exec"
     assert "find /" in recovered[0]["function"]["arguments"]
     assert looks_like_tool_call_json_dump(raw)
+
+
+def test_extract_xml_tool_call_markup() -> None:
+    """Local models paste <tool_call><function=…> as content — must recover."""
+    import json
+
+    from app.llm.thinking import (
+        extract_tool_calls_from_content,
+        looks_like_tool_call_json_dump,
+    )
+
+    raw = (
+        "<tool_call>\n"
+        "<function=terminal_exec>\n"
+        "<parameter=command>\n"
+        "python3 -c \"from huggingface_hub import snapshot_download; "
+        "snapshot_download('Qwen/Qwen-Image-2.1', "
+        "local_dir='/home/user/lab/data/ComfyUI/models/diffusers/')\" 2>&1 | tail -20\n"
+        "</parameter>\n"
+        "<parameter=intent>\n"
+        "用 Python API 下载 Qwen-Image-2.1 模型\n"
+        "</parameter>\n"
+        "<parameter=timeout_seconds>\n"
+        "3600\n"
+        "</parameter>\n"
+        "</function>\n"
+        "</tool_call>"
+    )
+    recovered = extract_tool_calls_from_content(raw)
+    assert len(recovered) == 1
+    assert recovered[0]["function"]["name"] == "terminal_exec"
+    args = json.loads(recovered[0]["function"]["arguments"])
+    assert "snapshot_download" in args["command"]
+    assert "Qwen-Image-2.1" in args["intent"]
+    assert args["timeout_seconds"] == 3600
+    assert looks_like_tool_call_json_dump(raw)
+    assert looks_like_tool_call_json_dump(
+        "<tool_call>\n<function=terminal_exec>\n<parameter=command>\necho"
+    )
+
+
+def test_extract_xml_tool_call_unclosed_stream_cut() -> None:
+    """Mid-stream cut before </function> must still recover command if present."""
+    import json
+
+    from app.llm.thinking import extract_tool_calls_from_content
+
+    raw = (
+        "<tool_call>\n"
+        "<function=terminal_exec>\n"
+        "<parameter=command>\n"
+        "echo still-running\n"
+        "</parameter>\n"
+        "<parameter=intent>\n"
+        "keep going"
+    )
+    recovered = extract_tool_calls_from_content(raw)
+    assert len(recovered) == 1
+    args = json.loads(recovered[0]["function"]["arguments"])
+    assert args["command"] == "echo still-running"
+    assert args["intent"] == "keep going"
+
+
+def test_strip_tool_call_markup_drops_fenced_web_fetch_param_wall() -> None:
+    from app.llm.thinking import strip_tool_call_markup
+
+    raw = (
+        "查价结果如下。\n\n"
+        "```\n"
+        "web_fetch\n"
+        "url: https://example.com/gpu\n"
+        "goal: 获取当前价格\n"
+        "```\n\n"
+        "大约一万。"
+    )
+    cleaned = strip_tool_call_markup(raw)
+    assert "查价结果如下" in cleaned
+    assert "大约一万" in cleaned
+    assert "web_fetch" not in cleaned
+    assert "example.com" not in cleaned
+
+
+def test_strip_tool_call_markup_keeps_prose() -> None:
+    from app.llm.thinking import strip_tool_call_markup
+
+    raw = (
+        "## 下载卡住了\n\n"
+        "**你想怎么处理？**"
+        "<tool_call>\n"
+        "<function=terminal_exec>\n"
+        "<parameter=command>\n"
+        "kill -9 1\n"
+        "</parameter>\n"
+        "<parameter=intent>\n"
+        "杀掉卡死的下载进程并确认\n"
+        "</parameter>\n"
+        "</function>\n"
+        "</tool_call>\n\n"
+        "<tool_call>\n"
+        "<function=terminal_exec>\n"
+        "<parameter=command>\n"
+        "ps aux | grep x\n"
+        "</parameter>\n"
+        "<parameter=intent>\n"
+        "检查下载进程是否还在\n"
+        "</parameter>\n"
+        "</function>\n"
+        "</tool_call>"
+    )
+    cleaned = strip_tool_call_markup(raw)
+    assert "下载卡住了" in cleaned
+    assert "你想怎么处理" in cleaned
+    assert "<tool_call>" not in cleaned
+    assert "kill -9" not in cleaned
+    assert "检查下载进程" not in cleaned
+
+
+def test_prose_plus_two_xml_tools_recovers_both() -> None:
+    import json
+
+    from app.llm.thinking import extract_tool_calls_from_content, strip_tool_call_markup
+
+    raw = (
+        "**你想怎么处理？**<tool_call>\n"
+        "<function=terminal_exec>\n"
+        "<parameter=command>\nkill -9 1\n</parameter>\n"
+        "<parameter=intent>\n杀掉\n</parameter>\n"
+        "</function>\n</tool_call>\n"
+        "<tool_call>\n"
+        "<function=terminal_exec>\n"
+        "<parameter=command>\nps aux\n</parameter>\n"
+        "<parameter=intent>\n检查\n</parameter>\n"
+        "</function>\n</tool_call>"
+    )
+    recovered = extract_tool_calls_from_content(raw)
+    assert len(recovered) == 2
+    assert "kill" in json.loads(recovered[0]["function"]["arguments"])["command"]
+    assert "ps aux" in json.loads(recovered[1]["function"]["arguments"])["command"]
+    assert "<tool_call>" not in strip_tool_call_markup(raw)

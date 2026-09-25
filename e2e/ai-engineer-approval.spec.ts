@@ -25,6 +25,12 @@ test.describe("AI approval flow", () => {
     const api = await twE2e(page);
     await api.simulateApproval("echo approval-e2e");
     await expect(page.getByTestId("ai-engineer-approval-card")).toBeVisible();
+    const commandCard = page.getByTestId("ai-engineer-approval-command");
+    await expect(commandCard).toBeVisible();
+    await expect(commandCard.locator(".ai-engineer-exec-prompt")).toHaveText("$");
+    await expect(commandCard.locator(".ai-engineer-exec-command-code")).toContainText(
+      "echo approval-e2e",
+    );
     await expect(page.getByTestId("ai-engineer-approval-once")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-approval-session")).toBeVisible();
     await page.getByTestId("ai-engineer-approval-once").click();

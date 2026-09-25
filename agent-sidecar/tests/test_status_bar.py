@@ -81,6 +81,30 @@ def test_status_bar_for_run_reads_metadata() -> None:
     assert "crashloop" in text.lower() or "pod" in text.lower()
 
 
+def test_status_bar_marks_continuing_prior_run() -> None:
+    run = AgentRun(session_id="s", run_id="r2")
+    run.metadata["resumed_from"] = "r1"
+    run.append_message({"role": "user", "content": "继续下载"})
+    text = status_bar_for_run(run)
+    assert "continuing prior run" in text.lower()
+    assert "继续下载" in text or "Goal:" in text
+
+
+def test_status_bar_skips_harness_for_goal_and_lists_prior() -> None:
+    msgs = [
+        {"role": "user", "content": "检查驱动版本"},
+        {"role": "assistant", "content": "驱动正常"},
+        {"role": "user", "content": "CPU 是瓶颈吗"},
+        {"role": "user", "content": "[HARNESS] Tool results are already…"},
+    ]
+    text = build_status_bar(messages=msgs)
+    assert "Goal: CPU 是瓶颈吗" in text
+    assert "[HARNESS]" not in text.split("Goal:", 1)[-1].split("\n", 1)[0]
+    assert "Prior:" in text
+    assert "检查驱动版本" in text
+    assert len(text) <= 800
+
+
 def test_status_bar_not_persisted_in_run_messages() -> None:
     """Status is sample-only; SessionLog must not grow status bars."""
     run = AgentRun(session_id="s", run_id="r2", security_mode="safe")

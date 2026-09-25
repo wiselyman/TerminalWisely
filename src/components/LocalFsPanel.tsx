@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isExtractableArchivePath } from "../lib/archivePath";
 import { formatAppError } from "../lib/formatAppError";
 import { invokeWithSudoRetry } from "../lib/invokeWithSudoRetry";
-import { pasteTargetDir, parentRemotePath, isSameOrDescendantPath, normalizeRemotePath } from "../lib/localFsOps";
+import { pasteTargetDir, parentRemotePath, isSameOrDescendantPath, normalizeRemotePath, sanitizeDeleteSelection, isProtectedDeletePath } from "../lib/localFsOps";
 import { downloadRemotePath } from "../lib/sessionDownload";
 import {
   canSendPathToChat,
@@ -25,8 +25,10 @@ import { clampWorkspacePanelWidth } from "../lib/workspacePanelWidth";
 import { LocalFsContextMenu, type LocalFsContextMenuProps } from "./LocalFsContextMenu";
 import { LocalFsBackIcon, LocalFsCwdIcon, LocalFsHiddenIcon, LocalFsHomeIcon, LocalFsRefreshIcon, LocalFsSettingsIcon, LocalFsUpIcon, LocalFsViewGridIcon, LocalFsViewListIcon } from "./LocalFsIcons";
 import { LocalFsContentsView } from "./LocalFsContentsView";
+import { LocalFsPathBreadcrumb } from "./LocalFsPathBreadcrumb";
 import { LocalFsTreeView } from "./LocalFsTreeView";
 import { PathInput } from "./PathInput";
+import { StatusBarTransfers } from "./StatusBarTransfers";
 import { PathSizeDialog } from "./PathSizeDialog";
 import { TaskManagerTable } from "./TaskManagerTable";
 import { FindInFilesIcon, LocalFilesIcon, TaskManagerIcon } from "./WorkspaceToolIcons";
@@ -90,6 +92,9 @@ export function LocalFsPanel({
   const pushToast = useToastStore((s) => s.pushToast);
   const openPreview = usePreviewStore((s) => s.openPreview);
   const openSendTo = useSessionStore((s) => s.openSendTo);
+  const transferCount = useSessionStore(
+    (s) => Object.keys(s.activeTransfers).length,
+  );
   const {
     width,
     setWidth,
@@ -172,6 +177,7 @@ export function LocalFsPanel({
   const [dialog, setDialog] = useState<{
     mode: TerminalFsDialogMode;
     path: string;
+    paths?: string[];
     kind: "file" | "directory";
   } | null>(null);
   const [menu, setMenu] = useState<LocalFsContextMenuProps | null>(null);
@@ -630,26 +636,27 @@ export function LocalFsPanel({
           kind: pathKind,
         }),
       onDelete: () => {
-        if (paths.length > 1) {
-          void (async () => {
-            try {
-              for (const p of paths) {
-                await invoke("delete_path", {
-                  request: { session_id: sessionId, path: p },
-                });
-              }
-              pushToast(t("terminal:toastDeleted"), true);
-              reloadDirsLocally(paths.map((p) => parentRemotePath(p)));
-            } catch (err) {
-              pushToast(formatAppError(err), false);
-            }
-          })();
+        const toDelete = sanitizeDeleteSelection(paths, contentsPath);
+        if (toDelete.length === 0) return;
+        if (
+          toDelete.length > 1 &&
+          toDelete.some((p) => isProtectedDeletePath(p, rootPath))
+        ) {
+          pushToast(t("terminal:deleteProtectedBlocked"), false);
           return;
         }
+        const anyDir = toDelete.some((p) => {
+          const hit = getEntryByPath(p);
+          return (
+            hit?.kind === "directory" ||
+            (p === entry.path && pathKind === "directory")
+          );
+        });
         setDialog({
           mode: "delete",
-          path: entry.path,
-          kind: pathKind,
+          path: toDelete[0],
+          paths: toDelete,
+          kind: anyDir ? "directory" : "file",
         });
       },
     });
@@ -976,19 +983,34 @@ export function LocalFsPanel({
             </button>
           </div>
           <div className="local-fs-address-bar">
-            <PathInput
-              sessionId={sessionId}
-              value={addressPath}
-              onChange={setAddressPath}
-              placeholder={t("localFs.addressPlaceholder")}
-              disabled={loadingRoot}
-              onFocus={() => setAddressEditing(true)}
-              onBlur={() => setAddressEditing(false)}
-              onSubmit={(path) => {
-                clearInlineSearch();
-                navigateToAddress(path);
-              }}
-            />
+            {addressEditing ? (
+              <PathInput
+                sessionId={sessionId}
+                value={addressPath}
+                onChange={setAddressPath}
+                placeholder={t("localFs.addressPlaceholder")}
+                disabled={loadingRoot}
+                autoFocus
+                onFocus={() => setAddressEditing(true)}
+                onBlur={() => setAddressEditing(false)}
+                onSubmit={(path) => {
+                  clearInlineSearch();
+                  setAddressEditing(false);
+                  navigateToAddress(path);
+                }}
+              />
+            ) : (
+              <LocalFsPathBreadcrumb
+                path={addressPath || contentsPath || "/"}
+                disabled={loadingRoot}
+                onNavigate={(path) => {
+                  clearInlineSearch();
+                  setAddressPath(path);
+                  navigateToAddress(path);
+                }}
+                onEdit={() => setAddressEditing(true)}
+              />
+            )}
           </div>
           {isEmbedded ? (
             <div className="local-fs-search-bar">
@@ -1144,6 +1166,14 @@ export function LocalFsPanel({
                 />
               </div>
             </div>
+            {transferCount > 0 ? (
+              <div
+                className="local-fs-transfer-strip"
+                data-testid="local-fs-transfer-strip"
+              >
+                <StatusBarTransfers />
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -1311,10 +1341,12 @@ export function LocalFsPanel({
           mode={dialog.mode}
           sessionId={sessionId}
           path={dialog.path}
+          paths={dialog.paths}
           pathKind={dialog.kind}
           onClose={() => setDialog(null)}
           onCommitted={({ reloadDirs }) => {
             reloadDirsLocally(reloadDirs);
+            useLocalFsStore.getState().setSelectedPaths([]);
           }}
         />
       ) : null}

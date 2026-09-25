@@ -88,6 +88,57 @@ def ai_model() -> str:
     return os.environ.get("TW_AI_MODEL", "gpt-4o-mini")
 
 
+def apply_runtime_config(
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    ollama_base_url: str | None = None,
+    api_key: str | None = None,
+    security_mode: str | None = None,
+) -> dict[str, str]:
+    """Hot-update process env so the next AgentLoop/ModelGateway picks new settings.
+
+    Avoids killing the sidecar on every model-profile switch (UI freeze).
+    """
+    if provider is not None:
+        os.environ["TW_AI_PROVIDER"] = str(provider).strip() or "openai"
+    if model is not None:
+        os.environ["TW_AI_MODEL"] = str(model).strip() or "gpt-4o-mini"
+    if ollama_base_url is not None:
+        os.environ["TW_AI_OLLAMA_BASE"] = (
+            str(ollama_base_url).strip() or "http://127.0.0.1:11434"
+        )
+    if api_key is not None:
+        # Always set (even empty) so a prior key cannot stick after clear.
+        os.environ["TW_AI_API_KEY"] = str(api_key)
+    if security_mode is not None:
+        mode = str(security_mode).strip().lower() or "safe"
+        os.environ["TW_AI_SECURITY_MODE"] = mode
+
+    prov = ai_provider().strip().lower()
+    if base_url is not None and str(base_url).strip():
+        os.environ["TW_AI_BASE_URL"] = str(base_url).strip().rstrip("/")
+    elif prov == "ollama":
+        # Mirror Rust spawn: derive OpenAI-compat base from ollama URL.
+        ollama = os.environ.get("TW_AI_OLLAMA_BASE", "http://127.0.0.1:11434").rstrip(
+            "/"
+        )
+        base = ollama if ollama.endswith("/v1") else f"{ollama}/v1"
+        os.environ["TW_AI_BASE_URL"] = base
+    elif base_url is not None:
+        # Explicit clear for non-ollama when empty.
+        os.environ.pop("TW_AI_BASE_URL", None)
+
+    return {
+        "provider": ai_provider(),
+        "model": ai_model(),
+        "base_url": ai_base_url(),
+        "security_mode": os.environ.get("TW_AI_SECURITY_MODE", "safe").strip().lower()
+        or "safe",
+    }
+
+
 def is_local_model_endpoint(url: str | None = None) -> bool:
     """True for Ollama / private OpenAI-compatible servers (no API key required)."""
     if ai_provider().strip().lower() == "ollama":
@@ -160,6 +211,14 @@ def max_run_wall_seconds() -> float:
 def stall_seconds() -> float:
     """Fail RUNNING runs that never touch the model within this many seconds."""
     return float(os.environ.get("TW_AI_STALL_SECONDS", "90"))
+
+
+def progress_stall_seconds() -> float:
+    """Fail RUNNING runs with no events/stream chunks for this many seconds.
+
+    Covers hung model HTTP after tools (cold-start stall alone stops after first touch).
+    """
+    return float(os.environ.get("TW_AI_PROGRESS_STALL_SECONDS", "300"))
 
 
 def max_context_tokens() -> int:

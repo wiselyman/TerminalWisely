@@ -4,6 +4,7 @@ import {
   getAiSettings,
   saveAiSettings,
   fetchRunTrace,
+  fetchRunTranscript,
   type AiSettingsUpdate,
   type AiSettingsView,
   type SidecarInfo,
@@ -15,6 +16,7 @@ import {
   runAgentChat,
   type AgentUiEvent,
 } from "../lib/aiEngineer/chatClient";
+import { ResumeMissError } from "../lib/aiEngineer/resumeMiss";
 import { remoteUserFromServerId } from "../lib/aiEngineer/targetIdentity";
 import {
   harnessNudgeContentCode,
@@ -22,6 +24,11 @@ import {
   withToolEvidenceFlags,
 } from "../lib/aiEngineer/harnessNotices";
 import { markRunningToolsStopped } from "../lib/aiEngineer/toolRunLifecycle";
+import { formatToolResultForDisplay } from "../lib/aiEngineer/formatToolResultDisplay";
+import {
+  chatHasRunningTool,
+  shouldAbortThinkingIdle,
+} from "../lib/aiEngineer/thinkingIdleAbort";
 import { buildOptimisticToolAfterApproval } from "../lib/aiEngineer/approvalOptimisticExec";
 import {
   looksTruncatedAssistant,
@@ -29,7 +36,16 @@ import {
   resolveAuthoritativeAssistantContent,
   stripTrailingDanglingHeading,
 } from "../lib/aiEngineer/truncatedAssistant";
-import { applyAssistantDeltaToMessages } from "../lib/aiEngineer/assistantStreamResume";
+import {
+  applyAssistantDeltaToMessages,
+  findLastAssistantIndexInTurn,
+  hasToolLineAfter,
+} from "../lib/aiEngineer/assistantStreamResume";
+import {
+  lastAssistantTextFromTranscript,
+  shouldReplaceAssistantWithTranscript,
+} from "../lib/aiEngineer/reconcileAssistantFromTranscript";
+import { createStreamDeltaCoalescer } from "../lib/aiEngineer/streamDeltaCoalesce";
 import {
   acquireAiSshLease,
   releaseAiSshLease,
@@ -217,6 +233,8 @@ export type ChatThread = {
   messages: ChatLine[];
   /** Last sidecar run_id for SessionLog resume on the next message. */
   lastRunId?: string | null;
+  /** Skip SessionLog resume once after the sidecar reports a missing run. */
+  skipNextResume?: boolean; // in-memory one-shot; not persisted
 };
 
 export type ScopeThreadBundle = {
@@ -912,7 +930,7 @@ function commitThreadMessages(
   scope: string,
   threadId: string,
   messages: ChatLine[],
-  opts?: { bumpTitle?: boolean },
+  opts?: { bumpTitle?: boolean; persist?: boolean },
 ): Record<string, ScopeThreadBundle> {
   const prev = get().threadsByScope;
   const bundle = prev[scope] ?? makeBundle();
@@ -937,7 +955,10 @@ function commitThreadMessages(
       threads: evictOldestThreads(threads, threadId),
     },
   };
-  savePersistedThreads(next, scope);
+  // Streaming tokens must not hit disk every chunk (Tauri invoke → UI stutter).
+  if (opts?.persist !== false) {
+    savePersistedThreads(next, scope);
+  }
   return next;
 }
 
@@ -1513,6 +1534,22 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   },
 
   saveSettings: async (update) => {
+    const prev = get().settings;
+    // Optimistic label swap — do not wait on sidecar restart for the picker UI.
+    if (prev) {
+      set({
+        settings: {
+          ...prev,
+          ...(update.active_profile_id != null
+            ? { active_profile_id: update.active_profile_id }
+            : {}),
+          ...(update.security_mode != null
+            ? { security_mode: update.security_mode }
+            : {}),
+          ...(update.profiles != null ? { profiles: update.profiles } : {}),
+        },
+      });
+    }
     const settings = await saveAiSettings(update);
     set({ settings });
   },
@@ -1742,12 +1779,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         role: m.kind as "user" | "assistant",
         content: m.content.slice(0, 4000),
       }));
-    const resumeRunId =
-      get()
-        .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId)
-        ?.lastRunId ?? null;
     const threadMeta = get()
       .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId);
+    const skipResume = Boolean(threadMeta?.skipNextResume);
+    const resumeRunId = skipResume
+      ? null
+      : (threadMeta?.lastRunId ?? null);
     const interactionMode = normalizeInteractionMode(threadMeta?.interactionMode);
     const userLine: ChatLine | null = text
       ? { id: nextId(), kind: "user", content: text }
@@ -1782,13 +1819,25 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       ...attachmentLines,
       ...(userLine ? [userLine] : []),
     ];
-    const threadsByScope = commitThreadMessages(
+    let threadsByScope = commitThreadMessages(
       get,
       runScope,
       runThreadId,
       nextMessages,
       { bumpTitle: true },
     );
+    if (skipResume) {
+      const bundle = threadsByScope[runScope];
+      threadsByScope = {
+        ...threadsByScope,
+        [runScope]: {
+          ...bundle,
+          threads: bundle.threads.map((t) =>
+            t.id === runThreadId ? { ...t, skipNextResume: false } : t,
+          ),
+        },
+      };
+    }
     set({
       input: "",
       busy: true,
@@ -1829,7 +1878,10 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       set({ messages, threadsByScope });
     };
 
-    const replaceMessagesIfSameThread = (messages: ChatLine[]) => {
+    const replaceMessagesIfSameThread = (
+      messages: ChatLine[],
+      opts?: { persist?: boolean },
+    ) => {
       const cur = get();
       if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) return;
       const threadsByScope = commitThreadMessages(
@@ -1837,8 +1889,79 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         runScope,
         runThreadId!,
         messages,
+        { persist: opts?.persist },
       );
       set({ messages, threadsByScope });
+    };
+
+    const applyLiveAssistantDelta = (text: string) => {
+      if (!text) return;
+      if (!sameRunTarget()) return;
+      replaceMessagesIfSameThread(
+        applyAssistantDeltaToMessages(get().messages, text, {
+          looksTruncated: looksTruncatedAssistant,
+          merge: mergeAssistantContinuation,
+          newId: nextId,
+        }),
+        { persist: false },
+      );
+      if (get().modelPhase !== "streaming") {
+        set({ modelPhase: "streaming" });
+      }
+    };
+
+    const assistantDeltaCoalesce = createStreamDeltaCoalescer(applyLiveAssistantDelta);
+    // Per-call tool stdout coalescing (no disk until turn settles)
+    const toolOutputBuf = new Map<string, string>();
+    let toolOutputRaf = 0;
+    const flushToolOutputBuf = () => {
+      toolOutputRaf = 0;
+      if (!sameRunTarget()) {
+        toolOutputBuf.clear();
+        return;
+      }
+      if (toolOutputBuf.size === 0) return;
+      const cur = get();
+      if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) {
+        toolOutputBuf.clear();
+        return;
+      }
+      let messages = cur.messages;
+      let changed = false;
+      for (const [callId, chunk] of toolOutputBuf) {
+        if (!chunk) continue;
+        const idx = messages.findIndex(
+          (line) => line.kind === "tool" && line.callId === callId,
+        );
+        if (idx < 0) continue;
+        const prev = messages[idx];
+        if (prev.kind !== "tool") continue;
+        if (!changed) messages = [...messages];
+        changed = true;
+        messages[idx] = {
+          ...prev,
+          output: appendToolOutputText(prev.output, chunk),
+          lastOutputAt: Date.now(),
+        };
+      }
+      toolOutputBuf.clear();
+      if (changed) {
+        replaceMessagesIfSameThread(messages, { persist: false });
+      }
+    };
+    const pushToolOutput = (callId: string, chunk: string) => {
+      if (!chunk) return;
+      toolOutputBuf.set(callId, (toolOutputBuf.get(callId) ?? "") + chunk);
+      if (toolOutputRaf) return;
+      toolOutputRaf = requestAnimationFrame(flushToolOutputBuf);
+    };
+    const flushStreamCoalescers = () => {
+      assistantDeltaCoalesce.flushNow();
+      if (toolOutputRaf) {
+        cancelAnimationFrame(toolOutputRaf);
+        toolOutputRaf = 0;
+      }
+      flushToolOutputBuf();
     };
 
     const patchToolLineByCallId = (
@@ -1859,22 +1982,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     };
 
     const appendToolOutputByCallId = (callId: string, chunk: string) => {
-      if (!chunk) return;
-      const cur = get();
-      if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) return;
-      const idx = cur.messages.findIndex(
-        (line) => line.kind === "tool" && line.callId === callId,
-      );
-      if (idx < 0) return;
-      const prev = cur.messages[idx];
-      if (prev.kind !== "tool") return;
-      const messages = [...cur.messages];
-      messages[idx] = {
-        ...prev,
-        output: appendToolOutputText(prev.output, chunk),
-        lastOutputAt: Date.now(),
-      };
-      replaceMessagesIfSameThread(messages);
+      pushToolOutput(callId, chunk);
     };
 
     const persistThreadLastRunId = (rid: string) => {
@@ -1892,6 +2000,28 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       set({ threadsByScope: next });
     };
 
+    let idleWatchdog: ReturnType<typeof setInterval> | null = null;
+    const clearStaleLastRunId = () => {
+      const state = get();
+      const bundle = state.threadsByScope[runScope];
+      if (!bundle) return;
+      const threads = bundle.threads.map((t) =>
+        t.id === runThreadId
+          ? {
+              ...t,
+              lastRunId: null,
+              skipNextResume: false,
+              updatedAt: Date.now(),
+            }
+          : t,
+      );
+      const next = {
+        ...state.threadsByScope,
+        [runScope]: { ...bundle, threads },
+      };
+      savePersistedThreads(next, runScope);
+      set({ threadsByScope: next });
+    };
     try {
       const sidecar = await ensureSidecar();
       set({ sidecar, ready: true });
@@ -1904,6 +2034,37 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       activeLeaseSessionId = runSessionId;
       void acquireAiSshLease(runSessionId);
 
+      /** Last SSE / tool activity — used to unstick 「模型思考中」 if the stream dies. */
+      let lastStreamActivityAt = Date.now();
+      const THINKING_IDLE_ABORT_MS = 5 * 60_000;
+      idleWatchdog = setInterval(() => {
+        const st = get();
+        if (
+          !shouldAbortThinkingIdle({
+            busy: sameRunTarget() && st.busy,
+            idleMs: Date.now() - lastStreamActivityAt,
+            thresholdMs: THINKING_IDLE_ABORT_MS,
+            pendingApproval: Boolean(st.pendingApproval),
+            pendingAsk: Boolean(st.pendingAsk),
+            hasRunningTool: chatHasRunningTool(st.messages),
+          })
+        ) {
+          return;
+        }
+        appendIfSameThread({
+          id: nextId(),
+          kind: "notice",
+          variant: "harness",
+          content: "run_stalled",
+        });
+        appendIfSameThread({
+          id: nextId(),
+          kind: "error",
+          content: "run_stalled",
+        });
+        abort.abort();
+      }, 15_000);
+
       const sshTab = useSessionStore
         .getState()
         .tabs.find((t) => t.id === runSessionId);
@@ -1913,7 +2074,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       const hostFingerprint = sshTab?.host_fingerprint ?? null;
       const remoteUser = remoteUserFromServerId(resolvedServerId ?? null);
 
-      const { runId } = await runAgentChat({
+      let attemptResume: string | null = resumeRunId;
+      let runId = "";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          ({ runId } = await runAgentChat({
         sidecar,
         sessionId: runSessionId,
         message: text,
@@ -1931,7 +2096,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         hostFingerprint,
         remoteUser,
         history: priorHistory,
-        resumeRunId,
+        resumeRunId: attemptResume,
         attachments: toWireAttachments(pendingAtts),
         signal: abort.signal,
         onAskUser: (ev) =>
@@ -1992,8 +2157,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             });
           }),
         onToolExec: {
-          onOutput: ({ callId, chunk }) => appendToolOutputByCallId(callId, chunk),
+          onOutput: ({ callId, chunk }) => {
+            lastStreamActivityAt = Date.now();
+            appendToolOutputByCallId(callId, chunk);
+          },
           onStart: ({ callId, command, intent }) => {
+            lastStreamActivityAt = Date.now();
             patchToolLineByCallId(callId, {
               detail: command,
               intent,
@@ -2002,6 +2171,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             });
           },
           onDone: ({ callId, ok, exitCode, error, stdout, stderr }) => {
+            lastStreamActivityAt = Date.now();
             const cur = get();
             const existing = cur.messages.find(
               (line): line is Extract<ChatLine, { kind: "tool" }> =>
@@ -2030,10 +2200,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               ...(output !== existing?.output ? { output } : {}),
             });
             // Gap before next assistant tokens — show existing 思考中 line.
-            if (sameRunTarget()) set({ modelPhase: "thinking" });
+            if (sameRunTarget()) {
+              lastStreamActivityAt = Date.now();
+              set({ modelPhase: "thinking" });
+            }
           },
         },
         onEvent: (event: AgentUiEvent) => {
+          lastStreamActivityAt = Date.now();
           if (
             get().chatScope !== runScope ||
             get().activeThreadId !== runThreadId ||
@@ -2041,6 +2215,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             activeRunThreadId !== runThreadId
           ) {
             return;
+          }
+          // Drain pending rAF chunks before any non-delta event so order stays
+          // correct (delta → message / tool_call / timeout, …).
+          if (event.type !== "assistant_delta") {
+            flushStreamCoalescers();
           }
           if (event.type === "tool_timeout") {
             patchToolLineByCallId(event.call_id, {
@@ -2070,15 +2249,35 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               kind: "error",
               content: "run_stalled",
             });
+            // Sidecar already FAILED; abort FE stream so finally clears busy.
+            abort.abort();
             return;
           }
           if (event.type === "tool_result") {
             const ok = event.payload.ok !== false;
+            const existing = get().messages.find(
+              (l): l is Extract<ChatLine, { kind: "tool" }> =>
+                l.kind === "tool" && l.callId === event.call_id,
+            );
+            const exitCode =
+              typeof event.payload.exit_code === "number"
+                ? event.payload.exit_code
+                : typeof event.payload.exitCode === "number"
+                  ? event.payload.exitCode
+                  : undefined;
             patchToolLineByCallId(event.call_id, {
               status: ok ? "done" : "failed",
               ok,
               finishedAt: Date.now(),
-              output: JSON.stringify(event.payload),
+              ...(exitCode !== undefined ? { exitCode } : {}),
+              ...(typeof event.payload.query === "string" &&
+              event.payload.query.trim()
+                ? { detail: String(event.payload.query).trim() }
+                : {}),
+              output: formatToolResultForDisplay(
+                event.payload,
+                existing?.output,
+              ),
             });
             set({ modelPhase: "thinking" });
             return;
@@ -2134,12 +2333,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             }
             // Truncated-answer continues must NOT insert a notice between
             // assistant halves — that splits markdown tables into two bubbles.
-            // Surface progress via modelPhase only.
-            if (
-              event.type === "act_nudge" &&
-              (event.kind || "").trim() === "truncated_answer"
-            ) {
-              set({ modelPhase: "streaming" });
+            // Conclude / plan / lead-in act nudges are model-only too: do not
+            // spam the transcript with "正在根据结果整理结论…" — let the model reply.
+            if (event.type === "act_nudge") {
+              const kind = (event.kind || "").trim();
+              set({
+                modelPhase:
+                  kind === "truncated_answer" ? "streaming" : "thinking",
+              });
               return;
             }
             // Model-only verify nudge — do not leak exit codes / harness jargon
@@ -2156,11 +2357,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 event.type,
                 event.type === "evidence_nudge"
                   ? { blocked: event.blocked }
-                  : event.type === "act_nudge"
-                    ? { kind: event.kind }
-                    : event.type === "audit_nudge"
-                      ? { reason: event.reason }
-                      : undefined,
+                  : event.type === "audit_nudge"
+                    ? { reason: event.reason }
+                    : undefined,
               ),
             });
             return;
@@ -2188,43 +2387,25 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             const content = event.content ?? "";
             if (content.trim()) {
               const msgs = get().messages;
-              for (let i = msgs.length - 1; i >= 0; i -= 1) {
-                const line = msgs[i];
-                if (line.kind === "assistant") {
-                  if (line.content === content) break;
-                  if (line.streaming) {
-                    replaceMessagesIfSameThread([
-                      ...msgs.slice(0, i),
-                      { id: line.id, kind: "assistant", content },
-                      ...msgs.slice(i + 1),
-                    ]);
-                    break;
-                  }
-                  // Prefer merge into the cut-off bubble over a second bubble.
-                  if (looksTruncatedAssistant(line.content)) {
-                    replaceMessagesIfSameThread([
-                      ...msgs.slice(0, i),
-                      {
-                        id: line.id,
-                        kind: "assistant",
-                        content:
-                          stripTrailingDanglingHeading(content) || content,
-                      },
-                      ...msgs.slice(i + 1),
-                    ]);
-                    break;
-                  }
-                  // Authoritative completed text replaces the prior bubble.
+              const shown = stripTrailingDanglingHeading(content) || content;
+              const lastAssistant = findLastAssistantIndexInTurn(msgs);
+              if (
+                lastAssistant < 0 ||
+                hasToolLineAfter(msgs, lastAssistant)
+              ) {
+                appendIfSameThread({
+                  id: nextId(),
+                  kind: "assistant",
+                  content: shown,
+                });
+              } else {
+                const line = msgs[lastAssistant];
+                if (line.kind === "assistant" && line.content !== content) {
                   replaceMessagesIfSameThread([
-                    ...msgs.slice(0, i),
-                    {
-                      id: line.id,
-                      kind: "assistant",
-                      content: stripTrailingDanglingHeading(content) || content,
-                    },
-                    ...msgs.slice(i + 1),
+                    ...msgs.slice(0, lastAssistant),
+                    { id: line.id, kind: "assistant", content: shown },
+                    ...msgs.slice(lastAssistant + 1),
                   ]);
-                  break;
                 }
               }
             }
@@ -2245,7 +2426,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             }
             return;
           } else if (event.type === "assistant_incomplete") {
-            // Exhausted auto-continue only — keep transcript clean (no 继续 spam).
+            // Exhausted sidecar auto-continue — do NOT ask the user to type
+            // 「继续」. Leave the partial on screen; next user message can proceed.
             return;
           } else if (event.type === "assistant_soft_continue") {
             // Soft hints removed: sidecar must auto-finish instead.
@@ -2275,14 +2457,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           } else if (event.type === "assistant_delta") {
             const text = event.text ?? "";
             if (!text) return;
-            replaceMessagesIfSameThread(
-              applyAssistantDeltaToMessages(get().messages, text, {
-                looksTruncated: looksTruncatedAssistant,
-                merge: mergeAssistantContinuation,
-                newId: nextId,
-              }),
-            );
-            set({ modelPhase: "streaming" });
+            assistantDeltaCoalesce.push(text);
           } else if (event.type === "assistant_message") {
             const content = event.content ?? "";
             if (!content.trim()) return;
@@ -2290,13 +2465,16 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             // Sidecar assistant_message is authoritative full text for this turn.
             // Always replace the latest assistant bubble — never merge a longer
             // streamed preview over a shorter cleaned final (drops trailing chars).
-            let lastAssistant = -1;
-            for (let i = msgs.length - 1; i >= 0; i -= 1) {
-              if (msgs[i].kind === "user") break;
-              if (msgs[i].kind === "assistant") {
-                lastAssistant = i;
-                break;
-              }
+            // A tool card after that bubble means this text is the post-tool
+            // answer; do not write it back into the preamble above the command.
+            const lastAssistant = findLastAssistantIndexInTurn(msgs);
+            if (lastAssistant >= 0 && hasToolLineAfter(msgs, lastAssistant)) {
+              appendIfSameThread({
+                id: nextId(),
+                kind: "assistant",
+                content: stripTrailingDanglingHeading(content) || content,
+              });
+              return;
             }
             if (lastAssistant >= 0) {
               const prev = msgs[lastAssistant];
@@ -2348,6 +2526,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               event.name === "terminal_exec" ||
               event.name === "ai_exec" ||
               event.name.startsWith("k8s_");
+            const isWebTool =
+              event.name === "web_search" || event.name === "web_fetch";
             const msgs = get().messages;
             const last = msgs[msgs.length - 1];
             if (last?.kind === "assistant" && last.streaming) {
@@ -2362,6 +2542,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               ? "denied"
               : isExec && event.awaiting_host
                 ? "running"
+                : isWebTool
+                  ? "running"
+                  : undefined;
+            const startedNow =
+              (isExec && event.awaiting_host) || isWebTool
+                ? Date.now()
                 : undefined;
             if (callId) {
               const existing = get().messages.find(
@@ -2378,9 +2564,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                       : "Denied by policy"
                     : detail || existing.detail,
                   status: status ?? existing.status,
-                  startedAt:
-                    existing.startedAt ??
-                    (isExec && event.awaiting_host ? Date.now() : undefined),
+                  startedAt: existing.startedAt ?? startedNow,
                   ok: event.denied ? false : existing.ok,
                   risk: existing.risk,
                   approvalDecision: existing.approvalDecision,
@@ -2408,7 +2592,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                   : "Denied by policy"
                 : detail,
               status,
-              startedAt: isExec && event.awaiting_host ? Date.now() : undefined,
+              startedAt: startedNow,
               ok: event.denied ? false : undefined,
               risk: linkedApproval?.risk,
               approvalDecision: linkedApproval ? "approved" : undefined,
@@ -2457,13 +2641,41 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             });
           }
         },
-      });
+      }));
+          break;
+        } catch (err) {
+          if (
+            err instanceof ResumeMissError &&
+            attempt === 0 &&
+            attemptResume
+          ) {
+            // Stale lastRunId (e.g. SSH tab session_id remapped) — drop it and
+            // reopen once from chat text only; no double-send for the user.
+            clearStaleLastRunId();
+            attemptResume = null;
+            continue;
+          }
+          throw err;
+        }
+      }
       if (sameRunTarget()) {
         activeRunId = runId;
         persistThreadLastRunId(runId);
       }
     } catch (err) {
-      if (!(err instanceof DOMException && err.name === "AbortError")) {
+      if (err instanceof ResumeMissError) {
+        // Both resume + text reopen failed (should be rare after clear).
+        appendIfSameThread({
+          id: nextId(),
+          kind: "notice",
+          variant: "harness",
+          content: "resume_miss",
+        });
+        clearStaleLastRunId();
+        if (sameRunTarget()) {
+          set({ busy: false, modelPhase: "idle" });
+        }
+      } else if (!(err instanceof DOMException && err.name === "AbortError")) {
         useToastStore.getState().pushToast(formatAppError(err), false);
         appendIfSameThread({
           id: nextId(),
@@ -2472,6 +2684,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         });
       }
     } finally {
+      flushStreamCoalescers();
+      if (idleWatchdog != null) clearInterval(idleWatchdog);
+      const reconcileRunId = activeRunId;
       if (activeRunScope === runScope && activeRunThreadId === runThreadId) {
         chatAbort = null;
         activeRunId = null;
@@ -2518,6 +2733,62 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               pendingAsk: null,
               pendingApproval: null,
             });
+          }
+          // Stream can drop the trailing assistant_message; sidecar still has
+          // the full answer — pull transcript and patch the last bubble.
+          const sid = get().sidecar;
+          const sess = get().sessionId;
+          if (sid && sess && reconcileRunId) {
+            void fetchRunTranscript(sid, sess, reconcileRunId)
+              .then((data) => {
+                if (
+                  get().chatScope !== runScope ||
+                  get().activeThreadId !== runThreadId
+                ) {
+                  return;
+                }
+                const full = lastAssistantTextFromTranscript(data.messages ?? []);
+                if (!full.trim()) return;
+                const cur = get().messages;
+                const idx = findLastAssistantIndexInTurn(cur);
+                const shown = stripTrailingDanglingHeading(full) || full;
+                if (idx < 0) {
+                  appendIfSameThread({
+                    id: nextId(),
+                    kind: "assistant",
+                    content: shown,
+                  });
+                  return;
+                }
+                const line = cur[idx];
+                if (line.kind !== "assistant") return;
+                if (
+                  !shouldReplaceAssistantWithTranscript({
+                    uiContent: line.content,
+                    transcriptContent: full,
+                  })
+                ) {
+                  return;
+                }
+                if (hasToolLineAfter(cur, idx)) {
+                  appendIfSameThread({
+                    id: nextId(),
+                    kind: "assistant",
+                    content: shown,
+                  });
+                  return;
+                }
+                replaceMessagesIfSameThread([
+                  ...cur.slice(0, idx),
+                  {
+                    id: line.id,
+                    kind: "assistant",
+                    content: shown,
+                  },
+                  ...cur.slice(idx + 1),
+                ]);
+              })
+              .catch(() => undefined);
           }
         }
       }

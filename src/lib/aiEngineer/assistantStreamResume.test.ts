@@ -44,6 +44,33 @@ describe("applyAssistantDeltaToMessages", () => {
     expect(next.some(isTruncatedAnswerNotice)).toBe(false);
   });
 
+  it("starts a new bubble after tool cards instead of hiding the answer above them", () => {
+    const msgs = [
+      { id: "u", kind: "user", content: "q" },
+      {
+        id: "a",
+        kind: "assistant",
+        content: "还没修好。让我找到 Merge.yaml 的真实位置：",
+        streaming: false,
+      },
+      { id: "t", kind: "tool", content: "cat Merge.yaml" },
+    ];
+    const next = applyAssistantDeltaToMessages(msgs, "没修好。需要重载。", {
+      looksTruncated: () => true,
+      merge: (p, n) => p + n,
+      newId: () => "final",
+    });
+    expect(next.map((m) => m.kind)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+    ]);
+    expect(next[1].content).toBe("还没修好。让我找到 Merge.yaml 的真实位置：");
+    expect(next[3].id).toBe("final");
+    expect(next[3].content).toBe("没修好。需要重载。");
+  });
+
   it("does not open a second assistant bubble after trunc notice", () => {
     const msgs = [
       { id: "u", kind: "user", content: "q" },

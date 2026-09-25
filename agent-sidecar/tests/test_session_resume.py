@@ -167,6 +167,61 @@ def test_chat_start_resume_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
         assert run_id in run_ids
 
 
+def test_chat_start_resume_miss_does_not_thin_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = ScriptedModel(
+        [{"role": "assistant", "content": "should not run", "tool_calls": []}]
+    )
+    _patch_model(monkeypatch, model)
+
+    with TestClient(app) as client:
+        r = client.post(
+            "/v1/chat/start",
+            headers=_auth(),
+            json={
+                "session_id": "sess-miss",
+                "message": "继续",
+                "resume_run_id": "does-not-exist",
+                "history": [
+                    {"role": "user", "content": "old"},
+                    {"role": "assistant", "content": "reply"},
+                ],
+            },
+        )
+        assert r.status_code == 409, r.text
+        detail = r.json()["detail"]
+        assert detail["error"] == "resume_miss"
+        assert detail["resume_run_id"] == "does-not-exist"
+        assert detail["session_id"] == "sess-miss"
+        assert model.i == 0
+        assert STORE.get_session_run("sess-miss") is None
+
+
+def test_create_run_resuming_across_session_id_remap() -> None:
+    """SSH reconnect changes session_id; FE keeps lastRunId under server scope."""
+    prior = SessionLog()
+    prior.append_system("sys")
+    prior.append_user("gpu price?")
+    prior.append_assistant("about 30k", None)
+    save_session_log("sess-old-tab", "run-cross", prior)
+
+    # Memory hit under a different session_id must still seed.
+    old = STORE.create_run("sess-old-tab", "run-cross-mem")
+    old.session_log = prior
+    STORE._runs["run-cross-mem"] = old
+
+    run_mem = STORE.create_run_resuming("sess-new-tab", "run-cross-mem")
+    assert run_mem is not None
+    assert any("30k" in str(m.get("content") or "") for m in run_mem.messages)
+
+    # Disk hit when session folder differs from the new tab id.
+    STORE._runs.pop("run-cross", None)
+    run_disk = STORE.create_run_resuming("sess-new-tab", "run-cross")
+    assert run_disk is not None
+    assert any("30k" in str(m.get("content") or "") for m in run_disk.messages)
+
+
 def test_chat_continue_hydrates_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
     prior = SessionLog()
     prior.append_system("sys")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -32,8 +33,16 @@ ACT_NUDGE_K8S = (
 CONCLUDE_NUDGE = (
     "[HARNESS] Tool results are already in this conversation. Do NOT re-plan or "
     "repeat English/Chinese thinking. Write the final answer to the user now in "
-    "their language, using only the tool evidence. No more tools unless a fact "
-    "is still missing."
+    "their language, answering ONLY the latest user goal. Use tool evidence that "
+    "directly supports that goal. Do not append a second summary or checklist for "
+    "other this-turn findings unless they directly answer the latest ask. No more "
+    "tools unless a fact for that goal is still missing."
+)
+
+LEAD_IN_ACT_NUDGE = (
+    "[HARNESS] You announced a next step (text ends with :/：) but made no tool "
+    "call. Call the required tool now. Do not narrate further without acting, "
+    "and do not stop after a colon lead-in."
 )
 
 TRUNCATED_PLAN_NUDGE = (
@@ -53,9 +62,11 @@ TRUNCATED_ANSWER_NUDGE = (
     "[HARNESS] Your previous reply was cut off mid-sentence (output length limit "
     "or incomplete ending). Continue EXACTLY from the last incomplete word/line — "
     "do NOT restart with the same markdown heading, do NOT rewrite earlier "
-    "sections, do NOT open a new '# …' title. You MUST finish the remaining "
-    "content for the user in their language in this sample — do not stop to ask "
-    "them to reply 「继续」/continue. Output plain continuation text only (no tools)."
+    "sections, do NOT open a new '# …' title, do NOT invent a user acknowledgment "
+    "dialogue, and do NOT start a second summary/checklist section. You MUST "
+    "finish the remaining content for the user in their language in this sample — "
+    "do not stop to ask them to reply 「继续」/continue. Output plain continuation "
+    "text only (no tools)."
 )
 
 TRUNCATED_ANSWER_INCOMPLETE_SUFFIX_ZH = (
@@ -74,7 +85,10 @@ SOFT_CONTINUE_NOTICE = "assistant_soft_continue"
 # like "`/data/foo` (12G)" which is still mid-reply.
 # Keep the floor low — post-tool wrap-ups are often short but still cut mid-clause.
 SOFT_CONTINUE_MIN_CHARS = 24
-_SOFT_CONTINUE_TERMINATORS = frozenset("。！？.!?…」』”’\"'")
+# Include :/： — a trailing colon is a lead-in ("next I will…:") not a mid-clause
+# cut. Treating it as unfinished forced tool_choice=none continues and blocked
+# the actual next tool call.
+_SOFT_CONTINUE_TERMINATORS = frozenset("。！？.!?…」』”’\"'：:")
 
 
 def truncated_answer_nudge(partial: str | None) -> str:
@@ -116,7 +130,202 @@ def ends_without_sentence_terminator(content: str | None) -> bool:
     raw = (content or "").rstrip()
     if not raw:
         return False
-    return raw[-1] not in _SOFT_CONTINUE_TERMINATORS
+    # Path / arrow connectors are mid-menu cuts, not finished prose.
+    if raw.endswith("->") or raw.endswith("→"):
+        return True
+    if raw[-1] in _SOFT_CONTINUE_TERMINATORS:
+        return False
+    last = raw.splitlines()[-1].strip() if raw.splitlines() else raw
+    # Complete markdown list / checklist rows often omit a final 。
+    if re.match(r"^[-*+]\s+\S", last) or re.match(r"^\d+\.\s+\S", last):
+        if len(last) >= 8 and not last.endswith(("：", ":", "，", ",", "、")):
+            return False
+    # Status emoji / marks at EOL are finished bullets.
+    if last.endswith(("✅", "❌", "⚠️", "⚠", "✔", "✖", "✓", "✗")):
+        return False
+    # Long last line without clause-continuation punctuation:
+    # - no sentence closer in the line → finished CJK prose missing final 。
+    # - closer exists but a long trailing clause after it → still mid-cut
+    if len(last) >= 60 and not last.endswith(
+        ("，", ",", "、", "：", ":", "(", "（", "[", "{", "`")
+    ):
+        closer_idxs = [last.rfind(c) for c in "。！？.!?"]
+        last_closer = max(closer_idxs) if closer_idxs else -1
+        if last_closer < 0:
+            return False
+        after = last[last_closer + 1 :].strip()
+        if len(after) >= 12:
+            return True
+        return False
+    return True
+
+
+def continuation_overshoots_finished_prose(
+    previous: str | None, joined: str | None
+) -> bool:
+    """True when a continue closed the sentence then dumped extra sections.
+
+    Classic failure: missing final 。 → soft-continue → model adds 。 + dialogue
+    ack + a second checklist. Generic structure only — no product keywords.
+    """
+    prev = (previous or "").rstrip()
+    emit_s = (joined or "").rstrip()
+    if not prev or not emit_s.startswith(prev):
+        return False
+    suffix = emit_s[len(prev) :]
+    if not suffix:
+        return False
+    m = re.match(r"^([。！？.!?…]+)\s*", suffix)
+    rest = suffix[m.end() :] if m else suffix
+    rest = rest.lstrip("\n")
+    if not rest or len(rest) < 24:
+        return False
+    if "\n\n" in rest:
+        return True
+    stripped = rest.lstrip()
+    if re.match(r"^[-*+]\s+\S", stripped) or re.match(r"^\d+\.\s+\S", stripped):
+        return True
+    if re.match(r"^#{1,6}\s+\S", stripped):
+        return True
+    first_line = stripped.split("\n", 1)[0].strip()
+    if first_line.endswith(("：", ":")) and len(first_line) <= 40:
+        return True
+    return False
+
+
+def trim_overcontinued_answer(previous: str | None, emit: str | None) -> str:
+    """Keep prior text (+ optional closer) when continue overshot into new sections."""
+    prev = (previous or "").rstrip()
+    emit_s = (emit or "").rstrip()
+    if prev and emit_s.startswith(prev):
+        suffix = emit_s[len(prev) :]
+        m = re.match(r"^([。！？.!?…]+)", suffix)
+        if m:
+            return prev + m.group(1)
+        return prev
+    return emit_s or prev
+
+
+def continuation_is_redundant(previous: str | None, joined: str | None) -> bool:
+    """True when a trunc-continue mostly republished earlier paragraphs (dead loop)."""
+    prev = (previous or "").strip()
+    joined_s = (joined or "").strip()
+    if not prev or not joined_s:
+        return False
+    if len(joined_s) <= len(prev) + 24:
+        return True
+    paras = [p.strip() for p in re.split(r"\n{2,}", joined_s) if len(p.strip()) >= 40]
+    if paras:
+        top = max((paras.count(p) for p in set(paras)), default=0)
+        if top >= 2:
+            return True
+    # Long stem of the prior answer appears twice in the joined text.
+    stem = prev[: min(96, len(prev))]
+    if len(stem) >= 48 and joined_s.count(stem) >= 2:
+        return True
+    return False
+
+
+def collapse_repeated_paragraphs(text: str | None) -> str:
+    """Drop duplicate ≥40-char paragraphs (keep first) after a continue echo."""
+    raw = text or ""
+    if not raw.strip():
+        return raw
+    parts = re.split(r"(\n{2,})", raw)
+    seen: set[str] = set()
+    out: list[str] = []
+    for part in parts:
+        if re.fullmatch(r"\n{2,}", part or ""):
+            if out and not re.fullmatch(r"\n{2,}", out[-1] or ""):
+                out.append(part)
+            continue
+        key = part.strip()
+        if len(key) >= 40:
+            if key in seen:
+                continue
+            seen.add(key)
+        out.append(part)
+    # Trim trailing separators.
+    while out and re.fullmatch(r"\n{2,}", out[-1] or ""):
+        out.pop()
+    return "".join(out)
+
+
+def should_stop_truncated_continue(
+    *,
+    nudges: int,
+    grew: bool,
+    previous: str | None,
+    emit: str | None,
+) -> bool:
+    """Stop auto-continue when the model is echoing instead of finishing."""
+    from app.llm.thinking import is_repetition_loop, looks_like_response_echo_loop
+
+    text = emit or ""
+    if is_repetition_loop(text) or looks_like_response_echo_loop(text):
+        return True
+    if nudges > 0 and not grew:
+        return True
+    if nudges > 0 and continuation_is_redundant(previous, emit):
+        return True
+    if nudges > 0 and continuation_overshoots_finished_prose(previous, emit):
+        return True
+    return False
+
+
+def looks_like_action_lead_in(content: str | None) -> bool:
+    """Short assistant text that only announces a next step (ends with :/：).
+
+    Under tool_choice=none this must not be treated as a finished answer — unlock
+    tools and act. Generic punctuation cue only; no task/software keywords.
+    """
+    raw = (content or "").strip()
+    if not raw or len(raw) > 240:
+        return False
+    return raw.endswith((":", "："))
+
+
+def join_answer_continuation(previous: str | None, incoming: str | None) -> str:
+    """Join a trunc-continue sample onto the prior partial into one full answer.
+
+    Models often restate the dangling last line then finish. The UI must receive
+    the joined full text (replace) — never a short suffix alone for the FE to guess.
+    Generic overlap / last-line stem only — no task or software keywords.
+    """
+    prev = (previous or "").rstrip()
+    nxt = (incoming or "").lstrip()
+    if not prev:
+        return nxt
+    if not nxt:
+        return prev
+
+    lines = prev.splitlines() or [prev]
+    last = lines[-1]
+    stem = last.rstrip("：:，,、").strip()
+    if len(stem) >= 6 and nxt.startswith(stem):
+        lines[-1] = nxt
+        joined = "\n".join(lines)
+        return _collapse_dangling_line_repeat(joined)
+
+    max_k = min(len(prev), len(nxt), 800)
+    overlap = 0
+    for k in range(max_k, 7, -1):
+        if prev[-k:] == nxt[:k]:
+            overlap = k
+            break
+    if overlap:
+        joined = prev if overlap == len(nxt) else prev[:-overlap] + nxt
+        return _collapse_dangling_line_repeat(joined)
+
+    # Pure suffix (no restated stem) — append with a space if needed.
+    if prev[-1:].isalnum() and nxt[:1].isalnum():
+        return prev + " " + nxt
+    return prev + nxt
+
+
+def _collapse_dangling_line_repeat(text: str) -> str:
+    """'重载：重载配置' → keep one copy when a continue restates the dangling stem."""
+    return re.sub(r"([^\n：:]{6,}?)[：:，,、]\s*\1", r"\1", text)
 
 
 def should_emit_soft_continue_hint(

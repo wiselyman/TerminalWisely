@@ -377,6 +377,10 @@ async def test_loop_auto_continues_truncated_answer() -> None:
     ]
     assert any("traj_1.jpeg" in t for t in finals)
     assert any("traj_2.jpeg" in t or "评估完成" in t for t in finals)
+    # Sidecar must emit one authoritative joined answer — not a bare suffix.
+    joined = [t for t in finals if "traj_1.jpeg" in t and "traj_2.jpeg" in t]
+    assert joined, finals
+    assert any("评估完成" in t for t in joined)
 
 
 class _LengthFinishThenContinueModel:
@@ -575,6 +579,247 @@ async def test_loop_mid_clause_prose_auto_continues() -> None:
         if e.type == "assistant_message"
     ]
     assert any("总结完毕" in t or "可接受" in t for t in finals)
+
+
+class _PathArrowThenToolsIgnoredModel:
+    """First sample ends with path arrow; second ignores tool_choice=none."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        import json
+
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if self.calls == 1:
+            body = ("具体操作如下。" * 8) + "Clash Verge -> 设置 ->"
+            yield {"type": "content", "text": body}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        # Ignore tool_choice=none — still emit a tool call (must be dropped).
+        if tool_choice == "none" or tools is None:
+            yield {
+                "type": "tool_call_delta",
+                "index": 0,
+                "id": "call_ignore",
+                "function": {
+                    "name": "terminal_exec",
+                    "arguments": json.dumps({"command": "echo should_drop"}),
+                },
+            }
+            yield {
+                "type": "content",
+                "text": "系统代理，开启。",
+            }
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {"type": "content", "text": "done"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_path_arrow_continue_drops_ignored_tools() -> None:
+    run = AgentRun(session_id="s1", run_id="r-arrow")
+    model = _PathArrowThenToolsIgnoredModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="怎么设")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    assert "none" in model.tool_choices
+    assert not any(e.type == "tool_call" for e in run.events)
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert any("系统代理" in t for t in finals)
+    joined = [t for t in finals if "Clash Verge" in t and "系统代理" in t]
+    assert joined, finals
+
+
+class _ColonCutThenContinueModel:
+    """Stops mid-prose (no terminator); continue finishes. Colon is NOT a cut."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        if self.calls == 1:
+            body = (
+                "**还没修好。** Merge.yaml 文件内容是对的。\n\n"
+                "1. 打开 Profiles\n"
+                "2. 重新选中当前配置\n\n"
+                "或者我试试通过 API 强制重载配置。你在 Clash Verge GUI 里点一下"
+                "当前配置的应用按钮，就能让 Merge"
+            )
+            yield {"type": "content", "text": body}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {
+            "type": "content",
+            "text": " 重新生效。生效后就会直连。",
+        }
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_colon_cut_continue_emits_joined_full_answer() -> None:
+    run = AgentRun(session_id="s1", run_id="r-colon")
+    model = _ColonCutThenContinueModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="修好了吗")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    joined = [
+        t
+        for t in finals
+        if "Profiles" in t and "重新生效" in t and "就会直连" in t
+    ]
+    assert joined, finals
+    assert not any(t.rstrip().endswith("Merge") for t in joined)
+
+
+class _LeadInColonThenToolModel:
+    """Forced no-tools sample only announces next step with ：; then acts."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        import json
+
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if self.calls == 1:
+            yield {
+                "type": "content",
+                "text": "规则已移入主 rules 段。现在重载配置并验证：",
+            }
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        if self.calls == 2:
+            yield {
+                "type": "tool_call_delta",
+                "index": 0,
+                "id": "call_reload",
+                "name": "terminal_exec",
+                "arguments": json.dumps({"command": "echo reloaded"}),
+            }
+            yield {"type": "finished", "finish_reason": "tool_calls"}
+            return
+        yield {"type": "content", "text": "已重载，出口正常。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_loop_colon_lead_in_unlocks_tools_instead_of_trunc_continue() -> None:
+    from app.agent.loop import deliver_tool_result
+    from app.harness.guards.probe_streak import FORCE_TOOL_CHOICE_NONE_KEY
+
+    run = AgentRun(session_id="s1", run_id="r-leadin")
+    run.messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "把规则挪进 rules"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_move",
+                    "type": "function",
+                    "function": {
+                        "name": "terminal_exec",
+                        "arguments": '{"command":"echo moved"}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_move",
+            "content": (
+                "[UNTRUSTED EXTERNAL DATA]\n"
+                '{"ok": true, "stdout": "moved\\n", "exit_code": 0}'
+            ),
+        },
+    ]
+    run.metadata[FORCE_TOOL_CHOICE_NONE_KEY] = True
+    model = _LeadInColonThenToolModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=30)
+
+    async def _feed() -> None:
+        for _ in range(200):
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "reloaded\n",
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+            if run.status == RunStatus.COMPLETED:
+                break
+            await asyncio.sleep(0.01)
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message=None)
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert any(
+        e.type == "act_nudge" and e.payload.get("kind") == "lead_in_act"
+        for e in run.events
+    )
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+    assert model.tool_choices[0] == "none"
+    assert any(c == "auto" for c in model.tool_choices[1:])
+    assert any(
+        "已重载" in str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    )
 
 
 class _FinishedProseNoSoftHintModel:
@@ -958,6 +1203,96 @@ async def test_tool_json_content_recovers_as_tool_call() -> None:
     )
 
 
+class _ToolXmlDumpModel:
+    """Pastes XML-ish <tool_call><function=…> as content (no tool_calls API)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        if self.calls == 1:
+            dump = (
+                "<tool_call>\n"
+                "<function=terminal_exec>\n"
+                "<parameter=command>\n"
+                "echo xml-ok\n"
+                "</parameter>\n"
+                "<parameter=intent>\n"
+                "verify xml recover\n"
+                "</parameter>\n"
+                "<parameter=timeout_seconds>\n"
+                "30\n"
+                "</parameter>\n"
+                "</function>\n"
+                "</tool_call>"
+            )
+            yield {"type": "content", "text": dump}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {"type": "content", "text": "完成。"}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_tool_xml_content_recovers_as_tool_call() -> None:
+    from app.agent.loop import deliver_tool_result
+
+    model = _ToolXmlDumpModel()
+    run = AgentRun(session_id="s-txml", run_id="r-txml")
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=30)
+
+    async def _feed() -> None:
+        for _ in range(300):
+            if run.status in (RunStatus.COMPLETED, RunStatus.FAILED):
+                return
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": "xml-ok\n",
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+                await asyncio.sleep(0)
+                continue
+            await asyncio.sleep(0.01)
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="跑一下")
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls >= 2
+    assert any(
+        m.get("role") == "assistant" and m.get("tool_calls") for m in run.messages
+    )
+    # XML dump must not remain as the user-facing answer.
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert not any("<tool_call>" in t for t in finals if t.strip())
+    assert any("完成" in t for t in finals)
+
+
 class _BareArgsJsonDumpModel:
     """Pastes bare {"command","intent","timeout_seconds"} without tool name."""
 
@@ -1100,3 +1435,334 @@ async def test_loop_structural_table_stop_auto_continues() -> None:
         if e.type == "assistant_message"
     ]
     assert any("主要大文件" in t or "llvm-dwp" in t for t in finals)
+
+
+class _EchoContinueLoopModel:
+    """First cut mid-clause; continues only restate the same summary (dead loop)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        body = (
+            "你当前跑模型推理，nvcc 12.0.140 完全够用，不需要升级。"
+            "驱动与运行时已经支持最新功能，可以继续用现有环境。\n\n"
+            "总结：\n"
+            "- 驱动 595.84 ✅ 最新\n"
+            "- CUDA 13.2 (运行时) ✅ 最新\n"
+            "- nvcc 12.0.140 ⚠️ 旧，但不影响你当前的模型推理"
+        )
+        if self.calls == 1:
+            # Cut before the checklist so soft-continue triggers once.
+            cut = (
+                "你当前跑模型推理，nvcc 12.0.140 完全够用，不需要升级。"
+                "驱动与运行时已经支持最新功能，可以继续用现有环境"
+            )
+            yield {"type": "content", "text": cut}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        # Echo the full answer again instead of only the missing suffix.
+        yield {"type": "content", "text": body}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_loop_stops_trunc_continue_on_echoed_summary() -> None:
+    """Echoed summary after continue must not leave the run busy forever."""
+    run = AgentRun(session_id="s1", run_id="r-echo-cont")
+    model = _EchoContinueLoopModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="CUDA 要不要升级")
+    assert run.status == RunStatus.COMPLETED
+    # One continue attempt, then stop — not 16 echo rounds.
+    assert model.calls == 2
+    assert (
+        sum(
+            1
+            for e in run.events
+            if e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        )
+        == 1
+    )
+    finals = [
+        str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    ]
+    assert any("✅" in t and "总结" in t for t in finals)
+    # Collapsed — summary block should not be duplicated endlessly.
+    best = max(finals, key=len)
+    assert best.count("总结：") <= 2
+
+
+class _CompleteChecklistModel:
+    """Finished checklist ending — must not soft-continue at all."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        body = (
+            "你当前跑模型推理，nvcc 12.0.140 完全够用，不需要升级。\n\n"
+            "总结：\n"
+            "- 驱动 595.84 ✅ 最新\n"
+            "- CUDA 13.2 (运行时) ✅ 最新\n"
+            "- nvcc 12.0.140 ⚠️ 旧，但不影响你当前的模型推理"
+        )
+        yield {"type": "content", "text": body}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+    @staticmethod
+    def extract_assistant_message(completion: dict[str, Any]) -> dict[str, Any]:
+        return ModelGateway.extract_assistant_message(completion)
+
+
+@pytest.mark.asyncio
+async def test_loop_complete_checklist_does_not_soft_continue() -> None:
+    run = AgentRun(session_id="s1", run_id="r-checklist-done")
+    model = _CompleteChecklistModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=4, max_run_seconds=30)
+    await loop.run_until_pause_or_done(user_message="CUDA 要不要升级")
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls == 1
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "truncated_answer"
+        for e in run.events
+    )
+
+
+class _ContentToolJsonDumpModel:
+    """Pastes tool JSON as content (local models); must not reopen tools under FORCE."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        self.calls += 1
+        dump = (
+            '{"name":"terminal_exec","arguments":'
+            '{"command":"curl -s http://127.0.0.1:8000/v1/models",'
+            '"intent":"Verify the model API is ready and responding"}}'
+        )
+        yield {"type": "content", "text": dump}
+        yield {"type": "finished", "finish_reason": "stop"}
+
+
+@pytest.mark.asyncio
+async def test_force_tool_choice_none_skips_content_tool_json_recovery() -> None:
+    from app.harness.guards.probe_streak import (
+        FORCE_TOOL_CHOICE_NONE_KEY,
+        PROBE_CONCLUDE_SENT_KEY,
+    )
+
+    run = AgentRun(session_id="s1", run_id="r-no-recover")
+    run.messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "查 API"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_prev",
+                    "type": "function",
+                    "function": {
+                        "name": "terminal_exec",
+                        "arguments": '{"command":"curl -s http://127.0.0.1:8000/v1/models"}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_prev",
+            "content": (
+                "[UNTRUSTED EXTERNAL DATA]\n"
+                '{"ok": true, "stdout": "{\\"data\\":[]}\\n", "exit_code": 0}'
+            ),
+        },
+    ]
+    run.metadata[FORCE_TOOL_CHOICE_NONE_KEY] = True
+    run.metadata[PROBE_CONCLUDE_SENT_KEY] = True
+    model = _ContentToolJsonDumpModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=20)
+    await loop.run_until_pause_or_done(user_message=None)
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls == 1
+    assert not any(
+        e.type == "tool_call" for e in run.events
+    ), "must not recover pasted tool JSON while FORCE_TOOL_CHOICE_NONE"
+    assert not any(
+        e.type == "act_nudge" for e in run.events
+    ), "must not idle-plan act under FORCE after tool JSON dump"
+
+
+@pytest.mark.asyncio
+async def test_probe_conclude_blocks_lead_in_tool_reopen() -> None:
+    from app.harness.guards.probe_streak import (
+        FORCE_TOOL_CHOICE_NONE_KEY,
+        PROBE_CONCLUDE_SENT_KEY,
+    )
+
+    run = AgentRun(session_id="s1", run_id="r-no-leadin")
+    run.messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "查 API"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_curl",
+                    "type": "function",
+                    "function": {
+                        "name": "terminal_exec",
+                        "arguments": '{"command":"curl -s http://x"}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_curl",
+            "content": (
+                "[UNTRUSTED EXTERNAL DATA]\n"
+                '{"ok": true, "stdout": "ok\\n", "exit_code": 0}'
+            ),
+        },
+    ]
+    run.metadata[FORCE_TOOL_CHOICE_NONE_KEY] = True
+    run.metadata[PROBE_CONCLUDE_SENT_KEY] = True
+    model = _LeadInColonThenToolModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=8, max_run_seconds=20)
+    await loop.run_until_pause_or_done(user_message=None)
+    assert run.status == RunStatus.COMPLETED
+    assert model.calls == 1
+    assert not any(
+        e.type == "act_nudge" and e.payload.get("kind") == "lead_in_act"
+        for e in run.events
+    )
+    assert "auto" not in model.tool_choices
+
+
+class _IdenticalCurlLoopModel:
+    """Keeps requesting the same curl until tool_choice=none forces prose."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.tool_choices: list[Any] = []
+
+    async def chat_completions_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        temperature: float = 0.2,
+        tool_choice: Any = "auto",
+        should_cancel: Any = None,
+        max_tokens: int | None = None,
+    ) -> Any:
+        import json
+
+        self.calls += 1
+        self.tool_choices.append(tool_choice)
+        if tool_choice == "none":
+            yield {"type": "content", "text": "API 已就绪，无需再探测。"}
+            yield {"type": "finished", "finish_reason": "stop"}
+            return
+        yield {
+            "type": "tool_call_delta",
+            "index": 0,
+            "id": f"call_curl_{self.calls}",
+            "name": "terminal_exec",
+            "arguments": json.dumps(
+                {
+                    "command": "curl -s http://127.0.0.1:8000/v1/models",
+                    "intent": f"Verify the model API is ready and responding #{self.calls}",
+                }
+            ),
+        }
+        yield {"type": "finished", "finish_reason": "tool_calls"}
+
+
+@pytest.mark.asyncio
+async def test_identical_tool_hard_deny_forces_conclude() -> None:
+    from app.agent.loop import deliver_tool_result
+
+    run = AgentRun(session_id="s1", run_id="r-repeat-stop")
+    model = _IdenticalCurlLoopModel()
+    loop = AgentLoop(run, model=model, max_tool_calls=16, max_run_seconds=45)
+    # Faster deny for the test (production default is 4).
+    loop._repeat_guard.hard_deny_at = 3  # noqa: SLF001
+
+    async def _feed() -> None:
+        for _ in range(400):
+            if run.status in (
+                RunStatus.COMPLETED,
+                RunStatus.FAILED,
+                RunStatus.CANCELLED,
+            ):
+                return
+            if run.status == RunStatus.WAITING_TOOL and run.pending_tool:
+                deliver_tool_result(
+                    run,
+                    run.pending_tool.call_id,
+                    {
+                        "ok": True,
+                        "exit_code": 0,
+                        "stdout": '{"data":[]}\n',
+                        "stderr": "",
+                        "_untrusted": True,
+                    },
+                )
+                await asyncio.sleep(0)
+                continue
+            await asyncio.sleep(0.01)
+
+    feeder = asyncio.create_task(_feed())
+    await loop.run_until_pause_or_done(user_message="模型 API 通吗")
+    await feeder
+    assert run.status == RunStatus.COMPLETED
+    assert any(
+        e.type == "harness_nudge" and e.payload.get("kind") == "repeat_tool_stop"
+        for e in run.events
+    )
+    assert any(c == "none" for c in model.tool_choices)
+    assert any(
+        "API 已就绪" in str(e.payload.get("content") or "")
+        for e in run.events
+        if e.type == "assistant_message"
+    )

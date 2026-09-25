@@ -451,15 +451,28 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
         base_url: "",
         has_api_key: false,
       },
+      {
+        id: "e2e-alt",
+        name: "E2E Alt",
+        provider: "ollama",
+        model: "alt-test",
+        ollama_base_url: "http://127.0.0.1:11434",
+        base_url: "",
+        has_api_key: false,
+      },
     ],
     security_mode: "safe",
   }),
   save_ai_settings: (args) => {
     const u = (args.update ?? args) as Record<string, unknown>;
+    const cur = handlers.get_ai_settings?.({}) as {
+      profiles: unknown[];
+      security_mode: string;
+    };
     return {
-      active_profile_id: "e2e-default",
-      profiles: u.profiles ?? handlers.get_ai_settings?.({}) ?? [],
-      security_mode: u.security_mode ?? "safe",
+      active_profile_id: (u.active_profile_id as string) ?? "e2e-default",
+      profiles: u.profiles ?? cur?.profiles ?? [],
+      security_mode: u.security_mode ?? cur?.security_mode ?? "safe",
     };
   },
   ai_list_models: () => ({ models: ["qwen-test"], error: null }),

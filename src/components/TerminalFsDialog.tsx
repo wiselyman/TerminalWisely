@@ -19,6 +19,8 @@ interface TerminalFsDialogProps {
   sessionId: string;
   /** Source path, or parent dir for create* modes. */
   path: string;
+  /** Multi-delete targets; when set and length > 1, deletes each path. */
+  paths?: string[];
   pathKind: "file" | "directory";
   onClose: () => void;
   /** Called after a successful mutation with directories that need a local reload. */
@@ -33,6 +35,7 @@ export function TerminalFsDialog({
   mode,
   sessionId,
   path,
+  paths,
   pathKind,
   onClose,
   onCommitted,
@@ -46,6 +49,10 @@ export function TerminalFsDialog({
   const [destDir, setDestDir] = useState("");
   const [needsSudo, setNeedsSudo] = useState(false);
   const [sudoPassword, setSudoPassword] = useState("");
+
+  const deletePaths =
+    mode === "delete" && paths && paths.length > 0 ? paths : [path];
+  const multiDelete = mode === "delete" && deletePaths.length > 1;
 
   const parentOf = (p: string) => {
     const trimmed = p.replace(/\/+$/, "");
@@ -82,11 +89,19 @@ export function TerminalFsDialog({
         pushToast(t("toastRenamed"), true);
         reloadDirs = [parentOf(path)];
       } else if (mode === "delete") {
-        await invoke("delete_path", {
-          request: { session_id: sessionId, path, sudo_password },
-        });
+        for (const target of deletePaths) {
+          await invoke("delete_path", {
+            request: {
+              session_id: sessionId,
+              path: target,
+              sudo_password,
+            },
+          });
+        }
         pushToast(t("toastDeleted"), true);
-        reloadDirs = [parentOf(path)];
+        reloadDirs = [
+          ...new Set(deletePaths.map((target) => parentOf(target))),
+        ];
       } else if (mode === "createFile" || mode === "createDir") {
         const trimmed = newName.trim();
         if (!trimmed) {
@@ -149,7 +164,11 @@ export function TerminalFsDialog({
             ? t("newFolder")
             : t("moveToDir");
 
-  const pathLabel = path.length > 56 ? `…${path.slice(-53)}` : path;
+  const pathLabel = multiDelete
+    ? t("deleteMultiLabel", { count: deletePaths.length })
+    : path.length > 56
+      ? `…${path.slice(-53)}`
+      : path;
   const showNameField =
     !needsSudo &&
     (mode === "rename" || mode === "createFile" || mode === "createDir");
@@ -226,10 +245,24 @@ export function TerminalFsDialog({
 
         {!needsSudo && mode === "delete" ? (
           <p className="terminal-fs-confirm">
-            {pathKind === "directory"
-              ? t("deleteDirConfirm")
-              : t("deleteFileConfirm")}
+            {multiDelete
+              ? t("deleteMultiConfirm", { count: deletePaths.length })
+              : pathKind === "directory"
+                ? t("deleteDirConfirm")
+                : t("deleteFileConfirm")}
           </p>
+        ) : null}
+        {!needsSudo && multiDelete ? (
+          <ul className="terminal-fs-delete-list" data-testid="terminal-fs-delete-list">
+            {deletePaths.slice(0, 12).map((item) => (
+              <li key={item} title={item}>
+                {basename(item)}
+              </li>
+            ))}
+            {deletePaths.length > 12 ? (
+              <li>…+{deletePaths.length - 12}</li>
+            ) : null}
+          </ul>
         ) : null}
 
         {!needsSudo && mode === "move" ? (

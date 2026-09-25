@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { formatAppError } from "../formatAppError";
+import { interpretReadProbeOutcome } from "./readProbeOutcome";
 import { invokeWithSudoRetry } from "../invokeWithSudoRetry";
 import {
   k8sApplyYaml,
@@ -307,20 +308,41 @@ export async function executeToolCall(
       const exitCode =
         typeof result.exit_code === "number" ? result.exit_code : 1;
       const timedOut = Boolean(result.timed_out);
-      const ok = exitCode === 0 && !timedOut;
+      const outcome = interpretReadProbeOutcome({
+        exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        timedOut,
+      });
+      if (outcome.kind === "ok") {
+        return {
+          ok: true,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exit_code: exitCode,
+          timed_out: timedOut,
+          _untrusted: true,
+        };
+      }
+      if (outcome.kind === "filter_no_match") {
+        return {
+          ok: true,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exit_code: exitCode,
+          timed_out: timedOut,
+          filter_no_match: true,
+          _note: outcome.note,
+          _untrusted: true,
+        };
+      }
       return {
-        ok,
+        ok: false,
         stdout: result.stdout,
         stderr: result.stderr,
         exit_code: exitCode,
         timed_out: timedOut,
-        ...(ok
-          ? {}
-          : {
-              error: timedOut
-                ? "timed out (no output, idle after output, or exceeded time limit)"
-                : `exit_code ${exitCode}`,
-            }),
+        error: outcome.error,
         _untrusted: true,
       };
     } catch (err) {

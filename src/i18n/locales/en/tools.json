@@ -135,6 +135,7 @@
   "aiEngineer.toolRunning": "Running",
   "aiEngineer.toolDone": "Done",
   "aiEngineer.toolFailed": "Failed",
+  "aiEngineer.toolFilterMiss": "Partial",
   "aiEngineer.toolDenied": "Denied",
   "aiEngineer.toolCancelled": "Stopped",
   "aiEngineer.toolWaitingOutput": "Waiting for output…",
@@ -154,6 +155,8 @@
   "aiEngineer.copyReplyFailed": "Copy failed",
   "aiEngineer.toolSpawnInvestigator": "Investigator",
   "aiEngineer.toolUpdatePlan": "Plan update",
+  "aiEngineer.webSearchPending": "Searching…",
+  "aiEngineer.webFetchPending": "Fetching page…",
   "aiEngineer.noticeCompaction": "Context compacted — older turns summarized",
   "aiEngineer.noticeResumed": "Continued from prior session log",
   "aiEngineer.noticeMemoryContext": "Injected verified case memory for this run",
@@ -460,5 +463,6 @@
   "sshLease.blockedReconnect": "AI is using this session. Stop AI before reconnecting SSH.",
   "sshLease.disconnectBanner": "SSH disconnected while AI holds this session. Stop AI first — reconnect is disabled.",
   "longJob.inProgress": "Host job in progress",
-  "aiEngineer.notice.run_stalled": "Agent stalled with no model progress — run failed. You can retry."
+  "aiEngineer.notice.resume_miss": "Could not resume prior SessionLog (tool evidence missing). Send again to continue from chat text only.",
+  "aiEngineer.notice.run_stalled": "Model side stalled with no progress (no host tool waiting) — run failed. You can retry."
 }

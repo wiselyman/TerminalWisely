@@ -12,22 +12,69 @@ _STATUS_MARK = "[AGENT_STATUS]"
 _MAX_CHARS = 800
 
 
+def _is_harness_or_status(content: Any) -> bool:
+    text = str(content or "").lstrip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text") or ""))
+        text = " ".join(parts).lstrip()
+    return text.startswith("[HARNESS]") or text.startswith(_STATUS_MARK)
+
+
+def _message_text(content: Any) -> str:
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text") or ""))
+        return " ".join(parts).strip()
+    return str(content or "").strip()
+
+
 def _latest_user_goal(messages: list[dict[str, Any]], *, limit: int = 160) -> str:
     for msg in reversed(messages):
         if msg.get("role") != "user":
             continue
-        content = msg.get("content")
-        if isinstance(content, list):
-            parts: list[str] = []
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    parts.append(str(block.get("text") or ""))
-            text = " ".join(parts).strip()
-        else:
-            text = str(content or "").strip()
+        if _is_harness_or_status(msg.get("content")):
+            continue
+        text = _message_text(msg.get("content"))
         if text:
             return text if len(text) <= limit else text[: limit - 1] + "…"
     return ""
+
+
+def _prior_user_topics(
+    messages: list[dict[str, Any]],
+    *,
+    exclude_goal: str,
+    max_n: int = 2,
+    each_limit: int = 72,
+) -> list[str]:
+    """Earlier real user asks (newest-first among priors), excluding current Goal."""
+    found: list[str] = []
+    seen_goal = False
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        if _is_harness_or_status(msg.get("content")):
+            continue
+        text = _message_text(msg.get("content"))
+        if not text:
+            continue
+        if not seen_goal:
+            # First real user from the end is the Goal — skip it for Prior.
+            seen_goal = True
+            continue
+        clipped = text if len(text) <= each_limit else text[: each_limit - 1] + "…"
+        if clipped == exclude_goal or clipped.rstrip("…") == exclude_goal.rstrip("…"):
+            continue
+        if clipped not in found:
+            found.append(clipped)
+        if len(found) >= max_n:
+            break
+    return found
 
 
 def _tool_counts(messages: list[dict[str, Any]]) -> Counter[str]:
@@ -93,12 +140,20 @@ def build_status_bar(
     pending_approval: bool = False,
     pending_sudo: bool = False,
     tool_calls_used: int = 0,
+    resumed_from: str | None = None,
 ) -> str:
     """Build a short status block for attention steering (≤ ~800 chars)."""
     lines = [_STATUS_MARK, "Current State:"]
     goal = _latest_user_goal(messages)
     if goal:
-        lines.append(f"- Goal: {goal}")
+        if resumed_from:
+            lines.append(f"- Goal: [continuing prior run] {goal}")
+        else:
+            lines.append(f"- Goal: {goal}")
+    priors = _prior_user_topics(messages, exclude_goal=goal)
+    if priors:
+        # Chronological for the model: older → newer among the short list.
+        lines.append(f"- Prior: {' | '.join(reversed(priors))}")
     if active_plan:
         steps: list[str] = []
         for i, step in enumerate(active_plan[:8]):
@@ -171,6 +226,7 @@ def status_bar_for_run(run: Any) -> str:
         meta = {}
     plan = meta.get("active_plan")
     skills = meta.get("injected_skills")
+    resumed_from = meta.get("resumed_from")
     return build_status_bar(
         messages=list(getattr(run, "messages", None) or []),
         security_mode=str(getattr(run, "security_mode", None) or "safe"),
@@ -183,4 +239,5 @@ def status_bar_for_run(run: Any) -> str:
         pending_approval=getattr(run, "pending_approval", None) is not None,
         pending_sudo=bool(meta.get("pending_sudo")),
         tool_calls_used=int(getattr(run, "tool_calls_used", 0) or 0),
+        resumed_from=str(resumed_from) if resumed_from else None,
     )

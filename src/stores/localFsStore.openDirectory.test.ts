@@ -58,7 +58,8 @@ describe("localFsStore.openDirectory / navigation", () => {
 
     const state = useLocalFsStore.getState();
     expect(state.contentsPath).toBe("/home/u/docs");
-    expect(state.selectedPath).toBe("/home/u/docs");
+    expect(state.selectedPath).toBeNull();
+    expect(state.selectedPaths).toEqual([]);
     expect(state.expandedPaths).toEqual(["/home/u"]);
     expect(state.expandedPaths).not.toContain("/home/u/docs");
     expect(state.contentsHistory).toEqual(["/home/u"]);

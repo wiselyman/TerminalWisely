@@ -8,6 +8,7 @@ import {
   resolveMediaId,
 } from "../../lib/aiEngineer/chatMedia";
 import { isHttpUrl, openExternalUrl } from "../../lib/aiEngineer/openExternalUrl";
+import { stabilizeStreamingMarkdown } from "../../lib/aiEngineer/stabilizeStreamingMarkdown";
 import { getAppTheme } from "../../lib/appTheme";
 
 marked.setOptions({
@@ -18,6 +19,8 @@ marked.setOptions({
 type Props = {
   content: string;
   className?: string;
+  /** While streaming, skip async image rewrite (races stream pin). */
+  streaming?: boolean;
   onImageClick?: (src: string, alt?: string) => void;
 };
 
@@ -36,13 +39,30 @@ function placeholderSvgDataUri(): string {
   );
 }
 
+/**
+ * Paint this commit's sync HTML unless the async image rewrite was produced
+ * from that exact string. A previous token's rewrite must not cover the new
+ * markdown — the stream pin measures that shorter DOM, then the real height
+ * lands and the viewport sits mid-transcript until the next pin.
+ */
+export function selectStreamingMarkdownHtml(
+  initialHtml: string,
+  asyncHtml: { source: string; html: string } | null,
+): string {
+  if (asyncHtml && asyncHtml.source === initialHtml) return asyncHtml.html;
+  return initialHtml;
+}
+
 /** Lightweight markdown render for AI chat bubbles (reuses app `marked`). */
-export function AiMarkdown({ content, className, onImageClick }: Props) {
+export function AiMarkdown({ content, className, streaming, onImageClick }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const initialHtml = useMemo(() => {
     try {
-      const parsed = marked.parse(content || "", { async: false }) as string;
+      // Unclosed ``` for diagrams otherwise swallows following prose into <pre>
+      // (literal **bold**, then a huge reflow / mid-scroll jump when closed).
+      const source = stabilizeStreamingMarkdown(content || "");
+      const parsed = marked.parse(source, { async: false }) as string;
       return decorateAnchors(decorateImages(parsed));
     } catch {
       return "";
@@ -51,24 +71,29 @@ export function AiMarkdown({ content, className, onImageClick }: Props) {
 
   // Seed from parsed HTML synchronously — empty useState("") flashes blank on remount
   // (host-tab fiber swaps must not blink the transcript).
-  // Async image rewrite overlays only; sync `initialHtml` must paint same commit
-  // so stream layout-pin measures real height (not stale useEffect html).
-  const [asyncHtml, setAsyncHtml] = useState<string | null>(null);
-  const html = asyncHtml ?? initialHtml;
+  const [asyncHtml, setAsyncHtml] = useState<{
+    source: string;
+    html: string;
+  } | null>(null);
+  const html = selectStreamingMarkdownHtml(initialHtml, asyncHtml);
 
   useEffect(() => {
+    // Remote image rewrite races the stream pin — skip until the bubble settles.
+    if (streaming) return;
+    if (!initialHtml.includes("<img")) return;
     let cancelled = false;
-    setAsyncHtml(null);
+    const source = initialHtml;
     void (async () => {
-      const rewritten = await rewriteRemoteImages(initialHtml);
-      if (!cancelled) {
-        setAsyncHtml(decorateAnchors(decorateImages(rewritten)));
-      }
+      const rewritten = await rewriteRemoteImages(source);
+      if (cancelled) return;
+      const next = decorateAnchors(decorateImages(rewritten));
+      if (next === source) return;
+      setAsyncHtml({ source, html: next });
     })();
     return () => {
       cancelled = true;
     };
-  }, [initialHtml]);
+  }, [initialHtml, streaming]);
 
   if (!content.trim()) return null;
 

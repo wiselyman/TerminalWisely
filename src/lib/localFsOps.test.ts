@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   canDropMove,
+  collapseToDeleteRoots,
   dropMoveTargetDir,
+  isProtectedDeletePath,
   isSameOrDescendantPath,
   parentRemotePath,
   pasteTargetDir,
+  pathBreadcrumbSegments,
+  pathsIntersectingMarquee,
   rangeSelectPaths,
+  sanitizeDeleteSelection,
   togglePathInSelection,
 } from "./localFsOps";
 
@@ -67,5 +72,69 @@ describe("localFsOps", () => {
     ]);
     expect(togglePathInSelection(["a", "b"], "b")).toEqual(["a"]);
     expect(togglePathInSelection(["a"], "c")).toEqual(["a", "c"]);
+  });
+
+  it("sanitizeDeleteSelection drops browsing cwd when children are also selected", () => {
+    expect(
+      sanitizeDeleteSelection(
+        ["/home/u", "/home/u/a.sh", "/home/u/b.sh"],
+        "/home/u",
+      ),
+    ).toEqual(["/home/u/a.sh", "/home/u/b.sh"]);
+    expect(sanitizeDeleteSelection(["/home/u"], "/home/u")).toEqual([
+      "/home/u",
+    ]);
+    expect(
+      sanitizeDeleteSelection(
+        ["/home/u/docs", "/home/u/docs/a.txt"],
+        "/home/u",
+      ),
+    ).toEqual(["/home/u/docs"]);
+  });
+
+  it("collapseToDeleteRoots keeps outermost parents", () => {
+    expect(
+      collapseToDeleteRoots(["/a/b", "/a/b/c", "/a/other"]),
+    ).toEqual(["/a/b", "/a/other"]);
+  });
+
+  it("isProtectedDeletePath guards root and home", () => {
+    expect(isProtectedDeletePath("/")).toBe(true);
+    expect(isProtectedDeletePath("/home")).toBe(true);
+    expect(isProtectedDeletePath("/home/u", "/home/u")).toBe(true);
+    expect(isProtectedDeletePath("/home/u/a.txt", "/home/u")).toBe(false);
+  });
+
+  it("pathBreadcrumbSegments splits absolute paths", () => {
+    expect(pathBreadcrumbSegments("/")).toEqual([{ label: "/", path: "/" }]);
+    expect(pathBreadcrumbSegments("/home/u/docs")).toEqual([
+      { label: "/", path: "/" },
+      { label: "home", path: "/home" },
+      { label: "u", path: "/home/u" },
+      { label: "docs", path: "/home/u/docs" },
+    ]);
+  });
+
+  it("pathsIntersectingMarquee hits overlapping items", () => {
+    const items = [
+      { path: "a", rect: { left: 0, top: 0, right: 10, bottom: 10 } },
+      { path: "b", rect: { left: 20, top: 20, right: 30, bottom: 30 } },
+    ];
+    expect(
+      pathsIntersectingMarquee(items, {
+        left: 5,
+        top: 5,
+        right: 25,
+        bottom: 25,
+      }),
+    ).toEqual(["a", "b"]);
+    expect(
+      pathsIntersectingMarquee(items, {
+        left: 0,
+        top: 0,
+        right: 5,
+        bottom: 5,
+      }),
+    ).toEqual(["a"]);
   });
 });

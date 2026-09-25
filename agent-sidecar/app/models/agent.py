@@ -141,3 +141,22 @@ class ModelListResponse(BaseModel):
     error: str | None = None
     resolved_model: str | None = None
     auto_corrected: bool = False
+
+
+class RuntimeConfigRequest(BaseModel):
+    """Hot-reload model/provider env without restarting the sidecar process."""
+
+    provider: str = "openai"
+    model: str = ""
+    base_url: str = ""
+    ollama_base_url: str = ""
+    api_key: str | None = None
+    security_mode: str = "safe"
+
+
+class RuntimeConfigResponse(BaseModel):
+    ok: bool = True
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    security_mode: str = "safe"

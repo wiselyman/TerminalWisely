@@ -335,9 +335,9 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         childrenCache: { [result.path]: result.entries },
         expandedPaths: [result.path],
         contentsPath: result.path,
-        selectedPath: result.path,
-        selectedPaths: [result.path],
-        selectionAnchor: result.path,
+        selectedPath: null,
+        selectedPaths: [],
+        selectionAnchor: null,
         loadingRoot: false,
       });
     } catch (err) {
@@ -370,9 +370,11 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
     set({
       contentsHistory: history,
       contentsPath: raw,
-      selectedPath: raw,
-      selectedPaths: [raw],
-      selectionAnchor: raw,
+      // Do not select the browsed folder — Cmd-multi-select of files must not
+      // keep the cwd in selectedPaths (that made Delete wipe the whole directory).
+      selectedPath: null,
+      selectedPaths: [],
+      selectionAnchor: null,
       error: null,
     });
 
@@ -395,9 +397,9 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
           [result.path]: result.entries,
         },
         contentsPath: result.path,
-        selectedPath: result.path,
-        selectedPaths: [result.path],
-        selectionAnchor: result.path,
+        selectedPath: null,
+        selectedPaths: [],
+        selectionAnchor: null,
       });
     } catch (err) {
       if (get().sessionId !== sessionId) return;
@@ -577,9 +579,6 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
         ...(patchContents
           ? {
               contentsPath: resolved,
-              selectedPath: resolved,
-              selectedPaths: [resolved],
-              selectionAnchor: resolved,
             }
           : {}),
       });

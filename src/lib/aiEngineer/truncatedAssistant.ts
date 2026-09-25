@@ -1,8 +1,30 @@
-/** Detect / merge assistant replies that stopped mid-structure (UI helper).
+/** Detect / merge assistant replies that stopped mid-structure or mid-prose.
  *
- * Keep in sync with agent-sidecar `looks_like_truncated_answer`: structural only
- * (fences, bold, tables, brackets, headings) — no language keyword lists.
+ * Keep in sync with agent-sidecar `looks_like_truncated_answer` +
+ * `ends_without_sentence_terminator` — no language keyword lists.
  */
+
+/** Match sidecar `SOFT_CONTINUE_MIN_CHARS` (verify.py). */
+export const SOFT_CONTINUE_MIN_CHARS = 24;
+
+/** Match sidecar `_SOFT_CONTINUE_TERMINATORS` (verify.py). */
+const SOFT_CONTINUE_TERMINATORS = new Set([
+  "。",
+  "！",
+  "？",
+  ".",
+  "!",
+  "?",
+  "…",
+  "」",
+  "』",
+  "”",
+  "’",
+  '"',
+  "'",
+  "：",
+  ":",
+]);
 
 const MD_HEADING_LINE = /^#{1,6}\s+\S/;
 const MD_HEADING_CAPTURE = /^(#{1,6}\s+)(.+?)\s*$/;
@@ -102,12 +124,15 @@ export function looksTruncatedAssistant(text: string | undefined | null): boolea
   const lines = probe.split("\n");
   const last = (lines[lines.length - 1] || probe).trim();
   // Closed fences end with ``` — complete. Lone trailing ` = cut inline code.
-  if (/[(（\[{：:,，、]$/.test(last)) return true;
+  // Trailing :/： is a lead-in before tools/lists, not a structural mid-cut.
+  if (/[(（\[{，、]$/.test(last)) return true;
   if (/`$/.test(last) && !/```$/.test(last)) return true;
   if (last && looksLikeIncompleteMdTable(probe, last)) return true;
   if (last.startsWith("│") && probe.length >= 80) return true;
   if (/\S\s+#{1,6}\s+\S/.test(last) && probe.length >= 80) return true;
   if (last && MD_HEADING_LINE.test(last) && probe.length >= 80) return true;
+  // Path / menu connectors left dangling (Clash Verge -> 设置 ->).
+  if (/(?:->|→)\s*$/.test(last)) return true;
   const headings = [
     ...probe.matchAll(/^(#{1,6}\s+)(.+?)\s*$/gm),
   ].map((m) => m[2].trim());
@@ -119,6 +144,29 @@ export function looksTruncatedAssistant(text: string | undefined | null): boolea
     return true;
   }
   return false;
+}
+
+/** True when last non-space char is not a sentence / clause closer. */
+export function endsWithoutSentenceTerminator(
+  content: string | undefined | null,
+): boolean {
+  const raw = (content || "").replace(/\s+$/, "");
+  if (!raw) return false;
+  if (raw.endsWith("->") || raw.endsWith("→")) return true;
+  return !SOFT_CONTINUE_TERMINATORS.has(raw[raw.length - 1]!);
+}
+
+/**
+ * Structural mid-cut OR long mid-prose early-EOS (sidecar unfinished_prose).
+ * Use for merge guards so short replaces do not wipe a long incomplete bubble.
+ */
+export function looksIncompleteAssistant(
+  text: string | undefined | null,
+): boolean {
+  if (looksTruncatedAssistant(text)) return true;
+  const raw = (text || "").trim();
+  if (raw.length < SOFT_CONTINUE_MIN_CHARS) return false;
+  return endsWithoutSentenceTerminator(text);
 }
 
 function leadingHeadingTitle(text: string): string | null {
@@ -157,6 +205,62 @@ function bodyHasHeadingTitle(body: string, title: string): boolean {
     const m = ln.trim().match(MD_HEADING_CAPTURE);
     return m && m[2].trim() === title;
   });
+}
+
+/**
+ * Join a trunc-continue sample onto a partial bubble.
+ * Returns null when `incoming` does not extend `previous`.
+ *
+ * A trailing colon makes the first sample look cut off. The next sample often
+ * repeats that line and finishes it. After the first chunk is glued, the colon
+ * is gone, so a later "already finished" check used to drop the tail
+ * ("就能让 Merge" and nothing after).
+ */
+export function extendAssistantContinuation(
+  previous: string,
+  incoming: string,
+): string | null {
+  const prev = (previous || "").replace(/\s+$/, "");
+  const next = (incoming || "").replace(/^\s+/, "");
+  if (!prev || !next) return null;
+
+  const lines = prev.split("\n");
+  const lastLine = lines[lines.length - 1] || "";
+  const stem = lastLine.replace(/[：:，,、]+$/u, "").trim();
+  if (stem.length >= 6 && next.startsWith(stem)) {
+    lines[lines.length - 1] = next;
+    return collapseDanglingRepeat(lines.join("\n"));
+  }
+
+  const max = Math.min(prev.length, next.length, 800);
+  let overlap = 0;
+  for (let k = max; k >= 8; k -= 1) {
+    if (prev.slice(-k) === next.slice(0, k)) {
+      overlap = k;
+      break;
+    }
+  }
+  if (overlap === 0) return null;
+  const joined =
+    overlap === next.length ? prev : prev.slice(0, prev.length - overlap) + next;
+  return collapseDanglingRepeat(joined);
+}
+
+/** Collapsing a repeated dangling line can make the string shorter while adding the real tail. */
+function continuationImproves(
+  previous: string,
+  extended: string | null,
+  incoming: string,
+): boolean {
+  if (!extended) return false;
+  if (extended.length > previous.length) return true;
+  const end = incoming.trim().slice(-16);
+  return end.length >= 8 && extended.includes(end) && !previous.includes(end);
+}
+
+/** "重载：重载配置" → "重载配置" when a continue restarts the dangling line. */
+function collapseDanglingRepeat(text: string): string {
+  return text.replace(/([^\n：:]{6,}?)[：:，,、]\s*\1/g, "$1");
 }
 
 /** Merge a continuation chunk into a truncated prior reply.
@@ -255,11 +359,20 @@ export function mergeAssistantContinuation(
   }
 
   if (!looksTruncatedAssistant(prev)) {
+    const extended = extendAssistantContinuation(prev, next);
+    if (continuationImproves(prev, extended, next)) {
+      return stripTrailingDanglingHeading(extended!) || extended!;
+    }
     // Prior looked finished; prefer incoming if it is a full replacement.
     if (next.length >= Math.floor(prev.length * 0.85)) {
       return stripTrailingDanglingHeading(next) || next;
     }
     return stripTrailingDanglingHeading(prev) || prev;
+  }
+
+  const extendedCut = extendAssistantContinuation(prev, next);
+  if (continuationImproves(prev, extendedCut, next)) {
+    return stripTrailingDanglingHeading(extendedCut!) || extendedCut!;
   }
 
   // Short suffix only — append when prior is structurally truncated.
@@ -300,8 +413,9 @@ export function mergeAssistantContinuation(
 
 /**
  * Choose final assistant text for an `assistant_message` event.
- * Trunc-continue samples often emit only the suffix — never wipe a longer
- * truncated prior with a short replace.
+ * Sidecar trunc-continue joins on the server and emits the full answer with
+ * replace:true. Prefer that payload. Only merge when a short suffix arrives
+ * onto a still-incomplete prior (legacy / race fallback).
  */
 export function resolveAuthoritativeAssistantContent(
   previous: string,
@@ -315,13 +429,22 @@ export function resolveAuthoritativeAssistantContent(
   if (opts?.replace === false) {
     return mergeAssistantContinuation(prev, nextRaw);
   }
-  const prevOpen = prev.slice(0, Math.min(60, prev.length)).trim();
+  if (next.length >= prev.length) return next;
+  // Finished full answer that is shorter than a messy streamed duplicate.
   if (
-    looksTruncatedAssistant(prev) &&
-    next.length < Math.floor(prev.length * 0.85) &&
-    !(prevOpen.length >= 20 && next.includes(prevOpen))
+    !looksIncompleteAssistant(next) &&
+    next.length >= SOFT_CONTINUE_MIN_CHARS
+  ) {
+    const prevOpen = prev.slice(0, Math.min(40, prev.length)).trim();
+    if (prevOpen.length >= 20 && next.includes(prevOpen)) return next;
+    if (looksIncompleteAssistant(prev)) return next;
+  }
+  if (
+    looksIncompleteAssistant(prev) &&
+    next.length < Math.floor(prev.length * 0.85)
   ) {
     return mergeAssistantContinuation(prev, nextRaw);
   }
+  if (prev.includes(next) && next.length < prev.length) return prev;
   return next;
 }

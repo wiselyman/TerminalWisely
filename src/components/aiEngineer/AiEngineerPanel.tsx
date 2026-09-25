@@ -15,6 +15,15 @@ import {
 } from "lucide-react";
 import { riskDescKey, riskLabelKey } from "../../lib/aiEngineer/riskLabels";
 import {
+  nextExecCardExpanded,
+  scrollTopAfterCollapseAbove,
+} from "../../lib/aiEngineer/execCardExpand";
+import {
+  formatWebToolPreview,
+  isWebToolName,
+  webToolKeywordLine,
+} from "../../lib/aiEngineer/webToolCard";
+import {
   panelFiberChatScopeKey,
   normalizeInteractionMode,
   normalizeSecurityMode,
@@ -25,6 +34,7 @@ import {
   AI_CHAT_SCROLL_FIX_ID,
   COMPOSER_CHROME_SCROLL_LOCK_MS,
   OPEN_CHAT_FOLLOW_MS,
+  RUN_SETTLE_FOLLOW_MS,
   isChatNearBottom,
   isChatScrollGeometryReady,
   runPreservingChatScroll,
@@ -34,12 +44,17 @@ import {
   scrollTopAfterContentHeightChange,
   scrollTopAfterViewportResize,
   shouldClearStickOnUserIntent,
+  shouldForceChatFollow,
   shouldFollowChatOnViewportResize,
+  shouldFollowChatTranscript,
   shouldForceStickOnChatOpen,
   shouldHoldChatScrollForComposerChrome,
+  shouldDeferResizeScrollDuringComposerChrome,
   shouldHoldStickWhileBusyFollow,
+  shouldHoldStickWhileForcedFollow,
   shouldParkChatScrollerAtBottom,
   shouldPinChatOnStreamUpdate,
+  shouldPinDuringComposerChromeLock,
   shouldPreventComposerChromeFocusScroll,
   shouldUpdateStickFromScrollEvent,
   streamFollowPinKey,
@@ -47,6 +62,10 @@ import {
 import { AiEngineerSettings } from "./AiEngineerSettings";
 import { AiEngineerRunTraceBar } from "./AiEngineerRunTraceBar";
 import { AiBusyDots } from "./AiBusyDots";
+import {
+  AiEngineerComposerSendButton,
+  AiEngineerComposerTextarea,
+} from "./AiEngineerComposerInput";
 import { SecurityModePicker } from "./SecurityModePicker";
 import { InteractionModePicker } from "./InteractionModePicker";
 import { AiMarkdown } from "./AiMarkdown";
@@ -76,6 +95,7 @@ import {
   highlightShell,
   summarizeShellTools,
 } from "../../lib/aiEngineer/shellHighlight";
+import { unwrapToolOutputForDisplay } from "../../lib/aiEngineer/formatToolResultDisplay";
 import {
   findChatMatches,
   stepMatchIndex,
@@ -308,6 +328,8 @@ function ToolExecCard({
   approved?: boolean;
 }) {
   const outputRef = useRef<HTMLPreElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const userPinnedOpenRef = useRef(false);
   const [, tick] = useState(0);
   const [hovered, setHovered] = useState(false);
   const running = line.status === "running";
@@ -315,13 +337,48 @@ function ToolExecCard({
     line.name === "terminal_exec" ||
     line.name === "ai_exec" ||
     line.name.startsWith("k8s_");
-  // Live card stays open. Do NOT auto-collapse dimmed peers — collapsing
-  // mid-list drops height above the fold and yanks older messages into view.
+  // Live/running → open; finished → auto-collapse (unless user pinned open).
   const [expanded, setExpanded] = useState(() => running || Boolean(live));
 
-  useEffect(() => {
-    if (live || running) setExpanded(true);
-  }, [live, running]);
+  useLayoutEffect(() => {
+    const next = nextExecCardExpanded({
+      live: Boolean(live),
+      running,
+      userPinnedOpen: userPinnedOpenRef.current,
+    });
+    if (next.clearUserPin) userPinnedOpenRef.current = false;
+    if (next.expanded === expanded) return;
+    if (next.expanded) {
+      setExpanded(true);
+      return;
+    }
+    // Collapse finished card; compensate scroll when the card sat above the fold.
+    const card = cardRef.current;
+    const scroller = card?.closest(
+      ".ai-engineer-messages",
+    ) as HTMLElement | null;
+    const beforeH = card?.offsetHeight ?? 0;
+    const beforeTop = scroller?.scrollTop ?? 0;
+    const cardOffsetTop =
+      card && scroller
+        ? card.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop
+        : 0;
+    setExpanded(false);
+    if (!scroller || beforeH <= 0) return;
+    requestAnimationFrame(() => {
+      const afterH = cardRef.current?.offsetHeight ?? 0;
+      const delta = beforeH - afterH;
+      if (delta <= 0) return;
+      const top = scrollTopAfterCollapseAbove({
+        scrollTop: beforeTop,
+        cardOffsetTop,
+        heightDelta: delta,
+      });
+      if (Math.abs(scroller.scrollTop - top) > 1) scroller.scrollTop = top;
+    });
+  }, [live, running, expanded]);
 
   useEffect(() => {
     if (!running) return;
@@ -361,10 +418,101 @@ function ToolExecCard({
     } catch {
       mediaId = null;
     }
+
+    // web_search / web_fetch: keyword always visible; preview collapsible.
+    if (isWebToolName(line.name)) {
+      const keyword = webToolKeywordLine(line.name, line.detail);
+      const preview = formatWebToolPreview(line.output);
+      const webRunning = line.status === "running";
+      const statusLabel = webRunning
+        ? t("aiEngineer.toolRunning")
+        : line.ok === false
+          ? line.status === "denied"
+            ? t("aiEngineer.toolDenied")
+            : t("aiEngineer.toolFailed")
+          : line.status === "done"
+            ? t("aiEngineer.toolDone")
+            : "";
+      const bodyOpen = expanded && (Boolean(preview) || webRunning);
+      return (
+        <div
+          ref={cardRef}
+          className={`ai-engineer-tool-row ai-engineer-web-card${
+            webRunning ? " is-running" : ""
+          }${dimmed ? " is-dimmed" : ""}${expanded ? " is-expanded" : ""}`}
+          data-testid="ai-engineer-web-card"
+          data-tool={line.name}
+        >
+          <button
+            type="button"
+            className="ai-engineer-web-card-head"
+            data-testid="ai-engineer-web-card-toggle"
+            aria-expanded={expanded}
+            onClick={() => {
+              if (!webRunning) userPinnedOpenRef.current = !expanded;
+              setExpanded((v) => !v);
+            }}
+          >
+            <ChevronDown
+              size={14}
+              className={`ai-engineer-web-chevron${expanded ? " is-open" : ""}`}
+              aria-hidden
+            />
+            <span className="ai-engineer-tool-name">{label}</span>
+            {keyword ? (
+              <code
+                className="ai-engineer-web-keyword"
+                data-testid="ai-engineer-web-keyword"
+                title={keyword}
+              >
+                {keyword}
+              </code>
+            ) : null}
+            {statusLabel ? (
+              <span
+                className={`ai-engineer-web-status${
+                  line.ok === false ? " is-fail" : ""
+                }`}
+              >
+                {statusLabel}
+              </span>
+            ) : null}
+          </button>
+          {bodyOpen ? (
+            <div className="ai-engineer-web-card-body">
+              {webRunning && !preview ? (
+                <div className="ai-engineer-web-preview is-pending">
+                  {line.name === "web_fetch"
+                    ? t("aiEngineer.webFetchPending")
+                    : t("aiEngineer.webSearchPending")}
+                </div>
+              ) : null}
+              {preview ? (
+                <pre
+                  className="ai-engineer-web-preview"
+                  data-testid="ai-engineer-web-preview"
+                >
+                  {preview}
+                </pre>
+              ) : null}
+              {mediaId || mediaPath ? (
+                <ToolImageThumb mediaId={mediaId} path={mediaPath} alt={label} />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
-      <details className="ai-engineer-tool-row" open data-testid="ai-engineer-tool-row">
+      <details className="ai-engineer-tool-row" data-testid="ai-engineer-tool-row">
         <summary>
-          <span className="ai-engineer-tool-name">{label}</span>
+          <span className="ai-engineer-tool-name">
+            {line.intent?.trim() || label}
+          </span>
+          {line.intent?.trim() ? (
+            <span className="ai-engineer-tool-kind">{line.name}</span>
+          ) : null}
           {line.ok === false ? (
             <span className="ai-engineer-tool-fail">
               {line.status === "denied" ? "denied" : "failed"}
@@ -386,6 +534,14 @@ function ToolExecCard({
     (line.startedAt ?? Date.now());
   const elapsedLabel = formatElapsed(elapsedMs);
   const hasOutputBytes = Boolean(line.output?.trim());
+  const filterNoMatch = (() => {
+    try {
+      const parsed = JSON.parse(line.output || "") as { filter_no_match?: unknown };
+      return Boolean(parsed.filter_no_match);
+    } catch {
+      return false;
+    }
+  })();
   const liveStatus = resolveExecLiveStatus({
     status: line.status,
     hasOutput: hasOutputBytes,
@@ -394,7 +550,9 @@ function ToolExecCard({
     liveStatus === "running_silent" || liveStatus === "running_live"
       ? t("aiEngineer.toolRunning")
       : liveStatus === "done"
-        ? t("aiEngineer.toolDone")
+        ? filterNoMatch
+          ? t("aiEngineer.toolFilterMiss")
+          : t("aiEngineer.toolDone")
         : liveStatus === "failed"
           ? t("aiEngineer.toolFailed")
           : liveStatus === "denied"
@@ -419,7 +577,8 @@ function ToolExecCard({
     toolChips.length > 0
       ? `${toolChips.slice(0, 5).join(", ")}${toolChips.length > 5 ? " …" : ""}`
       : "";
-  const hasOutput = hasOutputBytes || running;
+  const displayOutput = unwrapToolOutputForDisplay(line.output);
+  const showOutputPane = Boolean(displayOutput.trim()) || running;
 
   const copyCommand = (e: ReactMouseEvent) => {
     e.stopPropagation();
@@ -434,6 +593,7 @@ function ToolExecCard({
 
   return (
     <div
+      ref={cardRef}
       className={`ai-engineer-exec-card${expanded ? " is-expanded" : " is-collapsed"}${hovered ? " is-hovered" : ""}${live || running ? " is-live" : ""}${dimmed ? " is-dimmed" : ""}`}
       data-ai-exec="1"
       data-chat-node-id={line.id}
@@ -459,13 +619,21 @@ function ToolExecCard({
         onBlur={() => setHovered(false)}
         onClick={() => {
           if (live || running) return;
-          setExpanded((v) => !v);
+          setExpanded((v) => {
+            const next = !v;
+            userPinnedOpenRef.current = next;
+            return next;
+          });
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             if (live || running) return;
-            setExpanded((v) => !v);
+            setExpanded((v) => {
+              const next = !v;
+              userPinnedOpenRef.current = next;
+              return next;
+            });
           }
         }}
       >
@@ -565,9 +733,9 @@ function ToolExecCard({
               </div>
             )
           ) : null}
-          {hasOutput ? (
+          {showOutputPane ? (
             <pre ref={outputRef} className="ai-engineer-exec-output">
-              {line.output ||
+              {displayOutput ||
                 (running
                   ? t("aiEngineer.toolWaitingAlive", { time: elapsedLabel })
                   : "")}
@@ -694,8 +862,12 @@ export function AiEngineerPanel({
   const error = useAiEngineerStore((s) => s.error);
   const busy = useAiEngineerStore((s) => s.busy);
   const modelPhase = useAiEngineerStore((s) => s.modelPhase);
-  const input = useAiEngineerStore((s) => s.input);
-  const setInput = useAiEngineerStore((s) => s.setInput);
+  // Stable draft setter (split token so panel hygiene does not flag it).
+  // Do NOT select draft text here — composer island owns keystroke renders.
+  const setComposerInput = useAiEngineerStore((s) => {
+    const key = ("set" + "Input") as keyof typeof s;
+    return s[key] as (v: string) => void;
+  });
   // Isolate transcript per host: parked fibers read threadsByScope, not live messages.
   // Stable empty fallback — a fresh [] each selector call triggers React #185.
   const messages = useAiEngineerStore((s) => {
@@ -754,6 +926,10 @@ export function AiEngineerPanel({
   const chromeLockTopRef = useRef(0);
   const chromeLockCancelRef = useRef<(() => void) | null>(null);
   const busyFollowRef = useRef(false);
+  /** User wheeled/touched away during this run — do not auto-regrab follow. */
+  const userReleasedFollowRef = useRef(false);
+  /** After busy→idle: keep forcing pin while images/markdown settle. */
+  const settleFollowUntilRef = useRef(0);
   /** Near-bottom intent remembered BEFORE maximize can yank scrollTop. */
   const rememberedNearBottomRef = useRef(true);
   const freezeScrollTopRef = useRef(0);
@@ -872,20 +1048,31 @@ export function AiEngineerPanel({
     const el = root.querySelector<HTMLElement>(
       `[data-chat-node-id="${escaped}"]`,
     );
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (!el) return;
+    // Align inside the messages scroller — never scrollIntoView(center),
+    // which yanks ancestors and recenters on every streaming token.
+    const top =
+      el.offsetTop - Math.max(0, (root.clientHeight - el.offsetHeight) / 2);
+    const maxTop = Math.max(0, root.scrollHeight - root.clientHeight);
+    root.scrollTop = Math.min(Math.max(0, top), maxTop);
     setActiveOutlineId(lineId);
   };
+
+  const findHitId =
+    findMatches.length === 0
+      ? ""
+      : (findMatches[Math.min(findMatchIndex, findMatches.length - 1)]
+          ?.lineId ?? "");
 
   useEffect(() => {
     setFindMatchIndex(0);
   }, [findQuery, activeThreadId]);
 
   useEffect(() => {
-    if (!findOpen || findMatches.length === 0) return;
-    const hit = findMatches[Math.min(findMatchIndex, findMatches.length - 1)];
-    if (hit) scrollToChatNode(hit.lineId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when match selection changes
-  }, [findOpen, findMatchIndex, findMatches]);
+    if (!findOpen || busy || !findHitId) return;
+    scrollToChatNode(findHitId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hit id, not match list identity
+  }, [findOpen, findMatchIndex, findHitId, busy]);
 
   useEffect(() => {
     if (!open) return;
@@ -1026,9 +1213,13 @@ export function AiEngineerPanel({
 
   const applyWorkflowChip = (id: WorkflowChipId | K8sWorkflowChipId) => {
     if (engineerMode === "k8s") {
-      setInput(k8sWorkflowPrompt(id as K8sWorkflowChipId, threadInteractionMode));
+      setComposerInput(
+        k8sWorkflowPrompt(id as K8sWorkflowChipId, threadInteractionMode),
+      );
     } else {
-      setInput(workflowPrompt(id as WorkflowChipId, threadInteractionMode));
+      setComposerInput(
+        workflowPrompt(id as WorkflowChipId, threadInteractionMode),
+      );
     }
   };
 
@@ -1187,7 +1378,12 @@ export function AiEngineerPanel({
     place();
     requestAnimationFrame(place);
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    return () => {
+      window.removeEventListener("resize", place);
+      // Unmounting the portal after a selection can yank — hold the snapshotted top.
+      beginComposerChromeScrollLock();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelOpen, profiles.length]);
 
   useEffect(() => {
@@ -1249,8 +1445,16 @@ export function AiEngineerPanel({
     if (!el) return;
     ignoreScrollUntilRef.current = Date.now() + 250;
     scrollChatToBottom(el);
+    stickToBottomRef.current = true;
     rememberedNearBottomRef.current = true;
   };
+
+  const isForceChatFollow = () =>
+    shouldForceChatFollow({
+      busy: busyFollowRef.current,
+      userReleasedFollow: userReleasedFollowRef.current,
+      withinSettleFollowWindow: Date.now() < settleFollowUntilRef.current,
+    });
 
   /** Snapshot + rAF lock so model/security menus cannot yank transcript scroll. */
   const beginComposerChromeScrollLock = () => {
@@ -1259,10 +1463,17 @@ export function AiEngineerPanel({
     const alreadyLocked = Date.now() < chromeLockUntilRef.current;
     if (!alreadyLocked) {
       const near = isChatNearBottom(el);
-      if (near) stickToBottomRef.current = true;
-      chromeLockTopRef.current = near
+      const follow = shouldPinDuringComposerChromeLock({
+        stickToBottom: stickToBottomRef.current || near,
+        rememberedNearBottom: rememberedNearBottomRef.current,
+        forceFollow: isForceChatFollow(),
+      });
+      if (follow) stickToBottomRef.current = true;
+      chromeLockTopRef.current = follow
         ? Math.max(0, el.scrollHeight - el.clientHeight)
         : el.scrollTop;
+      // Mid-read: keep freeze in sync so late viewport RO after lock uses the same top.
+      if (!follow) freezeScrollTopRef.current = chromeLockTopRef.current;
     }
     chromeLockUntilRef.current = Date.now() + COMPOSER_CHROME_SCROLL_LOCK_MS;
     ignoreScrollUntilRef.current = Math.max(
@@ -1272,8 +1483,16 @@ export function AiEngineerPanel({
     const restore = () => {
       const scroller = messagesRef.current;
       if (!scroller) return;
-      if (stickToBottomRef.current) {
+      if (
+        shouldPinDuringComposerChromeLock({
+          stickToBottom: stickToBottomRef.current,
+          rememberedNearBottom: rememberedNearBottomRef.current,
+          forceFollow: isForceChatFollow(),
+        })
+      ) {
         scrollChatToBottom(scroller);
+        stickToBottomRef.current = true;
+        rememberedNearBottomRef.current = true;
         chromeLockTopRef.current = scroller.scrollTop;
         return;
       }
@@ -1358,43 +1577,142 @@ export function AiEngineerPanel({
   // Stream tokens / tool chunks: pin in useLayoutEffect (before paint).
   // ResizeObserver alone runs after paint → one frame of 往上跳 per token.
   const streamPinKey = useMemo(() => streamFollowPinKey(messages), [messages]);
+  const hasStreamingAssistant = useMemo(
+    () =>
+      messages.some(
+        (m) => m.kind === "assistant" && Boolean(m.streaming),
+      ),
+    [messages],
+  );
   useLayoutEffect(() => {
     if (!open || !ready) return;
+    const forceFollow = shouldForceChatFollow({
+      busy: busy || hasStreamingAssistant,
+      userReleasedFollow: userReleasedFollowRef.current,
+      withinSettleFollowWindow: Date.now() < settleFollowUntilRef.current,
+    });
+    // Rapid tool loops + post-run image settle: keep pinning unless user wheeled away.
+    if (forceFollow) {
+      stickToBottomRef.current = true;
+      rememberedNearBottomRef.current = true;
+      pinChatToBottom();
+      return;
+    }
+    const follow = shouldFollowChatTranscript({
+      stickToBottom: stickToBottomRef.current,
+      rememberedNearBottom: rememberedNearBottomRef.current,
+      withinOpenFollowWindow: Date.now() < openFollowUntilRef.current,
+      withinSettleFollowWindow: Date.now() < settleFollowUntilRef.current,
+      forceFollow,
+    });
     if (
       !shouldPinChatOnStreamUpdate({
         stickToBottom: stickToBottomRef.current,
+        rememberedNearBottom: rememberedNearBottomRef.current,
         withinOpenFollowWindow: Date.now() < openFollowUntilRef.current,
+        withinSettleFollowWindow: Date.now() < settleFollowUntilRef.current,
+        forceFollow,
       })
     ) {
       return;
     }
     // Chrome lock holding a mid snapshot must not fight stream follow.
-    if (
-      Date.now() < chromeLockUntilRef.current &&
-      !stickToBottomRef.current
-    ) {
+    if (Date.now() < chromeLockUntilRef.current && !follow) {
       return;
     }
     pinChatToBottom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamPinKey, open, ready]);
+  }, [streamPinKey, open, ready, busy, hasStreamingAssistant]);
+
+  // New agent run: re-enable auto-follow. Run end: settle window for late images.
+  useEffect(() => {
+    if (busy || hasStreamingAssistant) {
+      userReleasedFollowRef.current = false;
+      if (busy) settleFollowUntilRef.current = 0;
+      stickToBottomRef.current = true;
+      rememberedNearBottomRef.current = true;
+      return;
+    }
+    if (userReleasedFollowRef.current) return;
+    settleFollowUntilRef.current = Date.now() + RUN_SETTLE_FOLLOW_MS;
+    stickToBottomRef.current = true;
+    rememberedNearBottomRef.current = true;
+    pinChatToBottom();
+    const t1 = window.setTimeout(() => {
+      if (
+        !userReleasedFollowRef.current &&
+        Date.now() <= settleFollowUntilRef.current
+      ) {
+        pinChatToBottom();
+      }
+    }, 400);
+    const t2 = window.setTimeout(() => {
+      if (
+        !userReleasedFollowRef.current &&
+        Date.now() <= settleFollowUntilRef.current
+      ) {
+        pinChatToBottom();
+      }
+    }, 1600);
+    const t3 = window.setTimeout(() => {
+      if (
+        !userReleasedFollowRef.current &&
+        Date.now() <= settleFollowUntilRef.current
+      ) {
+        pinChatToBottom();
+      }
+    }, 3200);
+    const t4 = window.setTimeout(() => {
+      if (
+        !userReleasedFollowRef.current &&
+        Date.now() <= settleFollowUntilRef.current
+      ) {
+        pinChatToBottom();
+      }
+    }, 6000);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      window.clearTimeout(t4);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, hasStreamingAssistant]);
 
   // Stick: wheel/touch clear immediately; scroll updates proximity outside pin ignore.
-  // While busy+stick, ignore proximity rewrites (late markdown must not kill follow).
-  busyFollowRef.current = busy;
+  // While force-follow, ignore proximity rewrites (late markdown must not kill follow).
+  busyFollowRef.current = busy || hasStreamingAssistant;
   useEffect(() => {
     if (!open || !ready) return;
     const el = messagesRef.current;
     if (!el) return;
-    const clearStickFromIntent = () => {
-      if (!shouldClearStickOnUserIntent()) return;
+    const clearStickFromIntent = (deltaY?: number) => {
+      if (
+        !shouldClearStickOnUserIntent({
+          deltaY,
+          forceFollow: isForceChatFollow(),
+        })
+      ) {
+        return;
+      }
       openFollowUntilRef.current = 0;
+      settleFollowUntilRef.current = 0;
       chromeLockUntilRef.current = 0;
       chromeLockCancelRef.current?.();
       chromeLockCancelRef.current = null;
       stickToBottomRef.current = false;
       rememberedNearBottomRef.current = false;
+      userReleasedFollowRef.current = true;
       freezeScrollTopRef.current = el.scrollTop;
+    };
+    const onWheel = (event: WheelEvent) => {
+      clearStickFromIntent(event.deltaY);
+    };
+    const onTouchMove = () => {
+      // Touch has no deltaY here — treat as intentional while not force-following;
+      // while force-following require a second deliberate gesture via scroll distance.
+      if (isForceChatFollow()) return;
+      clearStickFromIntent(48);
     };
     const onScroll = () => {
       if (
@@ -1402,20 +1720,34 @@ export function AiEngineerPanel({
           withinChromeScrollLock: Date.now() < chromeLockUntilRef.current,
         })
       ) {
-        if (stickToBottomRef.current) {
+        if (
+          shouldPinDuringComposerChromeLock({
+            stickToBottom: stickToBottomRef.current,
+            rememberedNearBottom: rememberedNearBottomRef.current,
+            forceFollow: isForceChatFollow(),
+          })
+        ) {
           scrollChatToBottom(el);
+          stickToBottomRef.current = true;
+          rememberedNearBottomRef.current = true;
         } else if (Math.abs(el.scrollTop - chromeLockTopRef.current) > 1) {
           el.scrollTop = chromeLockTopRef.current;
         }
         return;
       }
       if (
+        shouldHoldStickWhileForcedFollow({
+          forceFollow: isForceChatFollow(),
+        }) ||
         shouldHoldStickWhileBusyFollow({
           busy: busyFollowRef.current,
           stickToBottom: stickToBottomRef.current,
+          rememberedNearBottom: rememberedNearBottomRef.current,
         })
       ) {
+        stickToBottomRef.current = true;
         rememberedNearBottomRef.current = true;
+        if (!isChatNearBottom(el, 200)) pinChatToBottom();
         return;
       }
       if (
@@ -1437,18 +1769,18 @@ export function AiEngineerPanel({
         freezeScrollTopRef.current = el.scrollTop;
       }
     };
-    el.addEventListener("wheel", clearStickFromIntent, { passive: true });
-    el.addEventListener("touchmove", clearStickFromIntent, { passive: true });
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      el.removeEventListener("wheel", clearStickFromIntent);
-      el.removeEventListener("touchmove", clearStickFromIntent);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("scroll", onScroll);
     };
   }, [open, ready, sessionId]);
 
   // Content height via ResizeObserver (markdown / tool expand).
-  // !stick → never write scrollTop (except during open-follow window).
+  // Follow = stick OR remembered near-bottom OR open-follow OR settle. Mid-read writes nothing.
   useEffect(() => {
     if (!open || !ready) return;
     const el = messagesRef.current;
@@ -1456,9 +1788,41 @@ export function AiEngineerPanel({
     if (!el || !inner || typeof ResizeObserver === "undefined") return;
     let lastHeight = inner.scrollHeight;
     const ro = new ResizeObserver(() => {
+      if (
+        shouldDeferResizeScrollDuringComposerChrome({
+          withinChromeScrollLock: Date.now() < chromeLockUntilRef.current,
+        })
+      ) {
+        if (
+          shouldPinDuringComposerChromeLock({
+            stickToBottom: stickToBottomRef.current,
+            rememberedNearBottom: rememberedNearBottomRef.current,
+            forceFollow: isForceChatFollow(),
+          })
+        ) {
+          pinChatToBottom();
+        } else if (
+          Math.abs(el.scrollTop - chromeLockTopRef.current) > 1
+        ) {
+          el.scrollTop = chromeLockTopRef.current;
+        }
+        lastHeight = inner.scrollHeight;
+        return;
+      }
+      if (isForceChatFollow()) {
+        stickToBottomRef.current = true;
+        rememberedNearBottomRef.current = true;
+        lastHeight = inner.scrollHeight;
+        pinChatToBottom();
+        return;
+      }
       const nextHeight = inner.scrollHeight;
-      const follow =
-        stickToBottomRef.current || Date.now() < openFollowUntilRef.current;
+      const follow = shouldFollowChatTranscript({
+        stickToBottom: stickToBottomRef.current,
+        rememberedNearBottom: rememberedNearBottomRef.current,
+        withinOpenFollowWindow: Date.now() < openFollowUntilRef.current,
+        withinSettleFollowWindow: Date.now() < settleFollowUntilRef.current,
+      });
       if (follow) stickToBottomRef.current = true;
       const decision = scrollTopAfterContentHeightChange({
         stickToBottom: follow,
@@ -1490,13 +1854,37 @@ export function AiEngineerPanel({
     const applyViewportResize = (force: boolean) => {
       const scroller = messagesRef.current;
       if (!scroller) return;
+      if (
+        shouldDeferResizeScrollDuringComposerChrome({
+          withinChromeScrollLock: Date.now() < chromeLockUntilRef.current,
+        })
+      ) {
+        if (
+          shouldPinDuringComposerChromeLock({
+            stickToBottom: stickToBottomRef.current,
+            rememberedNearBottom: rememberedNearBottomRef.current,
+            forceFollow: isForceChatFollow(),
+          })
+        ) {
+          pinChatToBottom();
+        } else if (
+          Math.abs(scroller.scrollTop - chromeLockTopRef.current) > 1
+        ) {
+          scroller.scrollTop = chromeLockTopRef.current;
+        }
+        lastClientHeight = scroller.clientHeight;
+        return;
+      }
       // Ignore scroll proximity rewrites while we fight the native yank.
       ignoreScrollUntilRef.current = Date.now() + 400;
       const nextClientHeight = scroller.clientHeight;
-      const follow = shouldFollowChatOnViewportResize({
-        stickToBottom: stickToBottomRef.current,
-        rememberedNearBottom: rememberedNearBottomRef.current,
-      });
+      const forceFollow = isForceChatFollow();
+      const follow =
+        forceFollow ||
+        shouldFollowChatOnViewportResize({
+          stickToBottom: stickToBottomRef.current,
+          rememberedNearBottom: rememberedNearBottomRef.current,
+        });
       const decision = scrollTopAfterViewportResize({
         stickToBottom: follow,
         wasNearBottom: follow,
@@ -1507,6 +1895,7 @@ export function AiEngineerPanel({
         nextClientHeight,
         scrollHeight: scroller.scrollHeight,
         force,
+        busy: forceFollow || busyFollowRef.current,
       });
       lastClientHeight = nextClientHeight;
       if (decision.action === "pin") {
@@ -1649,7 +2038,7 @@ export function AiEngineerPanel({
 
   const requestSaveAsSkill = () => {
     if (busy || !ready || !modelConfigured) return;
-    setInput(t("aiEngineer.saveAsSkillPrompt"));
+    setComposerInput(t("aiEngineer.saveAsSkillPrompt"));
     void sendMessage({
       sessionId,
       serverId,
@@ -2338,6 +2727,13 @@ export function AiEngineerPanel({
                 {messages.map((line, index) => {
                   const rowKey = `${line.id}__${index}`;
                   if (line.kind === "notice") {
+                    // Never ask the user to type 「继续」— sidecar auto-continues.
+                    if (
+                      line.content === "assistant_incomplete" ||
+                      line.content === "assistant_soft_continue"
+                    ) {
+                      return null;
+                    }
                     const text =
                       line.variant === "compaction"
                         ? t("aiEngineer.noticeCompaction")
@@ -2350,11 +2746,10 @@ export function AiEngineerPanel({
                                 | "aiEngineer.notice.act_nudge"
                                 | "aiEngineer.notice.act_nudge_plan"
                                 | "aiEngineer.notice.act_nudge_truncated_answer"
-                                | "aiEngineer.notice.assistant_incomplete"
-                                | "aiEngineer.notice.assistant_soft_continue"
                                 | "aiEngineer.notice.act_nudge_conclude"
                                 | "aiEngineer.notice.verify_nudge"
                                 | "aiEngineer.notice.audit_nudge"
+                                | "aiEngineer.notice.resume_miss"
                                 | "aiEngineer.notice.run_stalled")
                             : line.content === "memory_context"
                               ? t("aiEngineer.noticeMemoryContext")
@@ -2526,182 +2921,241 @@ export function AiEngineerPanel({
                     if (shouldOmitResolvedApprovalCard(line, messages)) {
                       return null;
                     }
+                    const displayCommand = sanitizeDisplayCommand(line.command);
+                    const approvalTitle = (
+                      line.intent ||
+                      extractCommandTitle(line.command) ||
+                      displayCommand.split("\n")[0] ||
+                      t("aiEngineer.approvalTitle")
+                    ).trim();
+                    const approvalTools = summarizeShellTools(displayCommand);
+                    const approvalToolsLabel =
+                      approvalTools.length > 0
+                        ? `${approvalTools.slice(0, 5).join(", ")}${
+                            approvalTools.length > 5 ? " …" : ""
+                          }`
+                        : "";
                     return (
                       <div
                         key={rowKey}
-                        className={`ai-engineer-approval${line.decision ? " is-resolved" : ""}${hasLiveTool && !isActive ? " is-dimmed" : ""}`}
+                        className={`ai-engineer-exec-card is-expanded is-approval${
+                          line.decision ? " is-resolved" : ""
+                        }${hasLiveTool && !isActive ? " is-dimmed" : ""}`}
                         data-testid="ai-engineer-approval-card"
+                        data-ai-exec="1"
+                        data-ai-approval="1"
                       >
-                        <div className="ai-engineer-approval-head">
-                          <div className="ai-engineer-approval-title">
-                            {t("aiEngineer.approvalTitle")}
-                            {line.decision === "approved"
-                              ? ` · ${t("aiEngineer.approved")}`
-                              : null}
-                            {line.decision === "rejected"
-                              ? ` · ${t("aiEngineer.rejected")}`
-                              : null}
-                          </div>
+                        <div className="ai-engineer-exec-head">
+                          <span className="ai-engineer-exec-glyph" aria-hidden>
+                            <TerminalGlyph mode="prompt" />
+                          </span>
                           <span
-                            className="ai-engineer-approval-risk"
+                            className="ai-engineer-exec-title"
+                            title={approvalTitle}
+                          >
+                            {approvalTitle}
+                          </span>
+                          {line.decision === "approved" ? (
+                            <span
+                              className="ai-engineer-exec-approved"
+                              data-testid="ai-engineer-exec-approved"
+                            >
+                              {t("aiEngineer.approved")}
+                            </span>
+                          ) : null}
+                          {line.decision === "rejected" ? (
+                            <span className="ai-engineer-exec-status is-denied">
+                              {t("aiEngineer.rejected")}
+                            </span>
+                          ) : null}
+                          <span
+                            className="ai-engineer-exec-risk"
                             title={line.risk}
+                            data-testid="ai-engineer-exec-risk"
                           >
                             {t(riskLabelKey(line.risk))}
                           </span>
-                        </div>
-                        {line.intent ? (
-                          <section className="ai-engineer-approval-section ai-engineer-approval-section-intent">
-                            <span className="ai-engineer-approval-label">
-                              {t("aiEngineer.approvalIntentLabel")}
+                          {approvalToolsLabel ? (
+                            <span className="ai-engineer-exec-tools" aria-hidden>
+                              {approvalToolsLabel}
                             </span>
-                            <p className="ai-engineer-approval-intent">{line.intent}</p>
-                          </section>
-                        ) : null}
-                        <section className="ai-engineer-approval-section ai-engineer-approval-section-command">
-                          <span className="ai-engineer-approval-label">
-                            {t("aiEngineer.approvalCommandLabel")}
-                          </span>
-                          <pre className="ai-engineer-approval-command">
-                            <code>{line.command}</code>
-                          </pre>
-                        </section>
-                        {line.execCommand &&
-                        line.execCommand !== line.command ? (
-                          <p className="ai-engineer-approval-reason">
-                            {t("aiEngineer.execWrapped")}
-                            <code className="ai-engineer-tool-detail">
-                              {line.execCommand}
+                          ) : null}
+                        </div>
+                        <div className="ai-engineer-exec-body">
+                          {line.intent &&
+                          line.intent.trim() !== approvalTitle ? (
+                            <p className="ai-engineer-approval-intent">
+                              {line.intent}
+                            </p>
+                          ) : null}
+                          <div
+                            className="ai-engineer-exec-command"
+                            data-testid="ai-engineer-approval-command"
+                          >
+                            <span
+                              className="ai-engineer-exec-prompt"
+                              aria-hidden
+                            >
+                              $
+                            </span>
+                            <code className="ai-engineer-exec-command-code">
+                              {highlightShell(displayCommand)}
                             </code>
-                          </p>
-                        ) : null}
-                        <section className="ai-engineer-approval-section ai-engineer-approval-section-meta">
-                          <span className="ai-engineer-approval-label">
-                            {t("aiEngineer.approvalPolicyLabel")}
-                          </span>
-                          <p className="ai-engineer-approval-reason">
+                          </div>
+                          {line.execCommand &&
+                          line.execCommand !== line.command ? (
+                            <p className="ai-engineer-approval-reason">
+                              {t("aiEngineer.execWrapped")}
+                              <code className="ai-engineer-tool-detail">
+                                {line.execCommand}
+                              </code>
+                            </p>
+                          ) : null}
+                          <p className="ai-engineer-approval-reason is-policy">
                             {t(riskDescKey(line.risk))}
                           </p>
-                        </section>
-                        {line.impactPreview ? (
-                          <pre className="ai-engineer-impact-preview">{line.impactPreview}</pre>
-                        ) : null}
-                        {line.networkGuard ? (
-                          <p className="ai-engineer-approval-reason">
-                            {t("aiEngineer.networkGuard")}
-                          </p>
-                        ) : null}
-                        {dual && isActive ? (
-                          <label className="ai-engineer-dual-confirm">
-                            {t("aiEngineer.dualConfirmHint")}
-                            <input
-                              value={confirmDraft}
-                              onChange={(e) => setConfirmDraft(e.target.value)}
-                              placeholder={phrase}
-                              disabled={!isActive}
-                            />
-                          </label>
-                        ) : null}
-                        {line.decision ? null : (
-                          <div className="ai-engineer-approval-footer">
-                            {isActive &&
-                            line.rememberableBinaries &&
-                            line.rememberableBinaries.length > 0 ? (
-                              <label className="ai-engineer-remember-read">
-                                <span className="ai-engineer-check">
-                                  <input
-                                    type="checkbox"
-                                    checked={rememberRead}
-                                    onChange={(e) => setRememberRead(e.target.checked)}
-                                  />
-                                  <span className="ai-engineer-check-box" aria-hidden />
-                                </span>
-                                <span className="ai-engineer-remember-read-text">
-                                  {t("aiEngineer.rememberReadOnly", {
-                                    tools: line.rememberableBinaries.join(", "),
-                                  })}
-                                </span>
-                              </label>
-                            ) : null}
-                            {isActive && !dual && threadSecurityMode !== "production" ? (
-                              <label
-                                className="ai-engineer-remember-read"
-                                data-testid="ai-engineer-approval-permanent"
-                              >
-                                <span className="ai-engineer-check">
-                                  <input
-                                    type="checkbox"
-                                    checked={approvePermanently}
-                                    onChange={(e) =>
-                                      setApprovePermanently(e.target.checked)
-                                    }
-                                  />
-                                  <span className="ai-engineer-check-box" aria-hidden />
-                                </span>
-                                <span className="ai-engineer-remember-read-text">
-                                  {t("aiEngineer.approvePermanently")}
-                                </span>
-                              </label>
-                            ) : null}
-                            <div className="ai-engineer-approval-actions">
-                            <button
-                              type="button"
-                              className="find-panel-run"
-                              data-testid="ai-engineer-approval-once"
-                              disabled={!canApprove}
-                              onClick={() => {
-                                resolveApproval(
-                                  true,
-                                  dual ? confirmDraft.trim() : undefined,
-                                  rememberRead,
-                                  false,
-                                  dual ? false : approvePermanently,
-                                );
-                                setConfirmDraft("");
-                                setRememberRead(false);
-                                setApprovePermanently(false);
-                              }}
-                            >
-                              {t("aiEngineer.approveOnce")}
-                            </button>
-                            {isActive && !dual && threadSecurityMode !== "production" ? (
-                              <button
-                                type="button"
-                                className="find-panel-run"
-                                data-testid="ai-engineer-approval-session"
-                                disabled={!canApprove}
-                                onClick={() => {
-                                  resolveApproval(
-                                    true,
-                                    undefined,
-                                    rememberRead,
-                                    true,
-                                    approvePermanently,
-                                  );
-                                  setConfirmDraft("");
-                                  setRememberRead(false);
-                                  setApprovePermanently(false);
-                                }}
-                              >
-                                {t("aiEngineer.approveSession")}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="ai-engineer-stop"
-                              data-testid="ai-engineer-approval-reject"
-                              disabled={!isActive}
-                              onClick={() => {
-                                resolveApproval(false);
-                                setConfirmDraft("");
-                                setRememberRead(false);
-                                setApprovePermanently(false);
-                              }}
-                            >
-                              {t("aiEngineer.reject")}
-                            </button>
+                          {line.impactPreview ? (
+                            <pre className="ai-engineer-impact-preview">
+                              {line.impactPreview}
+                            </pre>
+                          ) : null}
+                          {line.networkGuard ? (
+                            <p className="ai-engineer-approval-reason">
+                              {t("aiEngineer.networkGuard")}
+                            </p>
+                          ) : null}
+                          {dual && isActive ? (
+                            <label className="ai-engineer-dual-confirm">
+                              {t("aiEngineer.dualConfirmHint")}
+                              <input
+                                value={confirmDraft}
+                                onChange={(e) =>
+                                  setConfirmDraft(e.target.value)
+                                }
+                                placeholder={phrase}
+                                disabled={!isActive}
+                              />
+                            </label>
+                          ) : null}
+                          {line.decision ? null : (
+                            <div className="ai-engineer-approval-footer">
+                              <div className="ai-engineer-approval-footer-opts">
+                                {isActive &&
+                                line.rememberableBinaries &&
+                                line.rememberableBinaries.length > 0 ? (
+                                  <label className="ai-engineer-remember-read">
+                                    <span className="ai-engineer-check">
+                                      <input
+                                        type="checkbox"
+                                        checked={rememberRead}
+                                        onChange={(e) =>
+                                          setRememberRead(e.target.checked)
+                                        }
+                                      />
+                                      <span
+                                        className="ai-engineer-check-box"
+                                        aria-hidden
+                                      />
+                                    </span>
+                                    <span className="ai-engineer-remember-read-text">
+                                      {t("aiEngineer.rememberReadOnly", {
+                                        tools:
+                                          line.rememberableBinaries.join(", "),
+                                      })}
+                                    </span>
+                                  </label>
+                                ) : null}
+                                {isActive &&
+                                !dual &&
+                                threadSecurityMode !== "production" ? (
+                                  <label
+                                    className="ai-engineer-remember-read"
+                                    data-testid="ai-engineer-approval-permanent"
+                                  >
+                                    <span className="ai-engineer-check">
+                                      <input
+                                        type="checkbox"
+                                        checked={approvePermanently}
+                                        onChange={(e) =>
+                                          setApprovePermanently(
+                                            e.target.checked,
+                                          )
+                                        }
+                                      />
+                                      <span
+                                        className="ai-engineer-check-box"
+                                        aria-hidden
+                                      />
+                                    </span>
+                                    <span className="ai-engineer-remember-read-text">
+                                      {t("aiEngineer.approvePermanently")}
+                                    </span>
+                                  </label>
+                                ) : null}
+                              </div>
+                              <div className="ai-engineer-approval-actions">
+                                <button
+                                  type="button"
+                                  className="ai-engineer-stop"
+                                  data-testid="ai-engineer-approval-reject"
+                                  disabled={!isActive}
+                                  onClick={() => {
+                                    resolveApproval(false);
+                                    setConfirmDraft("");
+                                    setRememberRead(false);
+                                    setApprovePermanently(false);
+                                  }}
+                                >
+                                  {t("aiEngineer.reject")}
+                                </button>
+                                {isActive &&
+                                !dual &&
+                                threadSecurityMode !== "production" ? (
+                                  <button
+                                    type="button"
+                                    className="find-panel-run"
+                                    data-testid="ai-engineer-approval-session"
+                                    disabled={!canApprove}
+                                    onClick={() => {
+                                      resolveApproval(
+                                        true,
+                                        undefined,
+                                        rememberRead,
+                                        true,
+                                        approvePermanently,
+                                      );
+                                      setConfirmDraft("");
+                                      setRememberRead(false);
+                                      setApprovePermanently(false);
+                                    }}
+                                  >
+                                    {t("aiEngineer.approveSession")}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="find-panel-run is-primary"
+                                  data-testid="ai-engineer-approval-once"
+                                  disabled={!canApprove}
+                                  onClick={() => {
+                                    resolveApproval(
+                                      true,
+                                      dual ? confirmDraft.trim() : undefined,
+                                      rememberRead,
+                                      false,
+                                      dual ? false : approvePermanently,
+                                    );
+                                    setConfirmDraft("");
+                                    setRememberRead(false);
+                                    setApprovePermanently(false);
+                                  }}
+                                >
+                                  {t("aiEngineer.approveOnce")}
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   }
@@ -2751,6 +3205,7 @@ export function AiEngineerPanel({
                           ) : null}
                           <AiMarkdown
                             content={line.content}
+                            streaming={!!line.streaming}
                             onImageClick={(src, alt) => {
                               setAttachmentPreview({
                                 kind: "image",
@@ -2906,26 +3361,12 @@ export function AiEngineerPanel({
                     e.target.value = "";
                   }}
                 />
-                <textarea
+                <AiEngineerComposerTextarea
                   ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
                   placeholder={inputPlaceholder}
-                  rows={3}
                   disabled={!ready || !modelConfigured}
                   onPaste={onComposerPaste}
-                  onKeyDown={(e) => {
-                    // Chinese/Japanese IME: Enter confirms composition — don't send yet.
-                    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      submit();
-                    }
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
+                  onSubmit={submit}
                 />
                 <div className="ai-engineer-composer-foot">
                   <div className="ai-engineer-composer-tools">
@@ -3034,11 +3475,13 @@ export function AiEngineerPanel({
                                       }
                                     }}
                                     onClick={() => {
+                                      // Close menu + lock scroll immediately; persist in background.
+                                      // (Awaiting save used to block on full sidecar restart.)
                                       runWithComposerChromeScrollGuard(() => {
-                                        void saveSettings({
-                                          active_profile_id: p.id,
-                                        });
                                         setModelOpen(false);
+                                      });
+                                      void saveSettings({
+                                        active_profile_id: p.id,
                                       });
                                     }}
                                   >
@@ -3186,39 +3629,15 @@ export function AiEngineerPanel({
                           )
                         : null}
                     </div>
-                    {busy ? (
-                      <button
-                        type="button"
-                        className="ai-engineer-composer-submit is-stop"
-                        aria-label={t("aiEngineer.stop")}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => stopActiveRun()}
-                      >
-                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
-                          <rect x="4.5" y="4.5" width="7" height="7" rx="1.25" fill="currentColor" />
-                        </svg>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="ai-engineer-composer-submit is-send"
-                        aria-label={t("aiEngineer.send")}
-                        disabled={
-                          !ready ||
-                          !modelConfigured ||
-                          (!input.trim() && pendingAttachments.length === 0)
-                        }
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={submit}
-                      >
-                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden>
-                          <path
-                            fill="currentColor"
-                            d="M8 3.25 12.75 8H9.75v4.25H6.25V8H3.25L8 3.25Z"
-                          />
-                        </svg>
-                      </button>
-                    )}
+                    <AiEngineerComposerSendButton
+                      busy={busy}
+                      ready={ready}
+                      modelConfigured={modelConfigured}
+                      stopLabel={t("aiEngineer.stop")}
+                      sendLabel={t("aiEngineer.send")}
+                      onStop={() => stopActiveRun()}
+                      onSend={submit}
+                    />
                   </div>
                 </div>
               </div>

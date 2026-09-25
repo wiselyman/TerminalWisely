@@ -1,7 +1,7 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-// pdfjs-dist 6 touches global Iterator (Node 22+). CI still pins Node 20 for
-// other steps — stub the module so URL-helper unit tests stay Node-20-safe.
+// pdfjs-dist 6 touches global Iterator (Node 22+). Stub so these URL-helper
+// unit tests stay safe on Node 20 (historical CI pin / local older runtimes).
 vi.mock("pdfjs-dist", () => ({
   version: "0.0.0-test",
   GlobalWorkerOptions: { workerSrc: "" },
@@ -17,10 +17,6 @@ import {
 } from "./pdfjsOfv";
 
 describe("pdfjsOfv", () => {
-  beforeAll(() => {
-    // Ensure mock settled before assertions (vitest hoists vi.mock).
-  });
-
   it("builds http(s) absolute asset URLs for pdf.js fetch validation", () => {
     const base = pdfjsAssetBase("http://localhost:1420/");
     expect(base).toBe("http://localhost:1420/pdfjs/");

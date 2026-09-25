@@ -25,6 +25,8 @@ test.describe("Local FS panel", () => {
     await expect(page.getByTestId("file-manager-search")).toBeVisible();
     await expect(page.getByTestId("local-fs-split")).toBeVisible();
     await expect(page.getByTestId("local-fs-contents")).toBeVisible();
+    await expect(page.getByTestId("local-fs-path-breadcrumb")).toBeVisible();
+    await expect(page.getByTestId("local-fs-crumb-root")).toBeVisible();
 
     await page.getByTestId("host-file-manager-minimize").click();
     await expect(panel).toHaveCount(0);

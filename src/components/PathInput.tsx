@@ -11,6 +11,7 @@ interface PathInputProps {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  autoFocus?: boolean;
   onSubmit?: (value: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
@@ -22,6 +23,7 @@ export function PathInput({
   onChange,
   placeholder,
   disabled = false,
+  autoFocus = false,
   onSubmit,
   onFocus,
   onBlur,
@@ -151,6 +153,7 @@ export function PathInput({
         value={value}
         placeholder={placeholder ?? t("run.placeholderPath")}
         disabled={disabled}
+        autoFocus={autoFocus}
         onFocus={onFocus}
         onBlur={onBlur}
         onChange={(event) => {

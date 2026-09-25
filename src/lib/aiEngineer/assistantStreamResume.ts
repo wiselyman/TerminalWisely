@@ -13,6 +13,24 @@ export function findLastAssistantIndexInTurn(
   return -1;
 }
 
+/**
+ * True when a tool card sits between this assistant bubble and the end of the
+ * turn. The post-tool answer must be a new bubble — writing it back into the
+ * pre-tool preamble hides it above the command output.
+ */
+export function hasToolLineAfter(
+  messages: ReadonlyArray<ChatLineKind>,
+  assistantIndex: number,
+): boolean {
+  if (assistantIndex < 0) return false;
+  for (let i = assistantIndex + 1; i < messages.length; i += 1) {
+    const kind = messages[i].kind;
+    if (kind === "user") return false;
+    if (kind === "tool") return true;
+  }
+  return false;
+}
+
 /** Truncated-answer harness notices must not sit between table halves. */
 export function isTruncatedAnswerNotice(line: ChatLineKind | undefined | null): boolean {
   return (
@@ -36,7 +54,8 @@ export function applyAssistantDeltaToMessages<T extends ChatLineKind>(
 ): T[] {
   if (!text) return messages;
   const idx = findLastAssistantIndexInTurn(messages);
-  if (idx < 0) {
+  // Tool cards after the preamble: this text is the conclusion, not a suffix.
+  if (idx < 0 || hasToolLineAfter(messages, idx)) {
     const created = {
       id: opts.newId(),
       kind: "assistant",

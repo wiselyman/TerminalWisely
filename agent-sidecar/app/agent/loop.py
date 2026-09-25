@@ -26,17 +26,25 @@ from app.llm.thinking import (
     looks_like_truncated_plan,
     output_budget_exhausted,
     reasoning_starved_visible_reply,
+    strip_tool_call_markup,
     strip_trailing_dangling_heading,
 )
 from app.harness.verify import (
     CONCLUDE_NUDGE,
+    LEAD_IN_ACT_NUDGE,
     LOOP_ABORT_MESSAGE,
+    SOFT_CONTINUE_MIN_CHARS,
     claim_success_without_evidence,
+    collapse_repeated_paragraphs,
+    continuation_overshoots_finished_prose,
     ends_without_sentence_terminator,
+    join_answer_continuation,
+    looks_like_action_lead_in,
     nudge_for_engineer_mode,
     should_nudge_verify,
+    should_stop_truncated_continue,
+    trim_overcontinued_answer,
     truncated_answer_nudge,
-    SOFT_CONTINUE_MIN_CHARS,
 )
 from app.harness.approval_intent import sanitize_approval_intent
 from app.harness.command_display import (
@@ -241,6 +249,7 @@ class AgentLoop:
         )
         self.pipeline = ToolPipeline()
         self._repeat_guard = RepeatToolReminder()
+        self.pipeline.add_pre(self._repeat_guard)
         self.pipeline.add_post(self._repeat_guard)
         self.pipeline.add_around(ToolTimeoutGuard())
         self.pipeline.add_pre(InteractionModeGate(run.interaction_mode))
@@ -315,6 +324,8 @@ class AgentLoop:
                 self.run.metadata.pop("_trunc_answer_nudges", None)
                 self.run.metadata.pop("_trunc_answer_nudged", None)
                 self.run.metadata.pop("_trunc_answer_len", None)
+                self.run.metadata.pop("_trunc_answer_text", None)
+                self.run.metadata.pop("_lead_in_act_nudged", None)
                 self.run.metadata.pop("_finish_length", None)
 
                 msgs = self.run.messages
@@ -395,27 +406,48 @@ class AgentLoop:
                 assistant, tool_calls = await self._stream_assistant_turn()
                 # Harness forced a conclude sample — drop tool calls if the model
                 # ignored tool_choice=none (common on weak local endpoints).
-                if self.run.metadata.get(FORCE_TOOL_CHOICE_NONE_KEY) and tool_calls:
+                # Same for truncated-answer continues: tools would abandon mid-prose.
+                if (
+                    self.run.metadata.get(FORCE_TOOL_CHOICE_NONE_KEY)
+                    or self.run.metadata.get("_trunc_answer_nudged")
+                ) and tool_calls:
                     tool_calls = []
-                # Model pasted tool JSON as content instead of tool_calls API.
-                if not tool_calls:
-                    recovered = extract_tool_calls_from_content(
-                        str(assistant.get("content") or "")
-                    )
+                # Model pasted tool JSON/XML as content instead of / in addition to
+                # tool_calls API. Recover missing calls, and ALWAYS strip markup from
+                # visible prose so the FE does not show a duplicate fake command.
+                raw_content = str(assistant.get("content") or "")
+                if not tool_calls and not (
+                    self.run.metadata.get(FORCE_TOOL_CHOICE_NONE_KEY)
+                    or self.run.metadata.get("_trunc_answer_nudged")
+                ):
+                    recovered = extract_tool_calls_from_content(raw_content)
                     if recovered:
                         tool_calls = normalize_tool_calls(recovered)
-                        assistant = {
-                            "role": "assistant",
-                            "content": "",
-                        }
                         self.run.metadata.pop("_finish_length", None)
                         self.run.metadata.pop("_trunc_answer_nudged", None)
                         self.run.metadata.pop("_trunc_answer_nudges", None)
-                        # Wipe the streamed JSON dump from the chat surface.
-                        self.run.append_event(
-                            "assistant_message",
-                            {"content": "", "replace": True},
-                        )
+                    elif looks_like_tool_call_json_dump(raw_content):
+                        # Incomplete dump — clear and force act (do not conclude as answer).
+                        self.run.metadata["_tool_dump_idle"] = True
+                        self.run.metadata.pop("_trunc_answer_nudged", None)
+                        self.run.metadata.pop("_trunc_answer_nudges", None)
+                if raw_content and (
+                    "<tool_call" in raw_content.lower()
+                    or "<function=" in raw_content.lower()
+                    or looks_like_tool_call_json_dump(raw_content)
+                ):
+                    cleaned = strip_tool_call_markup(raw_content)
+                    # Pure dump → empty. Prose+dump → keep the prose only.
+                    if self.run.metadata.get("_tool_dump_idle") and not tool_calls:
+                        cleaned = ""
+                    assistant = {
+                        "role": "assistant",
+                        "content": cleaned,
+                    }
+                    self.run.append_event(
+                        "assistant_message",
+                        {"content": cleaned, "replace": True},
+                    )
                 hist_msg: dict[str, Any] = {
                     "role": "assistant",
                     "content": assistant.get("content") or "",
@@ -425,8 +457,10 @@ class AgentLoop:
                 self.run.append_message(hist_msg)
 
                 content = (assistant.get("content") or "").strip()
-                idle_dump = looks_like_idle_plan_dump(content) or bool(
-                    self.run.metadata.pop("_idle_plan", None)
+                idle_dump = (
+                    looks_like_idle_plan_dump(content)
+                    or bool(self.run.metadata.pop("_idle_plan", None))
+                    or bool(self.run.metadata.pop("_tool_dump_idle", None))
                 )
                 # Pasted investigation scripts are not answers — force tools, never
                 # "truncated answer" continue (that sets tool_choice=none and loops).
@@ -443,6 +477,16 @@ class AgentLoop:
                 # Don't paste a stalling plan dump into the chat as if it were the answer.
                 if idle_dump:
                     content = ""
+                # Forced conclude + model still pasting tool JSON / idle dump:
+                # finish now — idle_plan act nudges would only burn samples (and
+                # historically risked reopening the same probe loop).
+                if (
+                    not tool_calls
+                    and idle_dump
+                    and self.run.metadata.get(FORCE_TOOL_CHOICE_NONE_KEY)
+                ):
+                    self._emit_conclusion(RunStatus.COMPLETED, None)
+                    return
                 if not tool_calls:
                     # Empty continue after a cut-off reply: keep treating as truncated.
                     if not content and int(
@@ -457,6 +501,28 @@ class AgentLoop:
                                 ):
                                     content = prev_c
                                 break
+                    # Continue sample is often only the suffix / restated last line.
+                    # Join onto the stored partial BEFORE truncation checks / emit so
+                    # the FE always gets one authoritative full answer (replace).
+                    if content and int(
+                        self.run.metadata.get("_trunc_answer_nudges") or 0
+                    ):
+                        base = str(
+                            self.run.metadata.get("_trunc_answer_text") or ""
+                        ).rstrip()
+                        if not base:
+                            for m in reversed(self.run.messages):
+                                if m.get("role") == "assistant":
+                                    base = str(m.get("content") or "").rstrip()
+                                    break
+                        if base and content.strip() != base:
+                            content = join_answer_continuation(base, content)
+                        self.run.metadata["_trunc_answer_text"] = content
+                        if (
+                            self.run.messages
+                            and self.run.messages[-1].get("role") == "assistant"
+                        ):
+                            self.run.messages[-1]["content"] = content
                     # A: budget / reasoning-starved usage. B: structural cut or
                     # mid-clause stop (no sentence terminator). No model names.
                     budget_hit = bool(self.run.metadata.pop("_finish_length", None))
@@ -507,56 +573,89 @@ class AgentLoop:
                         truncated_answer = False
                         self.run.metadata.pop("_trunc_answer_nudged", None)
                         self.run.metadata.pop("_trunc_answer_nudges", None)
+                        self.run.metadata.pop("_trunc_answer_text", None)
                         if not idle_dump:
                             idle_dump = True
                             content = ""
                     nudges = int(self.run.metadata.get("_trunc_answer_nudges") or 0)
-                    max_trunc_nudges = 8
+                    max_trunc_nudges = 16
                     if content and truncated_answer and nudges < max_trunc_nudges:
                         # Stream already showed the partial; keep UI in sync but
                         # strip a restart heading so the next delta does not glue
                         # "## …" onto the last ASCII/prose line.
                         emit = strip_trailing_dangling_heading(content) or content
+                        prev_stored = str(
+                            self.run.metadata.get("_trunc_answer_text") or ""
+                        )
                         prev_len = int(
                             self.run.metadata.get("_trunc_answer_len") or 0
                         )
                         grew = len(emit) > prev_len + 20
-                        self.run.metadata["_trunc_answer_len"] = len(emit)
-                        if (
-                            self.run.messages
-                            and self.run.messages[-1].get("role") == "assistant"
+                        # Echo / no-growth after a continue → stop. Otherwise the
+                        # UI stays on「模型思考中」while the model re-summarizes.
+                        if should_stop_truncated_continue(
+                            nudges=nudges,
+                            grew=grew,
+                            previous=prev_stored,
+                            emit=emit,
                         ):
-                            self.run.messages[-1]["content"] = emit
-                        if emit:
-                            # Authoritative full text for this turn (FE replaces).
+                            if continuation_overshoots_finished_prose(
+                                prev_stored, emit
+                            ):
+                                emit = trim_overcontinued_answer(prev_stored, emit)
+                            else:
+                                emit = collapse_repeated_paragraphs(emit) or emit
+                            truncated_answer = False
+                            content = emit
+                            self.run.metadata.pop("_trunc_answer_nudged", None)
+                            self.run.metadata.pop("_trunc_answer_nudges", None)
+                            self.run.metadata.pop("_trunc_answer_len", None)
+                            self.run.metadata.pop("_trunc_answer_text", None)
+                            self.run.metadata.pop(FORCE_TOOL_CHOICE_NONE_KEY, None)
+                            if (
+                                self.run.messages
+                                and self.run.messages[-1].get("role") == "assistant"
+                            ):
+                                self.run.messages[-1]["content"] = emit
+                            # Fall through to final assistant_message emit below.
+                        else:
+                            self.run.metadata["_trunc_answer_len"] = len(emit)
+                            self.run.metadata["_trunc_answer_text"] = emit
+                            if (
+                                self.run.messages
+                                and self.run.messages[-1].get("role") == "assistant"
+                            ):
+                                self.run.messages[-1]["content"] = emit
+                            if emit:
+                                # Authoritative full text for this turn (FE replaces).
+                                self.run.append_event(
+                                    "assistant_message",
+                                    {"content": emit, "replace": True},
+                                )
+                            self.run.metadata["_trunc_answer_nudges"] = nudges + 1
+                            self.run.metadata["_trunc_answer_nudged"] = True
+                            # Always try a larger budget on the next sample.
+                            self.run.metadata["_raise_output_budget"] = True
+                            # No growth after a continue → stronger "resume only" nudge.
+                            nudge_text = truncated_answer_nudge(emit)
+                            if nudges > 0 and not grew:
+                                nudge_text = (
+                                    nudge_text
+                                    + "\nDo NOT repeat any earlier paragraph. "
+                                    "Emit ONLY the missing suffix."
+                                )
+                            self.run.append_message(
+                                {
+                                    "role": "user",
+                                    "content": nudge_text,
+                                }
+                            )
                             self.run.append_event(
-                                "assistant_message",
-                                {"content": emit, "replace": True},
+                                "act_nudge", {"kind": "truncated_answer"}
                             )
-                        self.run.metadata["_trunc_answer_nudges"] = nudges + 1
-                        self.run.metadata["_trunc_answer_nudged"] = True
-                        # Always try a larger budget on the next sample.
-                        self.run.metadata["_raise_output_budget"] = True
-                        # No growth after a continue → stronger "resume only" nudge.
-                        nudge_text = truncated_answer_nudge(emit)
-                        if nudges > 0 and not grew:
-                            nudge_text = (
-                                nudge_text
-                                + "\nDo NOT repeat any earlier paragraph. "
-                                "Emit ONLY the missing suffix."
-                            )
-                        self.run.append_message(
-                            {
-                                "role": "user",
-                                "content": nudge_text,
-                            }
-                        )
-                        self.run.append_event(
-                            "act_nudge", {"kind": "truncated_answer"}
-                        )
-                        continue
-                    # Exhausted auto-continue — keep going silently is impossible;
-                    # only then leave a single incomplete marker (no soft spam).
+                            continue
+                    # Exhausted auto-continue — keep the partial answer; never ask
+                    # the user to type 「继续」(FE also ignores this event).
                     if content and truncated_answer and nudges >= max_trunc_nudges:
                         if (
                             self.run.messages
@@ -565,12 +664,19 @@ class AgentLoop:
                             self.run.messages[-1]["content"] = (
                                 strip_trailing_dangling_heading(content) or content
                             )
+                        self.run.metadata.pop("_trunc_answer_nudged", None)
+                        self.run.metadata.pop("_trunc_answer_nudges", None)
+                        self.run.metadata.pop("_trunc_answer_len", None)
+                        self.run.metadata.pop("_trunc_answer_text", None)
+                        self.run.metadata.pop(FORCE_TOOL_CHOICE_NONE_KEY, None)
+                        # Diagnostic only — UI must not show a continue prompt.
                         self.run.append_event(
                             "assistant_incomplete", {"reason": "truncation"}
                         )
                     elif not truncated_answer:
                         self.run.metadata.pop("_trunc_answer_nudged", None)
                         self.run.metadata.pop("_trunc_answer_len", None)
+                        self.run.metadata.pop("_trunc_answer_text", None)
                     # Final user-facing text: never leave a dangling restart heading.
                     # Do NOT append “回复「继续」” footers here — that dodges finishing.
                     if content:
@@ -584,6 +690,31 @@ class AgentLoop:
                     )
 
                 if not tool_calls:
+                    has_tool_evidence = any(
+                        m.get("role") == "tool" for m in self.run.messages
+                    )
+                    # Colon lead-in under forced no-tools is not a finished answer —
+                    # unlock tools and act instead of concluding. Never reopen tools
+                    # after a probe-streak conclude (that restarts identical curls).
+                    if (
+                        content
+                        and looks_like_action_lead_in(content)
+                        and has_tool_evidence
+                        and not self.run.metadata.get("_lead_in_act_nudged")
+                        and not self.run.metadata.get(PROBE_CONCLUDE_SENT_KEY)
+                    ):
+                        self.run.metadata["_lead_in_act_nudged"] = True
+                        self.run.metadata.pop(FORCE_TOOL_CHOICE_NONE_KEY, None)
+                        self.run.metadata.pop("_trunc_answer_nudged", None)
+                        self.run.metadata.pop("_trunc_answer_nudges", None)
+                        self.run.metadata.pop("_trunc_answer_text", None)
+                        self.run.append_message(
+                            {"role": "user", "content": LEAD_IN_ACT_NUDGE}
+                        )
+                        self.run.append_event(
+                            "act_nudge", {"kind": "lead_in_act"}
+                        )
+                        continue
                     if (
                         self.run.last_mutation_risk
                         and claim_success_without_evidence(self.run.messages)
@@ -610,9 +741,6 @@ class AgentLoop:
                     # command dump must not abort the next user question.
                     planning_only = (not content) or bool(
                         self.run.metadata.pop("_content_loop", None)
-                    )
-                    has_tool_evidence = any(
-                        m.get("role") == "tool" for m in self.run.messages
                     )
                     if (
                         (truncated_plan or idle_dump)
@@ -851,7 +979,9 @@ class AgentLoop:
 
     async def _stream_assistant_turn_once(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Stream one model turn; emit assistant_delta for visible text."""
-        self.run.metadata["_model_touch_at"] = time.time()
+        now = time.time()
+        self.run.metadata["_model_touch_at"] = now
+        self.run.metadata["_last_progress_at"] = now
         span_id = self._tracer.start("model", "chat_completions")
         try:
             return await self._stream_assistant_turn_once_inner()
@@ -876,7 +1006,7 @@ class AgentLoop:
             if not delta_buf:
                 return
             now = time.monotonic()
-            if not force and len(delta_buf) < 24 and (now - last_flush) < 0.04:
+            if not force and len(delta_buf) < 48 and (now - last_flush) < 0.05:
                 return
             self.run.append_event("assistant_delta", {"text": delta_buf})
             delta_buf = ""
@@ -1001,6 +1131,9 @@ class AgentLoop:
         ):
             if self._should_cancel():
                 break
+            # Any stream chunk (even filtered CoT) counts as progress so we do
+            # not progress-stall a slow but live model; hung sockets still stall.
+            self.run.metadata["_last_progress_at"] = time.time()
             et = ev.get("type")
             if et == "content":
                 visible = filter_.feed(str(ev.get("text") or ""))
@@ -1158,6 +1291,17 @@ class AgentLoop:
         finally:
             self._tracer.end(span_id, call_id=call_id)
         if isinstance(result, dict) and result.get("_pipeline_deny"):
+            if result.get("stop_repeating"):
+                # Identical probe loop — force a no-tool conclude next sample.
+                self.run.metadata[FORCE_TOOL_CHOICE_NONE_KEY] = True
+                self.run.metadata[PROBE_CONCLUDE_SENT_KEY] = True
+                self.run.append_event(
+                    "harness_nudge",
+                    {
+                        "kind": "repeat_tool_stop",
+                        "repeat_count": result.get("repeat_count"),
+                    },
+                )
             await self._add_tool_result(
                 call_id, {k: v for k, v in result.items() if k != "_pipeline_deny"}
             )
@@ -2407,10 +2551,35 @@ class AgentLoop:
             return
         query = str(args.get("query") or "")
         max_results = int(args.get("max_results") or 5)
+        from app.agent.status_bar import _latest_user_goal
+        from app.harness.web_query_calendar import (
+            strip_invented_calendar_years,
+            web_query_year_advice,
+        )
+
+        user_text = _latest_user_goal(self.run.messages, limit=2000) or ""
+        cleaned, stripped_years = strip_invented_calendar_years(
+            query, user_text=user_text
+        )
+        search_q = cleaned or query
         try:
-            hits = await self.research.web_search(query, max_results=max_results)
-            payload = {"ok": True, "results": hits, "_untrusted": True}
+            hits = await self.research.web_search(search_q, max_results=max_results)
+            payload: dict[str, Any] = {
+                "ok": True,
+                "results": hits,
+                "query": search_q,
+                "_untrusted": True,
+            }
             self.run.metadata["web_fail_streak"] = 0
+            if stripped_years:
+                payload["query_original"] = query
+                advice = web_query_year_advice(
+                    query,
+                    user_text=user_text,
+                    stripped=stripped_years,
+                )
+                if advice:
+                    payload["advice"] = advice
         except ResearchError as exc:
             payload = self._web_tool_failure(str(exc))
         await self._add_tool_result(call_id, payload)
@@ -2752,7 +2921,17 @@ class AgentLoop:
         await self._add_tool_result(call_id, result)
 
     async def _add_tool_result(self, call_id: str, payload: dict[str, Any]) -> None:
-        slim = truncate_tool_payload(payload)
+        from app.harness.read_probe_outcome import annotate_read_probe_result
+
+        slim = truncate_tool_payload(annotate_read_probe_result(payload))
+        # Host tools return None from pipeline body — record failure streak here so
+        # identical broken scripts (approved but IndentationError, etc.) hard-stop.
+        tc = self._tool_call_by_id(call_id)
+        if tc is not None:
+            note = self._repeat_guard.note_result(tc[0], tc[1], slim)
+            if note:
+                pending = self.run.metadata.setdefault("_pending_guard_contexts", [])
+                pending.append(note)
         body = _UNTRUSTED_PREAMBLE + json.dumps(slim, ensure_ascii=False)
         try:
             from app.session.tool_artifacts import maybe_spill_tool_content
@@ -2768,6 +2947,42 @@ class AgentLoop:
             }
         )
         self.run.append_event("tool_result", {"call_id": call_id, "payload": slim})
+
+    def _tool_call_by_id(
+        self, call_id: str
+    ) -> tuple[str, dict[str, Any]] | None:
+        """Resolve tool name+args for a call_id from assistant history."""
+        want = str(call_id or "")
+        if not want:
+            return None
+        for msg in reversed(self.run.messages):
+            if msg.get("role") != "assistant":
+                continue
+            for tc in msg.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                if str(tc.get("id") or "") != want:
+                    continue
+                fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                name = str(
+                    (fn or {}).get("name") or tc.get("name") or ""
+                ).strip()
+                raw_args = (fn or {}).get("arguments", tc.get("arguments"))
+                args: dict[str, Any]
+                if isinstance(raw_args, dict):
+                    args = dict(raw_args)
+                elif isinstance(raw_args, str) and raw_args.strip():
+                    try:
+                        parsed = json.loads(raw_args)
+                    except Exception:  # noqa: BLE001
+                        parsed = {}
+                    args = parsed if isinstance(parsed, dict) else {}
+                else:
+                    args = {}
+                if name:
+                    return name, args
+            break
+        return None
 
     def _check_budgets(self) -> None:
         if self.run.tool_calls_used >= self.max_tool_calls:

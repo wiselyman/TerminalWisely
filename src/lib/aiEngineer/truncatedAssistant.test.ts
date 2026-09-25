@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  extendAssistantContinuation,
+  looksIncompleteAssistant,
   looksTruncatedAssistant,
   mergeAssistantContinuation,
+  resolveAuthoritativeAssistantContent,
   stripTrailingDanglingHeading,
 } from "./truncatedAssistant";
 
@@ -46,16 +49,38 @@ describe("looksTruncatedAssistant (structural only)", () => {
     expect(looksTruncatedAssistant(raw)).toBe(true);
   });
 
+  it("does not treat trailing colon lead-in as structural truncation", () => {
+    expect(
+      looksTruncatedAssistant("规则已移入。现在重载配置并验证："),
+    ).toBe(false);
+    expect(
+      looksIncompleteAssistant("规则已移入。现在重载配置并验证："),
+    ).toBe(false);
+  });
+
+  it("detects dangling path arrow connectors", () => {
+    const raw =
+      "具体操作如下。\n\n".repeat(3) + "Clash Verge -> 设置 ->";
+    expect(looksTruncatedAssistant(raw)).toBe(true);
+    expect(looksIncompleteAssistant(raw)).toBe(true);
+  });
+
   it("does not treat finished prose as truncated (no keyword heuristics)", () => {
     expect(looksTruncatedAssistant("这台机器是 Debian 12，内核正常。")).toBe(
       false,
     );
-    // Mid-prose without structural break is NOT flagged — budget signals handle that.
+    // Mid-prose without structural break is NOT structural-truncated.
     expect(
       looksTruncatedAssistant(
         "说明如下。\n\n".repeat(4) + "还剩 125 片，大约还要两小时左右",
       ),
     ).toBe(false);
+    // …but unfinished_prose / incomplete helper still flags it.
+    expect(
+      looksIncompleteAssistant(
+        "说明如下。\n\n".repeat(4) + "还剩 125 片，大约还要两小时左右",
+      ),
+    ).toBe(true);
   });
 
   it("does not treat a closed markdown fence as truncated", () => {
@@ -70,6 +95,52 @@ describe("looksTruncatedAssistant (structural only)", () => {
       "```";
     expect(looksTruncatedAssistant(fenced)).toBe(false);
     expect(looksTruncatedAssistant("说明如下：`getting")).toBe(true);
+  });
+});
+
+describe("resolveAuthoritativeAssistantContent mid-prose", () => {
+  it("keeps long incomplete prev over short replace suffix", () => {
+    const prev =
+      "具体操作如下。\n\n".repeat(4) + "Clash Verge -> 设置 ->";
+    const next = "系统代理。";
+    const out = resolveAuthoritativeAssistantContent(prev, next, {
+      replace: true,
+    });
+    expect(out).toContain("Clash Verge");
+    expect(out).toContain("系统代理");
+    expect(out.length).toBeGreaterThan(next.length);
+  });
+});
+
+describe("extendAssistantContinuation", () => {
+  const steps =
+    "**还没修好。** Merge.yaml 在，但 mihomo 没加载。\n\n" +
+    "1. 打开 Profiles\n" +
+    "2. 重新选中当前配置\n" +
+    "3. 强制重新合并 Merge.yaml\n\n" +
+    "或者我试试通过 API 强制重载：";
+  const tail =
+    "或者我试试通过 API 强制重载配置。你在 Clash Verge GUI 里点一下当前配置的应用按钮，就能让 Merge 重新生效。生效后就会直连。";
+
+  it("replaces a dangling colon line with the finished continuation", () => {
+    const out = extendAssistantContinuation(steps, tail);
+    expect(out).toContain("重新生效");
+    expect(out).toContain("就会直连");
+    expect(out).not.toContain("强制重载：或者我试试");
+    expect(out?.match(/强制重载/g)?.length).toBe(1);
+  });
+
+  it("keeps the tail when a partial stream already glued up to Merge", () => {
+    const partial = `${steps}或者我试试通过 API 强制重载配置。你在 Clash Verge GUI 里点一下当前配置的应用按钮，就能让 Merge`;
+    // Sidecar emits the joined full answer (not a bare suffix).
+    const full = `${steps.slice(0, steps.lastIndexOf("\n") + 1)}${tail}`;
+    const out = resolveAuthoritativeAssistantContent(partial, full, {
+      replace: true,
+    });
+    expect(out).toContain("Profiles");
+    expect(out).toContain("重新生效");
+    expect(out).toContain("就会直连");
+    expect(out.endsWith("Merge")).toBe(false);
   });
 });
 

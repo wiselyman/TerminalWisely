@@ -102,6 +102,8 @@
 | Dock → 进程管理器浮窗 | — | — | smoke | **✓** `local-fs-actions` | ✓ |
 | Host 左树+右内容（列表/网格） | `localFsTree` + `openDirectory` | — | smoke | — | ✓ |
 | Host 树新建/拖移/剪贴板/多选 | `localFsOps` + Rust `fs_path_tests` | create/copy/move | smoke menu | — | ✓ |
+| 框选多选 + 路径段跳转 + 面板内传输进度；打开目录不把 cwd 加入选区（防误删整夹） | `localFsOps`（sanitize/marquee/breadcrumb） | — | smoke `hostfs.safe-select-delete` | **✓** `local-fs` breadcrumb | ✓ |
+| 多选删除须确认（禁无确认批量 rm） | — | TerminalFsDialog multi | smoke | — | ✓ |
 | Host 树局部重载 | `localFsStore.reloadDirectory` | — | — | — | ✓ |
 | Host 树 pointer 拖移 | `localFsPointerMove` | — | smoke | — | ✓ |
 | Find in files（路径栏检索 → 文件列表） | — | — | smoke | **✓** | ✓ |
@@ -166,11 +168,13 @@
 | 个人记忆 (按模式隔离) | `test_user_memory` | — | user_memory_*；linux≠k8s prefs | — | ✓ |
 | 手动提炼 Skill | `test_skill_writer` | — | skill_save + reply icon | — | ✓ |
 | Skills 列表 UI | `test_skills_list_api` | — | Skills 菜单；`engineer_mode` 隔离 | — | ✓ |
-| Agent Status Bar | `test_status_bar` / `test_trajectory_fixtures` | — | 采样尾部注入 | — | ✓ |
+| Agent Status Bar | `test_status_bar` / `test_trajectory_fixtures` | — | 采样尾部注入；**Prior 近期话题**；Goal 跳过 harness | — | ✓ |
+| 同聊多话题（单目标收束 + 可引用 prior） | `test_prompts_continue` + `test_status_bar` Prior | CONCLUDE_NUDGE | — | — | ✓ |
 | Tool artifact 预算 | `test_tool_artifacts` | — | 超长工具落盘预览 | — | ✓ |
 | Memory 浏览器 UI | `test_memory_meta_api` | — | 个人/主机\|集群分区；无路径脚注 | — | ✓ |
 | Skills 关键词匹配 | `test_skill_match` | — | tag/title/body | — | ✓ |
 | 批准后乐观执行卡 | `approvalOptimisticExec` | — | 批准即出现 running 工具卡 | approval e2e | ✓ |
+| 执行卡完成后自动折叠（用户手动展开可钉住；滚动补偿防拽跑） | `execCardExpand.test` | — | smoke | — | ✓ |
 | 上下文压缩 durable | compaction + tool_pairing | pytest | — | — | ✓ |
 | Skill curator 归档 | `test_skill_curator` | — | — | — | ✓ |
 | terminal_exec 桥接 | Rust terminal | pytest gate | — | **✓** | ✓ |
@@ -180,11 +184,13 @@
 | Run trace 追踪 | — | pytest trace | — | — | ✓ |
 | 中途 user_context | — | API surface | — | — | ✓ |
 | Session resume | — | pytest resume | — | resume | ✓ |
+| SessionLog resume_miss（禁止静默薄 history；FE harness + 一次无 resume 重开） | `resumeMiss.test` + `test_session_resume` miss | chat_start 409 | smoke notice key | — | ✓ |
+| SessionLog resume 跨 session_id（SSH 重连）+ FE 自动无 resume 重试 | `test_session_resume` remap | — | — | — | — |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |
 | AI SSH lease（禁重连） | `sshLease.test` + Rust `ai_ssh_lease_tests` | — | TerminalView 闸门 | — | ✓ |
 | Long-job exec idle 豁免 | Rust `ai_exec_limits` | — | timeout≥600 关 idle | — | ✓ |
-| Run stall 看门狗 | `test_stall_watch` | main stall wrap | run_stalled 通知 | — | ✓ |
+| Run stall 看门狗（冷启动 + 工具后无进度；**工具执行中 / 审批中不误杀**；FE idle abort 同） | `test_stall_watch` + `thinkingIdleAbort.test` | main stall wrap | smoke + run_stalled 清 busy | — | ✓ |
 | Wall-clock run 预算 | paths `max_run_wall_seconds` | loop `_check_budgets` | — | — | ✓ |
 
 ## 10. AI chat 可观测性
@@ -202,15 +208,27 @@
 | Capabilities / deny floor | pytest | — | — | — | — |
 | **Agent 硬编码禁检** | `check-no-agent-hardcoding.mjs` + pytest | smoke | — | — | — |
 | web_search / web_fetch + SSRF | pytest | — | — | — | — |
+| web_search / web_fetch 小卡片（关键字常显 + fetch 网页预览持久） | Vitest `webToolCard` / `formatToolResultDisplay` | smoke `ai-web-tool-card` | — | — | — |
+| web_search 臆造年份（用户未写的 YYYY）→ strip + advice，不塞年份 | pytest `test_web_query_calendar` | — | hardcoding ban | — | — |
 | Chat images + external links (cache, openUrl, image_generate, HTML extract) | Vitest `openExternalUrl`/`chatMedia`/`turnMedia`; Rust `media_cache`; pytest `test_web_fetch_image`/`test_html_images` | smoke `ai-md-external-link` | — | — | — |
 | Compaction / token meter | pytest | — | — | — | — |
 | Probe streak → force conclude（连续探查工具后强制收束） | `test_probe_streak` + `test_stream_loop` | — | smoke | — | — |
+| 相同命令死循环硬拦（RepeatTool hard-deny；**失败后再交同一命令** fail-deny@2；FORCE 下不从 content 恢复 tool JSON；probe conclude 不 unlock lead-in） | `test_repeat_tool` + `test_stream_loop` | — | smoke `agent.repeat-tool-hard-deny` | — | — |
 | Content echo loop → abort stream（复读环掐流） | `test_content_loop_abort` + `test_stream_loop` | — | — | — | — |
 | Shell script dump → act（粘贴 find/lsof 不当 truncated 续写） | `test_thinking_sanitize` + `test_stream_loop` | — | smoke | — | — |
 | 括号截断续写（路径+容量 `(12G)` 不当作句号） | `test_thinking_sanitize` ends_without… | — | smoke | — | — |
-| 聊天滚动（maximize-follow：记住贴底意图；最大化/窗口 resize 贴底；中位 wheel 冻结；流式 sync markdown；busy stick；park-bottom）+ soft-hide 保 busy | `chatScroll.test` + Playwright `ai-chat-scroll-maximize` | — | smoke `ai.chat-scroll-final` | ✓ | — |
-| Tool JSON as content → recover tool_calls（闭合 fence 不误判截断） | `test_thinking_sanitize` + `test_stream_loop` + `truncatedAssistant.test` | — | smoke | — | — |
-| Approval merges into exec card（批准后隐藏批准卡，风险/已批准挂到执行卡） | `approvalCommandDedupe.test` + `approvalOptimisticExec.test` | — | smoke | — | — |
+| 截断续写越界（补句号后甩第二套总结 / 假应答 → 截断丢弃） | `test_thinking_sanitize` overshoot | loop trim | — | — | ✓ |
+| 聊天滚动（长表格流式：table-layout fixed；半截 table 行补齐；触控板微 wheel 不弃贴底；settle 8s；streaming assistant 强制 follow） | `chatScroll.test` + `stabilizeStreamingMarkdown.test` + Playwright `ai-chat-scroll-maximize` | — | smoke `ai.chat-scroll-final` | ✓ | — |
+| 切换模型不甩滚动（async saveSettings 期间延长 chrome lock；resize RO 让路） | `chatScroll.test` + Playwright selecting model | — | smoke | ✓ | — |
+| 流式出字不卡顿（delta/tool 输出 rAF 合并；流式不写磁盘；落盘在 message/tool/结束） | `streamDeltaCoalesce.test` | — | smoke | — | — |
+| 只读探测 filter 无匹配（exit 1 + 空 stderr + 有 stdout → soft-ok，不标失败、不瞎重试） | `readProbeOutcome.test` + `test_read_probe_outcome` | — | smoke | — | — |
+| 切换模型不卡顿（saveSettings 后台热更新 sidecar env，不在 UI 线程同步 restart） | `test_runtime_config` + Rust `apply_settings_to_sidecar` | — | smoke | — | — |
+| Composer 输入隔离（keystroke 不重渲整面板 transcript） | `composerInputIsolation.test` | — | smoke `ai.composer-input-island` | ✓ | — |
+| AI 中途截断续写（自动续写；无增长/回声复述即停；清单/状态 emoji 结尾视为写完；**不**向用户展示「回复未写完／继续」） | `truncatedAssistant.test` + `reconcileAssistantFromTranscript.test` + `test_stream_loop` + `test_thinking_sanitize` | — | smoke `ai.incomplete-reply` | ✓ | — |
+| Markdown 稳定化（成对 `**`→`<strong>`；`<tool_call>` XML 改写成代码块避免浏览器吞标签；tagged fence 不拆；空 fence / bare fence / 半截 table） | `stabilizeStreamingMarkdown.test` | — | smoke | — | — |
+| 执行卡输出只展示 stdout/stderr（不把 `_note`/`_untrusted` JSON 信封甩给用户） | `formatToolResultDisplay.test` | — | smoke | — | — |
+| Tool JSON/XML as content → recover tool_calls（`` `json` `` 与 `<tool_call><function=…>`；闭合 fence 不误判截断） | `test_thinking_sanitize` + `test_stream_loop` + `truncatedAssistant.test` | — | smoke | — | — |
+| 批准卡 = 执行卡同壳（标题栏 + `$` 命令 + 底栏拒绝/会话/批准；批准后隐藏批准卡） | `approvalCommandDedupe.test` + e2e `ai-engineer-approval` | — | smoke `ai.approval.command-exec-chrome` | ✓ | — |
 | Auto-continue until finished（禁止用「请回复继续」躲避未写完） | `test_stream_loop` | — | smoke | — | — |
 | Ops plan / update_plan | pytest | — | — | — | — |
 | Mock Ollama 场景 | pytest director | — | — | k8s_e2e | — |

@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.session.compaction import CompactionEngine
+from app.session.compaction import CompactionEngine, _SUMMARY_PROMPT
 from app.session.log import SessionLog
+
+
+def test_summary_prompt_retains_unfinished_goal() -> None:
+    assert "unfinished" in _SUMMARY_PROMPT.lower() or "current user goal" in _SUMMARY_PROMPT.lower()
+    assert "verified" in _SUMMARY_PROMPT.lower()
 
 
 class _FakeSummarizer:

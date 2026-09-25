@@ -124,9 +124,61 @@ function exists(rel) {
     "ai-engineer-approval-once",
     "ai-engineer-approval-session",
     "ai-engineer-approval-reject",
+    "ai-engineer-approval-command",
   ]) {
     if (panel.includes(`data-testid="${tid}"`)) pass(`ai.approval.${tid}`, tid);
     else fail(`ai.approval.${tid}`, `missing ${tid}`);
+  }
+  if (
+    panel.includes('data-testid="ai-engineer-approval-command"') &&
+    panel.includes("is-approval") &&
+    panel.includes("ai-engineer-exec-card") &&
+    panel.includes('className="ai-engineer-exec-command"')
+  ) {
+    pass(
+      "ai.approval.command-exec-chrome",
+      "approval is one exec card: title + $ command + actions",
+    );
+  } else {
+    fail(
+      "ai.approval.command-exec-chrome",
+      "approval missing unified exec-card chrome",
+    );
+  }
+  {
+    const fmt = read("src/lib/aiEngineer/formatToolResultDisplay.ts");
+    const store = read("src/stores/aiEngineerStore.ts");
+    if (
+      fmt.includes("formatToolResultForDisplay") &&
+      fmt.includes("unwrapToolOutputForDisplay") &&
+      store.includes("formatToolResultForDisplay") &&
+      !store.includes("output: JSON.stringify(event.payload)")
+    ) {
+      pass(
+        "ai.exec.tool-result-display",
+        "tool_result paints stdout not harness JSON envelope",
+      );
+    } else {
+      fail(
+        "ai.exec.tool-result-display",
+        "tool_result still dumps JSON.stringify(payload) to exec card",
+      );
+    }
+  }
+  const css = read("src/App.css");
+  if (
+    css.includes(".ai-engineer-exec-card.is-collapsed") &&
+    css.includes("background: var(--tw-surface)") &&
+    /ai-engineer-exec-card\.is-collapsed[\s\S]{0,120}border: 1px solid var\(--tw-border\)/.test(
+      css,
+    )
+  ) {
+    pass("ai.exec.collapsed-title-bar", "collapsed exec cards framed as title bars");
+  } else {
+    fail(
+      "ai.exec.collapsed-title-bar",
+      "collapsed exec cards missing bordered title-bar chrome",
+    );
   }
 }
 
@@ -486,6 +538,8 @@ function exists(rel) {
       "aiEngineer.notice.evidence_nudge",
       "aiEngineer.notice.evidence_nudge_blocked",
       "aiEngineer.notice.audit_nudge",
+      "aiEngineer.notice.resume_miss",
+      "aiEngineer.notice.run_stalled",
       "aiEngineer.hostExecuting",
       "aiEngineer.waitingApprovalBusy",
       "aiEngineer.waitingSudoBusy",
@@ -625,6 +679,38 @@ function exists(rel) {
   } else {
     fail("hostfs.tree-dnd", "missing tree pointer move / Finder split");
   }
+  {
+    const ops = read("src/lib/localFsOps.ts");
+    const contents = read("src/components/LocalFsContentsView.tsx");
+    const panelFs = read("src/components/LocalFsPanel.tsx");
+    const storeFs = read("src/stores/localFsStore.ts");
+    const openDirSlice = storeFs.slice(
+      storeFs.indexOf("openDirectory: async"),
+      storeFs.indexOf("openDirectory: async") + 900,
+    );
+    if (
+      ops.includes("sanitizeDeleteSelection") &&
+      ops.includes("pathBreadcrumbSegments") &&
+      ops.includes("pathsIntersectingMarquee") &&
+      contents.includes("beginMarquee") &&
+      contents.includes("local-fs-marquee") &&
+      panelFs.includes("LocalFsPathBreadcrumb") &&
+      panelFs.includes("sanitizeDeleteSelection") &&
+      panelFs.includes("local-fs-transfer-strip") &&
+      panelFs.includes("StatusBarTransfers") &&
+      /selectedPaths:\s*\[\s*\]/.test(openDirSlice)
+    ) {
+      pass(
+        "hostfs.safe-select-delete",
+        "marquee + breadcrumb + transfer strip + cwd not selected on open",
+      );
+    } else {
+      fail(
+        "hostfs.safe-select-delete",
+        "missing marquee/breadcrumb/safe-delete wiring",
+      );
+    }
+  }
   const css = read("src/App.css");
   const backdropIdx = css.indexOf(".send-to-backdrop");
   const backdropSlice = backdropIdx >= 0 ? css.slice(backdropIdx, backdropIdx + 280) : "";
@@ -745,6 +831,32 @@ function exists(rel) {
   } else {
     fail("agent.probe-streak", "missing probe streak harness");
   }
+  const repeatTool = read("agent-sidecar/app/harness/guards/repeat_tool.py");
+  if (
+    repeatTool.includes("HARD_DENY_AT") &&
+    repeatTool.includes("FAIL_DENY_AT") &&
+    repeatTool.includes("stop_repeating") &&
+    repeatTool.includes("note_result") &&
+    repeatTool.includes("prior_failed") &&
+    loopPy.includes("stop_repeating") &&
+    loopPy.includes("repeat_tool_stop") &&
+    loopPy.includes("note_result") &&
+    loopPy.includes("PROBE_CONCLUDE_SENT_KEY") &&
+    /FORCE_TOOL_CHOICE_NONE_KEY[\s\S]*extract_tool_calls_from_content/.test(
+      loopPy,
+    ) &&
+    exists("agent-sidecar/tests/test_repeat_tool.py")
+  ) {
+    pass(
+      "agent.repeat-tool-hard-deny",
+      "identical cmds hard-deny; failed identical cmds deny at 2",
+    );
+  } else {
+    fail(
+      "agent.repeat-tool-hard-deny",
+      "missing repeat-tool hard deny / fail-deny / FORCE content recovery gate",
+    );
+  }
   if (
     pathsPy.includes("prefer_complete_max_output_tokens") &&
     pathsPy.includes('"32768"') &&
@@ -766,9 +878,88 @@ function exists(rel) {
   } else {
     fail("ai.panel-chat", "missing RunTraceBar or composer in AiEngineerPanel");
   }
+  const composerInput = read("src/components/aiEngineer/AiEngineerComposerInput.tsx");
+  const truncAsst = read("src/lib/aiEngineer/truncatedAssistant.ts");
   if (
-    chatScroll.includes('AI_CHAT_SCROLL_FIX_ID = "2026-09-20-maximize-follow"') &&
+    composerInput.includes("AiEngineerComposerTextarea") &&
+    composerInput.includes("useAiEngineerStore((s) => s.input)") &&
+    panel.includes("AiEngineerComposerTextarea") &&
+    panel.includes("AiEngineerComposerSendButton") &&
+    !/useAiEngineerStore\(\(s\) => s\.input\)/.test(panel) &&
+    panel.includes("setComposerInput")
+  ) {
+    pass("ai.composer-input-island", "input subscribed only in composer island");
+  } else {
+    fail(
+      "ai.composer-input-island",
+      "panel still selects s.input or missing AiEngineerComposerInput",
+    );
+  }
+  if (
+    truncAsst.includes("looksIncompleteAssistant") &&
+    truncAsst.includes("endsWithoutSentenceTerminator") &&
+    truncAsst.includes("SOFT_CONTINUE_MIN_CHARS") &&
+    !read("src/stores/aiEngineerStore.ts").includes(
+      'content: "assistant_incomplete"',
+    ) &&
+    read("src/stores/aiEngineerStore.ts").includes(
+      'event.type === "assistant_incomplete"',
+    ) &&
+    read("src/components/aiEngineer/AiEngineerPanel.tsx").includes(
+      'line.content === "assistant_incomplete"',
+    ) &&
+    read("agent-sidecar/app/harness/verify.py").includes(
+      "def join_answer_continuation",
+    ) &&
+    read("agent-sidecar/app/agent/loop.py").includes("join_answer_continuation") &&
+    read("agent-sidecar/app/agent/loop.py").includes("_trunc_answer_text") &&
+    read("agent-sidecar/app/agent/loop.py").includes("max_trunc_nudges = 16") &&
+    read("src/lib/aiEngineer/reconcileAssistantFromTranscript.ts").includes(
+      "shouldReplaceAssistantWithTranscript",
+    ) &&
+    read("src/stores/aiEngineerStore.ts").includes("fetchRunTranscript") &&
+    read("src/stores/aiEngineerStore.ts").includes(
+      'kind === "truncated_answer" ? "streaming" : "thinking"',
+    ) &&
+    !/act_nudge[\s\S]{0,80}appendIfSameThread[\s\S]{0,40}act_nudge_conclude/.test(
+      read("src/stores/aiEngineerStore.ts"),
+    )
+  ) {
+    pass(
+      "ai.incomplete-reply",
+      "auto-continue only; never show 回复未写完/continue notice",
+    );
+  } else {
+    fail(
+      "ai.incomplete-reply",
+      "missing incomplete heuristics or still surfaces continue notice",
+    );
+  }
+  if (
+    read("agent-sidecar/app/agent/stall.py").includes("is_progress_stalled") &&
+    read("agent-sidecar/app/agent/stall.py").includes("pending_tool") &&
+    read("agent-sidecar/app/paths.py").includes("progress_stall_seconds") &&
+    read("src/stores/aiEngineerStore.ts").includes("THINKING_IDLE_ABORT_MS") &&
+    read("src/stores/aiEngineerStore.ts").includes("shouldAbortThinkingIdle") &&
+    read("src/lib/aiEngineer/thinkingIdleAbort.ts").includes(
+      "hasRunningTool",
+    ) &&
+    /run_stalled[\s\S]{0,200}abort\.abort/.test(
+      read("src/stores/aiEngineerStore.ts"),
+    )
+  ) {
+    pass(
+      "ai.thinking-stall",
+      "stall skips running tools/approvals; FE idle abort gated",
+    );
+  } else {
+    fail("ai.thinking-stall", "missing progress stall / FE idle abort");
+  }
+  if (
+    chatScroll.includes('AI_CHAT_SCROLL_FIX_ID = "2026-09-23-table-stream"') &&
     chatScroll.includes("OPEN_CHAT_FOLLOW_MS") &&
+    chatScroll.includes("RUN_SETTLE_FOLLOW_MS") &&
+    chatScroll.includes("STREAM_WHEEL_RELEASE_DELTA_PX") &&
     chatScroll.includes("COMPOSER_CHROME_SCROLL_LOCK_MS") &&
     chatScroll.includes("isChatScrollGeometryReady") &&
     chatScroll.includes("scheduleComposerChromeScrollLock") &&
@@ -777,17 +968,25 @@ function exists(rel) {
     chatScroll.includes("shouldPinChatOnStreamUpdate") &&
     chatScroll.includes("scrollTopAfterViewportResize") &&
     chatScroll.includes("shouldHoldStickWhileBusyFollow") &&
-    chatScroll.includes("shouldFollowChatOnViewportResize") &&
+    chatScroll.includes("shouldHoldStickWhileForcedFollow") &&
+    chatScroll.includes("shouldForceChatFollow") &&
+    chatScroll.includes("shouldPinDuringComposerChromeLock") &&
+    chatScroll.includes("shouldFollowChatTranscript") &&
+    panel.includes("shouldFollowChatTranscript") &&
+    panel.includes("hasStreamingAssistant") &&
     panel.includes("AI_CHAT_SCROLL_FIX_ID") &&
     panel.includes("data-scroll-fix={AI_CHAT_SCROLL_FIX_ID}") &&
     panel.includes("scheduleOpenChatPin") &&
     panel.includes("openFollowUntilRef") &&
+    panel.includes("settleFollowUntilRef") &&
     panel.includes("runPreservingChatScroll") &&
     panel.includes("beginComposerChromeScrollLock") &&
     panel.includes("streamFollowPinKey") &&
     panel.includes("shouldParkChatScrollerAtBottom") &&
     panel.includes("scrollTopAfterViewportResize") &&
     panel.includes("shouldHoldStickWhileBusyFollow") &&
+    panel.includes("shouldHoldStickWhileForcedFollow") &&
+    panel.includes("userReleasedFollowRef") &&
     panel.includes("shouldFollowChatOnViewportResize") &&
     panel.includes("rememberedNearBottomRef") &&
     panel.includes("shouldPreventComposerChromeFocusScroll") &&
@@ -800,19 +999,146 @@ function exists(rel) {
     /shouldPinChatAfterViewportResize[\s\S]*return opts\.stickToBottom/.test(
       chatScroll,
     ) &&
+    read("src/App.css").includes("table-layout: fixed") &&
     read("src/components/aiEngineer/AiMarkdown.tsx").includes(
+      "selectStreamingMarkdownHtml",
+    ) &&
+    read("src/components/aiEngineer/AiMarkdown.tsx").includes(
+      "stabilizeStreamingMarkdown",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "closeProseLeakingCodeFence",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "stabilizeTrailingIncompleteTable",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "fixCjkBoldClosingPunctuation",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "fixCjkBoldOpeningPunctuation",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "materializeBoldMarkers",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "rewriteToolCallMarkupForDisplay",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "stripEmptyCodeFences",
+    ) &&
+    read("src/lib/aiEngineer/stabilizeStreamingMarkdown.ts").includes(
+      "isLanguageTaggedFence",
+    ) &&
+    !read("src/components/aiEngineer/AiMarkdown.tsx").includes(
       "asyncHtml ?? initialHtml",
-    )
+    ) &&
+    !read("src/components/aiEngineer/AiMarkdown.tsx").includes("setAsyncHtml(null)")
   ) {
     pass(
       "ai.chat-scroll-final",
-      "maximize-follow: remembered near-bottom + window/Tauri resize pin",
+      "table-stream: fixed tables + tagged fences trusted + settle",
     );
   } else {
     fail(
       "ai.chat-scroll-final",
-      "scroll chaos remnants or missing 2026-09-20-maximize-follow stamp",
+      "scroll chaos remnants or missing 2026-09-23-table-stream stamp",
     );
+  }
+
+  {
+    const store = read("src/stores/aiEngineerStore.ts");
+    const coalesce = read("src/lib/aiEngineer/streamDeltaCoalesce.ts");
+    if (
+      coalesce.includes("createStreamDeltaCoalescer") &&
+      store.includes("createStreamDeltaCoalescer") &&
+      store.includes("persist: false") &&
+      store.includes("flushStreamCoalescers") &&
+      /opts\?\.persist !== false/.test(store)
+    ) {
+      pass(
+        "ai.stream-smooth",
+        "assistant/tool stream coalesced; mid-stream skips disk persist",
+      );
+    } else {
+      fail(
+        "ai.stream-smooth",
+        "missing rAF coalesce or persist:false on stream updates",
+      );
+    }
+  }
+
+  {
+    const fe = read("src/lib/aiEngineer/readProbeOutcome.ts");
+    const bridge = read("src/lib/aiEngineer/toolBridge.ts");
+    const py = read("agent-sidecar/app/harness/read_probe_outcome.py");
+    const prompts = read("agent-sidecar/app/agent/prompts.py");
+    if (
+      fe.includes("filter_no_match") &&
+      bridge.includes("interpretReadProbeOutcome") &&
+      py.includes("annotate_read_probe_result") &&
+      prompts.includes("filter_no_match")
+    ) {
+      pass(
+        "ai.read-probe-filter-miss",
+        "exit1+empty stderr+stdout → soft-ok; prompt warns against retry",
+      );
+    } else {
+      fail(
+        "ai.read-probe-filter-miss",
+        "missing read-probe filter-miss soft-ok wiring",
+      );
+    }
+  }
+
+  {
+    const secrets = read("src-tauri/src/ai_engineer/secrets.rs");
+    const sidecar = read("src-tauri/src/ai_engineer/sidecar.rs");
+    const pathsPy = read("agent-sidecar/app/paths.py");
+    const mainPy = read("agent-sidecar/app/main.py");
+    const store = read("src/stores/aiEngineerStore.ts");
+    if (
+      secrets.includes("apply_settings_to_sidecar") &&
+      secrets.includes("thread::spawn") &&
+      !/store\.save\(\)[\s\S]{0,80}restart_sidecar\(app\)/.test(secrets) &&
+      sidecar.includes("hot_reload_sidecar_config") &&
+      sidecar.includes("/v1/runtime/config") &&
+      pathsPy.includes("apply_runtime_config") &&
+      mainPy.includes("/v1/runtime/config") &&
+      store.includes("Optimistic label swap")
+    ) {
+      pass(
+        "ai.model-switch-no-freeze",
+        "model save hot-reloads sidecar in background (no sync restart)",
+      );
+    } else {
+      fail(
+        "ai.model-switch-no-freeze",
+        "save_ai_settings still sync-restarts sidecar or missing hot reload",
+      );
+    }
+  }
+
+  {
+    const chatScroll = read("src/lib/aiEngineer/chatScroll.ts");
+    const panel = read("src/components/aiEngineer/AiEngineerPanel.tsx");
+    if (
+      /COMPOSER_CHROME_SCROLL_LOCK_MS\s*=\s*1[2-9]\d{2}/.test(chatScroll) &&
+      chatScroll.includes("shouldDeferResizeScrollDuringComposerChrome") &&
+      panel.includes("runWithComposerChromeScrollGuard") &&
+      panel.includes("shouldDeferResizeScrollDuringComposerChrome") &&
+      /setModelOpen\(false\)[\s\S]{0,120}void saveSettings/.test(panel)
+    ) {
+      pass(
+        "ai.model-switch-scroll",
+        "model switch closes menu immediately; chrome lock + resize defer",
+      );
+    } else {
+      fail(
+        "ai.model-switch-scroll",
+        "missing chrome lock or non-blocking model switch click path",
+      );
+    }
   }
 
   const appCss = read("src/App.css");
@@ -841,6 +1167,18 @@ function exists(rel) {
     pass("ai.chat-find-outline", "find bar + outline jump anchors");
   } else {
     fail("ai.chat-find-outline", "missing find bar / outline wiring");
+  }
+  if (
+    panel.includes('data-testid="ai-engineer-web-card"') &&
+    panel.includes('data-testid="ai-engineer-web-keyword"') &&
+    panel.includes('data-testid="ai-engineer-web-preview"') &&
+    panel.includes('data-testid="ai-engineer-web-card-toggle"') &&
+    panel.includes("webToolKeywordLine") &&
+    panel.includes("formatWebToolPreview")
+  ) {
+    pass("ai.web-tool-card", "web_search/web_fetch keyword + preview card");
+  } else {
+    fail("ai.web-tool-card", "missing web tool card keyword/preview wiring");
   }
   if (
     panel.includes("ai-engineer-copy-reply") &&
@@ -1352,7 +1690,7 @@ function exists(rel) {
       "shouldParkChatScrollerAtBottom",
     ) &&
     read("src/components/aiEngineer/AiMarkdown.tsx").includes(
-      "asyncHtml ?? initialHtml",
+      "selectStreamingMarkdownHtml",
     ) &&
     read("src/stores/hostWorkspaceMemory.ts").includes(
       "skipNextWorkspacePanelEnter",

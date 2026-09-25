@@ -152,9 +152,15 @@ pub fn save_ai_settings(app: &AppHandle, update: AiSettingsUpdate) -> AppResult<
         serde_json::to_value(&s).map_err(|e| AppError::msg(e.to_string()))?,
     );
     store.save().map_err(|e| AppError::msg(e.to_string()))?;
-    // Reload sidecar env (API key / model / base URL) for the next chat.
-    let _ = crate::ai_engineer::sidecar::restart_sidecar(app);
-    Ok(to_view(s))
+    let view = to_view(s);
+    // Model switch used to call restart_sidecar synchronously here — that blocked
+    // the UI for seconds (Python cold start). Hot-reload env on the live process
+    // in the background; fall back to restart only if reload fails.
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        let _ = crate::ai_engineer::sidecar::apply_settings_to_sidecar(&app2);
+    });
+    Ok(view)
 }
 
 pub fn load_settings_for_sidecar(app: &AppHandle) -> AppResult<SidecarEnvSettings> {

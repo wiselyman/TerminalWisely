@@ -4,6 +4,7 @@ import { sidecarFetch, type SidecarInfo, type TraceSpanRow } from "./api";
 import { postToolResultWithRetry } from "./postToolResult";
 import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
 import type { K8sClusterTarget } from "../k8s/types";
+import { parseResumeMissBody, ResumeMissError } from "./resumeMiss";
 
 export type AgentUiEvent =
   | { type: "assistant_message"; content: string; replace?: boolean }
@@ -790,7 +791,20 @@ export async function runAgentChat(opts: {
     signal,
   });
   if (!startRes.ok) {
-    throw new Error(`chat start failed: ${startRes.status} ${await startRes.text()}`);
+    const text = await startRes.text();
+    if (startRes.status === 409) {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = null;
+      }
+      const miss = parseResumeMissBody(parsed);
+      if (miss) {
+        throw new ResumeMissError(miss.resume_run_id ?? resumeRunId ?? "");
+      }
+    }
+    throw new Error(`chat start failed: ${startRes.status} ${text}`);
   }
   const startJson = (await startRes.json()) as {
     run_id?: string;

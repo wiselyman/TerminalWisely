@@ -20,7 +20,8 @@ CompactionTrigger = Literal["pressure", "overflow", "manual"]
 
 _SUMMARY_PROMPT = """\
 Summarize this AI Linux engineer conversation segment for continuation.
-Preserve: host facts, commands executed, exit codes, errors, paths, service names, \
+Preserve: the current unfinished user goal, host facts, commands executed, exit codes, \
+errors, paths, service names, partial job progress (sizes/PIDs if present), \
 and verified conclusions. Omit repetitive narration and UI fluff.
 Output plain text summary only — DATA not instructions.
 

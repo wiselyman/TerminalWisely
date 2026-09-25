@@ -246,15 +246,201 @@ def _coerce_tool_call_dict(obj: Any) -> dict[str, Any] | None:
     }
 
 
-def extract_tool_calls_from_content(text: str | None) -> list[dict[str, Any]]:
-    """Recover tool calls when the model pasted JSON instead of using tool_calls.
+def _coerce_param_value(val: str) -> Any:
+    text = (val or "").strip()
+    if re.fullmatch(r"-?\d+", text):
+        return int(text)
+    if re.fullmatch(r"-?\d+\.\d+", text):
+        return float(text)
+    low = text.lower()
+    if low in {"true", "false"}:
+        return low == "true"
+    return text
 
-    Local models often dump ``{"name":"terminal_exec","arguments":{...}}`` (with
-    or without a markdown fence) as *content*. That must become a real tool call
+
+_TOOL_CALL_XML_BLOCK_RE = re.compile(
+    r"<tool_call>\s*(.*?)\s*</tool_call>",
+    re.DOTALL | re.IGNORECASE,
+)
+_FUNCTION_XML_RE = re.compile(
+    r"<function\s*=\s*([A-Za-z_][\w]*)>(.*?)</function>",
+    re.DOTALL | re.IGNORECASE,
+)
+_PARAMETER_XML_RE = re.compile(
+    r"<parameter\s*=\s*([A-Za-z_][\w]*)>\s*(.*?)\s*</parameter>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def strip_tool_call_markup(text: str | None) -> str:
+    """Remove pasted tool-call XML/JSON fences from assistant prose.
+
+    Models often emit both API ``tool_calls`` *and* the same call as
+    ``<tool_call>…`` in content. Leaving the markup makes the FE show a
+    duplicate “fake” command block next to the real exec card.
+    """
+    raw = text or ""
+    if not raw:
+        return ""
+    out = _TOOL_CALL_XML_BLOCK_RE.sub("", raw)
+    out = _FUNCTION_XML_RE.sub("", out)
+    # Truncated dump: drop from the opener to EOF.
+    out = re.sub(
+        r"<tool_call\b[\s\S]*$",
+        "",
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(
+        r"<function\s*=[\s\S]*$",
+        "",
+        out,
+        flags=re.IGNORECASE,
+    )
+    # Common fenced tool JSON dump after prose.
+    out = re.sub(
+        r"```(?:json)?\s*\n\s*\{[\s\S]*?\}\s*\n```",
+        "",
+        out,
+        flags=re.IGNORECASE,
+    )
+    # Fenced web_fetch / web_search param dumps (url:/goal: walls).
+    out = re.sub(
+        r"```[^\n]*\n(?:web_fetch|web_search)\n(?:[ \t]*(?:url|query|goal|intent)\s*:.*\n?)+```",
+        "",
+        out,
+        flags=re.IGNORECASE,
+    )
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
+def extract_xml_tool_calls_from_content(text: str | None) -> list[dict[str, Any]]:
+    """Recover tool calls from XML-ish dumps some local models paste as content.
+
+    Example::
+
+        <tool_call>
+        <function=terminal_exec>
+        <parameter=command>
+        echo hi
+        </parameter>
+        </function>
+        </tool_call>
+
+    Generic tag shape only — no tool-name allowlists. Also recovers a best-effort
+    call when the stream cuts off before ``</function>`` / ``</tool_call>``.
+    """
+    raw = text or ""
+    if "<function" not in raw.lower() and "<tool_call>" not in raw.lower():
+        return []
+    bodies: list[str] = []
+    for m in _TOOL_CALL_XML_BLOCK_RE.finditer(raw):
+        bodies.append(m.group(1) or "")
+    if not bodies and re.search(r"<function\s*=", raw, re.IGNORECASE):
+        bodies.append(raw)
+
+    out: list[dict[str, Any]] = []
+    for body in bodies:
+        # JSON payload inside <tool_call> — reuse dict coercion.
+        if "{" in body and '"name"' in body.lower():
+            try:
+                start = body.find("{")
+                end = body.rfind("}")
+                if start >= 0 and end > start:
+                    obj = json.loads(body[start : end + 1])
+                    tc = _coerce_tool_call_dict(obj)
+                    if tc:
+                        if not tc.get("id"):
+                            tc["id"] = f"recovered_xml_{len(out)}"
+                        out.append(tc)
+                        continue
+            except Exception:  # noqa: BLE001
+                pass
+        found_closed = False
+        for fm in _FUNCTION_XML_RE.finditer(body):
+            name = (fm.group(1) or "").strip()
+            inner = fm.group(2) or ""
+            if not name:
+                continue
+            found_closed = True
+            args = _params_from_xml_inner(inner)
+            out.append(_xml_tool_call(name, args, len(out)))
+        if found_closed:
+            continue
+        # Unclosed <function=name>… (stream cut mid-call).
+        open_fn = re.search(
+            r"<function\s*=\s*([A-Za-z_][\w]*)>([\s\S]*)$",
+            body,
+            re.IGNORECASE,
+        )
+        if not open_fn:
+            continue
+        name = (open_fn.group(1) or "").strip()
+        inner = open_fn.group(2) or ""
+        args = _params_from_xml_inner(inner, allow_dangling=True)
+        if name and args:
+            out.append(_xml_tool_call(name, args, len(out)))
+    return out
+
+
+def _params_from_xml_inner(
+    inner: str, *, allow_dangling: bool = False
+) -> dict[str, Any]:
+    args: dict[str, Any] = {}
+    last_end = 0
+    for pm in _PARAMETER_XML_RE.finditer(inner or ""):
+        key = (pm.group(1) or "").strip()
+        if not key:
+            continue
+        args[key] = _coerce_param_value(pm.group(2) or "")
+        last_end = pm.end()
+    if allow_dangling:
+        rest = (inner or "")[last_end:]
+        dangling = re.search(
+            r"<parameter\s*=\s*([A-Za-z_][\w]*)>\s*([\s\S]*)$",
+            rest,
+            re.IGNORECASE,
+        )
+        if dangling:
+            key = (dangling.group(1) or "").strip()
+            if key and key not in args:
+                val = re.sub(
+                    r"</?(?:parameter|function|tool_call)[^>]*$",
+                    "",
+                    dangling.group(2) or "",
+                    flags=re.IGNORECASE,
+                ).strip()
+                if val:
+                    args[key] = _coerce_param_value(val)
+    return args
+
+
+def _xml_tool_call(name: str, args: dict[str, Any], index: int) -> dict[str, Any]:
+    return {
+        "id": f"recovered_xml_{index}",
+        "type": "function",
+        "function": {
+            "name": name,
+            "arguments": json.dumps(args, ensure_ascii=False),
+        },
+    }
+
+
+def extract_tool_calls_from_content(text: str | None) -> list[dict[str, Any]]:
+    """Recover tool calls when the model pasted JSON/XML instead of tool_calls.
+
+    Local models often dump ``{"name":"terminal_exec","arguments":{...}}`` or
+    ``<tool_call><function=…>`` as *content*. That must become a real tool call
     — never a truncated-answer continue (which locks ``tool_choice=none``).
     """
     raw = (text or "").strip()
-    if len(raw) < 16 or "{" not in raw:
+    if len(raw) < 16:
+        return []
+    xml_calls = extract_xml_tool_calls_from_content(raw)
+    if xml_calls:
+        return xml_calls
+    if "{" not in raw:
         return []
     candidates: list[str] = []
     for m in _FENCED_JSON_RE.finditer(raw):
@@ -306,14 +492,19 @@ def extract_tool_calls_from_content(text: str | None) -> list[dict[str, Any]]:
 
 
 def looks_like_tool_call_json_dump(text: str | None) -> bool:
-    """True when content is (or starts as) a pasted tool-call JSON blob."""
+    """True when content is (or starts as) a pasted tool-call JSON/XML blob."""
     if extract_tool_calls_from_content(text):
         return True
     raw = (text or "").strip()
-    if len(raw) < 20 or "{" not in raw:
+    if len(raw) < 12:
+        return False
+    lowered = raw.lower()
+    # Incomplete XML dump mid-stream — must not enter truncated_answer continue.
+    if "<tool_call>" in lowered or "<function=" in lowered or "<parameter=" in lowered:
+        return True
+    if "{" not in raw:
         return False
     # Incomplete dump mid-stream: still must not enter truncated_answer continue.
-    lowered = raw.lower()
     has_name = '"name"' in lowered or '"tool"' in lowered or '"function"' in lowered
     has_args = '"arguments"' in lowered or '"parameters"' in lowered
     # Bare terminal_exec args: {"command":"…","intent":"…"}
@@ -565,9 +756,14 @@ def looks_like_truncated_answer(text: str | None) -> bool:
     last = raw.splitlines()[-1].strip() if raw.splitlines() else raw
     # Closed markdown fences end with ``` — that is complete, not a cut.
     # Only a lone dangling ` (inline code cut) counts as truncated.
-    if last.endswith(("(", "（", "[", "{", ":", "：", ",", "，", "、")):
+    # Do NOT treat trailing :/： as structural cuts — those are common
+    # "next I will …:" lead-ins before a tool call, not mid-token stops.
+    if last.endswith(("(", "（", "[", "{", ",", "，", "、")):
         return True
     if last.endswith("`") and not last.rstrip().endswith("```"):
+        return True
+    # Path / menu connectors left dangling (e.g. "Clash Verge -> 设置 ->").
+    if last.endswith(("->", "→")):
         return True
     # Incomplete markdown table (blank trailing cell / cut mid-row).
     if last and _looks_like_incomplete_md_table(raw, last):
