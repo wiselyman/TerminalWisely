@@ -186,6 +186,7 @@
 | Session resume | — | pytest resume | — | resume | ✓ |
 | SessionLog resume_miss（禁止静默薄 history；FE harness + 一次无 resume 重开） | `resumeMiss.test` + `test_session_resume` miss | chat_start 409 | smoke notice key | — | ✓ |
 | SessionLog resume 跨 session_id（SSH 重连）+ FE 自动无 resume 重试 | `test_session_resume` remap | — | — | — | — |
+| 0.0.2 External Agent Runtime（Cursor→Codex；TW MCP 远端闸门） | pytest `test_runtime_*` / `test_tw_mcp_*` / `test_cursor_runtime` | smoke picker | E2E mock runtime | — | — |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |
 | AI SSH lease（禁重连） | `sshLease.test` + Rust `ai_ssh_lease_tests` | — | TerminalView 闸门 | — | ✓ |
