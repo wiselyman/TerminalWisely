@@ -27,12 +27,26 @@ export interface AiSettingsView {
   active_profile_id: string;
   profiles: AiModelProfile[];
   security_mode?: string;
+  /** Cursor runtime key present in store (raw key never returned). */
+  has_cursor_api_key?: boolean;
 }
 
 export interface AiSettingsUpdate {
   active_profile_id?: string;
   profiles?: AiModelProfile[];
   security_mode?: string;
+  /** Omit = leave unchanged; "" = clear; non-empty = set. */
+  cursor_api_key?: string;
+}
+
+export type AgentRuntimeKind = "builtin" | "cursor" | "codex";
+
+export interface RuntimeProbeResult {
+  kind: string;
+  installed: boolean;
+  authenticated: boolean;
+  detail: string;
+  fake: boolean;
 }
 
 const E2E_DEFAULT_SETTINGS: AiSettingsView = {
@@ -58,9 +72,13 @@ const E2E_DEFAULT_SETTINGS: AiSettingsView = {
     },
   ],
   security_mode: "safe",
+  has_cursor_api_key: false,
 };
 
-let e2eSettingsCache: AiSettingsView = { ...E2E_DEFAULT_SETTINGS, profiles: [...E2E_DEFAULT_SETTINGS.profiles] };
+let e2eSettingsCache: AiSettingsView = {
+  ...E2E_DEFAULT_SETTINGS,
+  profiles: [...E2E_DEFAULT_SETTINGS.profiles],
+};
 
 export async function ensureSidecar(): Promise<SidecarInfo> {
   if (isE2eBrowserMode()) {
@@ -82,14 +100,33 @@ export async function saveAiSettings(
   update: AiSettingsUpdate,
 ): Promise<AiSettingsView> {
   if (isE2eBrowserMode()) {
-    e2eSettingsCache = {
+    const next: AiSettingsView = {
       ...e2eSettingsCache,
-      ...update,
+      ...(update.active_profile_id != null
+        ? { active_profile_id: update.active_profile_id }
+        : {}),
+      ...(update.security_mode != null
+        ? { security_mode: update.security_mode }
+        : {}),
       profiles: update.profiles ?? e2eSettingsCache.profiles,
     };
+    if (update.cursor_api_key !== undefined) {
+      next.has_cursor_api_key = update.cursor_api_key.trim().length > 0;
+    }
+    e2eSettingsCache = next;
     return e2eSettingsCache;
   }
   return invoke<AiSettingsView>("save_ai_settings", { update });
+}
+
+export async function probeRuntime(
+  sidecar: SidecarInfo,
+  kind: AgentRuntimeKind,
+): Promise<RuntimeProbeResult> {
+  const q = new URLSearchParams({ kind });
+  const res = await sidecarFetch(sidecar, `/v1/runtime/probe?${q}`);
+  if (!res.ok) throw new Error(`Runtime probe failed (${res.status})`);
+  return res.json() as Promise<RuntimeProbeResult>;
 }
 
 export interface AiListModelsRequest {

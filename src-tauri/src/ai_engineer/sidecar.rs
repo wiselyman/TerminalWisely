@@ -954,6 +954,10 @@ fn hot_reload_sidecar_config(app: &AppHandle) -> AppResult<bool> {
         "base_url": settings.base_url,
         "ollama_base_url": settings.ollama_base_url,
         "api_key": settings.api_key.clone().unwrap_or_default(),
+        "cursor_api_key": settings
+            .cursor_api_key
+            .clone()
+            .unwrap_or_else(|| crate::ai_engineer::secrets::load_cursor_api_key(app)),
         "security_mode": if settings.security_mode.is_empty() {
             "safe".to_string()
         } else {
@@ -1060,6 +1064,13 @@ pub fn restart_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
     cmd.env(
         "TW_AI_API_KEY",
         settings.api_key.clone().unwrap_or_default(),
+    );
+    cmd.env(
+        "CURSOR_API_KEY",
+        settings
+            .cursor_api_key
+            .clone()
+            .unwrap_or_else(|| crate::ai_engineer::secrets::load_cursor_api_key(app)),
     );
     // Ollama stores its URL in ollama_base_url; OpenAI-compat path is …/v1.
     if settings.provider.eq_ignore_ascii_case("ollama") {

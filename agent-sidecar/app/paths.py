@@ -96,6 +96,7 @@ def apply_runtime_config(
     ollama_base_url: str | None = None,
     api_key: str | None = None,
     security_mode: str | None = None,
+    cursor_api_key: str | None = None,
 ) -> dict[str, str]:
     """Hot-update process env so the next AgentLoop/ModelGateway picks new settings.
 
@@ -112,6 +113,8 @@ def apply_runtime_config(
     if api_key is not None:
         # Always set (even empty) so a prior key cannot stick after clear.
         os.environ["TW_AI_API_KEY"] = str(api_key)
+    if cursor_api_key is not None:
+        os.environ["CURSOR_API_KEY"] = str(cursor_api_key)
     if security_mode is not None:
         mode = str(security_mode).strip().lower() or "safe"
         os.environ["TW_AI_SECURITY_MODE"] = mode
@@ -130,12 +133,14 @@ def apply_runtime_config(
         # Explicit clear for non-ollama when empty.
         os.environ.pop("TW_AI_BASE_URL", None)
 
+    has_cursor = bool((os.environ.get("CURSOR_API_KEY") or "").strip())
     return {
         "provider": ai_provider(),
         "model": ai_model(),
         "base_url": ai_base_url(),
         "security_mode": os.environ.get("TW_AI_SECURITY_MODE", "safe").strip().lower()
         or "safe",
+        "has_cursor_api_key": "1" if has_cursor else "0",
     }
 
 

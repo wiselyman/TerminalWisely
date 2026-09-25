@@ -115,15 +115,15 @@
 - Modify: `src/lib/aiEngineer/api.ts`, settings UI panel
 - Test: sidecar `tests/test_runtime_probe.py`; FE unit if pure helpers
 
-- [ ] **Step 1: Failing test** — `probe("cursor")` returns `installed/authenticated` flags for fake env.
+  - [x] **Step 1: Failing test** — `probe("cursor")` returns `installed/authenticated` flags for fake env.
 
-- [ ] **Step 2: Implement** sidecar `GET /v1/runtime/probe?kind=cursor|codex` + store `CURSOR_API_KEY` via existing secrets pattern (never log key).
+- [x] **Step 2: Implement** sidecar `GET /v1/runtime/probe?kind=cursor|codex` + store `CURSOR_API_KEY` via existing secrets pattern (never log key).
 
-- [ ] **Step 3: Settings UI** — Cursor API key field + Ready status; i18n en/zh-CN.
+- [x] **Step 3: Settings UI** — Cursor API key field + Ready status; i18n en/zh-CN.
 
-- [ ] **Step 4: Run** pytest + relevant vitest — pass.
+- [x] **Step 4: Run** pytest + relevant vitest — pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   ```bash
   git commit -m "feat(ai): Cursor runtime probe and API key settings"
   ```

@@ -31,6 +31,9 @@ struct StoredSettings {
     profiles: Vec<AiModelProfile>,
     #[serde(default)]
     security_mode: String,
+    /// Cursor Agent SDK / API key for external agent runtime (0.0.2).
+    #[serde(default)]
+    cursor_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +41,9 @@ pub struct AiSettingsView {
     pub active_profile_id: String,
     pub profiles: Vec<AiModelProfile>,
     pub security_mode: String,
+    /// True when a non-empty Cursor API key is stored (key never sent to FE).
+    #[serde(default)]
+    pub has_cursor_api_key: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -45,6 +51,8 @@ pub struct AiSettingsUpdate {
     pub active_profile_id: Option<String>,
     pub profiles: Option<Vec<AiModelProfile>>,
     pub security_mode: Option<String>,
+    /// None = leave unchanged; Some("") = clear; Some(key) = set.
+    pub cursor_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -55,6 +63,7 @@ pub struct SidecarEnvSettings {
     pub ollama_base_url: String,
     pub api_key: Option<String>,
     pub security_mode: String,
+    pub cursor_api_key: Option<String>,
 }
 
 fn default_profiles() -> Vec<AiModelProfile> {
@@ -84,6 +93,7 @@ fn load_stored(app: &AppHandle) -> AppResult<StoredSettings> {
             active_profile_id: String::new(),
             profiles: vec![],
             security_mode: "safe".into(),
+            cursor_api_key: None,
         });
     };
     let s: StoredSettings =
@@ -101,10 +111,16 @@ fn to_view(mut s: StoredSettings) -> AiSettingsView {
         // Never send raw key to frontend.
         p.api_key = None;
     }
+    let has_cursor = s
+        .cursor_api_key
+        .as_ref()
+        .map(|k| !k.is_empty())
+        .unwrap_or(false);
     AiSettingsView {
         active_profile_id: s.active_profile_id,
         profiles: s.profiles,
         security_mode: s.security_mode,
+        has_cursor_api_key: has_cursor,
     }
 }
 
@@ -119,6 +135,13 @@ pub fn save_ai_settings(app: &AppHandle, update: AiSettingsUpdate) -> AppResult<
     }
     if let Some(id) = update.active_profile_id {
         s.active_profile_id = id;
+    }
+    if let Some(key) = update.cursor_api_key {
+        if key.is_empty() {
+            s.cursor_api_key = None;
+        } else {
+            s.cursor_api_key = Some(key);
+        }
     }
     if let Some(profiles) = update.profiles {
         // Merge api keys: empty incoming key keeps previous.
@@ -165,6 +188,10 @@ pub fn save_ai_settings(app: &AppHandle, update: AiSettingsUpdate) -> AppResult<
 
 pub fn load_settings_for_sidecar(app: &AppHandle) -> AppResult<SidecarEnvSettings> {
     let s = load_stored(app)?;
+    let cursor_api_key = s
+        .cursor_api_key
+        .clone()
+        .filter(|k| !k.is_empty());
     let profile = s
         .profiles
         .iter()
@@ -184,7 +211,16 @@ pub fn load_settings_for_sidecar(app: &AppHandle) -> AppResult<SidecarEnvSetting
         } else {
             s.security_mode
         },
+        cursor_api_key,
     })
+}
+
+/// Cursor key even when no Builtin model profile is configured.
+pub fn load_cursor_api_key(app: &AppHandle) -> String {
+    load_stored(app)
+        .ok()
+        .and_then(|s| s.cursor_api_key)
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Deserialize)]

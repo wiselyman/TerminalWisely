@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ensureSidecar, listAiModels } from "../../lib/aiEngineer/api";
+import {
+  ensureSidecar,
+  listAiModels,
+  probeRuntime,
+  type RuntimeProbeResult,
+} from "../../lib/aiEngineer/api";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
+import { cursorRuntimeStatusKind } from "../../lib/aiEngineer/cursorRuntimeStatus";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 
 /** All types speak OpenAI-compatible HTTP via ModelGateway. */
@@ -118,6 +124,9 @@ export function AiEngineerSettings() {
 
   const [view, setView] = useState<View>({ kind: "list" });
   const [apiKey, setApiKey] = useState("");
+  const [cursorApiKey, setCursorApiKey] = useState("");
+  const [cursorProbe, setCursorProbe] = useState<RuntimeProbeResult | null>(null);
+  const [cursorProbing, setCursorProbing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -130,6 +139,7 @@ export function AiEngineerSettings() {
 
   const profiles = settings?.profiles ?? [];
   const activeId = settings?.active_profile_id ?? "";
+  const hasCursorKey = Boolean(settings?.has_cursor_api_key);
 
   const persist = async (next: {
     profiles: AiModelProfile[];
@@ -147,6 +157,48 @@ export function AiEngineerSettings() {
       throw err;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onSaveCursorKey = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveSettings({ cursor_api_key: cursorApiKey });
+      setCursorApiKey("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onClearCursorKey = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveSettings({ cursor_api_key: "" });
+      setCursorApiKey("");
+      setCursorProbe(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onProbeCursor = async () => {
+    setCursorProbing(true);
+    setError(null);
+    try {
+      const info = await ensureSidecar();
+      const result = await probeRuntime(info, "cursor");
+      setCursorProbe(result);
+    } catch (err) {
+      setCursorProbe(null);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCursorProbing(false);
     }
   };
 
@@ -446,6 +498,80 @@ export function AiEngineerSettings() {
                 })}
               </ul>
             )}
+
+            <section
+              className="ai-engineer-settings-cursor-block"
+              data-testid="ai-engineer-cursor-runtime"
+            >
+              <div className="ai-engineer-settings-security-head">
+                <h4>{t("aiEngineer.settings.cursorRuntime")}</h4>
+                <p>{t("aiEngineer.settings.cursorRuntimeHint")}</p>
+              </div>
+              <label>
+                {t("aiEngineer.settings.cursorApiKey")}
+                {hasCursorKey
+                  ? ` (${t("aiEngineer.settings.keySaved")})`
+                  : ""}
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={cursorApiKey}
+                  placeholder={t("aiEngineer.settings.cursorApiKeyPlaceholder")}
+                  onChange={(e) => setCursorApiKey(e.target.value)}
+                  data-testid="ai-engineer-cursor-api-key"
+                />
+              </label>
+              <div className="ai-engineer-settings-cursor-actions">
+                <button
+                  type="button"
+                  className="find-panel-run"
+                  disabled={saving || !cursorApiKey.trim()}
+                  onClick={() => void onSaveCursorKey()}
+                  data-testid="ai-engineer-cursor-save-key"
+                >
+                  {t("aiEngineer.settings.cursorSaveKey")}
+                </button>
+                <button
+                  type="button"
+                  className="ai-engineer-text-btn"
+                  disabled={saving || !hasCursorKey}
+                  onClick={() => void onClearCursorKey()}
+                  data-testid="ai-engineer-cursor-clear-key"
+                >
+                  {t("aiEngineer.settings.cursorClearKey")}
+                </button>
+                <button
+                  type="button"
+                  className="ai-engineer-text-btn"
+                  disabled={cursorProbing}
+                  onClick={() => void onProbeCursor()}
+                  data-testid="ai-engineer-cursor-probe"
+                >
+                  {cursorProbing
+                    ? "…"
+                    : t("aiEngineer.settings.cursorProbe")}
+                </button>
+              </div>
+              <p
+                className={`ai-engineer-settings-cursor-status status-${cursorRuntimeStatusKind(cursorProbe)}`}
+                data-testid="ai-engineer-cursor-status"
+              >
+                {(() => {
+                  const kind = cursorRuntimeStatusKind(cursorProbe);
+                  if (kind === "ready") {
+                    return t("aiEngineer.settings.cursorStatusReady");
+                  }
+                  if (kind === "ready_fake") {
+                    return t("aiEngineer.settings.cursorStatusFake");
+                  }
+                  if (kind === "not_ready") {
+                    return t("aiEngineer.settings.cursorStatusNotReady");
+                  }
+                  return t("aiEngineer.settings.cursorStatusUnknown");
+                })()}
+                {cursorProbe?.detail ? ` · ${cursorProbe.detail}` : ""}
+              </p>
+            </section>
 
             <div className="ai-engineer-approval-actions">
               <button

@@ -462,17 +462,24 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       },
     ],
     security_mode: "safe",
+    has_cursor_api_key: false,
   }),
   save_ai_settings: (args) => {
     const u = (args.update ?? args) as Record<string, unknown>;
     const cur = handlers.get_ai_settings?.({}) as {
       profiles: unknown[];
       security_mode: string;
+      has_cursor_api_key?: boolean;
     };
+    let hasCursor = cur?.has_cursor_api_key ?? false;
+    if (typeof u.cursor_api_key === "string") {
+      hasCursor = u.cursor_api_key.trim().length > 0;
+    }
     return {
       active_profile_id: (u.active_profile_id as string) ?? "e2e-default",
       profiles: u.profiles ?? cur?.profiles ?? [],
       security_mode: u.security_mode ?? cur?.security_mode ?? "safe",
+      has_cursor_api_key: hasCursor,
     };
   },
   ai_list_models: () => ({ models: ["qwen-test"], error: null }),

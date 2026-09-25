@@ -154,6 +154,7 @@ class RuntimeConfigRequest(BaseModel):
     ollama_base_url: str = ""
     api_key: str | None = None
     security_mode: str = "safe"
+    cursor_api_key: str | None = None
 
 
 class RuntimeConfigResponse(BaseModel):
@@ -162,3 +163,12 @@ class RuntimeConfigResponse(BaseModel):
     model: str = ""
     base_url: str = ""
     security_mode: str = "safe"
+    has_cursor_api_key: bool = False
+
+
+class RuntimeProbeResponse(BaseModel):
+    kind: str
+    installed: bool = False
+    authenticated: bool = False
+    detail: str = ""
+    fake: bool = False

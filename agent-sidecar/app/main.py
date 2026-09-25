@@ -39,6 +39,7 @@ from app.models.agent import (
     RunTranscriptResponse,
     RuntimeConfigRequest,
     RuntimeConfigResponse,
+    RuntimeProbeResponse,
     ToolResultRequest,
     UserAnswerRequest,
 )
@@ -707,6 +708,7 @@ async def runtime_config(body: RuntimeConfigRequest, _: AuthDep) -> RuntimeConfi
         ollama_base_url=body.ollama_base_url,
         api_key=body.api_key if body.api_key is not None else "",
         security_mode=body.security_mode,
+        cursor_api_key=body.cursor_api_key,
     )
     return RuntimeConfigResponse(
         ok=True,
@@ -714,6 +716,40 @@ async def runtime_config(body: RuntimeConfigRequest, _: AuthDep) -> RuntimeConfi
         model=applied["model"],
         base_url=applied["base_url"],
         security_mode=applied["security_mode"],
+        has_cursor_api_key=applied.get("has_cursor_api_key") == "1",
+    )
+
+
+@app.get("/v1/runtime/probe", response_model=RuntimeProbeResponse)
+async def runtime_probe(
+    _: AuthDep,
+    kind: str = Query("builtin"),
+) -> RuntimeProbeResponse:
+    """Probe install/auth readiness for Builtin / Cursor / Codex runtimes."""
+    raw = (kind or "builtin").strip().lower()
+    if raw not in {"builtin", "cursor", "codex"}:
+        raise HTTPException(status_code=422, detail="kind must be builtin|cursor|codex")
+    if raw == "builtin":
+        from app.runtime.builtin import BuiltinRuntime
+
+        p = BuiltinRuntime().probe()
+    elif raw == "cursor":
+        from app.runtime.cursor_runtime import probe_cursor
+
+        p = probe_cursor()
+    else:
+        p = {
+            "installed": False,
+            "authenticated": False,
+            "detail": "codex runtime not wired yet",
+            "fake": False,
+        }
+    return RuntimeProbeResponse(
+        kind=raw,
+        installed=bool(p.get("installed")),
+        authenticated=bool(p.get("authenticated")),
+        detail=str(p.get("detail") or ""),
+        fake=bool(p.get("fake")),
     )
 
 

@@ -1547,6 +1547,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             ? { security_mode: update.security_mode }
             : {}),
           ...(update.profiles != null ? { profiles: update.profiles } : {}),
+          ...(update.cursor_api_key !== undefined
+            ? {
+                has_cursor_api_key: update.cursor_api_key.trim().length > 0,
+              }
+            : {}),
         },
       });
     }

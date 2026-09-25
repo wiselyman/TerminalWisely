@@ -11312,6 +11312,32 @@ body.cmd-nav-panel-resizing {
   padding-top: 4px;
   border-top: 1px solid var(--tw-surface-2);
 }
+.ai-engineer-settings-cursor-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tw-surface-2);
+}
+.ai-engineer-settings-cursor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ai-engineer-settings-cursor-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--tw-fg-muted);
+}
+.ai-engineer-settings-cursor-status.status-ready,
+.ai-engineer-settings-cursor-status.status-ready_fake {
+  color: var(--tw-success, #3ecf8e);
+}
+.ai-engineer-settings-cursor-status.status-not_ready {
+  color: var(--tw-warn, #e6a23c);
+}
 .ai-engineer-settings-security-head h4 {
   margin: 0;
   font-size: 0.78rem;

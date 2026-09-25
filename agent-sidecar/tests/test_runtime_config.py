@@ -37,3 +37,18 @@ def test_apply_runtime_config_openai_base(monkeypatch) -> None:
     assert out["base_url"] == "https://api.example.com/v1"
     assert os.environ["TW_AI_API_KEY"] == "sk-x"
     assert out["security_mode"] == "observe"
+
+
+def test_apply_runtime_config_cursor_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("CURSOR_API_KEY", raising=False)
+    out = apply_runtime_config(
+        provider="ollama",
+        model="x",
+        base_url="",
+        ollama_base_url="http://127.0.0.1:11434",
+        api_key="",
+        security_mode="safe",
+        cursor_api_key="cursor-secret",
+    )
+    assert os.environ.get("CURSOR_API_KEY") == "cursor-secret"
+    assert out["has_cursor_api_key"] == "1"
