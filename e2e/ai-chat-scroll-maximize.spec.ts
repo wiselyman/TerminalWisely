@@ -203,6 +203,7 @@ test.describe("AI composer chrome keeps chat scroll", () => {
     await expect(page.getByTestId("ai-engineer-model-menu")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-runtime-cursor")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-runtime-codex")).toBeVisible();
+    await expect(page.getByTestId("ai-engineer-runtime-claude")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-runtime-disclaimer")).toBeVisible();
     await page.waitForTimeout(400);
 

@@ -743,8 +743,8 @@ export async function runAgentChat(opts: {
   /** Prefer seeding from a prior sidecar SessionLog (tool results preserved). */
   resumeRunId?: string | null;
   interactionMode?: string;
-  /** Agent runtime adapter: builtin | cursor | codex. */
-  runtime?: "builtin" | "cursor" | "codex";
+  /** Agent runtime adapter: builtin | cursor | codex | claude. */
+  runtime?: "builtin" | "cursor" | "codex" | "claude";
   attachments?: Array<Record<string, unknown>>;
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;

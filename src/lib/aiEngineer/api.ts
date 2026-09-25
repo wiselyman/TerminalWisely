@@ -39,7 +39,7 @@ export interface AiSettingsUpdate {
   cursor_api_key?: string;
 }
 
-export type AgentRuntimeKind = "builtin" | "cursor" | "codex";
+export type AgentRuntimeKind = "builtin" | "cursor" | "codex" | "claude";
 
 export interface RuntimeProbeResult {
   kind: string;
@@ -47,7 +47,11 @@ export interface RuntimeProbeResult {
   authenticated: boolean;
   detail: string;
   fake: boolean;
+  binary?: string;
+  install_url?: string;
+  code?: string;
 }
+
 
 const E2E_DEFAULT_SETTINGS: AiSettingsView = {
   active_profile_id: "e2e-default",

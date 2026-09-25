@@ -29,6 +29,7 @@ import {
   normalizeSecurityMode,
   useAiEngineerStore,
 } from "../../stores/aiEngineerStore";
+import { externalRuntimeStatusKind } from "../../lib/aiEngineer/cursorRuntimeStatus";
 import { rememberAiFiber } from "../../stores/hostWorkspaceMemory";
 import {
   AI_CHAT_SCROLL_FIX_ID,
@@ -145,8 +146,11 @@ import {
   ensureSidecar,
   fetchMemoryMeta,
   fetchUserSkills,
+  probeRuntime,
   revealLocalPath,
+  type AgentRuntimeKind,
   type MemoryMetaCatalog,
+  type RuntimeProbeResult,
   type UserSkillsCatalog,
 } from "../../lib/aiEngineer/api";
 
@@ -894,6 +898,10 @@ export function AiEngineerPanel({
   const saveSettings = useAiEngineerStore((s) => s.saveSettings);
   const agentRuntime = useAiEngineerStore((s) => s.agentRuntime);
   const setAgentRuntime = useAiEngineerStore((s) => s.setAgentRuntime);
+  const [runtimeProbe, setRuntimeProbe] = useState<RuntimeProbeResult | null>(
+    null,
+  );
+  const [runtimeProbing, setRuntimeProbing] = useState(false);
   const chatScope = useAiEngineerStore((s) => s.chatScope);
   const activeThreadId = useAiEngineerStore((s) => s.activeThreadId);
   const threadsByScope = useAiEngineerStore((s) => s.threadsByScope);
@@ -1228,13 +1236,18 @@ export function AiEngineerPanel({
   const profiles = settings?.profiles ?? [];
   const modelConfigured = isAiModelConfigured(settings);
   const canChat =
-    agentRuntime === "cursor" || agentRuntime === "codex" || modelConfigured;
+    agentRuntime === "cursor" ||
+    agentRuntime === "codex" ||
+    agentRuntime === "claude" ||
+    modelConfigured;
   const activeProfileLabel =
     agentRuntime === "cursor"
       ? t("aiEngineer.runtime.cursor")
       : agentRuntime === "codex"
         ? t("aiEngineer.runtime.codex")
-        : formatActiveAiProfileLabel(settings);
+        : agentRuntime === "claude"
+          ? t("aiEngineer.runtime.claude")
+          : formatActiveAiProfileLabel(settings);
 
   useEffect(() => {
     if (storeOpen && liveSessionId === sessionId) {
@@ -2036,21 +2049,87 @@ export function AiEngineerPanel({
                 ? t("aiEngineer.cursorRunning")
                 : agentRuntime === "codex"
                   ? t("aiEngineer.codexRunning")
-                  : t("aiEngineer.modelThinking")
+                  : agentRuntime === "claude"
+                    ? t("aiEngineer.claudeRunning")
+                    : t("aiEngineer.modelThinking")
               : agentRuntime === "cursor"
                 ? t("aiEngineer.cursorRunning")
                 : agentRuntime === "codex"
                   ? t("aiEngineer.codexRunning")
-                  : t("aiEngineer.running");
+                  : agentRuntime === "claude"
+                    ? t("aiEngineer.claudeRunning")
+                    : t("aiEngineer.running");
 
   const submit = () => {
     if (busy) return;
+    if (
+      agentRuntime === "cursor" ||
+      agentRuntime === "codex" ||
+      agentRuntime === "claude"
+    ) {
+      const status = externalRuntimeStatusKind(runtimeProbe, agentRuntime);
+      if (status === "install_needed" || status === "unknown") {
+        void refreshRuntimeProbe(agentRuntime).then((p) => {
+          const next = externalRuntimeStatusKind(p, agentRuntime);
+          if (next === "install_needed" || next === "not_ready" || next === "unknown") {
+            setModelOpen(true);
+            return;
+          }
+          stickToBottomRef.current = true;
+          void sendMessage({
+            sessionId,
+            serverId,
+            clusterId: clusterId ?? undefined,
+          });
+        });
+        return;
+      }
+    }
     stickToBottomRef.current = true;
     void sendMessage({
       sessionId,
       serverId,
-      clusterId: engineerMode === "k8s" ? (clusterId ?? undefined) : undefined,
+      clusterId: clusterId ?? undefined,
     });
+  };
+
+  const refreshRuntimeProbe = async (kind: AgentRuntimeKind) => {
+    if (kind === "builtin") {
+      setRuntimeProbe(null);
+      return null;
+    }
+    setRuntimeProbing(true);
+    try {
+      const info = await ensureSidecar();
+      const result = await probeRuntime(info, kind);
+      setRuntimeProbe(result);
+      return result;
+    } catch {
+      setRuntimeProbe({
+        kind,
+        installed: false,
+        authenticated: false,
+        detail: "probe_failed",
+        fake: false,
+        code: "install_needed",
+      });
+      return null;
+    } finally {
+      setRuntimeProbing(false);
+    }
+  };
+
+  const selectExternalRuntime = (kind: AgentRuntimeKind) => {
+    runWithComposerChromeScrollGuard(() => {
+      setModelOpen(kind === "builtin" ? false : true);
+    });
+    setAgentRuntime(kind);
+    if (kind !== "builtin") {
+      void refreshRuntimeProbe(kind);
+    } else {
+      setRuntimeProbe(null);
+      setModelOpen(false);
+    }
   };
 
   const requestSaveAsSkill = () => {
@@ -3520,10 +3599,7 @@ export function AiEngineerPanel({
                                   }
                                 }}
                                 onClick={() => {
-                                  runWithComposerChromeScrollGuard(() => {
-                                    setModelOpen(false);
-                                  });
-                                  setAgentRuntime("builtin");
+                                  selectExternalRuntime("builtin");
                                 }}
                               >
                                 <span className="ai-engineer-model-name">
@@ -3546,10 +3622,7 @@ export function AiEngineerPanel({
                                   }
                                 }}
                                 onClick={() => {
-                                  runWithComposerChromeScrollGuard(() => {
-                                    setModelOpen(false);
-                                  });
-                                  setAgentRuntime("cursor");
+                                  selectExternalRuntime("cursor");
                                 }}
                               >
                                 <span className="ai-engineer-model-name">
@@ -3572,10 +3645,7 @@ export function AiEngineerPanel({
                                   }
                                 }}
                                 onClick={() => {
-                                  runWithComposerChromeScrollGuard(() => {
-                                    setModelOpen(false);
-                                  });
-                                  setAgentRuntime("codex");
+                                  selectExternalRuntime("codex");
                                 }}
                               >
                                 <span className="ai-engineer-model-name">
@@ -3585,6 +3655,85 @@ export function AiEngineerPanel({
                                   {t("aiEngineer.runtime.codexHint")}
                                 </span>
                               </button>
+                              <button
+                                type="button"
+                                className={`ai-engineer-menu-item${
+                                  agentRuntime === "claude" ? " active" : ""
+                                }`}
+                                role="menuitem"
+                                data-testid="ai-engineer-runtime-claude"
+                                onMouseDown={(e) => {
+                                  if (shouldPreventComposerChromeFocusScroll()) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                onClick={() => {
+                                  selectExternalRuntime("claude");
+                                }}
+                              >
+                                <span className="ai-engineer-model-name">
+                                  {t("aiEngineer.runtime.claude")}
+                                </span>
+                                <span className="ai-engineer-model-id">
+                                  {t("aiEngineer.runtime.claudeHint")}
+                                </span>
+                              </button>
+                              {agentRuntime !== "builtin" ? (
+                                <div
+                                  className="ai-engineer-runtime-install"
+                                  data-testid="ai-engineer-runtime-install"
+                                >
+                                  <p className="ai-engineer-runtime-install-status">
+                                    {runtimeProbing
+                                      ? "…"
+                                      : (() => {
+                                          const st = externalRuntimeStatusKind(
+                                            runtimeProbe,
+                                            agentRuntime,
+                                          );
+                                          if (st === "ready" || st === "ready_fake") {
+                                            return t("aiEngineer.runtime.statusReady");
+                                          }
+                                          if (st === "install_needed") {
+                                            return t("aiEngineer.runtime.statusInstallNeeded");
+                                          }
+                                          return t("aiEngineer.runtime.statusUnknown");
+                                        })()}
+                                  </p>
+                                  {externalRuntimeStatusKind(
+                                    runtimeProbe,
+                                    agentRuntime,
+                                  ) === "install_needed" ? (
+                                    <>
+                                      <p className="ai-engineer-runtime-install-hint">
+                                        {t("aiEngineer.runtime.installHint")}
+                                      </p>
+                                      {runtimeProbe?.install_url ? (
+                                        <a
+                                          className="ai-engineer-runtime-install-link"
+                                          href={runtimeProbe.install_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          data-testid="ai-engineer-runtime-install-link"
+                                        >
+                                          {t("aiEngineer.runtime.installOpen")}
+                                        </a>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        className="ai-engineer-text-btn"
+                                        data-testid="ai-engineer-runtime-recheck"
+                                        disabled={runtimeProbing}
+                                        onClick={() =>
+                                          void refreshRuntimeProbe(agentRuntime)
+                                        }
+                                      >
+                                        {t("aiEngineer.runtime.recheck")}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              ) : null}
                               <p
                                 className="ai-engineer-runtime-disclaimer"
                                 data-testid="ai-engineer-runtime-disclaimer"

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Literal, Protocol
 
-RuntimeKind = Literal["builtin", "cursor", "codex"]
+RuntimeKind = Literal["builtin", "cursor", "codex", "claude"]
 
-SUPPORTED_RUNTIMES: frozenset[str] = frozenset({"builtin", "cursor", "codex"})
+SUPPORTED_RUNTIMES: frozenset[str] = frozenset(
+    {"builtin", "cursor", "codex", "claude"}
+)
 
 
 class RuntimeProbe(dict[str, Any]):
@@ -34,13 +36,5 @@ def normalize_runtime(value: str | None) -> RuntimeKind:
 
 
 def runtime_available(kind: RuntimeKind) -> bool:
-    """Which runtimes chat/start may launch."""
-    if kind == "builtin":
-        return True
-    if kind == "cursor":
-        # Fake driver always works; real SDK optional later.
-        return True
-    if kind == "codex":
-        # Fake driver always works; real SDK optional later.
-        return True
-    return False
+    """Which runtimes chat/start may attempt to launch (install gate happens later)."""
+    return kind in SUPPORTED_RUNTIMES

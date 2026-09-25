@@ -1,4 +1,4 @@
-"""Cursor runtime — local `cursor-agent` / `cursor agent` CLI (Fake only under TW_AI_CURSOR_FAKE)."""
+"""Claude Code runtime — local `claude` CLI (Fake only under TW_AI_CLAUDE_FAKE)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from app.runtime import RuntimeKind
 from app.runtime.cli_host import LocalCliHost
 
 
-class CursorRuntime:
-    kind: RuntimeKind = "cursor"
+class ClaudeRuntime:
+    kind: RuntimeKind = "claude"
 
     def __init__(self) -> None:
-        self._host = LocalCliHost("cursor")
+        self._host = LocalCliHost("claude")
 
     def probe(self) -> dict[str, Any]:
         return self._host.probe()
@@ -24,5 +24,5 @@ class CursorRuntime:
         await self._host.start(run, user_message)
 
 
-def probe_cursor() -> dict[str, Any]:
-    return CursorRuntime().probe()
+def probe_claude() -> dict[str, Any]:
+    return ClaudeRuntime().probe()

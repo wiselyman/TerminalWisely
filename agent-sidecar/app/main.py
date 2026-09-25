@@ -40,6 +40,7 @@ from app.models.agent import (
     RuntimeConfigRequest,
     RuntimeConfigResponse,
     RuntimeProbeResponse,
+    McpCallRequest,
     ToolResultRequest,
     UserAnswerRequest,
 )
@@ -145,6 +146,24 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
                 "message": f"Agent runtime {runtime_kind!r} is not available yet",
             },
         )
+    # Install-gate: local CLI must be on PATH (unless CI fake env).
+    if runtime_kind in {"cursor", "codex", "claude"}:
+        from app.runtime.local_cli import probe_local_cli
+
+        probe = probe_local_cli(runtime_kind)  # type: ignore[arg-type]
+        if not probe.get("installed") and not probe.get("fake"):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "install_needed",
+                    "code": "install_needed",
+                    "runtime": runtime_kind,
+                    "install_url": probe.get("install_url") or "",
+                    "message": (
+                        f"{runtime_kind} CLI not found. Install it, then recheck."
+                    ),
+                },
+            )
     identity = TargetSessionIdentity(
         session_id=body.session_id,
         server_id=body.server_id,
@@ -213,7 +232,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             },
         )
 
-    # Dispatch agent runtime (builtin ModelGateway loop | Cursor | Codex).
+    # Dispatch agent runtime (builtin | local Cursor/Codex/Claude CLI).
     if runtime_kind == "cursor":
         from app.runtime.cursor_runtime import CursorRuntime
 
@@ -222,10 +241,15 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
         from app.runtime.codex_runtime import CodexRuntime
 
         runtime = CodexRuntime()
+    elif runtime_kind == "claude":
+        from app.runtime.claude_runtime import ClaudeRuntime
+
+        runtime = ClaudeRuntime()
     else:
         runtime = BuiltinRuntime()
     loop_task = asyncio.create_task(runtime.start(run, user_message))
     run.task = loop_task
+    run.metadata["_runtime_obj"] = runtime
     stall_task = asyncio.create_task(watch_run_for_stall(run))
     run.metadata["_stall_task"] = stall_task
     run.metadata["_agent_runtime"] = runtime_kind
@@ -602,6 +626,12 @@ async def cancel_run(run_id: str, body: CancelRunRequest, _: AuthDep) -> dict[st
     run = STORE.cancel_run(run_id)
     if run is None or run.session_id != body.session_id:
         raise HTTPException(status_code=404, detail="run not found")
+    rt = run.metadata.get("_runtime_obj")
+    if rt is not None and hasattr(rt, "cancel"):
+        try:
+            rt.cancel(run)
+        except Exception:  # noqa: BLE001
+            pass
     await asyncio.sleep(0)
     return {"ok": True, "status": _status_str(run.status)}
 
@@ -729,10 +759,12 @@ async def runtime_probe(
     _: AuthDep,
     kind: str = Query("builtin"),
 ) -> RuntimeProbeResponse:
-    """Probe install/auth readiness for Builtin / Cursor / Codex runtimes."""
+    """Probe install/auth readiness for Builtin / local Cursor / Codex / Claude."""
     raw = (kind or "builtin").strip().lower()
-    if raw not in {"builtin", "cursor", "codex"}:
-        raise HTTPException(status_code=422, detail="kind must be builtin|cursor|codex")
+    if raw not in {"builtin", "cursor", "codex", "claude"}:
+        raise HTTPException(
+            status_code=422, detail="kind must be builtin|cursor|codex|claude"
+        )
     if raw == "builtin":
         from app.runtime.builtin import BuiltinRuntime
 
@@ -741,17 +773,52 @@ async def runtime_probe(
         from app.runtime.cursor_runtime import probe_cursor
 
         p = probe_cursor()
-    else:
+    elif raw == "codex":
         from app.runtime.codex_runtime import probe_codex
 
         p = probe_codex()
+    else:
+        from app.runtime.claude_runtime import probe_claude
+
+        p = probe_claude()
     return RuntimeProbeResponse(
         kind=raw,
         installed=bool(p.get("installed")),
         authenticated=bool(p.get("authenticated")),
         detail=str(p.get("detail") or ""),
         fake=bool(p.get("fake")),
+        binary=str(p.get("binary") or ""),
+        install_url=str(p.get("install_url") or ""),
+        code=str(p.get("code") or ""),
     )
+
+
+@app.get("/v1/runs/{run_id}/mcp/tools")
+async def mcp_tools_list(
+    run_id: str,
+    _: AuthDep,
+    session_id: str = Query(""),
+) -> dict[str, Any]:
+    run = STORE.get_run(run_id)
+    if run is None or (session_id and run.session_id != session_id):
+        raise HTTPException(status_code=404, detail="run not found")
+    from app.runtime.tw_mcp import tw_mcp_list_tools
+
+    mode = str(run.metadata.get("engineer_mode") or "linux")
+    return {"tools": tw_mcp_list_tools(engineer_mode=mode)}
+
+
+@app.post("/v1/runs/{run_id}/mcp/call")
+async def mcp_tool_call(
+    run_id: str, body: McpCallRequest, _: AuthDep
+) -> dict[str, Any]:
+    run = STORE.get_run(run_id)
+    if run is None or run.session_id != body.session_id:
+        raise HTTPException(status_code=404, detail="run not found")
+    mcp = run.metadata.get("_tw_mcp")
+    if mcp is None:
+        raise HTTPException(status_code=409, detail="mcp host not active for run")
+    return await mcp.call_tool(body.name, body.arguments or {})
 
 
 @app.post("/v1/models/list", response_model=ModelListResponse)

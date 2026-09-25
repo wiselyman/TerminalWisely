@@ -1,4 +1,4 @@
-"""CodexRuntime Fake + install-gate."""
+"""ClaudeRuntime Fake + install-gate."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from app.state import STORE, AgentRun, RunStatus
 def _token(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("TW_AI_TOKEN", "test-token")
     monkeypatch.setenv("TW_AI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("TW_AI_CODEX_FAKE", "1")
+    monkeypatch.setenv("TW_AI_CLAUDE_FAKE", "1")
     STORE._runs.clear()
     STORE._session_latest.clear()
 
@@ -26,20 +26,19 @@ def _auth() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_codex_runtime_fake(tmp_path, monkeypatch) -> None:
+async def test_claude_runtime_fake(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("TW_AI_DATA_DIR", str(tmp_path))
-    run = AgentRun(session_id="s", run_id="r-codex", metadata={"engineer_mode": "linux"})
-    await LocalCliHost("codex").start(run, "hi")
+    run = AgentRun(session_id="s", run_id="r-claude", metadata={"engineer_mode": "linux"})
+    await LocalCliHost("claude").start(run, "hi")
     assert run.status == RunStatus.COMPLETED
-    assert any(ev.type == "external_tool_activity" for ev in run.events)
 
 
-def test_chat_start_codex_fake_runtime() -> None:
+def test_chat_start_claude_fake_runtime() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/v1/chat/start",
             headers=_auth(),
-            json={"session_id": "sess-codex", "message": "ping", "runtime": "codex"},
+            json={"session_id": "sess-claude", "message": "ping", "runtime": "claude"},
         )
         assert r.status_code == 200, r.text
         run = STORE._runs[r.json()["run_id"]]

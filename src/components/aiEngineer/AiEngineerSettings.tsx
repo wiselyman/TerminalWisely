@@ -7,7 +7,7 @@ import {
   type RuntimeProbeResult,
 } from "../../lib/aiEngineer/api";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
-import { cursorRuntimeStatusKind } from "../../lib/aiEngineer/cursorRuntimeStatus";
+import { externalRuntimeStatusKind } from "../../lib/aiEngineer/cursorRuntimeStatus";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 
 /** All types speak OpenAI-compatible HTTP via ModelGateway. */
@@ -553,18 +553,18 @@ export function AiEngineerSettings() {
                 </button>
               </div>
               <p
-                className={`ai-engineer-settings-cursor-status status-${cursorRuntimeStatusKind(cursorProbe)}`}
+                className={`ai-engineer-settings-cursor-status status-${externalRuntimeStatusKind(cursorProbe, "cursor")}`}
                 data-testid="ai-engineer-cursor-status"
               >
                 {(() => {
-                  const kind = cursorRuntimeStatusKind(cursorProbe);
+                  const kind = externalRuntimeStatusKind(cursorProbe, "cursor");
                   if (kind === "ready") {
                     return t("aiEngineer.settings.cursorStatusReady");
                   }
                   if (kind === "ready_fake") {
                     return t("aiEngineer.settings.cursorStatusFake");
                   }
-                  if (kind === "not_ready") {
+                  if (kind === "install_needed" || kind === "not_ready") {
                     return t("aiEngineer.settings.cursorStatusNotReady");
                   }
                   return t("aiEngineer.settings.cursorStatusUnknown");

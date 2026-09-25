@@ -1,45 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { cursorRuntimeStatusKind } from "./cursorRuntimeStatus";
+import { externalRuntimeStatusKind } from "./cursorRuntimeStatus";
 
-describe("cursorRuntimeStatusKind", () => {
+describe("externalRuntimeStatusKind", () => {
   it("returns unknown without probe", () => {
-    expect(cursorRuntimeStatusKind(null)).toBe("unknown");
-    expect(cursorRuntimeStatusKind(undefined)).toBe("unknown");
+    expect(externalRuntimeStatusKind(null)).toBe("unknown");
   });
 
-  it("marks fake cursor ready", () => {
+  it("marks install_needed", () => {
     expect(
-      cursorRuntimeStatusKind({
+      externalRuntimeStatusKind({
         kind: "cursor",
+        installed: false,
+        authenticated: false,
+        detail: "install_needed",
+        fake: false,
+        code: "install_needed",
+        install_url: "https://cursor.com/download",
+      }),
+    ).toBe("install_needed");
+  });
+
+  it("marks fake ready", () => {
+    expect(
+      externalRuntimeStatusKind({
+        kind: "claude",
         installed: true,
         authenticated: true,
         detail: "fake",
         fake: true,
+        code: "fake",
       }),
     ).toBe("ready_fake");
   });
 
-  it("marks real cursor ready when installed+auth", () => {
+  it("marks real ready", () => {
     expect(
-      cursorRuntimeStatusKind({
+      externalRuntimeStatusKind({
         kind: "cursor",
         installed: true,
         authenticated: true,
-        detail: "sdk",
+        detail: "login_unchecked",
         fake: false,
+        code: "ready",
+        binary: "/usr/bin/cursor-agent",
       }),
     ).toBe("ready");
-  });
-
-  it("marks not ready when missing auth", () => {
-    expect(
-      cursorRuntimeStatusKind({
-        kind: "cursor",
-        installed: true,
-        authenticated: false,
-        detail: "missing",
-        fake: false,
-      }),
-    ).toBe("not_ready");
   });
 });

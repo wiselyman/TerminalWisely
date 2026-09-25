@@ -55,8 +55,8 @@ class ChatStartRequest(BaseModel):
     # Prefer seeding from a prior sidecar SessionLog (tool results preserved).
     resume_run_id: str | None = None
     attachments: list[ChatAttachment] = Field(default_factory=list)
-    # Agent runtime: builtin (ModelGateway loop) | cursor | codex (external agents).
-    runtime: Literal["builtin", "cursor", "codex"] = "builtin"
+    # Agent runtime: builtin | cursor | codex | claude (local CLIs).
+    runtime: Literal["builtin", "cursor", "codex", "claude"] = "builtin"
 
 
 class ChatStartResponse(BaseModel):
@@ -172,3 +172,12 @@ class RuntimeProbeResponse(BaseModel):
     authenticated: bool = False
     detail: str = ""
     fake: bool = False
+    binary: str = ""
+    install_url: str = ""
+    code: str = ""
+
+
+class McpCallRequest(BaseModel):
+    session_id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)

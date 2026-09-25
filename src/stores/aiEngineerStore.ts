@@ -1307,7 +1307,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
 
   setAgentRuntime: (runtime) => {
     const next =
-      runtime === "cursor" || runtime === "codex" ? runtime : "builtin";
+      runtime === "cursor" || runtime === "codex" || runtime === "claude"
+        ? runtime
+        : "builtin";
     set({ agentRuntime: next });
   },
 
@@ -1773,7 +1775,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     if (!text && pendingAtts.length === 0) return;
     const selected = get().agentRuntime;
     const runtime =
-      selected === "cursor" || selected === "codex" ? selected : "builtin";
+      selected === "cursor" ||
+      selected === "codex" ||
+      selected === "claude"
+        ? selected
+        : "builtin";
     if (runtime === "builtin" && !isAiModelConfigured(get().settings)) {
       set({ settingsOpen: true });
       return;

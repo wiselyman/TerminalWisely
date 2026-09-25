@@ -1207,13 +1207,14 @@ function exists(rel) {
   if (
     panel.includes('data-testid="ai-engineer-runtime-cursor"') &&
     panel.includes('data-testid="ai-engineer-runtime-codex"') &&
+    panel.includes('data-testid="ai-engineer-runtime-claude"') &&
     panel.includes('data-testid="ai-engineer-runtime-disclaimer"') &&
-    panel.includes("aiEngineer.runtime.dualPlaneDisclaimer") &&
+    panel.includes('data-testid="ai-engineer-runtime-install"') &&
     panel.includes("external_activity")
   ) {
-    pass("ai.runtime-picker", "Cursor/Codex runtime picker + dual-plane disclaimer + external cards");
+    pass("ai.runtime-picker", "Cursor/Codex/Claude picker + install-gate + external cards");
   } else {
-    fail("ai.runtime-picker", "missing Cursor/Codex runtime picker / disclaimer / external_activity");
+    fail("ai.runtime-picker", "missing local CLI runtime picker / install-gate / external_activity");
   }
   if (panel.includes("ai-engineer-platform") || panel.includes("AiEngineerPlatformPanel")) {
     fail("ai.no-platform", "Platform panel remnants in AiEngineerPanel");

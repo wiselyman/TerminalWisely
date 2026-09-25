@@ -10935,6 +10935,31 @@ body.cmd-nav-panel-resizing {
   background: var(--tw-surface-2);
   border-radius: 6px;
 }
+.ai-engineer-runtime-install {
+  margin: 4px 12px 8px;
+  padding: 8px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  border: 1px dashed var(--tw-border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-engineer-runtime-install-status {
+  margin: 0;
+  font-weight: 600;
+  color: var(--tw-fg);
+}
+.ai-engineer-runtime-install-hint {
+  margin: 0;
+  color: var(--tw-fg-muted);
+}
+.ai-engineer-runtime-install-link {
+  color: var(--tw-accent, #58a6ff);
+  text-decoration: underline;
+  font-size: 0.72rem;
+}
 .ai-engineer-external-activity {
   margin: 6px 0;
   padding: 8px 10px;

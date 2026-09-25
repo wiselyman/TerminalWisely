@@ -14,11 +14,13 @@
 
 In AI chat **model picker**, user can select **Cursor** or **Codex** (and keep **Builtin** = today’s ModelGateway + AgentLoop). Selected product runs as a **full agent** (its own loop, tools, MCP ecosystem), while TerminalWisely remains the **ops cockpit**: connected SSH/K8s session, CommandBroker approvals, evidence UI, STOP.
 
-Priority (product order, not “API niceness” order):
+Priority (product order):
 
-1. **0.0.2 MVP — Cursor** (user’s daily driver)
-2. **0.0.2 follow-on — Codex**
-3. **Claude Code — out of 0.0.2** (user does not use it; leave adapter stub only if cheap)
+1. **Cursor** — local CLI
+2. **Codex** — local CLI
+3. **Claude Code** — local CLI
+
+Auth is the CLI’s own login; TW does not require pasting `CURSOR_API_KEY` to enable Cursor.
 
 ## Non-goals
 
@@ -29,7 +31,7 @@ Priority (product order, not “API niceness” order):
 | Bypassing PolicyEngine / approval UX for **remote** mutations | Iron rule |
 | Castrating Cursor/Codex into “chat completion only” | User requires full agent capability |
 | Cursor Cloud as primary ops runner | Local Cursor Agent SDK first; Cloud optional later |
-| Shipping Claude Code as a first-class picker entry in 0.0.2 | Explicit deferral |
+| Shipping Claude Code as a first-class picker entry in 0.0.2 | ~~Deferred~~ **Reopened** — local `claude` CLI with install-gate |
 | Year-append / product blacklists / per-app capability whitelist | AGENTS.md |
 
 ## Problem
@@ -41,30 +43,26 @@ Today the picker only selects **HTTP LLM profiles** (`AiModelProfile` → sideca
 | Topic | Decision |
 |-------|----------|
 | Product shape | **Runtime Adapter** — picker chooses *agent runtime*, not only model id |
-| Agent fidelity | **Full agent** — Cursor/Codex keep their loop, local tools, MCP; TW does not strip them to a single `terminal_exec` brain |
-| Dual plane | **Local/workspace plane** = external agent native powers; **Remote host plane** = TW tools only (`terminal_exec`, `k8s_*`, `web_*`, `ask_user`, …) via Broker |
+| Agent fidelity | **Full agent via local CLI** — Cursor/Codex/Claude Code CLIs keep their loop/tools; TW does not strip them to chat-only |
+| Dual plane | **Local/workspace plane** = CLI native powers; **Remote host plane** = TW MCP tools only via Broker |
 | Remote SSH | Always existing session `exec_command_capture`; never a second login |
-| Approvals | Remote R1+ mutations use **existing TW approval cards**; local Cursor/Codex tools follow **that product’s** approval/sandbox (documented honestly in UI) |
-| Builtin coexistence | Builtin runtime unchanged; switching runtime mid-thread starts a **new run** (or explicit “continue with other runtime” = new run + history seed — P1) |
-| Auth | Cursor: `CURSOR_API_KEY` / SDK login; Codex: existing Codex CLI login / SDK. Detect missing install/auth before start; surface harness notice, do not fake success |
-| STOP | Cancels TW run **and** external `run.cancel()` / app-server interrupt when supported |
-| Hardcoding | No special-case commands per product beyond generic runtime adapter + MCP tool schema |
+| Approvals | Remote R1+ mutations use **existing TW approval cards**; local CLI tools follow that product’s sandbox |
+| Builtin coexistence | Builtin runtime unchanged |
+| Auth / install | **Local CLI on PATH** is readiness. Missing → install-gate UI (official URL + Recheck). No silent Fake. Fake only with `TW_AI_*_FAKE=1` for CI. API keys are optional CLI overrides, not the product gate. |
+| Claude | First-class picker entry (local `claude` CLI) |
+| STOP | Cancels TW run **and** CLI process when supported |
+| Hardcoding | No per-app capability whitelist; install URLs are adapter metadata for named runtimes |
 
 ## §1 User experience
 
 ### 1.1 Model / runtime picker
 
-Composer control gains a **Runtime** section (or segmented entries):
+- **Builtin** — ModelGateway profiles
+- **Cursor** — local `cursor-agent` / `cursor agent`
+- **Codex** — local `codex`
+- **Claude Code** — local `claude`
 
-- **Builtin** — current profiles (Ollama, OpenAI-compatible, …)
-- **Cursor** — requires SDK/auth ready
-- **Codex** — requires CLI/SDK ready (after MVP)
-
-Selecting Cursor/Codex:
-
-- Does **not** require filling OpenAI `base_url` for that entry.
-- Shows status chip: `Ready` / `Install needed` / `Sign in needed` (probe on open settings + on select).
-- Optional sub-picker: Cursor model id from `Cursor.models.list` when available; otherwise default SDK model.
+Selecting an external runtime probes PATH. Status: Ready / Install needed. Send is blocked until installed (or explicit CI fake).
 
 ### 1.2 Chat session feel
 

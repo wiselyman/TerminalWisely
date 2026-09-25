@@ -1072,6 +1072,10 @@ pub fn restart_sidecar(app: &AppHandle) -> AppResult<SidecarInfo> {
             .clone()
             .unwrap_or_else(|| crate::ai_engineer::secrets::load_cursor_api_key(app)),
     );
+    cmd.env(
+        "TW_AI_SIDECAR_URL",
+        format!("http://127.0.0.1:{port}"),
+    );
     // Ollama stores its URL in ollama_base_url; OpenAI-compat path is …/v1.
     if settings.provider.eq_ignore_ascii_case("ollama") {
         let ollama = if settings.ollama_base_url.is_empty() {
