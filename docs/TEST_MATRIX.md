@@ -186,7 +186,7 @@
 | Session resume | — | pytest resume | — | resume | ✓ |
 | SessionLog resume_miss（禁止静默薄 history；FE harness + 一次无 resume 重开） | `resumeMiss.test` + `test_session_resume` miss | chat_start 409 | smoke notice key | — | ✓ |
 | SessionLog resume 跨 session_id（SSH 重连）+ FE 自动无 resume 重试 | `test_session_resume` remap | — | — | — | — |
-| 0.0.2 External Agent Runtime（Cursor→Codex；TW MCP 远端闸门） | pytest `test_runtime_*` / `test_tw_mcp_*` / `test_cursor_runtime` / `test_runtime_probe` + vitest `externalAgentActivity` / `cursorRuntimeStatus` | smoke `ai.runtime-picker` | E2E model menu Cursor entry (`ai-chat-scroll-maximize`) | — | ✓ |
+| 0.0.2 External Agent Runtime（Cursor→Codex；TW MCP 远端闸门） | pytest `test_runtime_*` / `test_tw_mcp_*` / `test_cursor_runtime` / `test_codex_runtime` / `test_runtime_probe` + vitest `externalAgentActivity` / `cursorRuntimeStatus` | smoke `ai.runtime-picker` | E2E model menu Cursor/Codex (`ai-chat-scroll-maximize`) | — | ✓ |
 | Cursor API key 设置 + `/v1/runtime/probe` | pytest probe/config | secrets `CURSOR_API_KEY` spawn/hot-reload | Settings UI + i18n | — | ✓ |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |

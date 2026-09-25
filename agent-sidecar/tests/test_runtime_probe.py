@@ -42,13 +42,18 @@ def test_runtime_probe_builtin() -> None:
         assert body["installed"] is True
 
 
-def test_runtime_probe_codex_not_ready() -> None:
+def test_runtime_probe_codex_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TW_AI_CODEX_FAKE", "1")
+    monkeypatch.delenv("CODEX_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with TestClient(app) as client:
         r = client.get("/v1/runtime/probe?kind=codex", headers=_auth())
         assert r.status_code == 200
         body = r.json()
         assert body["kind"] == "codex"
-        assert body["installed"] is False
+        assert body["installed"] is True
+        assert body["authenticated"] is True
+        assert body.get("fake") is True
 
 
 def test_runtime_probe_unknown() -> None:

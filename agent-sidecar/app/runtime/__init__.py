@@ -41,5 +41,6 @@ def runtime_available(kind: RuntimeKind) -> bool:
         # Fake driver always works; real SDK optional later.
         return True
     if kind == "codex":
-        return False
+        # Fake driver always works; real SDK optional later.
+        return True
     return False

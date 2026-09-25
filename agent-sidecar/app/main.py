@@ -213,11 +213,15 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             },
         )
 
-    # Dispatch agent runtime (builtin ModelGateway loop | Cursor | …).
+    # Dispatch agent runtime (builtin ModelGateway loop | Cursor | Codex).
     if runtime_kind == "cursor":
         from app.runtime.cursor_runtime import CursorRuntime
 
         runtime: Any = CursorRuntime()
+    elif runtime_kind == "codex":
+        from app.runtime.codex_runtime import CodexRuntime
+
+        runtime = CodexRuntime()
     else:
         runtime = BuiltinRuntime()
     loop_task = asyncio.create_task(runtime.start(run, user_message))
@@ -738,12 +742,9 @@ async def runtime_probe(
 
         p = probe_cursor()
     else:
-        p = {
-            "installed": False,
-            "authenticated": False,
-            "detail": "codex runtime not wired yet",
-            "fake": False,
-        }
+        from app.runtime.codex_runtime import probe_codex
+
+        p = probe_codex()
     return RuntimeProbeResponse(
         kind=raw,
         installed=bool(p.get("installed")),

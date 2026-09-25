@@ -1771,7 +1771,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const text = get().input.trim();
     const pendingAtts = [...get().pendingAttachments];
     if (!text && pendingAtts.length === 0) return;
-    const runtime = get().agentRuntime === "cursor" ? "cursor" : "builtin";
+    const selected = get().agentRuntime;
+    const runtime =
+      selected === "cursor" || selected === "codex" ? selected : "builtin";
     if (runtime === "builtin" && !isAiModelConfigured(get().settings)) {
       set({ settingsOpen: true });
       return;

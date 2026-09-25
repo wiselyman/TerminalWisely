@@ -40,10 +40,12 @@ class FakeCursorDriver:
         tool_name: str | None = TOOL_WEB_SEARCH,
         tool_args: dict[str, Any] | None = None,
         reply: str = "Cursor fake: done.",
+        activity_prefix: str = "cursor",
     ) -> None:
         self.tool_name = tool_name
         self.tool_args = tool_args or {"query": "status"}
         self.reply = reply
+        self.activity_prefix = activity_prefix
         self.cancelled = False
 
     def cancel(self) -> None:
@@ -65,7 +67,7 @@ class FakeCursorDriver:
         if self.tool_name and not self.cancelled:
             yield {
                 "type": "external_tool_activity",
-                "name": "cursor.plan",
+                "name": f"{self.activity_prefix}.plan",
                 "detail": f"calling TW MCP {self.tool_name}",
             }
             result = await call_mcp(self.tool_name, self.tool_args)
@@ -84,3 +86,21 @@ class FakeCursorDriver:
             return
         yield {"type": "assistant_message", "text": self.reply}
         yield {"type": "done"}
+
+
+class FakeCodexDriver(FakeCursorDriver):
+    """Codex-shaped driver for CI (same dual-plane MCP path as Cursor fake)."""
+
+    def __init__(
+        self,
+        *,
+        tool_name: str | None = TOOL_WEB_SEARCH,
+        tool_args: dict[str, Any] | None = None,
+        reply: str = "Codex fake: done.",
+    ) -> None:
+        super().__init__(
+            tool_name=tool_name,
+            tool_args=tool_args,
+            reply=reply,
+            activity_prefix="codex",
+        )

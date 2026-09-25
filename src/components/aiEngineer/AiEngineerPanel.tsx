@@ -2034,10 +2034,14 @@ export function AiEngineerPanel({
             : busyPhase.kind === "thinking" && busyPhase.streamingThought
               ? agentRuntime === "cursor"
                 ? t("aiEngineer.cursorRunning")
-                : t("aiEngineer.modelThinking")
+                : agentRuntime === "codex"
+                  ? t("aiEngineer.codexRunning")
+                  : t("aiEngineer.modelThinking")
               : agentRuntime === "cursor"
                 ? t("aiEngineer.cursorRunning")
-                : t("aiEngineer.running");
+                : agentRuntime === "codex"
+                  ? t("aiEngineer.codexRunning")
+                  : t("aiEngineer.running");
 
   const submit = () => {
     if (busy) return;
@@ -3553,6 +3557,32 @@ export function AiEngineerPanel({
                                 </span>
                                 <span className="ai-engineer-model-id">
                                   {t("aiEngineer.runtime.cursorHint")}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                className={`ai-engineer-menu-item${
+                                  agentRuntime === "codex" ? " active" : ""
+                                }`}
+                                role="menuitem"
+                                data-testid="ai-engineer-runtime-codex"
+                                onMouseDown={(e) => {
+                                  if (shouldPreventComposerChromeFocusScroll()) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                onClick={() => {
+                                  runWithComposerChromeScrollGuard(() => {
+                                    setModelOpen(false);
+                                  });
+                                  setAgentRuntime("codex");
+                                }}
+                              >
+                                <span className="ai-engineer-model-name">
+                                  {t("aiEngineer.runtime.codex")}
+                                </span>
+                                <span className="ai-engineer-model-id">
+                                  {t("aiEngineer.runtime.codexHint")}
                                 </span>
                               </button>
                               <p

@@ -180,9 +180,9 @@
 - Test: `tests/test_codex_runtime.py`
 - FE: enable Codex picker entry + probe
 
-- [ ] Mirror Task 3–5 for Codex app-server/SDK with FakeCodex.
-- [ ] Prefer Codex approval hooks to align with TW remote approvals where possible.
-- [ ] Commit: `feat(ai): Codex runtime adapter`
+- [x] Mirror Task 3–5 for Codex app-server/SDK with FakeCodex.
+- [x] Prefer Codex approval hooks to align with TW remote approvals where possible (remote via TW MCP/Broker; local follows Codex/fake).
+- [x] Commit: `feat(ai): Codex runtime adapter`
 
 ---
 
