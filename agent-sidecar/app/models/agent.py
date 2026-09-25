@@ -55,6 +55,8 @@ class ChatStartRequest(BaseModel):
     # Prefer seeding from a prior sidecar SessionLog (tool results preserved).
     resume_run_id: str | None = None
     attachments: list[ChatAttachment] = Field(default_factory=list)
+    # Agent runtime: builtin (ModelGateway loop) | cursor | codex (external agents).
+    runtime: Literal["builtin", "cursor", "codex"] = "builtin"
 
 
 class ChatStartResponse(BaseModel):

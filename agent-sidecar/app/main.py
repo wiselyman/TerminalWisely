@@ -129,8 +129,21 @@ async def healthz() -> dict[str, str]:
 
 @app.post("/v1/chat/start", response_model=ChatStartResponse)
 async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
+    from app.runtime import runtime_available
+    from app.runtime.builtin import BuiltinRuntime
+
     mode = body.security_mode or paths.security_mode()
     interaction = normalize_interaction_mode(body.interaction_mode)
+    runtime_kind = body.runtime or "builtin"
+    if not runtime_available(runtime_kind):
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "error": "runtime_unavailable",
+                "runtime": runtime_kind,
+                "message": f"Agent runtime {runtime_kind!r} is not available yet",
+            },
+        )
     identity = TargetSessionIdentity(
         session_id=body.session_id,
         server_id=body.server_id,
@@ -143,6 +156,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
         body.attachments,
         force_current_turn=bool(body.resume_run_id),
     )
+    meta = {**(body.metadata or {}), "runtime": runtime_kind}
     resumed_from: str | None = None
     if body.resume_run_id:
         run = STORE.create_run_resuming(
@@ -151,7 +165,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             security_mode=mode,
             interaction_mode=interaction,
             identity=identity,
-            metadata=body.metadata,
+            metadata=meta,
             new_run_id=body.run_id,
         )
         if run is None:
@@ -172,6 +186,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             )
         resumed_from = body.resume_run_id
         run.interaction_mode = interaction
+        run.metadata["runtime"] = runtime_kind
         run.append_event(
             "session_resumed",
             {"from_run_id": body.resume_run_id, "messages": len(run.messages)},
@@ -183,7 +198,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             security_mode=mode,
             interaction_mode=interaction,
             identity=identity,
-            metadata=body.metadata,
+            metadata=meta,
         )
         if body.history:
             _seed_history(run, mode, interaction, body.history)
@@ -197,7 +212,9 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             },
         )
 
-    loop_task = asyncio.create_task(start_run_via_graph(run, user_message))
+    # Task 1: only BuiltinRuntime is wired; cursor/codex rejected above.
+    runtime = BuiltinRuntime()
+    loop_task = asyncio.create_task(runtime.start(run, user_message))
     run.task = loop_task
     stall_task = asyncio.create_task(watch_run_for_stall(run))
     run.metadata["_stall_task"] = stall_task
@@ -209,6 +226,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             "message": body.message[:200],
             "security_mode": mode,
             "interaction_mode": interaction,
+            "runtime": runtime_kind,
             "resumed_from": resumed_from,
             "attachments": len(body.attachments),
         },
