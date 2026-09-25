@@ -161,7 +161,9 @@ class CursorRuntime:
                     text = str(ev.get("text") or "")
                     assistant_buf += text
                     run.append_message({"role": "assistant", "content": text})
-                    run.append_event("message", {"role": "assistant", "content": text})
+                    run.append_event(
+                        "assistant_message", {"content": text}
+                    )
                 elif et == "external_tool_activity":
                     run.append_event(
                         "external_tool_activity",
@@ -169,6 +171,7 @@ class CursorRuntime:
                             "name": ev.get("name"),
                             "detail": ev.get("detail"),
                             "ok": ev.get("ok"),
+                            "runtime": "cursor",
                         },
                     )
                 elif et == "cancelled":

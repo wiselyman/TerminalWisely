@@ -111,7 +111,14 @@ export type AgentUiEvent =
       error?: string;
       host_may_still_be_running?: boolean;
     }
-  | { type: "run_stalled"; stall_seconds?: number };
+  | { type: "run_stalled"; stall_seconds?: number }
+  | {
+      type: "external_tool_activity";
+      name: string;
+      detail?: string;
+      ok?: boolean;
+      runtime?: string;
+    };
 
 export type AskUserHandler = (event: Extract<AgentUiEvent, { type: "ask_user" }>) => Promise<{
   selected_option_ids: string[];
@@ -392,6 +399,16 @@ async function handleProtocolEvent(opts: {
         risk: typeof p.risk === "string" ? p.risk : undefined,
       });
     }
+  } else if (ev.type === "external_tool_activity") {
+    const name = typeof p.name === "string" ? p.name.trim() : "";
+    if (!name) return "continue";
+    onEvent({
+      type: "external_tool_activity",
+      name,
+      detail: typeof p.detail === "string" ? p.detail : undefined,
+      ok: typeof p.ok === "boolean" ? p.ok : undefined,
+      runtime: typeof p.runtime === "string" ? p.runtime : undefined,
+    });
   } else if (ev.type === "tool_timeout") {
     const callId = String(p.call_id ?? "");
     if (!callId) return "continue";
@@ -726,6 +743,8 @@ export async function runAgentChat(opts: {
   /** Prefer seeding from a prior sidecar SessionLog (tool results preserved). */
   resumeRunId?: string | null;
   interactionMode?: string;
+  /** Agent runtime adapter: builtin | cursor | codex. */
+  runtime?: "builtin" | "cursor" | "codex";
   attachments?: Array<Record<string, unknown>>;
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
@@ -758,6 +777,7 @@ export async function runAgentChat(opts: {
     history,
     resumeRunId,
     interactionMode,
+    runtime,
     attachments,
     onEvent,
     onAskUser,
@@ -781,6 +801,7 @@ export async function runAgentChat(opts: {
       metadata,
       security_mode: securityMode ?? null,
       interaction_mode: interactionMode ?? null,
+      runtime: runtime ?? "builtin",
       server_id: serverId ?? null,
       host_fingerprint: hostFingerprint ?? null,
       remote_user: remoteUser ?? null,

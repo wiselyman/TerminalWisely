@@ -5,6 +5,7 @@ import {
   saveAiSettings,
   fetchRunTrace,
   fetchRunTranscript,
+  type AgentRuntimeKind,
   type AiSettingsUpdate,
   type AiSettingsView,
   type SidecarInfo,
@@ -16,6 +17,7 @@ import {
   runAgentChat,
   type AgentUiEvent,
 } from "../lib/aiEngineer/chatClient";
+import { externalAgentActivityFromEvent } from "../lib/aiEngineer/externalAgentActivity";
 import { ResumeMissError } from "../lib/aiEngineer/resumeMiss";
 import { remoteUserFromServerId } from "../lib/aiEngineer/targetIdentity";
 import {
@@ -157,6 +159,14 @@ export type ChatLine =
       risk?: string;
       approvalDecision?: "approved" | "rejected";
     }
+  | {
+      id: string;
+      kind: "external_activity";
+      name: string;
+      detail?: string;
+      ok?: boolean | null;
+      runtime?: string;
+    }
   | { id: string; kind: "error"; content: string }
   | {
       id: string;
@@ -284,6 +294,7 @@ function isPersistableChatLine(v: unknown): v is ChatLine {
     kind === "user" ||
     kind === "assistant" ||
     kind === "tool" ||
+    kind === "external_activity" ||
     kind === "error" ||
     kind === "notice" ||
     kind === "attachment"
@@ -306,6 +317,16 @@ function slimMessagesForPersist(lines: ChatLine[]): ChatLine[] {
       }
       if (line.kind === "tool") {
         return slimToolLineForPersist(line);
+      }
+      if (line.kind === "external_activity") {
+        return {
+          id: line.id,
+          kind: "external_activity" as const,
+          name: line.name,
+          ...(line.detail ? { detail: line.detail } : {}),
+          ...(line.ok != null ? { ok: line.ok } : {}),
+          ...(line.runtime ? { runtime: line.runtime } : {}),
+        };
       }
       if (line.kind === "notice") {
         return {
@@ -823,6 +844,8 @@ type AiEngineerState = {
   sidecar: SidecarInfo | null;
   settings: AiSettingsView | null;
   settingsOpen: boolean;
+  /** Picker: Builtin profiles vs Cursor (Codex later). */
+  agentRuntime: AgentRuntimeKind;
   input: string;
   messages: ChatLine[];
   threadsByScope: Record<string, ScopeThreadBundle>;
@@ -866,6 +889,7 @@ type AiEngineerState = {
   setWidth: (w: number) => void;
   setInput: (v: string) => void;
   setSettingsOpen: (v: boolean) => void;
+  setAgentRuntime: (runtime: AgentRuntimeKind) => void;
   setThreadSecurityMode: (mode: string) => void;
   setThreadInteractionMode: (mode: string) => void;
   addPendingAttachment: (att: PendingAttachment) => void;
@@ -1056,6 +1080,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   sidecar: null,
   settings: null,
   settingsOpen: false,
+  agentRuntime: "builtin",
   input: "",
   messages: [],
   threadsByScope: {},
@@ -1279,6 +1304,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   },
 
   setSettingsOpen: (v) => set({ settingsOpen: v }),
+
+  setAgentRuntime: (runtime) => {
+    const next =
+      runtime === "cursor" || runtime === "codex" ? runtime : "builtin";
+    set({ agentRuntime: next });
+  },
 
   setThreadSecurityMode: (mode) => {
     const { chatScope, activeThreadId, threadsByScope } = get();
@@ -1740,7 +1771,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const text = get().input.trim();
     const pendingAtts = [...get().pendingAttachments];
     if (!text && pendingAtts.length === 0) return;
-    if (!isAiModelConfigured(get().settings)) {
+    const runtime = get().agentRuntime === "cursor" ? "cursor" : "builtin";
+    if (runtime === "builtin" && !isAiModelConfigured(get().settings)) {
       set({ settingsOpen: true });
       return;
     }
@@ -2097,6 +2129,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             ?.securityMode,
         ),
         interactionMode,
+        runtime,
         serverId: resolvedServerId,
         hostFingerprint,
         remoteUser,
@@ -2283,6 +2316,20 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 event.payload,
                 existing?.output,
               ),
+            });
+            set({ modelPhase: "thinking" });
+            return;
+          }
+          if (event.type === "external_tool_activity") {
+            const card = externalAgentActivityFromEvent(event);
+            if (!card) return;
+            appendIfSameThread({
+              id: nextId(),
+              kind: "external_activity",
+              name: card.name,
+              detail: card.detail || undefined,
+              ok: card.ok,
+              runtime: card.runtime,
             });
             set({ modelPhase: "thinking" });
             return;

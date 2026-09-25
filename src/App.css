@@ -10918,6 +10918,58 @@ body.cmd-nav-panel-resizing {
   white-space: nowrap;
 }
 .ai-engineer-model-btn:hover { border-color: var(--tw-fg-muted); color: var(--tw-fg); }
+.ai-engineer-menu-section-label {
+  padding: 8px 12px 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tw-fg-muted);
+}
+.ai-engineer-runtime-disclaimer {
+  margin: 4px 12px 8px;
+  padding: 6px 8px;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--tw-fg-muted);
+  background: var(--tw-surface-2);
+  border-radius: 6px;
+}
+.ai-engineer-external-activity {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--tw-border);
+  border-radius: 8px;
+  background: var(--tw-surface-1, var(--tw-bg));
+  font-size: 0.78rem;
+}
+.ai-engineer-external-activity-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.ai-engineer-external-activity-runtime {
+  font-weight: 600;
+  color: var(--tw-fg-muted);
+}
+.ai-engineer-external-activity-name {
+  color: var(--tw-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ai-engineer-external-activity-status {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--tw-fg-muted);
+}
+.ai-engineer-external-activity-detail {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.72rem;
+  color: var(--tw-fg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
 .dropdown-chevron {
   flex-shrink: 0;
   display: block;

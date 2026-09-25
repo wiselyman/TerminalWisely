@@ -139,17 +139,17 @@
 - Smoke: `scripts/smoke-product-checklist.mjs`
 - E2E: extend mock path in `e2e/` + `tauriCoreMock.ts`
 
-- [ ] **Step 1: Failing vitest** — map `external_tool_activity` event → card model.
+- [x] **Step 1: Failing vitest** — map `external_tool_activity` event → card model.
 
-- [ ] **Step 2: Picker** shows Builtin | Cursor (| Codex disabled/hidden until M2). Pass `runtime` on `chat/start`.
+- [x] **Step 2: Picker** shows Builtin | Cursor (| Codex disabled/hidden until M2). Pass `runtime` on `chat/start`.
 
-- [ ] **Step 3: Busy copy** — 「Cursor 运行中…」; dual-plane one-line disclaimer near picker.
+- [x] **Step 3: Busy copy** — 「Cursor 运行中…」; dual-plane one-line disclaimer near picker.
 
-- [ ] **Step 4: Render** external activity cards; remote tools unchanged.
+- [x] **Step 4: Render** external activity cards; remote tools unchanged.
 
-- [ ] **Step 5: Smoke + vitest + one Playwright** with mocked runtime — pass.
+- [x] **Step 5: Smoke + vitest + one Playwright** with mocked runtime — pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
   ```bash
   git commit -m "feat(ui): Cursor runtime in model picker and activity cards"
   ```

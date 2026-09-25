@@ -892,6 +892,8 @@ export function AiEngineerPanel({
   const setSettingsOpen = useAiEngineerStore((s) => s.setSettingsOpen);
   const settings = useAiEngineerStore((s) => s.settings);
   const saveSettings = useAiEngineerStore((s) => s.saveSettings);
+  const agentRuntime = useAiEngineerStore((s) => s.agentRuntime);
+  const setAgentRuntime = useAiEngineerStore((s) => s.setAgentRuntime);
   const chatScope = useAiEngineerStore((s) => s.chatScope);
   const activeThreadId = useAiEngineerStore((s) => s.activeThreadId);
   const threadsByScope = useAiEngineerStore((s) => s.threadsByScope);
@@ -1225,7 +1227,14 @@ export function AiEngineerPanel({
 
   const profiles = settings?.profiles ?? [];
   const modelConfigured = isAiModelConfigured(settings);
-  const activeProfileLabel = formatActiveAiProfileLabel(settings);
+  const canChat =
+    agentRuntime === "cursor" || agentRuntime === "codex" || modelConfigured;
+  const activeProfileLabel =
+    agentRuntime === "cursor"
+      ? t("aiEngineer.runtime.cursor")
+      : agentRuntime === "codex"
+        ? t("aiEngineer.runtime.codex")
+        : formatActiveAiProfileLabel(settings);
 
   useEffect(() => {
     if (storeOpen && liveSessionId === sessionId) {
@@ -2023,8 +2032,12 @@ export function AiEngineerPanel({
           : busyPhase.kind === "host_exec"
             ? t("aiEngineer.hostExecuting", { title: busyPhase.title })
             : busyPhase.kind === "thinking" && busyPhase.streamingThought
-              ? t("aiEngineer.modelThinking")
-              : t("aiEngineer.running");
+              ? agentRuntime === "cursor"
+                ? t("aiEngineer.cursorRunning")
+                : t("aiEngineer.modelThinking")
+              : agentRuntime === "cursor"
+                ? t("aiEngineer.cursorRunning")
+                : t("aiEngineer.running");
 
   const submit = () => {
     if (busy) return;
@@ -2037,7 +2050,7 @@ export function AiEngineerPanel({
   };
 
   const requestSaveAsSkill = () => {
-    if (busy || !ready || !modelConfigured) return;
+    if (busy || !ready || !canChat) return;
     setComposerInput(t("aiEngineer.saveAsSkillPrompt"));
     void sendMessage({
       sessionId,
@@ -2687,7 +2700,7 @@ export function AiEngineerPanel({
                     ) : null}
                   </div>
                 ) : null}
-                {!modelConfigured ? (
+                {!canChat ? (
                   <div className="ai-engineer-configure-model">
                     <p className="ai-engineer-configure-model-title">
                       {t("aiEngineer.configureModelTitle")}
@@ -2715,7 +2728,7 @@ export function AiEngineerPanel({
                           key={id}
                           type="button"
                           className="ai-engineer-workflow-chip"
-                          disabled={!ready || !modelConfigured}
+                          disabled={!ready || !canChat}
                           onClick={() => applyWorkflowChip(id)}
                         >
                           {t(`aiEngineer.workflow.${id}`)}
@@ -2827,6 +2840,44 @@ export function AiEngineerPanel({
                           <span className="ai-engineer-attach-tile-label">{shortLabel}</span>
                         </span>
                       </button>
+                    );
+                  }
+                  if (line.kind === "external_activity") {
+                    const status =
+                      line.ok === false
+                        ? t("aiEngineer.toolFailed")
+                        : line.ok === true
+                          ? t("aiEngineer.toolDone")
+                          : "";
+                    return (
+                      <div
+                        key={rowKey}
+                        className="ai-engineer-external-activity"
+                        data-testid="ai-engineer-external-activity"
+                      >
+                        <div className="ai-engineer-external-activity-head">
+                          <span className="ai-engineer-external-activity-runtime">
+                            {line.runtime === "cursor"
+                              ? t("aiEngineer.runtime.cursor")
+                              : line.runtime === "codex"
+                                ? t("aiEngineer.runtime.codex")
+                                : t("aiEngineer.runtime.external")}
+                          </span>
+                          <span className="ai-engineer-external-activity-name">
+                            {line.name}
+                          </span>
+                          {status ? (
+                            <span className="ai-engineer-external-activity-status">
+                              {status}
+                            </span>
+                          ) : null}
+                        </div>
+                        {line.detail ? (
+                          <pre className="ai-engineer-external-activity-detail">
+                            {line.detail}
+                          </pre>
+                        ) : null}
+                      </div>
                     );
                   }
                   if (line.kind === "tool") {
@@ -3227,7 +3278,7 @@ export function AiEngineerPanel({
                                 data-testid="ai-engineer-save-skill"
                                 aria-label={t("aiEngineer.saveAsSkill")}
                                 title={t("aiEngineer.saveAsSkill")}
-                                disabled={!ready || !modelConfigured || busy}
+                                disabled={!ready || !canChat || busy}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   requestSaveAsSkill();
@@ -3364,7 +3415,7 @@ export function AiEngineerPanel({
                 <AiEngineerComposerTextarea
                   ref={textareaRef}
                   placeholder={inputPlaceholder}
-                  disabled={!ready || !modelConfigured}
+                  disabled={!ready || !canChat}
                   onPaste={onComposerPaste}
                   onSubmit={submit}
                 />
@@ -3407,10 +3458,6 @@ export function AiEngineerPanel({
                         }}
                         onClick={() => {
                           runWithComposerChromeScrollGuard(() => {
-                            if (!modelConfigured) {
-                              openSettings();
-                              return;
-                            }
                             setModelOpen((v) => !v);
                             setHistoryOpen(false);
                             setSecurityOpen(false);
@@ -3420,15 +3467,11 @@ export function AiEngineerPanel({
                           });
                         }}
                       >
-                        {modelConfigured ? (
-                          <span className="ai-engineer-model-btn-label">
-                            {activeProfileLabel}
-                          </span>
-                        ) : (
-                          <span className="ai-engineer-model-btn-label">
-                            {t("aiEngineer.configureModelTitle")}
-                          </span>
-                        )}
+                        <span className="ai-engineer-model-btn-label">
+                          {canChat
+                            ? activeProfileLabel
+                            : t("aiEngineer.configureModelTitle")}
+                        </span>
                         <ChevronDown
                           size={14}
                           strokeWidth={2.25}
@@ -3436,7 +3479,7 @@ export function AiEngineerPanel({
                           aria-hidden
                         />
                       </button>
-                      {modelOpen && modelConfigured
+                      {modelOpen
                         ? createPortal(
                             <div
                               ref={modelMenuRef}
@@ -3454,6 +3497,73 @@ export function AiEngineerPanel({
                                 overflowY: "auto",
                               }}
                             >
+                              <div
+                                className="ai-engineer-menu-section-label"
+                                data-testid="ai-engineer-runtime-section"
+                              >
+                                {t("aiEngineer.runtime.section")}
+                              </div>
+                              <button
+                                type="button"
+                                className={`ai-engineer-menu-item${
+                                  agentRuntime === "builtin" ? " active" : ""
+                                }`}
+                                role="menuitem"
+                                data-testid="ai-engineer-runtime-builtin"
+                                onMouseDown={(e) => {
+                                  if (shouldPreventComposerChromeFocusScroll()) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                onClick={() => {
+                                  runWithComposerChromeScrollGuard(() => {
+                                    setModelOpen(false);
+                                  });
+                                  setAgentRuntime("builtin");
+                                }}
+                              >
+                                <span className="ai-engineer-model-name">
+                                  {t("aiEngineer.runtime.builtin")}
+                                </span>
+                                <span className="ai-engineer-model-id">
+                                  {t("aiEngineer.runtime.builtinHint")}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                className={`ai-engineer-menu-item${
+                                  agentRuntime === "cursor" ? " active" : ""
+                                }`}
+                                role="menuitem"
+                                data-testid="ai-engineer-runtime-cursor"
+                                onMouseDown={(e) => {
+                                  if (shouldPreventComposerChromeFocusScroll()) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                onClick={() => {
+                                  runWithComposerChromeScrollGuard(() => {
+                                    setModelOpen(false);
+                                  });
+                                  setAgentRuntime("cursor");
+                                }}
+                              >
+                                <span className="ai-engineer-model-name">
+                                  {t("aiEngineer.runtime.cursor")}
+                                </span>
+                                <span className="ai-engineer-model-id">
+                                  {t("aiEngineer.runtime.cursorHint")}
+                                </span>
+                              </button>
+                              <p
+                                className="ai-engineer-runtime-disclaimer"
+                                data-testid="ai-engineer-runtime-disclaimer"
+                              >
+                                {t("aiEngineer.runtime.dualPlaneDisclaimer")}
+                              </p>
+                              <div className="ai-engineer-menu-section-label">
+                                {t("aiEngineer.runtime.builtinProfiles")}
+                              </div>
                               {profiles.length === 0 ? (
                                 <div className="ai-engineer-menu-empty">
                                   {t("aiEngineer.noModels")}
@@ -3464,6 +3574,7 @@ export function AiEngineerPanel({
                                     key={p.id}
                                     type="button"
                                     className={`ai-engineer-menu-item${
+                                      agentRuntime === "builtin" &&
                                       p.id === settings?.active_profile_id
                                         ? " active"
                                         : ""
@@ -3475,14 +3586,13 @@ export function AiEngineerPanel({
                                       }
                                     }}
                                     onClick={() => {
-                                      // Close menu + lock scroll immediately; persist in background.
-                                      // (Awaiting save used to block on full sidecar restart.)
                                       runWithComposerChromeScrollGuard(() => {
                                         setModelOpen(false);
                                       });
                                       void saveSettings({
                                         active_profile_id: p.id,
                                       });
+                                      setAgentRuntime("builtin");
                                     }}
                                   >
                                     <span className="ai-engineer-model-name">
@@ -3546,7 +3656,7 @@ export function AiEngineerPanel({
                         className={`ai-engineer-paperclip-btn${attachMenuOpen ? " is-open" : ""}`}
                         aria-label={t("aiEngineer.attachMenu")}
                         aria-expanded={attachMenuOpen}
-                        disabled={!ready || !modelConfigured}
+                        disabled={!ready || !canChat}
                         onPointerDown={(e) => {
                           if (shouldPreventComposerChromeFocusScroll()) {
                             e.preventDefault();
@@ -3632,7 +3742,7 @@ export function AiEngineerPanel({
                     <AiEngineerComposerSendButton
                       busy={busy}
                       ready={ready}
-                      modelConfigured={modelConfigured}
+                      modelConfigured={canChat}
                       stopLabel={t("aiEngineer.stop")}
                       sendLabel={t("aiEngineer.send")}
                       onStop={() => stopActiveRun()}

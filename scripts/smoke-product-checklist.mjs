@@ -1204,6 +1204,16 @@ function exists(rel) {
   } else {
     fail("ai.model-menu-portal", "model menu must use body portal to avoid overflow clip");
   }
+  if (
+    panel.includes('data-testid="ai-engineer-runtime-cursor"') &&
+    panel.includes('data-testid="ai-engineer-runtime-disclaimer"') &&
+    panel.includes("aiEngineer.runtime.dualPlaneDisclaimer") &&
+    panel.includes("external_activity")
+  ) {
+    pass("ai.runtime-picker", "Cursor runtime picker + dual-plane disclaimer + external cards");
+  } else {
+    fail("ai.runtime-picker", "missing Cursor runtime picker / disclaimer / external_activity");
+  }
   if (panel.includes("ai-engineer-platform") || panel.includes("AiEngineerPlatformPanel")) {
     fail("ai.no-platform", "Platform panel remnants in AiEngineerPanel");
   } else {
