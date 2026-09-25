@@ -162,11 +162,11 @@
 - Modify: `docs/TEST_MATRIX.md`, `RELEASE_NOTES.md` / `CHANGELOG.md` when cutting 0.0.2
 - Verify: `node scripts/check-no-agent-hardcoding.mjs`
 
-- [ ] **Step 1: Add matrix rows** for runtime dispatch, TW MCP, Cursor fake, picker smoke/E2E.
+- [x] **Step 1: Add matrix rows** for runtime dispatch, TW MCP, Cursor fake, picker smoke/E2E.
 
-- [ ] **Step 2: Run** `./scripts/run-all-tests.sh` (or scoped then full before push).
+- [x] **Step 2: Run** hardcoding ban + scoped tests (full `./scripts/run-all-tests.sh` before push).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
   ```bash
   git commit -m "docs(test): matrix for external agent runtimes"
   ```
