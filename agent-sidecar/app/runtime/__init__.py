@@ -34,5 +34,12 @@ def normalize_runtime(value: str | None) -> RuntimeKind:
 
 
 def runtime_available(kind: RuntimeKind) -> bool:
-    """Task 1: only builtin is wired. Cursor/Codex land in later tasks."""
-    return kind == "builtin"
+    """Which runtimes chat/start may launch."""
+    if kind == "builtin":
+        return True
+    if kind == "cursor":
+        # Fake driver always works; real SDK optional later.
+        return True
+    if kind == "codex":
+        return False
+    return False

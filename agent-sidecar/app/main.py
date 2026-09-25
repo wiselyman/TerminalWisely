@@ -212,12 +212,18 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             },
         )
 
-    # Task 1: only BuiltinRuntime is wired; cursor/codex rejected above.
-    runtime = BuiltinRuntime()
+    # Dispatch agent runtime (builtin ModelGateway loop | Cursor | …).
+    if runtime_kind == "cursor":
+        from app.runtime.cursor_runtime import CursorRuntime
+
+        runtime: Any = CursorRuntime()
+    else:
+        runtime = BuiltinRuntime()
     loop_task = asyncio.create_task(runtime.start(run, user_message))
     run.task = loop_task
     stall_task = asyncio.create_task(watch_run_for_stall(run))
     run.metadata["_stall_task"] = stall_task
+    run.metadata["_agent_runtime"] = runtime_kind
     STORE.audit(
         "chat_start",
         {

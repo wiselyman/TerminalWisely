@@ -102,14 +102,11 @@ def test_chat_start_builtin_runtime_default(monkeypatch: pytest.MonkeyPatch) -> 
         assert run.metadata.get("runtime") == "builtin"
 
 
-def test_chat_start_cursor_runtime_not_implemented_yet(
+def test_chat_start_cursor_runtime_uses_fake(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """M1 scaffold: cursor accepted on the wire but returns 501 until CursorRuntime ships."""
-    model = ScriptedModel(
-        [{"role": "assistant", "content": "nope", "tool_calls": []}]
-    )
-    _patch_model(monkeypatch, model)
+    """Cursor runtime is available via FakeCursorDriver (no SDK required)."""
+    monkeypatch.setenv("TW_AI_CURSOR_FAKE", "1")
     with TestClient(app) as client:
         r = client.post(
             "/v1/chat/start",
@@ -120,8 +117,6 @@ def test_chat_start_cursor_runtime_not_implemented_yet(
                 "runtime": "cursor",
             },
         )
-        # Task 1: accept field + dispatch table; cursor not wired → 501
-        assert r.status_code == 501, r.text
-        detail = r.json()["detail"]
-        assert detail["error"] == "runtime_unavailable"
-        assert detail["runtime"] == "cursor"
+        assert r.status_code == 200, r.text
+        run = STORE._runs[r.json()["run_id"]]
+        assert run.metadata.get("runtime") == "cursor"
