@@ -14,6 +14,27 @@ describe("lastAssistantTextFromTranscript", () => {
       ]),
     ).toBe("full answer。");
   });
+
+  it("ignores prior-turn assistants before the latest user message", () => {
+    expect(
+      lastAssistantTextFromTranscript([
+        { role: "user", content: "list big files" },
+        { role: "assistant", content: "## 大文件汇总\n| path | size |" },
+        { role: "user", content: "显卡是哪家集成商" },
+      ]),
+    ).toBe("");
+  });
+
+  it("returns this-turn assistant after the latest user message", () => {
+    expect(
+      lastAssistantTextFromTranscript([
+        { role: "user", content: "list big files" },
+        { role: "assistant", content: "## 大文件汇总" },
+        { role: "user", content: "显卡是哪家集成商" },
+        { role: "assistant", content: "板卡厂商需查 lspci Subsystem" },
+      ]),
+    ).toBe("板卡厂商需查 lspci Subsystem");
+  });
 });
 
 describe("shouldReplaceAssistantWithTranscript", () => {
@@ -54,5 +75,18 @@ describe("shouldReplaceAssistantWithTranscript", () => {
         transcriptContent: "说明如下，还剩两小时左右。",
       }),
     ).toBe(true);
+  });
+
+  it("does not fill an empty UI from a prior-turn transcript alone", () => {
+    // Guard: shouldReplace would say yes for empty UI + long full — callers must
+    // pass lastAssistantTextFromTranscript (this-turn only), which returns "".
+    const prior = "## 大文件汇总\n| path | size |";
+    expect(
+      lastAssistantTextFromTranscript([
+        { role: "user", content: "大文件" },
+        { role: "assistant", content: prior },
+        { role: "user", content: "显卡集成商?" },
+      ]),
+    ).toBe("");
   });
 });

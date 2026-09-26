@@ -41,16 +41,19 @@ async def _list_tools() -> list[dict[str, Any]]:
 
 
 async def _call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    from app.runtime.tw_mcp import normalize_mcp_tool_name
+
     run_id = os.environ.get("TW_AI_RUN_ID") or ""
     session_id = os.environ.get("TW_AI_SESSION_ID") or ""
     url = f"{_sidecar_url()}/v1/runs/{run_id}/mcp/call"
+    tool_name = normalize_mcp_tool_name(name)
     async with httpx.AsyncClient(timeout=600.0) as client:
         r = await client.post(
             url,
             headers=_auth_headers(),
             json={
                 "session_id": session_id,
-                "name": name,
+                "name": tool_name,
                 "arguments": arguments or {},
             },
         )

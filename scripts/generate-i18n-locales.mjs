@@ -511,15 +511,18 @@ const catalog = {
   },
   welcome: {
     sectionAria: { zh: "产品介绍", en: "Product introduction" },
-    eyebrow: { zh: "开源桌面终端", en: "Open-source desktop terminal" },
+    eyebrow: {
+      zh: "v0.0.2 · Cursor / Codex / Claude Code → 运维",
+      en: "v0.0.2 · Cursor / Codex / Claude Code → ops",
+    },
     productName: { zh: "TerminalWisely", en: "TerminalWisely" },
     tagline: {
-      zh: "为日常运维准备的桌面终端",
-      en: "A desktop terminal built for day-to-day ops",
+      zh: "编码 Agent 接到真实 SSH 与 Kubernetes 运维",
+      en: "Coding agents meet live SSH & Kubernetes ops",
     },
     summary: {
-      zh: "在同一窗口管理 SSH 会话，并用 AI Linux Engineer 在已连接主机上排障：你描述问题，AI 提出命令；只读自动执行，变更需你批准。拖拽上传、点击预览、跨服发送仍内置。",
-      en: "Manage SSH sessions in one window, plus AI Linux Engineer on the connected host: you describe the problem; the agent proposes commands. Reads run automatically; mutations need your approval. Drag-upload, click-preview, and cross-server send stay built in.",
+      zh: "同一窗口管理 SSH 会话与 Kubernetes 集群。可用内置 AI Linux / K8S Engineer——或让 Cursor Agent、Codex、Claude Code 当大脑，由 TW 管会话、MCP 工具、批准与 STOP。",
+      en: "Manage SSH sessions and Kubernetes clusters in one window. Use built-in AI Linux / K8S Engineers — or run Cursor Agent, Codex, or Claude Code as the brain while TW owns the session, MCP tools, approvals, and STOP.",
     },
     quickStart: { zh: "快速开始", en: "Quick start" },
     "feature.dragUpload.title": { zh: "拖拽上传", en: "Drag & drop upload" },

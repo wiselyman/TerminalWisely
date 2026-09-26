@@ -530,6 +530,8 @@ function exists(rel) {
       "panel.collapse",
       "aiEngineer.manageModels",
       "aiEngineer.modelPicker",
+      "aiEngineer.picker.tabModel",
+      "aiEngineer.picker.tabAgent",
       "aiEngineer.findChat",
       "aiEngineer.outline",
       "aiEngineer.outlineHint",
@@ -1127,11 +1129,18 @@ function exists(rel) {
       chatScroll.includes("shouldDeferResizeScrollDuringComposerChrome") &&
       panel.includes("runWithComposerChromeScrollGuard") &&
       panel.includes("shouldDeferResizeScrollDuringComposerChrome") &&
-      /setModelOpen\(false\)[\s\S]{0,120}void saveSettings/.test(panel)
+      /setModelOpen\(false\)[\s\S]{0,120}void saveSettings/.test(panel) &&
+      /ai-engineer-picker-tab-model[\s\S]{0,900}runWithComposerChromeScrollGuard/.test(
+        panel,
+      ) &&
+      /ai-engineer-picker-tab-agent[\s\S]{0,900}runWithComposerChromeScrollGuard/.test(
+        panel,
+      ) &&
+      /\[modelOpen, pickerTab, profiles\.length/.test(panel)
     ) {
       pass(
         "ai.model-switch-scroll",
-        "model switch closes menu immediately; chrome lock + resize defer",
+        "model/agent tab chrome lock + menu place deps include pickerTab",
       );
     } else {
       fail(
@@ -1205,16 +1214,73 @@ function exists(rel) {
     fail("ai.model-menu-portal", "model menu must use body portal to avoid overflow clip");
   }
   if (
-    panel.includes('data-testid="ai-engineer-runtime-cursor"') &&
-    panel.includes('data-testid="ai-engineer-runtime-codex"') &&
-    panel.includes('data-testid="ai-engineer-runtime-claude"') &&
-    panel.includes('data-testid="ai-engineer-runtime-disclaimer"') &&
+    panel.includes('data-testid="ai-engineer-picker-tabs"') &&
+    panel.includes('"ai-engineer-runtime-cursor"') &&
+    panel.includes('"ai-engineer-runtime-status-cursor"') &&
     panel.includes('data-testid="ai-engineer-runtime-install"') &&
-    panel.includes("external_activity")
+    panel.includes("external_activity") &&
+    read("agent-sidecar/app/main.py").includes("asyncio.to_thread(probe_cursor)") &&
+    read("src/lib/aiEngineer/api.ts").includes('path.includes("/v1/runtime/probe")')
   ) {
-    pass("ai.runtime-picker", "Cursor/Codex/Claude picker + install-gate + external cards");
+    pass(
+      "ai.runtime-picker",
+      "Model/Agent tabs + per-agent CLI status icons + non-blocking probe",
+    );
   } else {
-    fail("ai.runtime-picker", "missing local CLI runtime picker / install-gate / external_activity");
+    fail("ai.runtime-picker", "missing Model/Agent picker tabs or local CLI gate");
+  }
+  const secretsRs = read("src-tauri/src/ai_engineer/secrets.rs");
+  const storeTs = read("src/stores/aiEngineerStore.ts");
+  if (
+    secretsRs.includes("agent_runtime") &&
+    storeTs.includes('saveSettings({ agent_runtime: next })') &&
+    storeTs.includes("normalizeAgentRuntime(settings.agent_runtime)") &&
+    read("src/lib/aiEngineer/api.ts").includes("agent_runtime?: string")
+  ) {
+    pass("ai.agent-runtime-persist", "agent_runtime saved with AI settings like model");
+  } else {
+    fail("ai.agent-runtime-persist", "agent selection not persisted in settings");
+  }
+  const externalAct = read("src/lib/aiEngineer/externalAgentActivity.ts");
+  if (
+    panel.includes('data-testid="ai-engineer-exec-agent-source"') &&
+    panel.includes("ai-engineer-exec-agent-source") &&
+    storeTs.includes("toolAgentSource") &&
+    storeTs.includes("agentSource") &&
+    externalAct.includes("isMirroredTwMcpActivity") &&
+    externalAct.includes("return null") &&
+    read("src/App.css").includes(".ai-engineer-exec-agent-source")
+  ) {
+    pass(
+      "ai.runtime-exec-agent-source",
+      "TW exec/web cards badge Cursor/Codex/Claude; mirrored MCP activity suppressed",
+    );
+  } else {
+    fail(
+      "ai.runtime-exec-agent-source",
+      "missing agent source badge or mirrored MCP suppress",
+    );
+  }
+  const remotePlane = read("agent-sidecar/app/runtime/remote_plane.py");
+  const cliHostRemotePlane = read("agent-sidecar/app/runtime/cli_host.py");
+  if (
+    remotePlane.includes("REMOTE_PLANE_ADDENDUM") &&
+    remotePlane.includes("is_local_desktop_impersonation") &&
+    remotePlane.includes("这台电脑") &&
+    cliHostRemotePlane.includes("--disable") &&
+    cliHostRemotePlane.includes("computer_use") &&
+    cliHostRemotePlane.includes("write_remote_plane_guidance") &&
+    externalAct.includes("isLocalDesktopImpersonationActivity")
+  ) {
+    pass(
+      "ai.runtime-remote-plane",
+      "external agents: deixis=SSH host; Codex disables computer_use; CUA suppressed",
+    );
+  } else {
+    fail(
+      "ai.runtime-remote-plane",
+      "missing remote-plane addendum / computer_use disable / CUA suppress",
+    );
   }
   if (panel.includes("ai-engineer-platform") || panel.includes("AiEngineerPlatformPanel")) {
     fail("ai.no-platform", "Platform panel remnants in AiEngineerPanel");
@@ -1242,6 +1308,41 @@ function exists(rel) {
   const chat = read("src/lib/aiEngineer/chatClient.ts");
   if (chat.includes("flushUserContext")) pass("ai.user-context", "flushUserContext");
   else fail("ai.user-context", "missing flushUserContext");
+  if (
+    chat.includes("stream_cursor") &&
+    chat.includes("cursor: streamCursor")
+  ) {
+    pass("ai.stream-cursor-resume", "chatClient wires stream_cursor into SSE/pull");
+  } else {
+    fail("ai.stream-cursor-resume", "chatClient missing stream_cursor wiring");
+  }
+  const cliHost = read("agent-sidecar/app/runtime/cli_host.py");
+  if (
+    cliHost.includes('.codex') &&
+    cliHost.includes("config.toml") &&
+    cliHost.includes("mcp_servers.terminalwisely")
+  ) {
+    pass("ai.codex-mcp-config", "write_tw_mcp_config writes Codex .codex/config.toml");
+  } else {
+    fail("ai.codex-mcp-config", "Codex project MCP config.toml missing");
+  }
+  if (
+    cliHost.includes('"stream-json"') &&
+    cliHost.includes("--verbose") &&
+    cliHost.includes("--include-partial-messages") &&
+    cliHost.includes("--strict-mcp-config") &&
+    cliHost.includes("bypassPermissions")
+  ) {
+    pass(
+      "ai.claude-stream-json-verbose",
+      "Claude -p stream-json includes --verbose + bypassPermissions for TW MCP",
+    );
+  } else {
+    fail(
+      "ai.claude-stream-json-verbose",
+      "Claude argv missing --verbose / bypassPermissions for stream-json MCP",
+    );
+  }
   const store = read("src/stores/aiEngineerStore.ts");
   for (const dead of ["platformOpen", "togglePlatformView", "openPlatformView"]) {
     if (store.includes(dead)) fail(`ai.store.no-${dead}`, `${dead} still in store`);

@@ -1,10 +1,12 @@
 {
   "sectionAria": "Product introduction",
-  "eyebrow": "v0.0.1 · Open-source desktop terminal",
+  "eyebrow": "v0.0.2 · Cursor / Codex / Claude Code → ops",
   "productName": "TerminalWisely",
-  "tagline": "Fix Linux and Kubernetes in plain language",
-  "summary": "Manage SSH sessions and Kubernetes clusters in one window. Open a host Desktop (files, processes, browser) through the live SSH session. AI Linux Engineer works on the connected host; AI K8S Engineer works on the selected cluster. You describe the problem; the agent proposes actions. Reads run automatically; mutations need your approval.",
+  "tagline": "Coding agents meet live SSH & Kubernetes ops",
+  "summary": "Manage SSH sessions and Kubernetes clusters in one window. Open a host Desktop (files, processes, browser) through the live SSH session. Use built-in AI Linux / K8S Engineers — or run Cursor Agent, Codex, or Claude Code as the brain while TW owns the session, MCP tools, approvals, and STOP.",
   "quickStart": "Quick start",
+  "feature.agentRuntimes.title": "Cursor / Codex / Claude Code → ops",
+  "feature.agentRuntimes.desc": "Pick an installed CLI as the agent runtime. It investigates via TW MCP on the same SSH session or cluster you already opened — no second login. Mutations need TW approval; STOP kills the run. TW guides install & login; it never silently installs CLIs.",
   "feature.aiEngineer.title": "AI Linux & K8S Engineers",
   "feature.aiEngineer.desc": "Hosts view: tell the connected host “disk is full” or “nginx 502” over your real SSH session. Long agent runs keep the session leased. K8s view: troubleshoot CrashLoop, image pulls, and Services with k8s_* tools. Risky changes ask for approval.",
   "feature.k8s.title": "Kubernetes workbench",
@@ -14,7 +16,7 @@
   "feature.hostBrowser.title": "Host Browser",
   "feature.hostBrowser.desc": "Browse HTTP services on the remote host (including 127.0.0.1) through the existing SSH session. Multi-tab chrome with history and bookmarks, isolated per host.",
   "feature.policySafe.title": "Policy & safety",
-  "feature.policySafe.desc": "The harness classifies commands by capability (R0–R4): auto-allow reads, approve mutations, deny catastrophes. Unknown scripts are strict. The model cannot bypass policy. API keys stay on-device; execution uses only your open sessions.",
+  "feature.policySafe.desc": "The harness classifies commands by capability (R0–R4): auto-allow reads, approve mutations, deny catastrophes. Unknown scripts are strict. The model cannot bypass policy — including when Cursor / Codex / Claude Code call TW tools. API keys stay on-device; execution uses only your open sessions.",
   "feature.dragUpload.title": "Drag & drop upload",
   "feature.dragUpload.desc": "Drop files onto an SSH terminal or tab to upload via SFTP into the current remote directory.",
   "feature.clickBrowse.title": "Click to browse & edit",
@@ -36,5 +38,5 @@
   "step.ssh.iconLabel": "Remote SSH",
   "step.ssh.text": "Connect to a Linux host; save it as a bookmark for next time. Or switch the sidebar to K8s and pick a cluster.",
   "step.bookmark.iconLabel": "AI Engineer",
-  "step.bookmark.text": "Open AI Engineer from the title bar. On Hosts it is Linux mode; on K8s it is K8S mode—approve mutations when prompted."
+  "step.bookmark.text": "Open AI Engineer from the title bar. Choose Built-in, Cursor, Codex, or Claude Code. On Hosts it is Linux mode; on K8s it is K8S mode—approve mutations when prompted."
 }

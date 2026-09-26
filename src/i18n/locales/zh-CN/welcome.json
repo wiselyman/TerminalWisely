@@ -1,10 +1,12 @@
 {
   "sectionAria": "产品介绍",
-  "eyebrow": "v0.0.1 · 开源桌面终端",
+  "eyebrow": "v0.0.2 · Cursor / Codex / Claude Code → 运维",
   "productName": "TerminalWisely",
-  "tagline": "用自然语言修 Linux 与 Kubernetes",
-  "summary": "同一窗口管理 SSH 会话与 Kubernetes 集群。在已连接主机上打开 Desktop（文件、进程、浏览器）。Hosts 下为 AI Linux Engineer；侧栏切到 K8s 后为 AI K8S Engineer。你描述问题，AI 提议操作；只读自动执行，变更必须你批准。",
+  "tagline": "编码 Agent 接到真实 SSH 与 Kubernetes 运维",
+  "summary": "同一窗口管理 SSH 会话与 Kubernetes 集群。在已连接主机上打开 Desktop（文件、进程、浏览器）。可用内置 AI Linux / K8S Engineer——或让 Cursor Agent、Codex、Claude Code 当大脑，由 TW 管会话、MCP 工具、批准与 STOP。",
   "quickStart": "快速开始",
+  "feature.agentRuntimes.title": "Cursor / Codex / Claude Code → 运维",
+  "feature.agentRuntimes.desc": "选择已安装的 CLI 作为 Agent 运行时。经 TW MCP 在你已打开的同一 SSH / 集群上排查——不另开登录。变更需 TW 批准；STOP 终止运行。TW 引导安装与登录，不会静默安装 CLI。",
   "feature.aiEngineer.title": "AI Linux 与 K8S Engineer",
   "feature.aiEngineer.desc": "Hosts：对已连接主机说「磁盘满了」「nginx 502」；长时间 Agent 任务会续租 SSH。K8s：用 k8s_* 工具排查 CrashLoop、镜像拉取与 Service。危险变更弹出批准。",
   "feature.k8s.title": "Kubernetes 工作台",
@@ -14,7 +16,7 @@
   "feature.hostBrowser.title": "主机 Browser",
   "feature.hostBrowser.desc": "通过现有 SSH 会话访问远端 HTTP 服务（含 127.0.0.1）。多标签、历史与书签，按主机隔离。",
   "feature.policySafe.title": "策略与安全",
-  "feature.policySafe.desc": "Harness 按命令能力分级（R0–R4）：只读自动、变更审批、灾难级拒绝。未知脚本偏严；模型不能绕过策略。API Key 存本机，执行只走你已打开的会话。",
+  "feature.policySafe.desc": "Harness 按命令能力分级（R0–R4）：只读自动、变更审批、灾难级拒绝。未知脚本偏严；模型不能绕过策略——包括 Cursor / Codex / Claude Code 调用 TW 工具时。API Key 存本机，执行只走你已打开的会话。",
   "feature.dragUpload.title": "拖拽上传",
   "feature.dragUpload.desc": "将文件拖入 SSH 终端窗口，或拖到 SSH 标签上，自动通过 SFTP 上传到当前远程目录。",
   "feature.clickBrowse.title": "点击浏览与编辑",
@@ -36,5 +38,5 @@
   "step.ssh.iconLabel": "远程 SSH",
   "step.ssh.text": "连接 Linux 主机并保存书签；或侧栏切换到 K8s 选择集群。",
   "step.bookmark.iconLabel": "AI 工程师",
-  "step.bookmark.text": "标题栏打开 AI 工程师：Hosts 为 Linux 模式，K8s 为 K8S 模式；变更按提示批准。"
+  "step.bookmark.text": "标题栏打开 AI 工程师：可选内置、Cursor、Codex 或 Claude Code。Hosts 为 Linux 模式，K8s 为 K8S 模式；变更按提示批准。"
 }

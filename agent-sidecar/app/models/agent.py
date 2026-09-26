@@ -64,6 +64,9 @@ class ChatStartResponse(BaseModel):
     run_id: str
     status: StatusLiteral = "running"
     resumed_from: str | None = None
+    # FE starts SSE/pull here. On resume this is len(run.events) (usually 0):
+    # SessionLog history is NOT in the pull stream — do not use SessionLog length.
+    stream_cursor: int = 0
 
 
 class ChatContinueRequest(BaseModel):
@@ -154,7 +157,6 @@ class RuntimeConfigRequest(BaseModel):
     ollama_base_url: str = ""
     api_key: str | None = None
     security_mode: str = "safe"
-    cursor_api_key: str | None = None
 
 
 class RuntimeConfigResponse(BaseModel):
@@ -163,7 +165,6 @@ class RuntimeConfigResponse(BaseModel):
     model: str = ""
     base_url: str = ""
     security_mode: str = "safe"
-    has_cursor_api_key: bool = False
 
 
 class RuntimeProbeResponse(BaseModel):
@@ -174,7 +175,20 @@ class RuntimeProbeResponse(BaseModel):
     fake: bool = False
     binary: str = ""
     install_url: str = ""
+    login_hint: str = ""
     code: str = ""
+
+
+class RuntimeLoginRequest(BaseModel):
+    kind: str = "cursor"
+
+
+class RuntimeLoginResponse(BaseModel):
+    kind: str
+    phase: str = "idle"
+    url: str = ""
+    detail: str = ""
+    exit_code: int | None = None
 
 
 class McpCallRequest(BaseModel):

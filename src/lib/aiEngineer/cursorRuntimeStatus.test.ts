@@ -46,4 +46,18 @@ describe("externalRuntimeStatusKind", () => {
       }),
     ).toBe("ready");
   });
+
+  it("marks login_needed", () => {
+    expect(
+      externalRuntimeStatusKind({
+        kind: "cursor",
+        installed: true,
+        authenticated: false,
+        detail: "login_needed",
+        fake: false,
+        code: "login_needed",
+        login_hint: "Sign in with Cursor in TerminalWisely",
+      }),
+    ).toBe("login_needed");
+  });
 });

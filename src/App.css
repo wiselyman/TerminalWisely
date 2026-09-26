@@ -9914,6 +9914,18 @@ body.cmd-nav-panel-resizing {
   background: var(--tw-surface);
   white-space: nowrap;
 }
+.ai-engineer-exec-agent-source {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--tw-fg-muted);
+  border: 1px solid var(--tw-border);
+  background: var(--tw-bg);
+  white-space: nowrap;
+}
 .ai-engineer-exec-risk {
   flex: 0 0 auto;
   padding: 2px 7px;
@@ -10918,6 +10930,33 @@ body.cmd-nav-panel-resizing {
   white-space: nowrap;
 }
 .ai-engineer-model-btn:hover { border-color: var(--tw-fg-muted); color: var(--tw-fg); }
+.ai-engineer-picker-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 6px 8px 4px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--tw-surface-2);
+}
+.ai-engineer-picker-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--tw-fg-muted);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ai-engineer-picker-tab.active {
+  background: var(--tw-bg);
+  color: var(--tw-fg);
+  box-shadow: 0 0 0 1px var(--tw-border);
+}
+.ai-engineer-picker-tab:hover:not(.active) {
+  color: var(--tw-fg);
+}
 .ai-engineer-menu-section-label {
   padding: 8px 12px 4px;
   font-size: 0.68rem;
@@ -10935,6 +10974,52 @@ body.cmd-nav-panel-resizing {
   background: var(--tw-surface-2);
   border-radius: 6px;
 }
+.ai-engineer-runtime-agent-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ai-engineer-runtime-agent-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.ai-engineer-runtime-status-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: var(--tw-fg-muted);
+  background: color-mix(in srgb, var(--tw-fg-muted) 12%, transparent);
+}
+.ai-engineer-runtime-status-icon.is-ready {
+  color: #3fb950;
+  background: color-mix(in srgb, #3fb950 18%, transparent);
+}
+.ai-engineer-runtime-status-icon.is-install,
+.ai-engineer-runtime-status-icon.is-login {
+  color: #d29922;
+  background: color-mix(in srgb, #d29922 18%, transparent);
+}
+.ai-engineer-runtime-status-icon.is-probing,
+.ai-engineer-runtime-status-icon.is-unknown {
+  color: var(--tw-fg-muted);
+}
+.ai-engineer-runtime-status-spin {
+  animation: ai-engineer-spin 0.9s linear infinite;
+}
+@keyframes ai-engineer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .ai-engineer-runtime-install {
   margin: 4px 12px 8px;
   padding: 8px;
@@ -10945,11 +11030,6 @@ body.cmd-nav-panel-resizing {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.ai-engineer-runtime-install-status {
-  margin: 0;
-  font-weight: 600;
-  color: var(--tw-fg);
 }
 .ai-engineer-runtime-install-hint {
   margin: 0;

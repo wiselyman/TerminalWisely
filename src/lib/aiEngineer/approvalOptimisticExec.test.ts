@@ -22,7 +22,7 @@ describe("buildOptimisticToolAfterApproval", () => {
         execCommand: "wrapped-script",
         intent: "network change",
       },
-      { now: 1000 },
+      { now: 1000, agentSource: "cursor" },
     );
     expect(line).toEqual({
       kind: "tool",
@@ -34,6 +34,7 @@ describe("buildOptimisticToolAfterApproval", () => {
       startedAt: 1000,
       risk: undefined,
       approvalDecision: "approved",
+      agentSource: "cursor",
     });
   });
 

@@ -140,6 +140,9 @@ def test_chat_start_resume_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["resumed_from"] == "prior-1"
+        # Pull protocol starts empty on resume — cursor stays at 0 (or just after
+        # session_resumed). Must NOT equal SessionLog length.
+        assert body["stream_cursor"] == 0
         run_id = body["run_id"]
         assert run_id != "prior-1"
 

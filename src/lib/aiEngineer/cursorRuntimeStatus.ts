@@ -4,6 +4,7 @@ export type ExternalRuntimeStatusKind =
   | "ready"
   | "ready_fake"
   | "install_needed"
+  | "login_needed"
   | "not_ready"
   | "unknown";
 
@@ -16,6 +17,12 @@ export function externalRuntimeStatusKind(
   if (expectedKind && probe.kind !== expectedKind) return "unknown";
   if (probe.code === "install_needed" || (!probe.installed && !probe.fake)) {
     return "install_needed";
+  }
+  if (
+    probe.code === "login_needed" ||
+    (probe.installed && probe.authenticated === false && !probe.fake)
+  ) {
+    return "login_needed";
   }
   if (probe.installed && (probe.authenticated || probe.fake)) {
     return probe.fake ? "ready_fake" : "ready";

@@ -183,11 +183,13 @@
 | Investigator 子代理 | — | pytest | — | — | ✓ |
 | Run trace 追踪 | — | pytest trace | — | — | ✓ |
 | 中途 user_context | — | API surface | — | — | ✓ |
-| Session resume | — | pytest resume | — | resume | ✓ |
+| Session resume | — | pytest resume + `stream_cursor=len(run.events)` (not SessionLog); transcript reconcile is this-turn only | — | resume | ✓ |
 | SessionLog resume_miss（禁止静默薄 history；FE harness + 一次无 resume 重开） | `resumeMiss.test` + `test_session_resume` miss | chat_start 409 | smoke notice key | — | ✓ |
 | SessionLog resume 跨 session_id（SSH 重连）+ FE 自动无 resume 重试 | `test_session_resume` remap | — | — | — | — |
-| 0.0.2 External Agent Runtime（本地 CLI：Cursor/Codex/Claude + install-gate；TW MCP 远端闸门） | pytest `test_local_cli_probe` / `test_runtime_*` / `test_cursor_runtime` / `test_codex_runtime` / `test_claude_runtime` + vitest `cursorRuntimeStatus` / `externalAgentActivity` | smoke `ai.runtime-picker` | E2E model menu Cursor/Codex/Claude | — | ✓ |
-| Cursor API key 设置（可选覆盖）+ `/v1/runtime/probe` | pytest probe | secrets optional `CURSOR_API_KEY` | Settings optional override + CLI Ready | — | ✓ |
+| 0.0.2 External Agent Runtime（本地 CLI：Cursor/Codex/Claude + 行内状态图标 + install/login gate；TW MCP 远端闸门；`agent_runtime` 与模型一并持久化） | pytest `test_local_cli_probe` / `test_runtime_*` / `test_cursor_runtime` / `test_codex_runtime` / `test_claude_runtime` + vitest `cursorRuntimeStatus` / `externalAgentActivity` / `agentRuntime` | smoke `ai.runtime-picker` | E2E model menu Cursor/Codex/Claude | — | ✓ |
+| External agent 执行 UX（抑制 `cursor.terminal_exec` 等与 TW 工具卡重复的 activity；ToolExecCard/WebCard 仅挂 Cursor/Codex/Claude 来源徽标） | vitest `externalAgentActivity` / `agentRuntime` / `approvalOptimisticExec` | smoke `ai.runtime-exec-agent-source` | 单卡脚本执行 + 来源标识 | — | ✓ |
+| External agent 远端平面（「这台电脑」= SSH 被控主机；Codex `--disable computer_use` + workspace AGENTS.md；抑制 CUA/桌面冒充远端证据） | pytest `test_remote_plane` / `test_cli_stream_parse` | — | 不问本机显示器当远端事实 | — | ✓ |
+| Local CLI stream 卡片（无空 cursor.tool）+ Cursor `.cursor/mcp.json` + Codex `.codex/config.toml` + Codex `item.completed`/`turn.completed` 解析 + `--approve-for-me` | pytest cli_stream_parse | 有内容的工具卡；远程走 TW MCP | 空 `{}` 卡被过滤；Codex 不再卡在等 stdin | — | ✓ |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |
 | AI SSH lease（禁重连） | `sshLease.test` + Rust `ai_ssh_lease_tests` | — | TerminalView 闸门 | — | ✓ |

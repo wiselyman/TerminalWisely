@@ -5,6 +5,11 @@ import {
   e2eSidecarUrl,
   isE2eBrowserMode,
 } from "../e2eRuntime";
+import type { AgentRuntimeKind } from "./agentRuntime";
+import { normalizeAgentRuntime } from "./agentRuntime";
+
+export type { AgentRuntimeKind } from "./agentRuntime";
+export { normalizeAgentRuntime, toolAgentSource } from "./agentRuntime";
 
 export interface SidecarInfo {
   base_url: string;
@@ -27,19 +32,16 @@ export interface AiSettingsView {
   active_profile_id: string;
   profiles: AiModelProfile[];
   security_mode?: string;
-  /** Cursor runtime key present in store (raw key never returned). */
-  has_cursor_api_key?: boolean;
+  /** Composer agent: builtin | cursor | codex | claude — persisted with model pick. */
+  agent_runtime?: string;
 }
 
 export interface AiSettingsUpdate {
   active_profile_id?: string;
   profiles?: AiModelProfile[];
   security_mode?: string;
-  /** Omit = leave unchanged; "" = clear; non-empty = set. */
-  cursor_api_key?: string;
+  agent_runtime?: string;
 }
-
-export type AgentRuntimeKind = "builtin" | "cursor" | "codex" | "claude";
 
 export interface RuntimeProbeResult {
   kind: string;
@@ -49,12 +51,14 @@ export interface RuntimeProbeResult {
   fake: boolean;
   binary?: string;
   install_url?: string;
+  login_hint?: string;
   code?: string;
 }
 
 
 const E2E_DEFAULT_SETTINGS: AiSettingsView = {
   active_profile_id: "e2e-default",
+  agent_runtime: "builtin",
   profiles: [
     {
       id: "e2e-default",
@@ -76,7 +80,6 @@ const E2E_DEFAULT_SETTINGS: AiSettingsView = {
     },
   ],
   security_mode: "safe",
-  has_cursor_api_key: false,
 };
 
 let e2eSettingsCache: AiSettingsView = {
@@ -112,11 +115,11 @@ export async function saveAiSettings(
       ...(update.security_mode != null
         ? { security_mode: update.security_mode }
         : {}),
+      ...(update.agent_runtime != null
+        ? { agent_runtime: normalizeAgentRuntime(update.agent_runtime) }
+        : {}),
       profiles: update.profiles ?? e2eSettingsCache.profiles,
     };
-    if (update.cursor_api_key !== undefined) {
-      next.has_cursor_api_key = update.cursor_api_key.trim().length > 0;
-    }
     e2eSettingsCache = next;
     return e2eSettingsCache;
   }
@@ -131,6 +134,59 @@ export async function probeRuntime(
   const res = await sidecarFetch(sidecar, `/v1/runtime/probe?${q}`);
   if (!res.ok) throw new Error(`Runtime probe failed (${res.status})`);
   return res.json() as Promise<RuntimeProbeResult>;
+}
+
+export type RuntimeLoginPhase =
+  | "idle"
+  | "starting"
+  | "waiting_browser"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export interface RuntimeLoginResult {
+  kind: string;
+  phase: RuntimeLoginPhase | string;
+  url: string;
+  detail: string;
+  exit_code?: number | null;
+}
+
+export async function startRuntimeLogin(
+  sidecar: SidecarInfo,
+  kind: AgentRuntimeKind,
+): Promise<RuntimeLoginResult> {
+  const res = await sidecarFetch(sidecar, "/v1/runtime/login", {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(body || `Runtime login failed (${res.status})`);
+  }
+  return res.json() as Promise<RuntimeLoginResult>;
+}
+
+export async function getRuntimeLoginStatus(
+  sidecar: SidecarInfo,
+  kind: AgentRuntimeKind,
+): Promise<RuntimeLoginResult> {
+  const q = new URLSearchParams({ kind });
+  const res = await sidecarFetch(sidecar, `/v1/runtime/login/status?${q}`);
+  if (!res.ok) throw new Error(`Runtime login status failed (${res.status})`);
+  return res.json() as Promise<RuntimeLoginResult>;
+}
+
+export async function cancelRuntimeLogin(
+  sidecar: SidecarInfo,
+  kind: AgentRuntimeKind,
+): Promise<RuntimeLoginResult> {
+  const res = await sidecarFetch(sidecar, "/v1/runtime/login/cancel", {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
+  if (!res.ok) throw new Error(`Runtime login cancel failed (${res.status})`);
+  return res.json() as Promise<RuntimeLoginResult>;
 }
 
 export interface AiListModelsRequest {
@@ -195,7 +251,11 @@ export async function sidecarFetch(
         method,
         path,
         body,
-        timeout_ms: method === "POST" && path.includes("/chat/start") ? 60_000 : 60_000,
+        timeout_ms: path.includes("/v1/runtime/probe")
+          ? 8_000
+          : path.includes("/v1/runtime/login")
+            ? 15_000
+            : 60_000,
       },
     });
     return new Response(result.body, {

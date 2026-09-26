@@ -71,13 +71,16 @@ async def test_tw_mcp_web_search_via_loop_handlers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tw_mcp_rejects_unknown_tool() -> None:
-    run = AgentRun(session_id="s", run_id="r")
+async def test_tw_mcp_accepts_cursor_prefixed_tool_name() -> None:
+    run = AgentRun(session_id="s", run_id="r", metadata={"engineer_mode": "linux"})
     loop = AgentLoop(run, model=SilentModel(), research=FakeResearch())
     mcp = TwMcpServer(loop)
-    result = await mcp.call_tool("not_a_tw_tool", {})
-    assert result.get("ok") is False
-    assert "not exposed" in str(result.get("error") or "").lower()
+    result = await mcp.call_tool(
+        "terminalwisely-web_search",
+        {"query": "x"},
+    )
+    assert result.get("ok") is True
+    assert result.get("results")
 
 
 @pytest.mark.asyncio

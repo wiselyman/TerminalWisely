@@ -30,8 +30,7 @@ class FakeResearch(ResearchProvider):
 
 class FakeCursorDriver:
     """
-    Minimal Cursor-shaped driver: stream text, optionally call one TW MCP tool,
-    then finish. Used in CI and when cursor-sdk / API key is absent.
+    CI-only Cursor-shaped driver (TW_AI_*_FAKE). Never used as a product fallback.
     """
 
     def __init__(
@@ -39,7 +38,7 @@ class FakeCursorDriver:
         *,
         tool_name: str | None = TOOL_WEB_SEARCH,
         tool_args: dict[str, Any] | None = None,
-        reply: str = "Cursor fake: done.",
+        reply: str = "[ci-stub] cursor ok",
         activity_prefix: str = "cursor",
     ) -> None:
         self.tool_name = tool_name
@@ -89,14 +88,14 @@ class FakeCursorDriver:
 
 
 class FakeCodexDriver(FakeCursorDriver):
-    """Codex-shaped driver for CI (same dual-plane MCP path as Cursor fake)."""
+    """Codex-shaped CI stub (same dual-plane MCP path as FakeCursorDriver)."""
 
     def __init__(
         self,
         *,
         tool_name: str | None = TOOL_WEB_SEARCH,
         tool_args: dict[str, Any] | None = None,
-        reply: str = "Codex fake: done.",
+        reply: str = "[ci-stub] codex ok",
     ) -> None:
         super().__init__(
             tool_name=tool_name,

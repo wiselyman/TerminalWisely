@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { SidebarActionIcon, type SidebarActionKind } from "./SidebarIcons";
 
 const FEATURE_KEYS = [
+  "agentRuntimes",
   "aiEngineer",
   "k8s",
   "hostDesktop",

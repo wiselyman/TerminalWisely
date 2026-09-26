@@ -19,12 +19,16 @@ export type OptimisticToolLine = {
   startedAt: number;
   risk?: string;
   approvalDecision?: "approved";
+  agentSource?: "cursor" | "codex" | "claude";
 };
 
 /** Build a provisional running tool line from an approved card (needs callId). */
 export function buildOptimisticToolAfterApproval(
   approval: ApprovalForOptimisticExec,
-  opts?: { now?: number },
+  opts?: {
+    now?: number;
+    agentSource?: "cursor" | "codex" | "claude";
+  },
 ): OptimisticToolLine | null {
   const callId = (approval.callId || "").trim();
   if (!callId) return null;
@@ -45,6 +49,7 @@ export function buildOptimisticToolAfterApproval(
     startedAt: opts?.now ?? Date.now(),
     risk,
     approvalDecision: "approved",
+    ...(opts?.agentSource ? { agentSource: opts.agentSource } : {}),
   };
 }
 

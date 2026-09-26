@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.2] - 2026-09-26
+
+Cursor / Codex / Claude Code as ops agent runtimes.
+
+- Agent runtimes: Cursor Agent, Codex, Claude Code via TW MCP on the live SSH session / selected cluster
+- Unified approval plane with agent-source labels; STOP kills external CLI runs
+- Guided install/login readiness; automatic MCP / workspace wiring (no silent CLI install)
+- Dual-plane chat UX (local CLI activity + remote exec cards)
+- Built-in AI Linux / K8S Engineers unchanged alongside external runtimes
+
+将 Cursor / Codex / Claude Code 接入运维 Agent 运行时。
+
+- 经 TW MCP 在已连接 SSH / 所选集群上运行 Cursor Agent、Codex、Claude Code
+- 统一审批面（标注 Agent 来源）；STOP 可终止外部 CLI
+- 安装/登录引导；自动接线 MCP / 工作区（不静默安装 CLI）
+- 双平面对话 UX（本机 CLI 活动 + 远端执行卡片）
+- 内置 AI Linux / K8S Engineer 与外部运行时并存
+
 ## [0.0.1] - 2026-09-20
 
 Public release (republished).

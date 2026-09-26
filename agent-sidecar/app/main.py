@@ -39,6 +39,8 @@ from app.models.agent import (
     RunTranscriptResponse,
     RuntimeConfigRequest,
     RuntimeConfigResponse,
+    RuntimeLoginRequest,
+    RuntimeLoginResponse,
     RuntimeProbeResponse,
     McpCallRequest,
     ToolResultRequest,
@@ -150,8 +152,11 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
     if runtime_kind in {"cursor", "codex", "claude"}:
         from app.runtime.local_cli import probe_local_cli
 
-        probe = probe_local_cli(runtime_kind)  # type: ignore[arg-type]
-        if not probe.get("installed") and not probe.get("fake"):
+        # Subprocess auth checks must not block the asyncio event loop (UI freeze).
+        probe = await asyncio.to_thread(probe_local_cli, runtime_kind)  # type: ignore[arg-type]
+        if probe.get("fake"):
+            pass
+        elif not probe.get("installed"):
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -159,9 +164,25 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
                     "code": "install_needed",
                     "runtime": runtime_kind,
                     "install_url": probe.get("install_url") or "",
+                    "login_hint": probe.get("login_hint") or "",
                     "message": (
                         f"{runtime_kind} CLI not found. Install it, then recheck."
                     ),
+                },
+            )
+        elif probe.get("code") == "login_needed" or probe.get("authenticated") is False:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "login_needed",
+                    "code": "login_needed",
+                    "runtime": runtime_kind,
+                    "install_url": probe.get("install_url") or "",
+                    "login_hint": probe.get("login_hint") or "",
+                    "message": (
+                        f"{runtime_kind} CLI is not logged in. "
+                        f"{probe.get('login_hint') or ''}"
+                    ).strip(),
                 },
             )
     identity = TargetSessionIdentity(
@@ -178,6 +199,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
     )
     meta = {**(body.metadata or {}), "runtime": runtime_kind}
     resumed_from: str | None = None
+    stream_cursor = 0
     if body.resume_run_id:
         run = STORE.create_run_resuming(
             body.session_id,
@@ -207,6 +229,11 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
         resumed_from = body.resume_run_id
         run.interaction_mode = interaction
         run.metadata["runtime"] = runtime_kind
+        # Pull-protocol `run.events` starts empty on resume (SessionLog history is
+        # NOT copied there). Cursor must be len(run.events), never len(session_log)
+        # — otherwise FE skips all new events and transcript reconcile re-shows
+        # the prior turn's last assistant (e.g. 大文件汇总).
+        stream_cursor = len(run.events)
         run.append_event(
             "session_resumed",
             {"from_run_id": body.resume_run_id, "messages": len(run.messages)},
@@ -264,6 +291,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
             "runtime": runtime_kind,
             "resumed_from": resumed_from,
             "attachments": len(body.attachments),
+            "stream_cursor": stream_cursor,
         },
     )
     await asyncio.sleep(0)
@@ -272,6 +300,7 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
         run_id=run.run_id,
         status=_status_str(run.status),
         resumed_from=resumed_from,
+        stream_cursor=stream_cursor,
     )
 
 
@@ -742,7 +771,6 @@ async def runtime_config(body: RuntimeConfigRequest, _: AuthDep) -> RuntimeConfi
         ollama_base_url=body.ollama_base_url,
         api_key=body.api_key if body.api_key is not None else "",
         security_mode=body.security_mode,
-        cursor_api_key=body.cursor_api_key,
     )
     return RuntimeConfigResponse(
         ok=True,
@@ -750,7 +778,6 @@ async def runtime_config(body: RuntimeConfigRequest, _: AuthDep) -> RuntimeConfi
         model=applied["model"],
         base_url=applied["base_url"],
         security_mode=applied["security_mode"],
-        has_cursor_api_key=applied.get("has_cursor_api_key") == "1",
     )
 
 
@@ -772,15 +799,15 @@ async def runtime_probe(
     elif raw == "cursor":
         from app.runtime.cursor_runtime import probe_cursor
 
-        p = probe_cursor()
+        p = await asyncio.to_thread(probe_cursor)
     elif raw == "codex":
         from app.runtime.codex_runtime import probe_codex
 
-        p = probe_codex()
+        p = await asyncio.to_thread(probe_codex)
     else:
         from app.runtime.claude_runtime import probe_claude
 
-        p = probe_claude()
+        p = await asyncio.to_thread(probe_claude)
     return RuntimeProbeResponse(
         kind=raw,
         installed=bool(p.get("installed")),
@@ -789,8 +816,63 @@ async def runtime_probe(
         fake=bool(p.get("fake")),
         binary=str(p.get("binary") or ""),
         install_url=str(p.get("install_url") or ""),
+        login_hint=str(p.get("login_hint") or ""),
         code=str(p.get("code") or ""),
     )
+
+
+def _parse_local_cli_kind(raw: str) -> str:
+    kind = (raw or "").strip().lower()
+    if kind not in {"cursor", "codex", "claude"}:
+        raise HTTPException(
+            status_code=422, detail="kind must be cursor|codex|claude"
+        )
+    return kind
+
+
+@app.post("/v1/runtime/login", response_model=RuntimeLoginResponse)
+async def runtime_login(
+    body: RuntimeLoginRequest, _: AuthDep
+) -> RuntimeLoginResponse:
+    """Start guided CLI login; returns browser URL for TW to open."""
+    from app.runtime.cli_login import start_login
+
+    kind = _parse_local_cli_kind(body.kind)
+    try:
+        status = await start_login(kind)  # type: ignore[arg-type]
+    except RuntimeError as exc:
+        if str(exc) == "install_needed":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "install_needed",
+                    "code": "install_needed",
+                    "runtime": kind,
+                },
+            ) from exc
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return RuntimeLoginResponse(**status)
+
+
+@app.get("/v1/runtime/login/status", response_model=RuntimeLoginResponse)
+async def runtime_login_status(
+    _: AuthDep,
+    kind: str = Query("cursor"),
+) -> RuntimeLoginResponse:
+    from app.runtime.cli_login import get_login_status
+
+    raw = _parse_local_cli_kind(kind)
+    return RuntimeLoginResponse(**get_login_status(raw))  # type: ignore[arg-type]
+
+
+@app.post("/v1/runtime/login/cancel", response_model=RuntimeLoginResponse)
+async def runtime_login_cancel(
+    body: RuntimeLoginRequest, _: AuthDep
+) -> RuntimeLoginResponse:
+    from app.runtime.cli_login import cancel_login
+
+    kind = _parse_local_cli_kind(body.kind)
+    return RuntimeLoginResponse(**(await cancel_login(kind)))  # type: ignore[arg-type]
 
 
 @app.get("/v1/runs/{run_id}/mcp/tools")

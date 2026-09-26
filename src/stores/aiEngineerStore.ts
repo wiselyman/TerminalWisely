@@ -5,6 +5,8 @@ import {
   saveAiSettings,
   fetchRunTrace,
   fetchRunTranscript,
+  normalizeAgentRuntime,
+  toolAgentSource,
   type AgentRuntimeKind,
   type AiSettingsUpdate,
   type AiSettingsView,
@@ -158,6 +160,8 @@ export type ChatLine =
       /** Carried from the approval card once the user approved. */
       risk?: string;
       approvalDecision?: "approved" | "rejected";
+      /** Local CLI agent that triggered this TW MCP tool (Cursor/Codex/Claude). */
+      agentSource?: "cursor" | "codex" | "claude";
     }
   | {
       id: string;
@@ -1306,11 +1310,10 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   setSettingsOpen: (v) => set({ settingsOpen: v }),
 
   setAgentRuntime: (runtime) => {
-    const next =
-      runtime === "cursor" || runtime === "codex" || runtime === "claude"
-        ? runtime
-        : "builtin";
+    const next = normalizeAgentRuntime(runtime);
     set({ agentRuntime: next });
+    // Same persistence plane as model profile (ai-engineer.json).
+    void get().saveSettings({ agent_runtime: next });
   },
 
   setThreadSecurityMode: (mode) => {
@@ -1531,6 +1534,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         const sidecar = await ensureSidecar();
         set({
           settings,
+          agentRuntime: normalizeAgentRuntime(settings.agent_runtime),
           sidecar,
           ready: true,
           starting: false,
@@ -1560,7 +1564,10 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   refreshSettings: async () => {
     try {
       const settings = await getAiSettings();
-      set({ settings });
+      set({
+        settings,
+        agentRuntime: normalizeAgentRuntime(settings.agent_runtime),
+      });
     } catch {
       /* ignore */
     }
@@ -1579,17 +1586,25 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           ...(update.security_mode != null
             ? { security_mode: update.security_mode }
             : {}),
-          ...(update.profiles != null ? { profiles: update.profiles } : {}),
-          ...(update.cursor_api_key !== undefined
-            ? {
-                has_cursor_api_key: update.cursor_api_key.trim().length > 0,
-              }
+          ...(update.agent_runtime != null
+            ? { agent_runtime: normalizeAgentRuntime(update.agent_runtime) }
             : {}),
+          ...(update.profiles != null ? { profiles: update.profiles } : {}),
         },
+        ...(update.agent_runtime != null
+          ? { agentRuntime: normalizeAgentRuntime(update.agent_runtime) }
+          : {}),
       });
+    } else if (update.agent_runtime != null) {
+      set({ agentRuntime: normalizeAgentRuntime(update.agent_runtime) });
     }
     const settings = await saveAiSettings(update);
-    set({ settings });
+    set({
+      settings,
+      agentRuntime: normalizeAgentRuntime(
+        settings.agent_runtime ?? get().agentRuntime,
+      ),
+    });
   },
 
   stopActiveRun: () => {
@@ -1718,13 +1733,16 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     );
     // Close the approve→tool_call gap: show a running card immediately.
     if (approved && approvalLine) {
-      const optimistic = buildOptimisticToolAfterApproval({
-        callId: approvalLine.callId,
-        command: approvalLine.command,
-        execCommand: approvalLine.execCommand,
-        intent: approvalLine.intent,
-        risk: approvalLine.risk,
-      });
+      const optimistic = buildOptimisticToolAfterApproval(
+        {
+          callId: approvalLine.callId,
+          command: approvalLine.command,
+          execCommand: approvalLine.execCommand,
+          intent: approvalLine.intent,
+          risk: approvalLine.risk,
+        },
+        { agentSource: toolAgentSource(get().agentRuntime) },
+      );
       if (
         optimistic &&
         !nextMessages.some(
@@ -2209,11 +2227,13 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           },
           onStart: ({ callId, command, intent }) => {
             lastStreamActivityAt = Date.now();
+            const agentSource = toolAgentSource(get().agentRuntime);
             patchToolLineByCallId(callId, {
               detail: command,
               intent,
               status: "running",
               startedAt: Date.now(),
+              ...(agentSource ? { agentSource } : {}),
             });
           },
           onDone: ({ callId, ok, exitCode, error, stdout, stderr }) => {
@@ -2628,6 +2648,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                   ok: event.denied ? false : existing.ok,
                   risk: existing.risk,
                   approvalDecision: existing.approvalDecision,
+                  agentSource:
+                    existing.agentSource ?? toolAgentSource(get().agentRuntime),
                 });
                 return;
               }
@@ -2640,6 +2662,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                     line.decision === "approved",
                 )
               : undefined;
+            const agentSource = toolAgentSource(get().agentRuntime);
             appendIfSameThread({
               id: nextId(),
               kind: "tool",
@@ -2656,6 +2679,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               ok: event.denied ? false : undefined,
               risk: linkedApproval?.risk,
               approvalDecision: linkedApproval ? "approved" : undefined,
+              ...(agentSource ? { agentSource } : {}),
             });
           } else if (event.type === "plan_progress") {
             set({ activePlan: event.plan.length > 0 ? event.plan : null });

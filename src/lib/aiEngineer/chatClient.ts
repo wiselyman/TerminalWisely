@@ -578,6 +578,8 @@ async function runAgentChatViaStream(opts: {
   sidecar: SidecarInfo;
   sessionId: string;
   runId: string;
+  /** Skip SessionLog events already seeded by resume (avoids replaying old answers). */
+  cursor?: number;
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
   onApproval: ApprovalHandler;
@@ -594,7 +596,17 @@ async function runAgentChatViaStream(opts: {
   };
   signal?: AbortSignal;
 }): Promise<void> {
-  const { sidecar, sessionId, runId, onEvent, onAskUser, onApproval, onToolExec, signal } = opts;
+  const {
+    sidecar,
+    sessionId,
+    runId,
+    cursor = 0,
+    onEvent,
+    onAskUser,
+    onApproval,
+    onToolExec,
+    signal,
+  } = opts;
   const handled = new Set<string>();
   const settledHostCalls = new Set<string>();
   // Serialize event handlers so approval/ask awaits don't race.
@@ -636,7 +648,7 @@ async function runAgentChatViaStream(opts: {
     void invoke("ai_sidecar_stream", {
       sessionId,
       runId,
-      cursor: 0,
+      cursor,
       onEvent: channel,
     })
       .then(async () => {
@@ -656,6 +668,7 @@ async function runAgentChatViaPull(opts: {
   sidecar: SidecarInfo;
   sessionId: string;
   runId: string;
+  cursor?: number;
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
   onApproval: ApprovalHandler;
@@ -672,8 +685,17 @@ async function runAgentChatViaPull(opts: {
   };
   signal?: AbortSignal;
 }): Promise<void> {
-  const { sidecar, sessionId, runId, onEvent, onAskUser, onApproval, onToolExec, signal } = opts;
-  let cursor = 0;
+  const {
+    sidecar,
+    sessionId,
+    runId,
+    onEvent,
+    onAskUser,
+    onApproval,
+    onToolExec,
+    signal,
+  } = opts;
+  let cursor = typeof opts.cursor === "number" && opts.cursor > 0 ? opts.cursor : 0;
   const handled = new Set<string>();
   const settledHostCalls = new Set<string>();
 
@@ -831,8 +853,13 @@ export async function runAgentChat(opts: {
     run_id?: string;
     status?: string;
     resumed_from?: string | null;
+    stream_cursor?: number;
   };
   const runId = startJson.run_id ?? "";
+  const streamCursor =
+    typeof startJson.stream_cursor === "number" && startJson.stream_cursor > 0
+      ? Math.floor(startJson.stream_cursor)
+      : 0;
   onEvent({ type: "status", status: startJson.status ?? "running", run_id: runId });
 
   if (isTauriRuntime()) {
@@ -841,6 +868,7 @@ export async function runAgentChat(opts: {
         sidecar,
         sessionId,
         runId,
+        cursor: streamCursor,
         onEvent,
         onAskUser,
         onApproval,
@@ -858,6 +886,7 @@ export async function runAgentChat(opts: {
     sidecar,
     sessionId,
     runId,
+    cursor: streamCursor,
     onEvent,
     onAskUser,
     onApproval,

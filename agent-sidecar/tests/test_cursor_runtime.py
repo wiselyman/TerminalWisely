@@ -100,6 +100,9 @@ def test_chat_start_cursor_fake_runtime() -> None:
 def test_chat_start_cursor_install_needed(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
     with TestClient(app) as client:
         r = client.post(
             "/v1/chat/start",
@@ -113,3 +116,33 @@ def test_chat_start_cursor_install_needed(monkeypatch, tmp_path) -> None:
         assert r.status_code == 400
         detail = r.json().get("detail") or {}
         assert detail.get("code") == "install_needed" or detail.get("error") == "install_needed"
+
+
+def test_chat_start_cursor_login_needed(monkeypatch, tmp_path) -> None:
+    agent = tmp_path / "cursor-agent"
+    agent.write_text(
+        "#!/bin/sh\n"
+        "echo \"Error: Authentication required. Please run 'agent login' first.\" >&2\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    agent.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    with TestClient(app) as client:
+        r = client.post(
+            "/v1/chat/start",
+            headers=_auth(),
+            json={
+                "session_id": "sess-login",
+                "message": "ping",
+                "runtime": "cursor",
+            },
+        )
+        assert r.status_code == 400
+        detail = r.json().get("detail") or {}
+        assert detail.get("code") == "login_needed" or detail.get("error") == "login_needed"
+        assert "sign in" in (detail.get("login_hint") or detail.get("message") or "").lower()

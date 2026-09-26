@@ -201,10 +201,14 @@ test.describe("AI composer chrome keeps chat scroll", () => {
 
     await page.getByTestId("ai-engineer-model-picker").click();
     await expect(page.getByTestId("ai-engineer-model-menu")).toBeVisible();
+    await page.getByTestId("ai-engineer-picker-tab-agent").click();
     await expect(page.getByTestId("ai-engineer-runtime-cursor")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-runtime-codex")).toBeVisible();
     await expect(page.getByTestId("ai-engineer-runtime-claude")).toBeVisible();
-    await expect(page.getByTestId("ai-engineer-runtime-disclaimer")).toBeVisible();
+    await page.getByTestId("ai-engineer-picker-tab-model").click();
+    await expect(page.getByTestId("ai-engineer-picker-panel-model")).toBeVisible();
+    await page.getByTestId("ai-engineer-picker-tab-agent").click();
+    await expect(page.getByTestId("ai-engineer-runtime-cursor")).toBeVisible();
     await page.waitForTimeout(400);
 
     const after = await scroller.evaluate((el) => el.scrollTop);

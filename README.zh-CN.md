@@ -6,15 +6,27 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.1](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.1)**
+**当前版本：[v0.0.2](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.2)**
 
-**SSH 终端 + 主机 Desktop / Browser + Kubernetes 工作台 + AI Linux / K8S Engineer。** 连接服务器，在已连接主机上打开桌面（文件、进程、浏览器），从本机 kubeconfig 或 SSH kubectl 浏览集群，用类 Typora 方式编辑 Markdown，用自然语言描述问题——内置 Agent 在**当前会话或所选集群**上排查，只读检查自动执行，任何会改动系统的操作都会先请你批准。
+**把 Cursor Agent、Codex、Claude Code 接到真实运维上——就在你已打开的 SSH 会话与 Kubernetes 集群上。** TerminalWisely 是桌面驾驶舱：多标签 SSH、主机 Desktop / Browser、K8s 工作台、AI 工程师。**v0.0.2** 起，你日常用的编码 Agent 可以变成**运维 Agent**：它们保留自己的模型与登录，TW 管会话、MCP 工具、批准卡片和随时 STOP。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
 <p align="center">
-  <img src="./docs/images/promo-ai-engineer.jpg" alt="SSH 终端与 AI 工程师" width="920" />
+  <img src="./docs/images/v002-01-chat-agent-ops.png" alt="图 1 — 常规聊天：Cursor 在已连接主机上运维" width="920" />
 </p>
+<p align="center"><em>图 1 — 常规 AI 工程师对话：自然语言提问；Cursor（或其他 Agent）在已连接主机上执行工具，并基于证据回答。</em></p>
+
+---
+
+## v0.0.2 新特性
+
+| | |
+|--|--|
+| **Cursor / Codex / Claude Code → 运维** | 选择已安装的 CLI 作为 Agent 运行时。经 **TW MCP** 在**同一** SSH / 集群上排查——不另开静默登录。 |
+| **统一审批面** | 只读可自动；变更走 TW 批准卡片（标注来源 Agent）。**STOP** 终止整次运行。 |
+| **引导式就绪** | 探测安装与登录状态，缺登录时引导完成；自动接线 MCP / 工作区。**不会**静默安装 CLI。 |
+| **内置工程师仍在** | AI Linux / K8S Engineer + 自有模型 Profile（OpenAI 兼容、Ollama、Anthropic 兼容、Gemini）。 |
 
 ---
 
@@ -22,6 +34,7 @@
 
 | 模块 | 能力 |
 |------|------|
+| **Agent 运行时** | Cursor Agent / Codex / Claude Code 经 TW MCP 操作已连接 SSH / K8s；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
 | **主机 Desktop** | 已连接主机上的 Dock：Files、Processes、Browser；按主机记忆布局 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
@@ -32,15 +45,36 @@
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
 | **可观测** | 状态栏显示 CPU、内存、磁盘读写、网络 |
 
-<p align="center">
-  <img src="./docs/images/promo-model-settings.jpg" alt="模型配置" width="920" />
-</p>
-
 ---
 
-## AI Linux Engineer 与 AI K8S Engineer
+## 模型与 Agent
 
-点击标题栏 **AI 工程师**。模式跟随侧栏：
+在输入框下方的选择器里切换 **Model**（你配置的内置模型 Profile）与 **Agent**（本机 CLI）。
+
+<p align="center">
+  <img src="./docs/images/v002-02-model-picker.png" alt="图 2 — 模型选择" width="420" />
+</p>
+<p align="center"><em>图 2 — 模型选择：切换已配置的 Profile（OpenAI 兼容、Ollama 等），或进入「管理模型…」。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-03-agent-picker.png" alt="图 3 — Agent 选择" width="420" />
+</p>
+<p align="center"><em>图 3 — Agent 选择：本机 CLI 就绪时可选 Cursor、Codex、Claude Code。</em></p>
+
+### Cursor / Codex / Claude Code 当作运维 Agent
+
+打开 **AI 工程师** → 选择运行时（**内置**、**Cursor**、**Codex** 或 **Claude Code**）。
+
+- **它们的 Agent，你的会话** — CLI 在本机跑；远端操作经 TW MCP（`terminal_exec`、`k8s_*` …）走你已打开的会话。
+- **不另开影子 SSH** — 与终端标签同一租约；长任务会续租。
+- **审批仍在 TW** — 能力分级（R0–R4）；变更需目标绑定批准；卡片标注 Agent 来源。
+- **安装与登录引导** — CLI 缺失或登录过期会进入引导流，不会后台静默安装。
+
+需本机已安装并登录对应 CLI（Cursor Agent / Codex / Claude Code）。
+
+### 内置 AI Linux 与 K8S Engineer
+
+模式跟随侧栏：
 
 - **Hosts** → **AI Linux Engineer**（已连接 SSH，`terminal_exec`）
 - **K8s** → **AI K8S Engineer**（当前集群，`k8s_*` 工具）
@@ -63,7 +97,46 @@
 
 ---
 
-## 终端与文件
+## Linux 主机 Desktop
+
+在已连接 SSH 主机上打开桌面：**Files**、**Processes**、**Browser** 作为 Dock 应用。主流文件可预览与编辑（含 Markdown 所见即所得），无需离开当前会话。
+
+<p align="center">
+  <img src="./docs/images/v002-04-host-desktop.jpg" alt="图 4 — 主机 Desktop" width="920" />
+</p>
+<p align="center"><em>图 4 — 主机 Desktop：与 SSH 终端并排；已连接 Linux 主机上的 Files / Processes / Browser Dock。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-05-host-files.jpg" alt="图 5 — 主机 Files" width="920" />
+</p>
+<p align="center"><em>图 5 — 主机 Files：类 Finder 的左树右网格浏览远端文件系统。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-06-markdown-wysiwyg.png" alt="图 6 — Markdown 所见即所得" width="720" />
+</p>
+<p align="center"><em>图 6 — 远端主机上的 Markdown 所见即所得编辑（类 Typora）。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-07-host-processes.jpg" alt="图 7 — 主机 Processes" width="920" />
+</p>
+<p align="center"><em>图 7 — 主机 Processes：进程名、端口、内存与 CPU；确认后可结束进程。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-08-host-browser.jpg" alt="图 8 — 主机 Browser" width="920" />
+</p>
+<p align="center"><em>图 8 — 主机 Browser：以<strong>当前访问主机的网络</strong>访问 HTTP（含 <code>127.0.0.1</code>），走现有 SSH 会话。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-09-file-preview-log.jpg" alt="图 9 — 日志 / 文本预览" width="920" />
+</p>
+<p align="center"><em>图 9 — 远端日志等常见文件可预览与搜索。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-10-file-preview-image.jpg" alt="图 10 — 图片预览" width="920" />
+</p>
+<p align="center"><em>图 10 — 图片等主流文件类型在预览面板中打开。</em></p>
+
+### 终端与传输
 
 - **上传** — 文件拖到终端或标签 → SFTP 到当前目录  
 - **进目录** — 点击 `ls` 里的目录名  
@@ -74,13 +147,25 @@
 
 ---
 
+## Kubernetes 工作台
+
+侧栏 **Hosts ↔ K8s**：总览、工作负载、网络、存储与安全资源，并在所选集群上使用 AI。
+
+<p align="center">
+  <img src="./docs/images/v002-11-k8s-ops.png" alt="图 11 — Kubernetes 运维" width="920" />
+</p>
+<p align="center"><em>图 11 — Kubernetes 运维：集群总览 + AI 工程师回答「集群是否正常」。</em></p>
+
+---
+
 ## 快速开始
 
 1. 侧栏添加 SSH 主机并连接——或切到 **K8s** 点 **+** 添加集群（kubeconfig 文件或粘贴）。  
 2. 可选：在已连接主机上打开 **Desktop** 或 **Browser**，管理文件/进程或访问远端 HTTP。  
-3. 可选：打开 **AI 工程师** → 设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。  
-4. 照常使用终端或 K8s 工作台；需要排障时用自然语言提问。  
-5. 对标记为「系统变更」的命令选择批准或拒绝。
+3. 可选：打开 **AI 工程师** → 选择运行时（内置模型，或已安装的 Cursor / Codex / Claude Code）。  
+4. 内置模式：设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。  
+5. 照常使用终端或 K8s 工作台；需要排障时用自然语言提问。  
+6. 对标记为「系统变更」的命令选择批准或拒绝。
 
 Kubernetes 说明：本机操作优先用应用目录中一键安装的 kubectl/Helm（也可回退 PATH）；SSH 跳板机仍用远端 PATH。K8s 界面是受 Lens 启发的实用子集，不是完整 Lens IDE。
 

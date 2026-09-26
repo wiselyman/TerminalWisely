@@ -7,30 +7,43 @@ export type TranscriptAssistantSource = {
   content?: unknown;
 };
 
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) =>
+        part &&
+        typeof part === "object" &&
+        "text" in part &&
+        typeof (part as { text?: unknown }).text === "string"
+          ? (part as { text: string }).text
+          : "",
+      )
+      .join("");
+  }
+  return "";
+}
+
+/**
+ * Last assistant text that belongs to the latest user turn.
+ * Ignores prior-turn assistants left in a resumed SessionLog clone — otherwise
+ * an empty streamed bubble gets replaced with e.g. an old 大文件汇总.
+ */
 export function lastAssistantTextFromTranscript(
   messages: ReadonlyArray<TranscriptAssistantSource>,
 ): string {
+  let lastUser = -1;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === "user") {
+      lastUser = i;
+      break;
+    }
+  }
+  for (let i = messages.length - 1; i > lastUser; i -= 1) {
     const m = messages[i];
     if (m?.role !== "assistant") continue;
-    const raw = m.content;
-    const text =
-      typeof raw === "string"
-        ? raw
-        : Array.isArray(raw)
-          ? raw
-              .map((part) =>
-                part &&
-                typeof part === "object" &&
-                "text" in part &&
-                typeof (part as { text?: unknown }).text === "string"
-                  ? (part as { text: string }).text
-                  : "",
-              )
-              .join("")
-          : "";
-    const trimmed = text.trim();
-    if (trimmed) return text;
+    const text = messageText(m.content);
+    if (text.trim()) return text;
   }
   return "";
 }

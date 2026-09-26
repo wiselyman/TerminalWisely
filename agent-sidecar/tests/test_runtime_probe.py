@@ -34,6 +34,10 @@ def test_runtime_probe_cursor_fake(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_runtime_probe_cursor_install_needed(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    monkeypatch.setattr(local_cli, "_codex_fallback_binaries", lambda: [])
     with TestClient(app) as client:
         r = client.get("/v1/runtime/probe?kind=cursor", headers=_auth())
         assert r.status_code == 200
