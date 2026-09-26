@@ -145,6 +145,23 @@ def test_which_finds_user_local_bin_when_path_stripped(monkeypatch, tmp_path: Pa
     assert "claude" in found
 
 
+def test_which_finds_cmd_shim_off_path_on_windows(monkeypatch, tmp_path: Path) -> None:
+    """Windows npm-style shims are ``name.cmd`` under user bin dirs."""
+    import app.runtime.local_cli as local_cli
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    shim = bin_dir / "cursor-agent.cmd"
+    shim.write_text("@echo off\r\nexit /b 0\r\n", encoding="utf-8", newline="\r\n")
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(local_cli, "_is_windows", lambda: True)
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [bin_dir])
+    found = local_cli._which("cursor-agent")
+    assert found is not None
+    assert found.lower().endswith(".cmd")
+    assert "cursor-agent" in found
+
+
 def test_auth_check_argv_is_kind_specific() -> None:
     from app.runtime.local_cli import ResolvedCli, auth_check_argv
 

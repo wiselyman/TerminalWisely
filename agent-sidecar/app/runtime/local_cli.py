@@ -78,8 +78,9 @@ def _which(name: str) -> str | None:
         return found
     # GUI apps frequently inherit a stripped PATH; still find user-local CLIs.
     names = [name]
-    if _is_windows() and not name.lower().endswith(".exe"):
-        names.append(f"{name}.exe")
+    if _is_windows() and not name.lower().endswith((".exe", ".cmd", ".bat")):
+        # npm / installer shims are often ``name.cmd`` (PATHEXT); also try .exe.
+        names.extend([f"{name}.cmd", f"{name}.exe", f"{name}.bat"])
     for directory in _extra_user_bin_dirs():
         for n in names:
             candidate = directory / n
