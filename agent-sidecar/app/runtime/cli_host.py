@@ -19,6 +19,7 @@ from app.runtime.local_cli import (
     cli_spawn_env,
     explicit_fake_env,
     looks_like_auth_failure,
+    prepare_cli_argv,
     probe_local_cli,
     resolve_local_cli,
 )
@@ -579,7 +580,7 @@ class LocalCliHost:
         assistant_buf = ""
         try:
             self._proc = await asyncio.create_subprocess_exec(
-                *argv,
+                *prepare_cli_argv(argv),
                 cwd=str(cwd),
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,

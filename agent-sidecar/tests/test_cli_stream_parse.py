@@ -103,10 +103,13 @@ def test_write_tw_mcp_also_writes_cursor_and_codex_project_mcp(
 
 
 def test_cursor_argv_has_trust_force_no_partial(monkeypatch, tmp_path: Path) -> None:
-    agent = tmp_path / "cursor-agent"
-    agent.write_text("#!/bin/sh\n", encoding="utf-8")
-    agent.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path))
+    from app.runtime.local_cli import ResolvedCli
+
+    binary = str(tmp_path / "cursor-agent")
+    monkeypatch.setattr(
+        "app.runtime.cli_host.resolve_local_cli",
+        lambda kind: ResolvedCli(kind="cursor", binary=binary, argv_prefix=[binary]),
+    )
     argv = build_cli_argv(
         "cursor",
         prompt="hi",
@@ -121,10 +124,13 @@ def test_cursor_argv_has_trust_force_no_partial(monkeypatch, tmp_path: Path) -> 
 
 
 def test_claude_argv_stream_json_requires_verbose(monkeypatch, tmp_path: Path) -> None:
-    binary = tmp_path / "claude"
-    binary.write_text("#!/bin/sh\n", encoding="utf-8")
-    binary.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path))
+    from app.runtime.local_cli import ResolvedCli
+
+    binary = str(tmp_path / "claude")
+    monkeypatch.setattr(
+        "app.runtime.cli_host.resolve_local_cli",
+        lambda kind: ResolvedCli(kind="claude", binary=binary, argv_prefix=[binary]),
+    )
     argv = build_cli_argv(
         "claude",
         prompt="hi",
@@ -142,21 +148,20 @@ def test_claude_argv_stream_json_requires_verbose(monkeypatch, tmp_path: Path) -
 
 def test_codex_argv_skips_git_repo_check(monkeypatch, tmp_path: Path) -> None:
     """TW agent workspaces are temp dirs — Codex requires --skip-git-repo-check."""
-    binary = tmp_path / "codex"
-    binary.write_text("#!/bin/sh\n", encoding="utf-8")
-    binary.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path))
-    import app.runtime.local_cli as local_cli
+    from app.runtime.local_cli import ResolvedCli
 
-    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
-    monkeypatch.setattr(local_cli, "_codex_fallback_binaries", lambda: [])
+    binary = str(tmp_path / "codex")
+    monkeypatch.setattr(
+        "app.runtime.cli_host.resolve_local_cli",
+        lambda kind: ResolvedCli(kind="codex", binary=binary, argv_prefix=[binary]),
+    )
     argv = build_cli_argv(
         "codex",
         prompt="hi",
         workspace=tmp_path,
         mcp_config=tmp_path / "tw_mcp.json",
     )
-    assert argv[:2] == [str(binary), "exec"]
+    assert argv[:2] == [binary, "exec"]
     assert "--json" in argv
     assert "--cd" in argv
     assert "--skip-git-repo-check" in argv

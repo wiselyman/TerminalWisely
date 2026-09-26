@@ -201,6 +201,19 @@ def cli_spawn_env() -> dict[str, str]:
     return env
 
 
+def prepare_cli_argv(argv: list[str]) -> list[str]:
+    """
+    Windows CreateProcess cannot run ``.cmd`` / ``.bat`` directly (WinError 193).
+    npm-style shims and our test stubs use those extensions — wrap with ``cmd.exe /c``.
+    """
+    if not argv or not _is_windows():
+        return list(argv)
+    first = str(argv[0]).lower()
+    if first.endswith(".cmd") or first.endswith(".bat"):
+        return ["cmd.exe", "/c", *argv]
+    return list(argv)
+
+
 def looks_like_auth_failure(text: str) -> bool:
     low = (text or "").lower()
     if not low:
@@ -264,7 +277,7 @@ def _parse_auth_output(out: str, returncode: int) -> tuple[bool, str]:
 
 def _auth_status(resolved: ResolvedCli) -> tuple[bool, str]:
     """Best-effort login check. Returns (ok, detail)."""
-    argv = auth_check_argv(resolved)
+    argv = prepare_cli_argv(auth_check_argv(resolved))
     try:
         r = subprocess.run(
             argv,

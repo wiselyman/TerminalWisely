@@ -119,14 +119,9 @@ def test_chat_start_cursor_install_needed(monkeypatch, tmp_path) -> None:
 
 
 def test_chat_start_cursor_login_needed(monkeypatch, tmp_path) -> None:
-    agent = tmp_path / "cursor-agent"
-    agent.write_text(
-        "#!/bin/sh\n"
-        "echo \"Error: Authentication required. Please run 'agent login' first.\" >&2\n"
-        "exit 1\n",
-        encoding="utf-8",
-    )
-    agent.chmod(0o755)
+    from cli_stub_helpers import stub_auth_required
+
+    stub_auth_required(tmp_path, "cursor-agent")
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
     import app.runtime.local_cli as local_cli

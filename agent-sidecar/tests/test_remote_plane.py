@@ -47,14 +47,13 @@ def test_addendum_names_deixis_and_forbids_cua() -> None:
 
 
 def test_codex_argv_disables_computer_use(monkeypatch, tmp_path: Path) -> None:
-    binary = tmp_path / "codex"
-    binary.write_text("#!/bin/sh\n", encoding="utf-8")
-    binary.chmod(0o755)
-    monkeypatch.setenv("PATH", str(tmp_path))
-    import app.runtime.local_cli as local_cli
+    from app.runtime.local_cli import ResolvedCli
 
-    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
-    monkeypatch.setattr(local_cli, "_codex_fallback_binaries", lambda: [])
+    binary = str(tmp_path / "codex")
+    monkeypatch.setattr(
+        "app.runtime.cli_host.resolve_local_cli",
+        lambda kind: ResolvedCli(kind="codex", binary=binary, argv_prefix=[binary]),
+    )
     argv = build_cli_argv(
         "codex",
         prompt="hi",

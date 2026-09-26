@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from app.runtime.local_cli import probe_local_cli, resolve_local_cli
+from cli_stub_helpers import (
+    stub_auth_required,
+    stub_claude_auth_json,
+    stub_codex_login_ok,
+    stub_exit0,
+    write_path_cli_stub,
+)
 
 
 def test_probe_missing_when_path_empty(monkeypatch, tmp_path: Path) -> None:
@@ -23,9 +29,7 @@ def test_probe_missing_when_path_empty(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_probe_finds_cursor_agent(monkeypatch, tmp_path: Path) -> None:
-    fake = tmp_path / "cursor-agent"
-    fake.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    fake.chmod(0o755)
+    stub_exit0(tmp_path, "cursor-agent")
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
     p = probe_local_cli("cursor")
@@ -36,14 +40,7 @@ def test_probe_finds_cursor_agent(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_probe_login_needed_when_auth_message(monkeypatch, tmp_path: Path) -> None:
-    fake = tmp_path / "cursor-agent"
-    fake.write_text(
-        "#!/bin/sh\n"
-        "echo \"Error: Authentication required. Please run 'agent login' first.\" >&2\n"
-        "exit 1\n",
-        encoding="utf-8",
-    )
-    fake.chmod(0o755)
+    stub_auth_required(tmp_path, "cursor-agent")
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
     p = probe_local_cli("cursor")
@@ -64,9 +61,7 @@ def test_probe_fake_env_overrides_missing(monkeypatch, tmp_path: Path) -> None:
 
 def test_probe_codex_and_claude_names(monkeypatch, tmp_path: Path) -> None:
     for name in ("codex", "claude"):
-        b = tmp_path / name
-        b.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-        b.chmod(0o755)
+        stub_exit0(tmp_path, name)
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CODEX_FAKE", raising=False)
     monkeypatch.delenv("TW_AI_CLAUDE_FAKE", raising=False)
@@ -78,22 +73,16 @@ def test_resolve_codex_from_chatgpt_app_bundle(monkeypatch, tmp_path: Path) -> N
     """ChatGPT Desktop ships `codex` under Contents/Resources — not always on PATH."""
     monkeypatch.setenv("PATH", str(tmp_path))  # empty of codex
     monkeypatch.delenv("TW_AI_CODEX_FAKE", raising=False)
-    bundled = (
+    # Place stub under a ChatGPT-like path; resolve uses monkeypatched fallbacks.
+    app_dir = (
         tmp_path
         / "Applications"
         / "ChatGPT.app"
         / "Contents"
         / "Resources"
-        / "codex"
     )
-    bundled.parent.mkdir(parents=True)
-    bundled.write_text(
-        "#!/bin/sh\n"
-        'if [ "$1" = "login" ] && [ "$2" = "status" ]; then echo "Logged in using ChatGPT"; exit 0; fi\n'
-        "exit 0\n",
-        encoding="utf-8",
-    )
-    bundled.chmod(0o755)
+    app_dir.mkdir(parents=True)
+    bundled = stub_codex_login_ok(app_dir, "codex")
 
     import app.runtime.local_cli as local_cli
 
@@ -148,13 +137,12 @@ def test_which_finds_user_local_bin_when_path_stripped(monkeypatch, tmp_path: Pa
 
     local_bin = tmp_path / ".local" / "bin"
     local_bin.mkdir(parents=True)
-    claude = local_bin / "claude"
-    claude.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    claude.chmod(0o755)
+    write_path_cli_stub(local_bin, "claude", py_body="import sys\nsys.exit(0)\n")
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [local_bin])
     found = local_cli._which("claude")
-    assert found == str(claude)
+    assert found is not None
+    assert "claude" in found
 
 
 def test_auth_check_argv_is_kind_specific() -> None:
@@ -171,18 +159,29 @@ def test_auth_check_argv_is_kind_specific() -> None:
     ) == ["/bin/a", "auth", "status"]
 
 
+def test_prepare_cli_argv_wraps_cmd_on_windows(monkeypatch) -> None:
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setattr(local_cli, "_is_windows", lambda: True)
+    assert local_cli.prepare_cli_argv([r"C:\bin\cursor-agent.cmd", "status"]) == [
+        "cmd.exe",
+        "/c",
+        r"C:\bin\cursor-agent.cmd",
+        "status",
+    ]
+    assert local_cli.prepare_cli_argv([r"C:\bin\cursor-agent.exe", "status"]) == [
+        r"C:\bin\cursor-agent.exe",
+        "status",
+    ]
+    monkeypatch.setattr(local_cli, "_is_windows", lambda: False)
+    assert local_cli.prepare_cli_argv(["/usr/bin/cursor-agent", "status"]) == [
+        "/usr/bin/cursor-agent",
+        "status",
+    ]
+
+
 def test_claude_auth_status_json(monkeypatch, tmp_path: Path) -> None:
-    fake = tmp_path / "claude"
-    fake.write_text(
-        "#!/bin/sh\n"
-        'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then '
-        'echo \'{"loggedIn": true, "authMethod": "oauth_token"}\'; exit 0; fi\n'
-        # Bare status would hang in real CLI — stub exits nonzero so we notice misuse.
-        'if [ "$1" = "status" ] || [ "$1" = "whoami" ]; then exit 99; fi\n'
-        "exit 0\n",
-        encoding="utf-8",
-    )
-    fake.chmod(0o755)
+    stub_claude_auth_json(tmp_path, "claude")
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.delenv("TW_AI_CLAUDE_FAKE", raising=False)
     p = probe_local_cli("claude")

@@ -60,20 +60,12 @@ async def test_start_login_install_needed(monkeypatch, tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_start_login_emits_url(monkeypatch, tmp_path: Path) -> None:
-    script = tmp_path / "cursor-agent"
-    script.write_text(
-        "#!/bin/sh\n"
-        "if [ \"$1\" = \"status\" ] || [ \"$1\" = \"whoami\" ]; then\n"
-        "  echo \"Authentication required. Please run 'agent login'.\" >&2\n"
-        "  exit 1\n"
-        "fi\n"
-        "echo 'Open: https://cursor.com/loginDeepControl?challenge=x&uuid=y'\n"
-        "sleep 60\n",
-        encoding="utf-8",
-    )
-    script.chmod(0o755)
-    # Keep system PATH so /bin/sh and sleep resolve; prepend stub.
-    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ.get('PATH', '')}")
+    from cli_stub_helpers import stub_cursor_login_url
+    from app.runtime.local_cli import ResolvedCli
+
+    script = stub_cursor_login_url(tmp_path, "cursor-agent")
+    # Keep system PATH so helpers resolve; prepend stub.
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
 
     monkeypatch.setattr(
         "app.runtime.cli_login.probe_local_cli",
@@ -90,9 +82,7 @@ async def test_start_login_emits_url(monkeypatch, tmp_path: Path) -> None:
     )
     monkeypatch.setattr(
         "app.runtime.cli_login.resolve_local_cli",
-        lambda kind: __import__(
-            "app.runtime.local_cli", fromlist=["ResolvedCli"]
-        ).ResolvedCli(
+        lambda kind: ResolvedCli(
             kind="cursor", binary=str(script), argv_prefix=[str(script)]
         ),
     )

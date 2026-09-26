@@ -14,6 +14,7 @@ from typing import Any
 from app.runtime.local_cli import (
     LocalCliKind,
     cli_spawn_env,
+    prepare_cli_argv,
     probe_local_cli,
     resolve_local_cli,
 )
@@ -141,7 +142,7 @@ async def start_login(kind: LocalCliKind) -> dict[str, Any]:
     if existing and existing.phase in {"starting", "waiting_browser"}:
         return get_login_status(kind)
 
-    argv = login_argv(kind)
+    argv = prepare_cli_argv(login_argv(kind))
     sess = LoginSession(kind=kind, phase="starting", detail="starting")
     _SESSIONS[kind] = sess
 
