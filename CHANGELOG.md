@@ -11,7 +11,8 @@ Cursor / Codex / Claude Code as ops agent runtimes.
 - Built-in AI Linux / K8S Engineers unchanged alongside external runtimes
 - macOS: embed About-menu and window icons so a machine without the build tree does not abort on launch
 - Rebuild: host-native bundled Python only; model settings stay profiles; Ungrouped hosts start expanded and a new host can pick a group; a Base URL in the API key field is rejected
-- Agent CLI probe sees Homebrew, `/usr/local/bin`, and the login-shell PATH; Codex bundled in current ChatGPT is detected; the install blurb under the download icon is removed
+- Agent CLI probe sees Homebrew, `/usr/local/bin`, and the login-shell PATH; Codex bundled in current ChatGPT is detected
+- A missing CLI cannot be selected as the answering agent; the download icon opens the install page (Codex → ChatGPT desktop download)
 
 将 Cursor / Codex / Claude Code 接入运维 Agent 运行时。
 
@@ -22,7 +23,8 @@ Cursor / Codex / Claude Code as ops agent runtimes.
 - 内置 AI Linux / K8S Engineer 与外部运行时并存
 - macOS：About 菜单与窗口图标编译进二进制，避免未带源码目录的机器启动即退出
 - 重新打包：内置 Python 只选本机系统可执行文件；模型设置不再包含 Agent CLI；未分组默认展开且新建主机可选分组；API Key 填成网址时会拦住
-- Agent CLI 检测覆盖 Homebrew、`/usr/local/bin` 与登录 shell PATH；认出新版 ChatGPT 内置 Codex；下载图标下不再重复安装说明
+- Agent CLI 检测覆盖 Homebrew、`/usr/local/bin` 与登录 shell PATH；认出新版 ChatGPT 内置 Codex
+- 未检测到的 CLI 不能选作回答 Agent；下载图标打开安装页（Codex 指向 ChatGPT 桌面版下载）
 
 ## [0.0.1] - 2026-09-20
 

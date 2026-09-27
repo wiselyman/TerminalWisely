@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { externalRuntimeStatusKind } from "./cursorRuntimeStatus";
+import {
+  canSelectExternalRuntime,
+  externalRuntimeStatusKind,
+} from "./cursorRuntimeStatus";
 
 describe("externalRuntimeStatusKind", () => {
   it("returns unknown without probe", () => {
@@ -45,6 +48,15 @@ describe("externalRuntimeStatusKind", () => {
         binary: "/usr/bin/cursor-agent",
       }),
     ).toBe("ready");
+  });
+
+  it("allows only a detected CLI to be the answering agent", () => {
+    expect(canSelectExternalRuntime("ready")).toBe(true);
+    expect(canSelectExternalRuntime("ready_fake")).toBe(true);
+    expect(canSelectExternalRuntime("login_needed")).toBe(true);
+    expect(canSelectExternalRuntime("install_needed")).toBe(false);
+    expect(canSelectExternalRuntime("unknown")).toBe(false);
+    expect(canSelectExternalRuntime("not_ready")).toBe(false);
   });
 
   it("marks login_needed", () => {

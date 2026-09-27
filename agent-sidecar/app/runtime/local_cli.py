@@ -15,7 +15,7 @@ LocalCliKind = Literal["cursor", "codex", "claude"]
 
 INSTALL_URLS: dict[str, str] = {
     "cursor": "https://cursor.com/docs/cli/installation",
-    "codex": "https://github.com/openai/codex",
+    "codex": "https://chatgpt.com/download/",
     "claude": "https://claude.ai/code",
 }
 

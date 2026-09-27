@@ -147,7 +147,7 @@
   "aiEngineer.runtime.external": "外部智能体",
   "aiEngineer.runtime.dualPlaneDisclaimer": "远端主机操作仍走 TerminalWisely 工具与批准；本机 CLI 工具在智能体工作区执行。",
   "aiEngineer.runtime.statusReady": "本机 CLI 已就绪",
-  "aiEngineer.runtime.statusInstallNeeded": "未安装",
+  "aiEngineer.runtime.statusInstallNeeded": "未安装，点此打开安装页",
   "aiEngineer.runtime.statusLoginNeeded": "已安装 — 请在本应用内登录",
   "aiEngineer.runtime.statusUnknown": "正在检测本机 CLI…",
   "aiEngineer.runtime.loginHint": "点击「登录」，TerminalWisely 会打开浏览器完成账号授权。",

@@ -1254,6 +1254,18 @@ function exists(rel) {
   } else {
     fail("ai.runtime-picker", "missing Model/Agent picker tabs or local CLI gate");
   }
+  if (
+    panel.includes("openExternalUrl") &&
+    panel.includes("RUNTIME_INSTALL_URL") &&
+    panel.includes("event.stopPropagation()")
+  ) {
+    pass(
+      "ai.runtime-install-icon",
+      "download icon opens the agent install page",
+    );
+  } else {
+    fail("ai.runtime-install-icon", "install icon does not open an install page");
+  }
   const secretsRs = read("src-tauri/src/ai_engineer/secrets.rs");
   const storeTs = read("src/stores/aiEngineerStore.ts");
   if (

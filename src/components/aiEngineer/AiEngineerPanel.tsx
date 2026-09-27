@@ -34,9 +34,11 @@ import {
   useAiEngineerStore,
 } from "../../stores/aiEngineerStore";
 import {
+  canSelectExternalRuntime,
   externalRuntimeStatusKind,
   type ExternalRuntimeStatusKind,
 } from "../../lib/aiEngineer/cursorRuntimeStatus";
+import { openExternalUrl } from "../../lib/aiEngineer/openExternalUrl";
 import { rememberAiFiber } from "../../stores/hostWorkspaceMemory";
 import {
   AI_CHAT_SCROLL_FIX_ID,
@@ -879,6 +881,13 @@ function ChatCopyButton({
 
 const EXTERNAL_RUNTIME_KINDS = ["cursor", "codex", "claude"] as const;
 
+/** Used when the probe response has no install page. Matches sidecar INSTALL_URLS. */
+const RUNTIME_INSTALL_URL: Record<(typeof EXTERNAL_RUNTIME_KINDS)[number], string> = {
+  cursor: "https://cursor.com/docs/cli/installation",
+  codex: "https://chatgpt.com/download/",
+  claude: "https://claude.ai/code",
+};
+
 function runtimeStatusTitleKey(
   status: ExternalRuntimeStatusKind,
 ):
@@ -899,11 +908,13 @@ function RuntimeAgentStatusIcon({
   status,
   probing,
   title,
+  installUrl,
 }: {
   kind: (typeof EXTERNAL_RUNTIME_KINDS)[number];
   status: ExternalRuntimeStatusKind;
   probing: boolean;
   title: string;
+  installUrl?: string;
 }) {
   const showSpin = probing && (status === "unknown" || status === "not_ready");
   const visual =
@@ -928,9 +939,19 @@ function RuntimeAgentStatusIcon({
     <CircleAlert size={14} aria-hidden />
   );
 
+  const openInstall = installUrl
+    ? (event: ReactMouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void openExternalUrl(installUrl).catch(() => undefined);
+      }
+    : undefined;
+
   return (
     <span
-      className={`ai-engineer-runtime-status-icon is-${visual}`}
+      className={`ai-engineer-runtime-status-icon is-${visual}${
+        openInstall ? " is-action" : ""
+      }`}
       data-testid={
         kind === "cursor"
           ? "ai-engineer-runtime-status-cursor"
@@ -941,6 +962,16 @@ function RuntimeAgentStatusIcon({
       data-status={status}
       title={title}
       aria-label={title}
+      role={openInstall ? "link" : undefined}
+      onMouseDown={
+        openInstall
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          : undefined
+      }
+      onClick={openInstall}
     >
       {icon}
     </span>
@@ -2218,6 +2249,15 @@ export function AiEngineerPanel({
     });
   };
 
+  const releaseUndetectedRuntime = (
+    kind: "cursor" | "codex" | "claude",
+    probe: RuntimeProbeResult | null,
+  ) => {
+    if (useAiEngineerStore.getState().agentRuntime !== kind) return;
+    if (canSelectExternalRuntime(externalRuntimeStatusKind(probe, kind))) return;
+    setAgentRuntime("builtin");
+  };
+
   const refreshRuntimeProbe = async (kind: AgentRuntimeKind) => {
     if (kind === "builtin") {
       return null;
@@ -2227,6 +2267,7 @@ export function AiEngineerPanel({
       const info = await ensureSidecar();
       const result = await probeRuntime(info, kind);
       setRuntimeProbes((prev) => ({ ...prev, [kind]: result }));
+      releaseUndetectedRuntime(kind, result);
       return result;
     } catch {
       const failed: RuntimeProbeResult = {
@@ -2236,9 +2277,11 @@ export function AiEngineerPanel({
         detail: "probe_failed",
         fake: false,
         code: "install_needed",
+        install_url: RUNTIME_INSTALL_URL[kind],
       };
       setRuntimeProbes((prev) => ({ ...prev, [kind]: failed }));
-      return null;
+      releaseUndetectedRuntime(kind, failed);
+      return failed;
     } finally {
       setRuntimeProbing(false);
     }
@@ -2253,6 +2296,7 @@ export function AiEngineerPanel({
           try {
             const result = await probeRuntime(info, kind);
             setRuntimeProbes((prev) => ({ ...prev, [kind]: result }));
+            releaseUndetectedRuntime(kind, result);
           } catch {
             const failed: RuntimeProbeResult = {
               kind,
@@ -2261,8 +2305,10 @@ export function AiEngineerPanel({
               detail: "probe_failed",
               fake: false,
               code: "install_needed",
+              install_url: RUNTIME_INSTALL_URL[kind],
             };
             setRuntimeProbes((prev) => ({ ...prev, [kind]: failed }));
+            releaseUndetectedRuntime(kind, failed);
           }
         }),
       );
@@ -2316,30 +2362,37 @@ export function AiEngineerPanel({
   };
 
   const selectExternalRuntime = (kind: AgentRuntimeKind) => {
-    setAgentRuntime(kind);
     if (kind === "builtin") {
+      setAgentRuntime(kind);
       runWithComposerChromeScrollGuard(() => {
         setModelOpen(false);
       });
       return;
     }
+    const applySelection = (status: ExternalRuntimeStatusKind) => {
+      if (!canSelectExternalRuntime(status)) return;
+      setAgentRuntime(kind);
+      if (status === "ready" || status === "ready_fake") {
+        runWithComposerChromeScrollGuard(() => {
+          setModelOpen(false);
+        });
+        return;
+      }
+      runWithComposerChromeScrollGuard(() => {
+        setModelOpen(true);
+        setPickerTab("agent");
+      });
+    };
     const existing = runtimeProbes[kind] ?? null;
     const status = externalRuntimeStatusKind(existing, kind);
-    // Already probed ready — switch instantly, do not re-block on CLI status.
-    if (status === "ready" || status === "ready_fake") {
-      runWithComposerChromeScrollGuard(() => {
-        setModelOpen(false);
-      });
+    if (status === "ready" || status === "ready_fake" || status === "login_needed") {
+      applySelection(status);
       return;
     }
-    runWithComposerChromeScrollGuard(() => {
-      setModelOpen(true);
-      setPickerTab("agent");
+    // Missing CLI stays unselected. A later click rechecks after install.
+    void refreshRuntimeProbe(kind).then((probe) => {
+      applySelection(externalRuntimeStatusKind(probe, kind));
     });
-    // Download icon is the install signal. Selecting again rechecks after a CLI is installed.
-    if (status === "unknown" || status === "install_needed") {
-      void refreshRuntimeProbe(kind);
-    }
   };
 
   const requestSaveAsSkill = () => {
@@ -3956,8 +4009,16 @@ export function AiEngineerPanel({
                                         key={kind}
                                         type="button"
                                         className={`ai-engineer-menu-item ai-engineer-runtime-agent-item${
-                                          agentRuntime === kind ? " active" : ""
+                                          agentRuntime === kind &&
+                                          canSelectExternalRuntime(status)
+                                            ? " active"
+                                            : ""
+                                        }${
+                                          status === "install_needed"
+                                            ? " is-unavailable"
+                                            : ""
                                         }`}
+                                        aria-disabled={status === "install_needed"}
                                         role="menuitem"
                                         data-testid={
                                           kind === "cursor"
@@ -3993,6 +4054,12 @@ export function AiEngineerPanel({
                                             (status === "unknown" || !probe)
                                           }
                                           title={t(runtimeStatusTitleKey(status))}
+                                          installUrl={
+                                            status === "install_needed"
+                                              ? probe?.install_url ||
+                                                RUNTIME_INSTALL_URL[kind]
+                                              : undefined
+                                          }
                                         />
                                       </button>
                                     );

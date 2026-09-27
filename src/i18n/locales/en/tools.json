@@ -147,7 +147,7 @@
   "aiEngineer.runtime.external": "External agent",
   "aiEngineer.runtime.dualPlaneDisclaimer": "Remote host ops stay on TerminalWisely tools + approvals. Local CLI tools run in the agent workspace.",
   "aiEngineer.runtime.statusReady": "Local CLI ready",
-  "aiEngineer.runtime.statusInstallNeeded": "Not installed",
+  "aiEngineer.runtime.statusInstallNeeded": "Not installed — open install page",
   "aiEngineer.runtime.statusLoginNeeded": "Installed — sign in, then continue",
   "aiEngineer.runtime.statusUnknown": "Checking local CLI…",
   "aiEngineer.runtime.loginHint": "Sign in with your account. TerminalWisely will open the browser for you.",

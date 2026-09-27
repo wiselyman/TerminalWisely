@@ -10980,6 +10980,12 @@ body.cmd-nav-panel-resizing {
   justify-content: space-between;
   gap: 10px;
 }
+.ai-engineer-runtime-agent-item.is-unavailable {
+  cursor: default;
+}
+.ai-engineer-runtime-agent-item.is-unavailable .ai-engineer-runtime-agent-text {
+  opacity: 0.72;
+}
 .ai-engineer-runtime-agent-text {
   display: flex;
   flex-direction: column;
@@ -11007,6 +11013,9 @@ body.cmd-nav-panel-resizing {
 .ai-engineer-runtime-status-icon.is-login {
   color: #d29922;
   background: color-mix(in srgb, #d29922 18%, transparent);
+}
+.ai-engineer-runtime-status-icon.is-action {
+  cursor: pointer;
 }
 .ai-engineer-runtime-status-icon.is-probing,
 .ai-engineer-runtime-status-icon.is-unknown {

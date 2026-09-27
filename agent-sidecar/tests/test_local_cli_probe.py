@@ -204,6 +204,19 @@ def test_prepare_cli_argv_wraps_cmd_on_windows(monkeypatch) -> None:
     ]
 
 
+def test_codex_install_page_is_chatgpt_download(monkeypatch, tmp_path: Path) -> None:
+    """Desktop Codex ships inside the ChatGPT app."""
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.delenv("TW_AI_CODEX_FAKE", raising=False)
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    monkeypatch.setattr(local_cli, "_codex_fallback_binaries", lambda: [])
+    probed = probe_local_cli("codex")
+    assert probed["installed"] is False
+    assert probed["install_url"] == "https://chatgpt.com/download/"
+
+
 def test_static_user_bin_dirs_include_homebrew_and_usr_local(monkeypatch) -> None:
     """Dock launches omit Homebrew and /usr/local/bin from PATH."""
     import app.runtime.local_cli as local_cli

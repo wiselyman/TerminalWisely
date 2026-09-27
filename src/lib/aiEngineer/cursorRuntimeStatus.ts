@@ -30,6 +30,13 @@ export function externalRuntimeStatusKind(
   return "not_ready";
 }
 
+/** Installed CLIs can be the answering agent. A missing CLI cannot. */
+export function canSelectExternalRuntime(
+  status: ExternalRuntimeStatusKind,
+): boolean {
+  return status === "ready" || status === "ready_fake" || status === "login_needed";
+}
+
 /** @deprecated use externalRuntimeStatusKind */
 export function cursorRuntimeStatusKind(
   probe: RuntimeProbeResult | null | undefined,
