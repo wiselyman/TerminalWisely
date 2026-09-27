@@ -14,7 +14,7 @@ from typing import Any, Literal
 LocalCliKind = Literal["cursor", "codex", "claude"]
 
 INSTALL_URLS: dict[str, str] = {
-    "cursor": "https://cursor.com/download",
+    "cursor": "https://cursor.com/docs/cli/installation",
     "codex": "https://github.com/openai/codex",
     "claude": "https://claude.ai/code",
 }
@@ -52,8 +52,24 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
-def _extra_user_bin_dirs() -> list[Path]:
-    """Dirs often missing from GUI-launched process PATH (Finder / Explorer / dock)."""
+_SHELL_PATH_CACHE: list[Path] | None = None
+_PATH_MARKER = "__TWPATH__"
+
+
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    out: list[Path] = []
+    for path in paths:
+        key = str(path)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    return out
+
+
+def _static_user_bin_dirs() -> list[Path]:
+    """Bin dirs a Dock / Finder launch usually omits from PATH."""
     home = Path.home()
     dirs: list[Path] = []
     if _is_windows():
@@ -63,38 +79,158 @@ def _extra_user_bin_dirs() -> list[Path]:
         install_dir = (os.environ.get("CODEX_INSTALL_DIR") or "").strip()
         if install_dir:
             dirs.append(Path(install_dir))
-    else:
-        install_dir = (os.environ.get("CODEX_INSTALL_DIR") or "").strip()
-        if install_dir:
-            dirs.append(Path(install_dir))
-        dirs.append(home / ".local" / "bin")
-        dirs.append(home / "bin")
+        return dirs
+    install_dir = (os.environ.get("CODEX_INSTALL_DIR") or "").strip()
+    if install_dir:
+        dirs.append(Path(install_dir))
+    dirs.append(home / ".local" / "bin")
+    dirs.append(home / "bin")
+    # Homebrew: Apple Silicon vs Intel. Neither is on a GUI app's default PATH.
+    dirs.append(Path("/opt/homebrew/bin"))
+    dirs.append(Path("/usr/local/bin"))
     return dirs
 
 
-def _which(name: str) -> str | None:
-    found = shutil.which(name)
-    if found:
-        return found
-    # GUI apps frequently inherit a stripped PATH; still find user-local CLIs.
+def _parse_marked_path(text: str) -> list[Path]:
+    idx = text.rfind(_PATH_MARKER)
+    if idx < 0:
+        return []
+    line = text[idx + len(_PATH_MARKER) :].split("\n", 1)[0].strip()
+    return [Path(part) for part in line.split(":") if part]
+
+
+def _login_shell() -> str | None:
+    shell = (os.environ.get("SHELL") or "").strip()
+    if shell and Path(shell).is_file():
+        return shell
+    for candidate in ("/bin/zsh", "/bin/bash"):
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def _login_shell_path_dirs() -> list[Path]:
+    """PATH the user's login shell would use (nvm, asdf, brew shellenv, …)."""
+    global _SHELL_PATH_CACHE
+    if _SHELL_PATH_CACHE is not None:
+        return list(_SHELL_PATH_CACHE)
+    shell = _login_shell()
+    if shell is None or _is_windows():
+        _SHELL_PATH_CACHE = []
+        return []
+    home = str(Path.home())
+    env = {
+        "HOME": home,
+        "USER": os.environ.get("USER") or "",
+        "LOGNAME": os.environ.get("LOGNAME") or os.environ.get("USER") or "",
+        "SHELL": shell,
+        "PATH": os.environ.get("PATH") or "/usr/bin:/bin",
+        "TERM": "dumb",
+        "LANG": os.environ.get("LANG") or "C",
+    }
+    try:
+        result = subprocess.run(
+            [shell, "-lc", f"printf '\\n{_PATH_MARKER}%s\\n' \"$PATH\""],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+            env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _SHELL_PATH_CACHE = []
+        return []
+    dirs = _parse_marked_path(result.stdout or "")
+    _SHELL_PATH_CACHE = dirs
+    return list(dirs)
+
+
+def _extra_user_bin_dirs() -> list[Path]:
+    """Dirs often missing from GUI-launched process PATH (Finder / Explorer / dock)."""
+    return _dedupe_paths(_static_user_bin_dirs() + _login_shell_path_dirs())
+
+
+def _candidate_names(name: str) -> list[str]:
     names = [name]
     if _is_windows() and not name.lower().endswith((".exe", ".cmd", ".bat")):
         # npm / installer shims are often ``name.cmd`` (PATHEXT); also try .exe.
         names.extend([f"{name}.cmd", f"{name}.exe", f"{name}.bat"])
+    return names
+
+
+def _which_all(name: str) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+    first = shutil.which(name)
+    if first:
+        found.append(first)
+        seen.add(first)
     for directory in _extra_user_bin_dirs():
-        for n in names:
+        for n in _candidate_names(name):
             candidate = directory / n
-            if _is_executable(candidate):
-                return str(candidate)
+            if not _is_executable(candidate):
+                continue
+            path = str(candidate)
+            if path in seen:
+                continue
+            seen.add(path)
+            found.append(path)
+    return found
+
+
+def _which(name: str) -> str | None:
+    matches = _which_all(name)
+    return matches[0] if matches else None
+
+
+def _realpath(path: str) -> str:
+    try:
+        return str(Path(path).resolve())
+    except OSError:
+        return path
+
+
+def _is_cursor_agent_binary(path: str) -> bool:
+    """The installer exposes the same binary as ``agent`` and ``cursor-agent``."""
+    return "cursor-agent" in _realpath(path)
+
+
+def _cursor_versioned_agent() -> str | None:
+    """Newest versioned binary when the ``~/.local/bin`` symlink was not created."""
+    root = Path.home() / ".local" / "share" / "cursor-agent" / "versions"
+    try:
+        entries = list(root.iterdir()) if root.is_dir() else []
+    except OSError:
+        return None
+    for directory in sorted(entries, key=lambda p: p.name, reverse=True):
+        binary = directory / "cursor-agent"
+        if _is_executable(binary):
+            return str(binary)
     return None
 
 
+def _is_cursor_editor_shim(path: str) -> bool:
+    """IDE ``cursor`` command opens Electron. It is not the agent CLI."""
+    try:
+        data = Path(path).read_bytes()[:4096]
+    except OSError:
+        return False
+    text = data.decode("utf-8", errors="ignore")
+    return "ELECTRON_RUN_AS_NODE" in text or "out/cli.js" in text
+
+
 def resolve_cursor_cli() -> ResolvedCli | None:
-    agent = _which("cursor-agent")
-    if agent:
+    for agent in _which_all("cursor-agent"):
         return ResolvedCli(kind="cursor", binary=agent, argv_prefix=[agent])
-    cursor = _which("cursor")
-    if cursor:
+    for named in _which_all("agent"):
+        if _is_cursor_agent_binary(named):
+            return ResolvedCli(kind="cursor", binary=named, argv_prefix=[named])
+    versioned = _cursor_versioned_agent()
+    if versioned:
+        return ResolvedCli(kind="cursor", binary=versioned, argv_prefix=[versioned])
+    for cursor in _which_all("cursor"):
+        if _is_cursor_editor_shim(cursor):
+            continue
         return ResolvedCli(
             kind="cursor", binary=cursor, argv_prefix=[cursor, "agent"]
         )
@@ -140,9 +276,13 @@ def _codex_fallback_binaries() -> list[Path]:
             candidates.append(Path(install_dir) / exe)
         candidates.append(Path.home() / ".local" / "bin" / exe)
 
-    # macOS ChatGPT Desktop embeds the CLI binary.
+    # macOS ChatGPT Desktop embeds the CLI (Dock name is ChatGPT).
+    # Newer builds: Resources/codex-cli/bin/codex. Older builds: Resources/codex.
     if sys.platform == "darwin":
-        candidates.append(Path("/Applications/ChatGPT.app/Contents/Resources/codex"))
+        for root in (Path("/Applications"), Path.home() / "Applications"):
+            base = root / "ChatGPT.app" / "Contents" / "Resources"
+            candidates.append(base / "codex-cli" / "bin" / "codex")
+            candidates.append(base / "codex")
 
     candidates.append(codex_home / "plugins" / ".plugin-appserver" / exe)
 

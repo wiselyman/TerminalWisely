@@ -17,7 +17,7 @@ Bring **Cursor Agent**, **Codex**, and **Claude Code** into real ops — on the 
 - **Safety** — policy-graded commands; API keys on-device; model cannot bypass CommandBroker
 - **Insight** — host CPU, memory, disk I/O, and network on the status bar
 
-This rebuild also keeps the bundled Python matched to the host OS, leaves model settings as profiles only, expands the Ungrouped host group by default, and rejects a Base URL pasted into the API key field.
+This rebuild also keeps the bundled Python matched to the host OS, leaves model settings as profiles only, expands the Ungrouped host group by default, and rejects a Base URL pasted into the API key field. Agent CLIs are detected from Homebrew, `/usr/local/bin`, and the login-shell PATH when the app is opened from the Dock. Codex inside current ChatGPT (`codex-cli/bin/codex`) is recognized. The download icon is the install signal; the extra install paragraph is gone.
 
 Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where available).
 
@@ -50,7 +50,7 @@ xattr -cr /Applications/TerminalWisely.app
 - **安全** — 命令能力分级；API Key 本机；模型不能绕过 CommandBroker
 - **可观测** — 状态栏 CPU、内存、磁盘与网络
 
-本次重新打包还会：只选用当前系统的内置 Python；模型设置只保留模型配置；主机「未分组」默认展开，新建主机可选分组；把网址填进 API Key 时会直接拦住。
+本次重新打包还会：只选用当前系统的内置 Python；模型设置只保留模型配置；主机「未分组」默认展开，新建主机可选分组；把网址填进 API Key 时会直接拦住。从 Dock 打开时也会在 Homebrew、`/usr/local/bin` 和登录 shell 的 PATH 里找 Agent CLI；能认出新版 ChatGPT 里的 Codex（`codex-cli/bin/codex`）。未安装只保留下载图标，不再重复一段安装说明。
 
 安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
 

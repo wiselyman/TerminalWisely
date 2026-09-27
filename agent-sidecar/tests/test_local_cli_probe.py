@@ -21,10 +21,11 @@ def test_probe_missing_when_path_empty(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
     monkeypatch.setattr(local_cli, "_codex_fallback_binaries", lambda: [])
+    monkeypatch.setattr(local_cli, "_cursor_versioned_agent", lambda: None)
     p = probe_local_cli("cursor")
     assert p["installed"] is False
     assert p["code"] == "install_needed"
-    assert "http" in (p.get("install_url") or "")
+    assert p.get("install_url") == "https://cursor.com/docs/cli/installation"
     assert resolve_local_cli("cursor") is None
 
 
@@ -71,8 +72,11 @@ def test_probe_codex_and_claude_names(monkeypatch, tmp_path: Path) -> None:
 
 def test_resolve_codex_from_chatgpt_app_bundle(monkeypatch, tmp_path: Path) -> None:
     """ChatGPT Desktop ships `codex` under Contents/Resources — not always on PATH."""
+    import app.runtime.local_cli as local_cli
+
     monkeypatch.setenv("PATH", str(tmp_path))  # empty of codex
     monkeypatch.delenv("TW_AI_CODEX_FAKE", raising=False)
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
     # Place stub under a ChatGPT-like path; resolve uses monkeypatched fallbacks.
     app_dir = (
         tmp_path
@@ -83,8 +87,6 @@ def test_resolve_codex_from_chatgpt_app_bundle(monkeypatch, tmp_path: Path) -> N
     )
     app_dir.mkdir(parents=True)
     bundled = stub_codex_login_ok(app_dir, "codex")
-
-    import app.runtime.local_cli as local_cli
 
     monkeypatch.setattr(
         local_cli,
@@ -128,7 +130,12 @@ def test_codex_fallback_includes_unix_and_windows_layout(monkeypatch, tmp_path: 
 
     monkeypatch.setattr(local_cli.sys, "platform", "darwin")
     mac = local_cli._codex_fallback_binaries()
-    assert any("ChatGPT.app" in str(p) for p in mac)
+    mac_s = [str(p) for p in mac]
+    assert "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" in mac_s
+    assert "/Applications/ChatGPT.app/Contents/Resources/codex" in mac_s
+    home_resources = Path.home() / "Applications" / "ChatGPT.app" / "Contents" / "Resources"
+    assert str(home_resources / "codex-cli" / "bin" / "codex") in mac_s
+    assert str(home_resources / "codex") in mac_s
 
 
 def test_which_finds_user_local_bin_when_path_stripped(monkeypatch, tmp_path: Path) -> None:
@@ -195,6 +202,97 @@ def test_prepare_cli_argv_wraps_cmd_on_windows(monkeypatch) -> None:
         "/usr/bin/cursor-agent",
         "status",
     ]
+
+
+def test_static_user_bin_dirs_include_homebrew_and_usr_local(monkeypatch) -> None:
+    """Dock launches omit Homebrew and /usr/local/bin from PATH."""
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setattr(local_cli, "_is_windows", lambda: False)
+    dirs = [str(p) for p in local_cli._static_user_bin_dirs()]
+    assert "/opt/homebrew/bin" in dirs
+    assert "/usr/local/bin" in dirs
+    assert any(p.endswith("/.local/bin") for p in dirs)
+
+
+def test_parse_marked_path_ignores_shell_preamble() -> None:
+    from app.runtime.local_cli import _parse_marked_path
+
+    text = "welcome\n__TWPATH__/opt/homebrew/bin:/Users/me/.local/bin\n"
+    parsed = [str(p) for p in _parse_marked_path(text)]
+    assert parsed == ["/opt/homebrew/bin", "/Users/me/.local/bin"]
+
+
+def test_which_finds_homebrew_codex_when_gui_path_stripped(monkeypatch, tmp_path: Path) -> None:
+    import app.runtime.local_cli as local_cli
+
+    brew = tmp_path / "homebrew" / "bin"
+    brew.mkdir(parents=True)
+    write_path_cli_stub(brew, "codex", py_body="import sys\nsys.exit(0)\n")
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [brew])
+    found = local_cli._which("codex")
+    assert found is not None
+    assert found.endswith("/codex")
+
+
+def test_resolve_cursor_agent_symlink_not_unrelated_agent(monkeypatch, tmp_path: Path) -> None:
+    import app.runtime.local_cli as local_cli
+
+    real_dir = tmp_path / "share" / "cursor-agent" / "versions" / "2026.09.26"
+    real_dir.mkdir(parents=True)
+    binary = real_dir / "cursor-agent"
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    link = tmp_path / "bin" / "agent"
+    link.parent.mkdir()
+    link.symlink_to(binary)
+    other = tmp_path / "other" / "agent"
+    other.parent.mkdir()
+    other.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    other.chmod(0o755)
+    monkeypatch.setenv("PATH", str(other.parent))
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [link.parent])
+    monkeypatch.setattr(local_cli, "_cursor_versioned_agent", lambda: None)
+    resolved = resolve_local_cli("cursor")
+    assert resolved is not None
+    assert resolved.binary == str(link)
+    assert resolved.argv_prefix == [str(link)]
+
+
+def test_resolve_versioned_cursor_agent_without_symlink(monkeypatch, tmp_path: Path) -> None:
+    import app.runtime.local_cli as local_cli
+
+    versions = tmp_path / ".local" / "share" / "cursor-agent" / "versions"
+    older = versions / "2026.01.01"
+    newer = versions / "2026.09.26"
+    older.mkdir(parents=True)
+    newer.mkdir()
+    for directory in (older, newer):
+        binary = directory / "cursor-agent"
+        binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        binary.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    monkeypatch.setattr(local_cli.Path, "home", classmethod(lambda cls: tmp_path))
+    resolved = resolve_local_cli("cursor")
+    assert resolved is not None
+    assert resolved.binary == str(newer / "cursor-agent")
+
+
+def test_editor_cursor_shim_is_not_the_agent_cli(monkeypatch, tmp_path: Path) -> None:
+    import app.runtime.local_cli as local_cli
+
+    shim = tmp_path / "cursor"
+    shim.write_text(
+        "#!/bin/bash\nELECTRON_RUN_AS_NODE=1 \"$ELECTRON\" \"$CLI\"\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    monkeypatch.setattr(local_cli, "_cursor_versioned_agent", lambda: None)
+    assert resolve_local_cli("cursor") is None
 
 
 def test_claude_auth_status_json(monkeypatch, tmp_path: Path) -> None:

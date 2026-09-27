@@ -2336,8 +2336,8 @@ export function AiEngineerPanel({
       setModelOpen(true);
       setPickerTab("agent");
     });
-    // Only probe when we have no usable result yet (install/login panels need it).
-    if (status === "unknown") {
+    // Download icon is the install signal. Selecting again rechecks after a CLI is installed.
+    if (status === "unknown" || status === "install_needed") {
       void refreshRuntimeProbe(kind);
     }
   };
@@ -4004,10 +4004,7 @@ export function AiEngineerPanel({
                                         runtimeProbe,
                                         agentRuntime,
                                       );
-                                    if (
-                                      selectedStatus !== "install_needed" &&
-                                      selectedStatus !== "login_needed"
-                                    ) {
+                                    if (selectedStatus !== "login_needed") {
                                       return null;
                                     }
                                     return (
@@ -4015,93 +4012,56 @@ export function AiEngineerPanel({
                                         className="ai-engineer-runtime-install"
                                         data-testid="ai-engineer-runtime-install"
                                       >
-                                        {selectedStatus === "install_needed" ? (
-                                          <>
-                                            <p className="ai-engineer-runtime-install-hint">
-                                              {t("aiEngineer.runtime.installHint")}
-                                            </p>
-                                            {runtimeProbe?.install_url ? (
-                                              <a
-                                                className="ai-engineer-runtime-install-link"
-                                                href={runtimeProbe.install_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                data-testid="ai-engineer-runtime-install-link"
-                                              >
-                                                {t("aiEngineer.runtime.installOpen")}
-                                              </a>
-                                            ) : null}
-                                            <button
-                                              type="button"
-                                              className="ai-engineer-text-btn"
-                                              data-testid="ai-engineer-runtime-recheck"
-                                              disabled={runtimeProbing}
-                                              onClick={() =>
-                                                void refreshRuntimeProbe(
-                                                  agentRuntime,
-                                                )
-                                              }
-                                            >
-                                              {t("aiEngineer.runtime.recheck")}
-                                            </button>
-                                          </>
-                                        ) : null}
-                                        {selectedStatus === "login_needed" ? (
-                                          <>
-                                            <p
-                                              className="ai-engineer-runtime-install-hint"
-                                              data-testid="ai-engineer-runtime-login-hint"
-                                            >
-                                              {runtimeLoginDetail ||
-                                                t("aiEngineer.runtime.loginHint")}
-                                            </p>
-                                            <button
-                                              type="button"
-                                              className="find-panel-run"
-                                              data-testid="ai-engineer-runtime-signin"
-                                              disabled={
-                                                runtimeLoggingIn || runtimeProbing
-                                              }
-                                              onClick={() =>
-                                                void startGuidedLogin(agentRuntime)
-                                              }
-                                            >
-                                              {runtimeLoggingIn
-                                                ? t(
-                                                    "aiEngineer.runtime.loginInProgress",
-                                                  )
-                                                : t("aiEngineer.runtime.signIn")}
-                                            </button>
-                                            {runtimeLoggingIn ? (
-                                              <button
-                                                type="button"
-                                                className="ai-engineer-text-btn"
-                                                data-testid="ai-engineer-runtime-login-cancel"
-                                                onClick={() => {
-                                                  runtimeLoginAbortRef.current?.abort();
-                                                }}
-                                              >
-                                                {t(
-                                                  "aiEngineer.runtime.loginCancel",
-                                                )}
-                                              </button>
-                                            ) : (
-                                              <button
-                                                type="button"
-                                                className="ai-engineer-text-btn"
-                                                data-testid="ai-engineer-runtime-recheck"
-                                                disabled={runtimeProbing}
-                                                onClick={() =>
-                                                  void refreshRuntimeProbe(
-                                                    agentRuntime,
-                                                  )
-                                                }
-                                              >
-                                                {t("aiEngineer.runtime.recheck")}
-                                              </button>
-                                            )}
-                                          </>
-                                        ) : null}
+                                        <p
+                                          className="ai-engineer-runtime-install-hint"
+                                          data-testid="ai-engineer-runtime-login-hint"
+                                        >
+                                          {runtimeLoginDetail ||
+                                            t("aiEngineer.runtime.loginHint")}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          className="find-panel-run"
+                                          data-testid="ai-engineer-runtime-signin"
+                                          disabled={
+                                            runtimeLoggingIn || runtimeProbing
+                                          }
+                                          onClick={() =>
+                                            void startGuidedLogin(agentRuntime)
+                                          }
+                                        >
+                                          {runtimeLoggingIn
+                                            ? t(
+                                                "aiEngineer.runtime.loginInProgress",
+                                              )
+                                            : t("aiEngineer.runtime.signIn")}
+                                        </button>
+                                        {runtimeLoggingIn ? (
+                                          <button
+                                            type="button"
+                                            className="ai-engineer-text-btn"
+                                            data-testid="ai-engineer-runtime-login-cancel"
+                                            onClick={() => {
+                                              runtimeLoginAbortRef.current?.abort();
+                                            }}
+                                          >
+                                            {t("aiEngineer.runtime.loginCancel")}
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="ai-engineer-text-btn"
+                                            data-testid="ai-engineer-runtime-recheck"
+                                            disabled={runtimeProbing}
+                                            onClick={() =>
+                                              void refreshRuntimeProbe(
+                                                agentRuntime,
+                                              )
+                                            }
+                                          >
+                                            {t("aiEngineer.runtime.recheck")}
+                                          </button>
+                                        )}
                                       </div>
                                     );
                                   })()}

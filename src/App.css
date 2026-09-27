@@ -11035,11 +11035,6 @@ body.cmd-nav-panel-resizing {
   margin: 0;
   color: var(--tw-fg-muted);
 }
-.ai-engineer-runtime-install-link {
-  color: var(--tw-accent, #58a6ff);
-  text-decoration: underline;
-  font-size: 0.72rem;
-}
 .ai-engineer-external-activity {
   margin: 6px 0;
   padding: 8px 10px;
