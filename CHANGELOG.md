@@ -9,6 +9,7 @@ Cursor / Codex / Claude Code as ops agent runtimes.
 - Guided install/login readiness; automatic MCP / workspace wiring (no silent CLI install)
 - Dual-plane chat UX (local CLI activity + remote exec cards)
 - Built-in AI Linux / K8S Engineers unchanged alongside external runtimes
+- macOS: embed About-menu and window icons so a machine without the build tree does not abort on launch
 
 将 Cursor / Codex / Claude Code 接入运维 Agent 运行时。
 
@@ -17,6 +18,7 @@ Cursor / Codex / Claude Code as ops agent runtimes.
 - 安装/登录引导；自动接线 MCP / 工作区（不静默安装 CLI）
 - 双平面对话 UX（本机 CLI 活动 + 远端执行卡片）
 - 内置 AI Linux / K8S Engineer 与外部运行时并存
+- macOS：About 菜单与窗口图标编译进二进制，避免未带源码目录的机器启动即退出
 
 ## [0.0.1] - 2026-09-20
 

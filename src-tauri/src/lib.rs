@@ -42,12 +42,8 @@ fn apply_linux_webkit_workarounds() {
 }
 
 fn apply_window_icon(app: &tauri::App) -> tauri::Result<()> {
-    let icon_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("icons/32x32.png");
-    if !icon_path.exists() {
-        return Ok(());
-    }
-
-    let icon = Image::from_path(&icon_path)?.to_owned();
+    // Same reason as the About menu: do not resolve icons via CARGO_MANIFEST_DIR.
+    let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
     for (_, window) in app.webview_windows() {
         window.set_icon(icon.clone())?;
     }

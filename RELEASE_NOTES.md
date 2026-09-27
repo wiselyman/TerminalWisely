@@ -21,6 +21,14 @@ Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where avai
 
 Requires the corresponding CLI installed and signed in when using Cursor / Codex / Claude Code runtimes.
 
+### macOS
+
+If macOS says the app is damaged and should be moved to the Trash, it is the download quarantine flag. After installing to `/Applications`:
+
+```bash
+xattr -cr /Applications/TerminalWisely.app
+```
+
 ---
 
 ## 中文
@@ -43,3 +51,11 @@ Requires the corresponding CLI installed and signed in when using Cursor / Codex
 安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
 
 使用 Cursor / Codex / Claude Code 运行时需本机已安装并登录对应 CLI。
+
+### macOS
+
+若提示「TerminalWisely」已损坏，无法打开，你应该将它移到废纸篓：应用没有损坏，是下载隔离属性。放入「应用程序」后执行：
+
+```bash
+xattr -cr /Applications/TerminalWisely.app
+```

@@ -31,10 +31,10 @@ pub fn install(app: &App) -> tauri::Result<()> {
 
     #[cfg(target_os = "macos")]
     let menu = {
-        let about_icon = Image::from_path(
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("icons/256x256.png"),
-        )?
-        .to_owned();
+        // Embed the icon. CARGO_MANIFEST_DIR is the build machine path and
+        // does not exist in an installed .app on another Mac (setup then panics
+        // inside applicationDidFinishLaunching → abort).
+        let about_icon = Image::from_bytes(include_bytes!("../icons/256x256.png"))?;
         let about = PredefinedMenuItem::about(
             app,
             Some("About TerminalWisely"),

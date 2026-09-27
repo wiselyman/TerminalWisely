@@ -177,6 +177,16 @@ Installers for **Windows**, **macOS** (Apple Silicon & Intel), and **Linux** (de
 
 The AI runtime ships inside the app. The first time you open AI Engineer, dependencies install automatically in the background (progress is shown in the UI).
 
+### macOS
+
+If macOS says **“TerminalWisely” is damaged and can’t be opened** and asks you to move it to the Trash, the app is not damaged. Gatekeeper quarantined the download. Copy it to `/Applications`, then run:
+
+```bash
+xattr -cr /Applications/TerminalWisely.app
+```
+
+Open TerminalWisely again.
+
 ---
 
 ## License
