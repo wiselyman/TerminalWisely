@@ -38,6 +38,7 @@ def test_runtime_probe_cursor_install_needed(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
     monkeypatch.setattr(local_cli, "_codex_fallback_binaries", lambda: [])
+    monkeypatch.setattr(local_cli, "_cursor_versioned_agent", lambda: None)
     with TestClient(app) as client:
         r = client.get("/v1/runtime/probe?kind=cursor", headers=_auth())
         assert r.status_code == 200

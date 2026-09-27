@@ -103,6 +103,7 @@ def test_chat_start_cursor_install_needed(monkeypatch, tmp_path) -> None:
     import app.runtime.local_cli as local_cli
 
     monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    monkeypatch.setattr(local_cli, "_cursor_versioned_agent", lambda: None)
     with TestClient(app) as client:
         r = client.post(
             "/v1/chat/start",
