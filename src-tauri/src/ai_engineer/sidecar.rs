@@ -513,15 +513,27 @@ fn run_pip_install_with_progress(
     Ok(())
 }
 
+fn bundled_python_candidates(runtime: &std::path::Path) -> Vec<PathBuf> {
+    // Only host binaries. A Windows embed (`python.exe`) left in the dev tree
+    // is a file on macOS/Linux, but exec fails with "cannot execute binary file".
+    if cfg!(windows) {
+        vec![
+            runtime.join("python.exe"),
+            runtime.join("python3.exe"),
+            runtime.join("bin").join("python.exe"),
+        ]
+    } else {
+        vec![
+            runtime.join("bin").join("python3"),
+            runtime.join("bin").join("python"),
+        ]
+    }
+}
+
 fn find_bundled_python(sidecar_dir: &std::path::Path) -> Option<PathBuf> {
-    let runtime = sidecar_dir.join("runtime");
-    let candidates = [
-        runtime.join("bin").join("python3"),
-        runtime.join("bin").join("python"),
-        runtime.join("python.exe"),
-        runtime.join("python3.exe"),
-    ];
-    candidates.into_iter().find(|p| p.is_file())
+    bundled_python_candidates(&sidecar_dir.join("runtime"))
+        .into_iter()
+        .find(|p| p.is_file())
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> AppResult<()> {
@@ -1391,5 +1403,49 @@ fn decode_chunked_body(input: &str) -> String {
         input.to_string()
     } else {
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{bundled_python_candidates, find_bundled_python};
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn bundled_python_candidates_match_host() {
+        let runtime = Path::new("/app/runtime");
+        let names: Vec<String> = bundled_python_candidates(runtime)
+            .into_iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        if cfg!(windows) {
+            assert!(names.iter().any(|n| n.ends_with(".exe")));
+        } else {
+            assert!(names.iter().all(|n| !n.ends_with(".exe")));
+            assert!(names.iter().any(|n| n == "python3"));
+        }
+    }
+
+    #[test]
+    fn find_bundled_python_ignores_foreign_executable() {
+        let dir = std::env::temp_dir().join(format!(
+            "tw-py-host-{}-{}",
+            std::process::id(),
+            cfg!(windows)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let runtime = dir.join("runtime");
+        fs::create_dir_all(runtime.join("bin")).unwrap();
+        fs::write(runtime.join("python.exe"), b"not-a-host-binary").unwrap();
+        fs::write(runtime.join("bin").join("python3"), b"#!/bin/sh\n").unwrap();
+
+        let found = find_bundled_python(&dir).map(|p| p.file_name().unwrap().to_string_lossy().into_owned());
+        if cfg!(windows) {
+            assert_eq!(found.as_deref(), Some("python.exe"));
+        } else {
+            assert_eq!(found.as_deref(), Some("python3"));
+        }
+        let _ = fs::remove_dir_all(&dir);
     }
 }

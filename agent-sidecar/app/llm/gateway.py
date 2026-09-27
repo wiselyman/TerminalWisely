@@ -19,6 +19,26 @@ class ModelGatewayError(RuntimeError):
     pass
 
 
+def normalize_provider_api_key(key: str) -> str:
+    """Trim and drop a single leading Bearer prefix. Never invent a key."""
+    raw = (key or "").strip()
+    if raw.lower().startswith("bearer "):
+        raw = raw[7:].strip()
+    return raw
+
+
+def api_key_is_base_url(key: str, base_url: str) -> bool:
+    """True when the secret field holds an http(s) address (often the Base URL)."""
+    raw = (key or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower().rstrip("/")
+    if lowered.startswith("http://") or lowered.startswith("https://"):
+        return True
+    base = (base_url or "").strip().lower().rstrip("/")
+    return bool(base) and lowered == base
+
+
 def parse_sse_data_lines(buffer: str) -> tuple[list[str], str]:
     """Split buffered SSE text into complete `data:` payloads and remainder."""
     payloads: list[str] = []
@@ -120,7 +140,12 @@ class ModelGateway:
             self._client = None
 
     def _auth_headers_and_key(self) -> tuple[dict[str, str], str]:
-        key = (self.api_key or "").strip()
+        key = normalize_provider_api_key(self.api_key or "")
+        if api_key_is_base_url(key, self.base_url):
+            raise ModelGatewayError(
+                "API Key is a web address, not a secret. "
+                "Paste the provider key into API Key, and keep the service address in Base URL."
+            )
         if not key and not paths.is_local_model_endpoint(self.base_url):
             raise ModelGatewayError(
                 "API Key is empty. Open AI Model Settings, paste a key for the active profile, then save. "

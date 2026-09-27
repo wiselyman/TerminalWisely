@@ -350,7 +350,7 @@ function exists(rel) {
   const layoutLib = read("src/lib/entityListLayout.ts");
   if (
     layoutLib.includes("ENTITY_LAYOUT_KEYS") &&
-    layoutLib.includes("LAYOUT_VERSION = 3") &&
+    layoutLib.includes("LAYOUT_VERSION = 4") &&
     layoutLib.includes("SIDEBAR_LAYOUT_KEY") &&
     layoutLib.includes("migrateV2SidebarScope")
   ) {
@@ -530,6 +530,7 @@ function exists(rel) {
       "panel.collapse",
       "aiEngineer.manageModels",
       "aiEngineer.modelPicker",
+      "aiEngineer.chooseModelOrAgent",
       "aiEngineer.picker.tabModel",
       "aiEngineer.picker.tabAgent",
       "aiEngineer.findChat",
@@ -623,6 +624,30 @@ function exists(rel) {
     pass("provider.refresh-models", "refresh models wired");
   } else {
     fail("provider.refresh-models", "missing listAiModels / refreshModels");
+  }
+  if (
+    settings.includes("cursor-runtime") ||
+    settings.includes("probeRuntime") ||
+    settings.includes("runGuidedRuntimeLogin")
+  ) {
+    fail("provider.no-agent-runtime", "model settings still embeds agent CLI");
+  } else {
+    pass("provider.no-agent-runtime", "model settings is profiles only");
+  }
+  const panel = read("src/components/aiEngineer/AiEngineerPanel.tsx");
+  if (panel.includes("runGuidedRuntimeLogin") && panel.includes("agentRuntime")) {
+    pass("agent.runtime-in-picker", "agent login stays on the composer picker");
+  } else {
+    fail("agent.runtime-in-picker", "agent picker lost runtime login");
+  }
+  const zhTools = JSON.parse(read("src/i18n/locales/zh-CN/tools.json"));
+  if (
+    zhTools["aiEngineer.chooseModelOrAgent"] === "选择大模型或agent" &&
+    panel.includes('t("aiEngineer.chooseModelOrAgent")')
+  ) {
+    pass("picker.choose-model-or-agent", "unconfigured picker label");
+  } else {
+    fail("picker.choose-model-or-agent", "picker label is not 选择大模型或agent");
   }
   const gw = read("agent-sidecar/app/llm/gateway.py");
   if (gw.includes("async def list_models") && gw.includes("parse_openai_models_payload")) {

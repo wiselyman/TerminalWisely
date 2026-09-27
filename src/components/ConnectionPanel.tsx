@@ -27,6 +27,8 @@ import {
   savedServerKey,
   sshKubectlProbeOk,
 } from "../lib/k8s/sshHostBind";
+import { useEntityLayoutStore } from "../stores/entityLayoutStore";
+import { UNGROUPED_SECTION } from "../lib/entityListLayout";
 import { useAppUpdateStore } from "../stores/appUpdateStore";
 import { UpdateAvailableBadge } from "./UpdateAvailableBadge";
 
@@ -118,6 +120,8 @@ export function ConnectionPanel({
   const [savedPassword, setSavedPassword] = useState("");
   const [rememberPassword, setRememberPassword] = useState(true);
   const [rememberSavedPassword, setRememberSavedPassword] = useState(true);
+  const [hostGroupId, setHostGroupId] = useState(UNGROUPED_SECTION);
+  const hostGroups = useEntityLayoutStore((s) => s.layouts.hosts?.groups ?? []);
 
   const {
     savedConnections,
@@ -264,6 +268,7 @@ export function ConnectionPanel({
     setForm(defaultRequest);
     setConnectionName("");
     setRememberPassword(false);
+    setHostGroupId(UNGROUPED_SECTION);
   }, []);
 
   useEffect(() => {
@@ -355,12 +360,22 @@ export function ConnectionPanel({
       );
       if (result) {
         const bookmarkName = connectionName.trim() || form.host.trim();
-        await saveConnection(
+        const saved = await saveConnection(
           bookmarkName,
           form,
           rememberPassword,
           result.os_id,
           result.os_name,
+        );
+        const ids = useSessionStore.getState().savedConnections.map((item) => item.id);
+        if (!ids.includes(saved.id)) ids.push(saved.id);
+        useEntityLayoutStore.getState().placeEntity(
+          "hosts",
+          ids,
+          saved.id,
+          hostGroupId,
+          (ordered) => void reorderSavedConnections(ordered),
+          t("shell:entityUngrouped"),
         );
       }
       closeSshForm();
@@ -462,6 +477,23 @@ export function ConnectionPanel({
             autoComplete="username"
           />
         </label>
+        {!isEditing ? (
+          <label>
+            {t("connection:fieldGroup")}
+            <select
+              data-testid="ssh-host-group"
+              value={hostGroupId}
+              onChange={(e) => setHostGroupId(e.target.value)}
+            >
+              <option value={UNGROUPED_SECTION}>{t("shell:entityUngrouped")}</option>
+              {hostGroups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label>
           {t("connection:fieldAuthMethod")}
           <select

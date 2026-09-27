@@ -10,6 +10,7 @@ Cursor / Codex / Claude Code as ops agent runtimes.
 - Dual-plane chat UX (local CLI activity + remote exec cards)
 - Built-in AI Linux / K8S Engineers unchanged alongside external runtimes
 - macOS: embed About-menu and window icons so a machine without the build tree does not abort on launch
+- Rebuild: host-native bundled Python only; model settings stay profiles; Ungrouped hosts start expanded and a new host can pick a group; a Base URL in the API key field is rejected
 
 将 Cursor / Codex / Claude Code 接入运维 Agent 运行时。
 
@@ -19,6 +20,7 @@ Cursor / Codex / Claude Code as ops agent runtimes.
 - 双平面对话 UX（本机 CLI 活动 + 远端执行卡片）
 - 内置 AI Linux / K8S Engineer 与外部运行时并存
 - macOS：About 菜单与窗口图标编译进二进制，避免未带源码目录的机器启动即退出
+- 重新打包：内置 Python 只选本机系统可执行文件；模型设置不再包含 Agent CLI；未分组默认展开且新建主机可选分组；API Key 填成网址时会拦住
 
 ## [0.0.1] - 2026-09-20
 

@@ -134,7 +134,7 @@ interface SessionState {
     rememberPassword: boolean,
     osId?: string | null,
     osName?: string | null,
-  ) => Promise<void>;
+  ) => Promise<SavedConnection>;
   updateSavedConnection: (
     id: string,
     name: string,
@@ -478,7 +478,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   saveConnection: async (name, request, rememberPassword, osId, osName) => {
-    await invoke("save_connection", {
+    const saved = await invoke<SavedConnection>("save_connection", {
       name,
       request,
       rememberPassword,
@@ -486,6 +486,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       osName: osName ?? null,
     });
     await get().loadSavedConnections();
+    return saved;
   },
 
   updateSavedConnection: async (id, name, request, rememberPassword) => {

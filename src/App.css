@@ -11462,51 +11462,6 @@ body.cmd-nav-panel-resizing {
   background: var(--tw-bg);
   color: var(--tw-fg);
 }
-.ai-engineer-settings-security-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 4px;
-  border-top: 1px solid var(--tw-surface-2);
-}
-.ai-engineer-settings-cursor-block {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--tw-surface-2);
-}
-.ai-engineer-settings-cursor-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-.ai-engineer-settings-cursor-status {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--tw-fg-muted);
-}
-.ai-engineer-settings-cursor-status.status-ready,
-.ai-engineer-settings-cursor-status.status-ready_fake {
-  color: var(--tw-success, #3ecf8e);
-}
-.ai-engineer-settings-cursor-status.status-not_ready {
-  color: var(--tw-warn, #e6a23c);
-}
-.ai-engineer-settings-security-head h4 {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--tw-fg);
-}
-.ai-engineer-settings-security-head p {
-  margin: 2px 0 0;
-  color: var(--tw-fg-muted);
-  font-size: 0.72rem;
-  line-height: 1.35;
-}
 .ai-engineer-settings-mode-list {
   display: flex;
   flex-direction: column;

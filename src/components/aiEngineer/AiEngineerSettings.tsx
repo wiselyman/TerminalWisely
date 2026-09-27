@@ -1,14 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ensureSidecar,
-  listAiModels,
-  probeRuntime,
-  type RuntimeProbeResult,
-} from "../../lib/aiEngineer/api";
+import { ensureSidecar, listAiModels } from "../../lib/aiEngineer/api";
 import type { AiModelProfile } from "../../lib/aiEngineer/api";
-import { externalRuntimeStatusKind } from "../../lib/aiEngineer/cursorRuntimeStatus";
-import { runGuidedRuntimeLogin } from "../../lib/aiEngineer/guidedRuntimeLogin";
+import { apiKeyIsBaseUrl } from "../../lib/aiEngineer/apiKeyShape";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 
 /** All types speak OpenAI-compatible HTTP via ModelGateway. */
@@ -125,10 +119,6 @@ export function AiEngineerSettings() {
 
   const [view, setView] = useState<View>({ kind: "list" });
   const [apiKey, setApiKey] = useState("");
-  const [cursorProbe, setCursorProbe] = useState<RuntimeProbeResult | null>(null);
-  const [cursorProbing, setCursorProbing] = useState(false);
-  const [cursorLoggingIn, setCursorLoggingIn] = useState(false);
-  const [cursorLoginDetail, setCursorLoginDetail] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -158,45 +148,6 @@ export function AiEngineerSettings() {
       throw err;
     } finally {
       setSaving(false);
-    }
-  };
-
-  const onProbeCursor = async () => {
-    setCursorProbing(true);
-    setError(null);
-    try {
-      const info = await ensureSidecar();
-      const result = await probeRuntime(info, "cursor");
-      setCursorProbe(result);
-    } catch (err) {
-      setCursorProbe(null);
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCursorProbing(false);
-    }
-  };
-
-  const onSignInCursor = async () => {
-    if (cursorLoggingIn) return;
-    setCursorLoggingIn(true);
-    setCursorLoginDetail(t("aiEngineer.runtime.loginStarting"));
-    setError(null);
-    try {
-      const probe = await runGuidedRuntimeLogin("cursor", {
-        onProgress: (p) => {
-          if (p.phase === "waiting_browser") {
-            setCursorLoginDetail(t("aiEngineer.runtime.loginWaitingBrowser"));
-          }
-        },
-      });
-      setCursorProbe(probe);
-      setCursorLoginDetail(null);
-    } catch (err) {
-      setCursorLoginDetail(null);
-      setError(err instanceof Error ? err.message : String(err));
-      await onProbeCursor();
-    } finally {
-      setCursorLoggingIn(false);
     }
   };
 
@@ -231,6 +182,10 @@ export function AiEngineerSettings() {
     }
     if (!draft.model.trim()) {
       setError(t("aiEngineer.settings.modelRequired"));
+      return;
+    }
+    if (apiKeyIsBaseUrl(apiKey, draft.base_url)) {
+      setError(t("aiEngineer.settings.apiKeyIsUrl"));
       return;
     }
     const endpointErr = profileEndpointError(view.providerType, draft);
@@ -297,6 +252,13 @@ export function AiEngineerSettings() {
     if (endpointErr) {
       setError(endpointErr);
       setModelHint(endpointErr);
+      setModelOptions([]);
+      return;
+    }
+    if (apiKeyIsBaseUrl(apiKey, view.profile.base_url)) {
+      const msg = t("aiEngineer.settings.apiKeyIsUrl");
+      setError(msg);
+      setModelHint(msg);
       setModelOptions([]);
       return;
     }
@@ -497,68 +459,6 @@ export function AiEngineerSettings() {
               </ul>
             )}
 
-            <section
-              className="ai-engineer-settings-cursor-block"
-              data-testid="ai-engineer-cursor-runtime"
-            >
-              <div className="ai-engineer-settings-security-head">
-                <h4>{t("aiEngineer.settings.cursorRuntime")}</h4>
-                <p>{t("aiEngineer.settings.cursorRuntimeHint")}</p>
-              </div>
-              <div className="ai-engineer-settings-cursor-actions">
-                {externalRuntimeStatusKind(cursorProbe, "cursor") ===
-                "login_needed" ? (
-                  <button
-                    type="button"
-                    className="find-panel-run"
-                    disabled={cursorLoggingIn || cursorProbing}
-                    onClick={() => void onSignInCursor()}
-                    data-testid="ai-engineer-cursor-signin"
-                  >
-                    {cursorLoggingIn
-                      ? t("aiEngineer.runtime.loginInProgress")
-                      : t("aiEngineer.runtime.signIn")}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="ai-engineer-text-btn"
-                  disabled={cursorProbing || cursorLoggingIn}
-                  onClick={() => void onProbeCursor()}
-                  data-testid="ai-engineer-cursor-probe"
-                >
-                  {cursorProbing
-                    ? "…"
-                    : t("aiEngineer.settings.cursorProbe")}
-                </button>
-              </div>
-              <p
-                className={`ai-engineer-settings-cursor-status status-${externalRuntimeStatusKind(cursorProbe, "cursor")}`}
-                data-testid="ai-engineer-cursor-status"
-              >
-                {(() => {
-                  const kind = externalRuntimeStatusKind(cursorProbe, "cursor");
-                  if (cursorLoginDetail) return cursorLoginDetail;
-                  if (kind === "ready") {
-                    return t("aiEngineer.settings.cursorStatusReady");
-                  }
-                  if (kind === "ready_fake") {
-                    return t("aiEngineer.settings.cursorStatusFake");
-                  }
-                  if (kind === "login_needed") {
-                    return t("aiEngineer.settings.cursorStatusLoginNeeded");
-                  }
-                  if (kind === "install_needed" || kind === "not_ready") {
-                    return t("aiEngineer.settings.cursorStatusNotReady");
-                  }
-                  return t("aiEngineer.settings.cursorStatusUnknown");
-                })()}
-                {!cursorLoginDetail && cursorProbe?.detail
-                  ? ` · ${cursorProbe.detail}`
-                  : ""}
-              </p>
-            </section>
-
             <div className="ai-engineer-approval-actions">
               <button
                 type="button"
@@ -657,12 +557,20 @@ export function AiEngineerSettings() {
                   ? ` (${t("aiEngineer.settings.keySaved")})`
                   : ""}
                 <input
-                  type="password"
+                  type={apiKeyIsBaseUrl(apiKey, view.profile.base_url) ? "text" : "password"}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
+                  onInput={(e) => setApiKey(e.currentTarget.value)}
                   placeholder={t("aiEngineer.settings.apiKeyPlaceholder")}
-                  autoComplete="off"
+                  autoComplete="new-password"
+                  data-testid="ai-model-api-key"
+                  spellCheck={false}
                 />
+                {apiKeyIsBaseUrl(apiKey, view.profile.base_url) ? (
+                  <span className="ai-engineer-model-hint is-error">
+                    {t("aiEngineer.settings.apiKeyIsUrl")}
+                  </span>
+                ) : null}
               </label>
             ) : null}
             <label>

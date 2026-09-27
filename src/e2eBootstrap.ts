@@ -86,6 +86,8 @@ export interface TwE2eApi {
   openSettings: () => void;
   invokeKillProcess: (pid: number) => Promise<void>;
   invokeK8sApplyYaml: (yaml: string) => Promise<void>;
+  /** Drop model profiles so the picker shows the unconfigured label. */
+  clearAiModelConfig: () => Promise<void>;
 }
 
 declare global {
@@ -206,6 +208,14 @@ async function openAiChatForSsh() {
     { open: true },
   );
   await useAiEngineerStore.getState().ensureReady();
+}
+
+async function clearAiModelConfig() {
+  await useAiEngineerStore.getState().saveSettings({
+    profiles: [],
+    active_profile_id: "",
+    agent_runtime: "builtin",
+  });
 }
 
 function simulateAiBusy() {
@@ -416,6 +426,7 @@ export function runE2eBootstrap(): void {
     openBrowserPanel,
     openAiChat,
     openAiChatForSsh,
+    clearAiModelConfig,
     simulateAiBusy,
     simulateStreamingAssistantGrow,
     getAiBusy,

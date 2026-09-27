@@ -9,6 +9,7 @@
   "hostPlaceholder": "192.168.1.10",
   "fieldPort": "Port",
   "fieldUsername": "Username",
+  "fieldGroup": "Group",
   "usernamePlaceholder": "root",
   "fieldAuthMethod": "Authentication",
   "authPassword": "Password",

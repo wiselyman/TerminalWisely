@@ -8,6 +8,7 @@ import {
   isDefaultGroupId,
   loadEntityListLayout,
   moveEntityToSection,
+  placeEntityInSection,
   preferHealthierLayout,
   reorderEntityGroups,
   reorderEntityItem,
@@ -27,7 +28,7 @@ describe("entityListLayout", () => {
     expect(sections).toHaveLength(1);
     expect(sections[0]?.defaultGroup).toBe(true);
     expect(sections[0]?.group.name).toBe(defaultName);
-    expect(sections[0]?.group.collapsed).toBe(true);
+    expect(sections[0]?.group.collapsed).toBe(false);
     expect(sections[0]?.itemIds).toEqual(["a", "b", "c"]);
   });
 
@@ -76,6 +77,41 @@ describe("entityListLayout", () => {
     const layout = deleteEntityGroup(createDefaultLayout(ids), UNGROUPED_SECTION);
     expect(isDefaultGroupId(UNGROUPED_SECTION)).toBe(true);
     expect(layout.groupOrder).toContain(UNGROUPED_SECTION);
+  });
+
+  it("places a new host in the chosen group and expands it", () => {
+    let layout = addEntityGroup(createDefaultLayout(ids), "Lab");
+    const groupId = layout.groups[0]!.id;
+    layout = placeEntityInSection(layout, "new-host", groupId);
+    expect(layout.assignments["new-host"]).toBe(groupId);
+    expect(layout.order[groupId]).toEqual(["new-host"]);
+    expect(layout.groups[0]?.collapsed).toBe(false);
+    expect(layout.defaultGroupCollapsed).toBe(false);
+  });
+
+  it("places a new host in ungrouped and keeps that section expanded", () => {
+    const layout = placeEntityInSection(createDefaultLayout(ids), "new-host", UNGROUPED_SECTION);
+    expect(layout.assignments["new-host"]).toBeNull();
+    expect(layout.order[UNGROUPED_SECTION]).toEqual(["a", "b", "c", "new-host"]);
+    const sections = buildEntityListSections(layout, [...ids, "new-host"], defaultName);
+    expect(sections[0]?.group.collapsed).toBe(false);
+  });
+
+  it("migrates v3 collapsed ungrouped to expanded", () => {
+    const migrated = migrateStoredLayout(
+      {
+        version: 3,
+        groupOrder: [UNGROUPED_SECTION],
+        groups: [],
+        defaultGroupCollapsed: true,
+        assignments: { a: null },
+        order: { [UNGROUPED_SECTION]: ["a"] },
+      },
+      "hosts",
+    );
+    expect(migrated?.version).toBe(4);
+    expect(migrated?.defaultGroupCollapsed).toBe(false);
+    expect(migrated?.assignments.a).toBeNull();
   });
 
   it("sync adds new ids at end of ungrouped", () => {
@@ -129,7 +165,7 @@ describe("entityListLayout", () => {
   it("preferHealthierLayout recovers stripped v3 hosts from sidebar snapshot", () => {
     const groupId = "grp-home";
     const stripped = {
-      version: 3 as const,
+      version: 4 as const,
       groupOrder: [groupId, UNGROUPED_SECTION],
       groups: [{ id: groupId, name: "家", collapsed: true }],
       defaultGroupCollapsed: false,
@@ -137,7 +173,7 @@ describe("entityListLayout", () => {
       order: { [groupId]: [], [UNGROUPED_SECTION]: ["a", "b"] },
     };
     const healthy = {
-      version: 3 as const,
+      version: 4 as const,
       groupOrder: [groupId, UNGROUPED_SECTION],
       groups: [{ id: groupId, name: "家", collapsed: false }],
       defaultGroupCollapsed: true,
@@ -181,7 +217,8 @@ describe("entityListLayout", () => {
       },
     };
     const migrated = migrateStoredLayout(sidebar, "hosts");
-    expect(migrated?.version).toBe(3);
+    expect(migrated?.version).toBe(4);
+    expect(migrated?.defaultGroupCollapsed).toBe(false);
     expect(migrated?.assignments.a).toBe(groupId);
     expect(migrated?.order[groupId]).toEqual(["a"]);
   });

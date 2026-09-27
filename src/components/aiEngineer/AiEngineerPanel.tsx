@@ -3773,7 +3773,7 @@ export function AiEngineerPanel({
                         <span className="ai-engineer-model-btn-label">
                           {canChat
                             ? activeProfileLabel
-                            : t("aiEngineer.configureModelTitle")}
+                            : t("aiEngineer.chooseModelOrAgent")}
                         </span>
                         <ChevronDown
                           size={14}

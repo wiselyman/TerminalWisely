@@ -39,6 +39,7 @@ function wrapApi(page: Page): TwE2eApi {
     },
     openAiChat: () => call("openAiChat") as Promise<void>,
     openAiChatForSsh: () => call("openAiChatForSsh") as Promise<void>,
+    clearAiModelConfig: () => call("clearAiModelConfig") as Promise<void>,
     simulateAiBusy: () => call("simulateAiBusy"),
     simulateStreamingAssistantGrow: (opts) =>
       call("simulateStreamingAssistantGrow", opts),

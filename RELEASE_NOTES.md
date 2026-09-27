@@ -17,6 +17,8 @@ Bring **Cursor Agent**, **Codex**, and **Claude Code** into real ops — on the 
 - **Safety** — policy-graded commands; API keys on-device; model cannot bypass CommandBroker
 - **Insight** — host CPU, memory, disk I/O, and network on the status bar
 
+This rebuild also keeps the bundled Python matched to the host OS, leaves model settings as profiles only, expands the Ungrouped host group by default, and rejects a Base URL pasted into the API key field.
+
 Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where available).
 
 Requires the corresponding CLI installed and signed in when using Cursor / Codex / Claude Code runtimes.
@@ -47,6 +49,8 @@ xattr -cr /Applications/TerminalWisely.app
 - **Kubernetes** — 侧栏 Hosts ↔ K8s；kubeconfig 或 SSH kubectl；资源树、YAML、日志、Pod Shell
 - **安全** — 命令能力分级；API Key 本机；模型不能绕过 CommandBroker
 - **可观测** — 状态栏 CPU、内存、磁盘与网络
+
+本次重新打包还会：只选用当前系统的内置 Python；模型设置只保留模型配置；主机「未分组」默认展开，新建主机可选分组；把网址填进 API Key 时会直接拦住。
 
 安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
 

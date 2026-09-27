@@ -1,7 +1,7 @@
 /** Sidebar entity list layout: per-view groups + order (Hosts, K8s). */
 
 export const UNGROUPED_SECTION = "__ungrouped__";
-export const LAYOUT_VERSION = 3 as const;
+export const LAYOUT_VERSION = 4 as const;
 
 export const ENTITY_LAYOUT_KEYS = {
   hosts: "tw.entityLayout.hosts",
@@ -98,7 +98,7 @@ export function createDefaultLayout(entityIds: string[]): EntityListLayout {
     version: LAYOUT_VERSION,
     groupOrder: [UNGROUPED_SECTION],
     groups: [],
-    defaultGroupCollapsed: true,
+    defaultGroupCollapsed: false,
     assignments: Object.fromEntries(entityIds.map((id) => [id, null])),
     order: { [UNGROUPED_SECTION]: [...entityIds] },
   };
@@ -152,12 +152,12 @@ function migrateV2SidebarScope(
         UNGROUPED_SECTION,
       ],
       groups,
-      defaultGroupCollapsed: true,
+      defaultGroupCollapsed: false,
       assignments: scopeData?.assignments ?? {},
       order: scopeData?.order ?? { [UNGROUPED_SECTION]: [] },
     }),
     groups,
-    defaultGroupCollapsed: true,
+    defaultGroupCollapsed: false,
     assignments: scopeData?.assignments ?? {},
     order: scopeData?.order ?? { [UNGROUPED_SECTION]: [] },
   };
@@ -172,6 +172,20 @@ export function migrateStoredLayout(
 
   if (record.version === LAYOUT_VERSION) {
     return raw as EntityListLayout;
+  }
+
+  // v3 stored ungrouped as collapsed. Expand it once; later toggles persist on v4.
+  if (record.version === 3) {
+    const layout = raw as EntityListLayout;
+    return {
+      ...layout,
+      version: LAYOUT_VERSION,
+      defaultGroupCollapsed: false,
+      groupOrder: normalizeGroupOrder({
+        ...layout,
+        version: LAYOUT_VERSION,
+      }),
+    };
   }
 
   if (record.version === 1) {
@@ -373,7 +387,7 @@ export function resolveGroup(
     return {
       id: UNGROUPED_SECTION,
       name: defaultGroupName,
-      collapsed: layout.defaultGroupCollapsed ?? true,
+      collapsed: layout.defaultGroupCollapsed ?? false,
     };
   }
   const found = layout.groups.find((g) => g.id === groupId);
@@ -434,6 +448,34 @@ export function reorderEntityItem(
     targetId,
     position,
   );
+  return next;
+}
+
+/** Put an item in a section and expand that section so the item stays visible. */
+export function placeEntityInSection(
+  layout: EntityListLayout,
+  itemId: string,
+  toSectionKey: string,
+): EntityListLayout {
+  const next = structuredClone(layout);
+  const target = next.groups.some((group) => group.id === toSectionKey)
+    ? toSectionKey
+    : UNGROUPED_SECTION;
+
+  for (const key of Object.keys(next.order)) {
+    next.order[key] = (next.order[key] ?? []).filter((id) => id !== itemId);
+  }
+  next.assignments[itemId] = isDefaultGroupId(target) ? null : target;
+  const bucket = ensureSectionOrder(next, target);
+  if (!bucket.includes(itemId)) bucket.push(itemId);
+
+  if (isDefaultGroupId(target)) {
+    next.defaultGroupCollapsed = false;
+  } else {
+    next.groups = next.groups.map((group) =>
+      group.id === target ? { ...group, collapsed: false } : group,
+    );
+  }
   return next;
 }
 
@@ -554,7 +596,7 @@ export function toggleEntityGroupCollapsed(
 ): EntityListLayout {
   const next = structuredClone(layout);
   if (isDefaultGroupId(groupId)) {
-    next.defaultGroupCollapsed = !(next.defaultGroupCollapsed ?? true);
+    next.defaultGroupCollapsed = !(next.defaultGroupCollapsed ?? false);
     return next;
   }
   next.groups = next.groups.map((g) =>

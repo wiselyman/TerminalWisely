@@ -7,6 +7,7 @@ import {
   loadEntityListLayout,
   moveEntityRelativeToTarget,
   moveEntityToSection,
+  placeEntityInSection,
   reorderEntityGroups,
   renameEntityGroup,
   saveEntityListLayout,
@@ -61,6 +62,14 @@ interface EntityLayoutState {
     scope: EntityLayoutScope,
     entityIds: string[],
     groupId: string,
+  ) => void;
+  placeEntity: (
+    scope: EntityLayoutScope,
+    entityIds: string[],
+    itemId: string,
+    sectionKey: string,
+    onOrderChange?: (orderedIds: string[]) => void,
+    defaultGroupName?: string,
   ) => void;
 }
 
@@ -171,6 +180,16 @@ export const useEntityLayoutStore = create<EntityLayoutState>((set, get) => ({
   toggleGroupCollapsed(scope, entityIds, groupId) {
     get().applyLayout(scope, entityIds, (layout) =>
       toggleEntityGroupCollapsed(layout, groupId),
+    );
+  },
+
+  placeEntity(scope, entityIds, itemId, sectionKey, onOrderChange, defaultGroupName) {
+    get().applyLayout(
+      scope,
+      entityIds,
+      (layout) => placeEntityInSection(layout, itemId, sectionKey),
+      onOrderChange,
+      defaultGroupName,
     );
   },
 }));

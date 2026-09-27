@@ -9,6 +9,7 @@
   "hostPlaceholder": "192.168.1.10",
   "fieldPort": "端口",
   "fieldUsername": "用户名",
+  "fieldGroup": "分组",
   "usernamePlaceholder": "root",
   "fieldAuthMethod": "认证方式",
   "authPassword": "密码",
