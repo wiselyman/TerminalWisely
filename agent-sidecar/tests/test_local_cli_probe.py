@@ -130,12 +130,16 @@ def test_codex_fallback_includes_unix_and_windows_layout(monkeypatch, tmp_path: 
 
     monkeypatch.setattr(local_cli.sys, "platform", "darwin")
     mac = local_cli._codex_fallback_binaries()
-    mac_s = [str(p) for p in mac]
-    assert "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" in mac_s
-    assert "/Applications/ChatGPT.app/Contents/Resources/codex" in mac_s
-    home_resources = Path.home() / "Applications" / "ChatGPT.app" / "Contents" / "Resources"
-    assert str(home_resources / "codex-cli" / "bin" / "codex") in mac_s
-    assert str(home_resources / "codex") in mac_s
+    app_resources = (
+        Path("/Applications") / "ChatGPT.app" / "Contents" / "Resources"
+    )
+    assert app_resources / "codex-cli" / "bin" / "codex" in mac
+    assert app_resources / "codex" in mac
+    home_resources = (
+        Path.home() / "Applications" / "ChatGPT.app" / "Contents" / "Resources"
+    )
+    assert home_resources / "codex-cli" / "bin" / "codex" in mac
+    assert home_resources / "codex" in mac
 
 
 def test_which_finds_user_local_bin_when_path_stripped(monkeypatch, tmp_path: Path) -> None:
@@ -222,18 +226,20 @@ def test_static_user_bin_dirs_include_homebrew_and_usr_local(monkeypatch) -> Non
     import app.runtime.local_cli as local_cli
 
     monkeypatch.setattr(local_cli, "_is_windows", lambda: False)
-    dirs = [str(p) for p in local_cli._static_user_bin_dirs()]
-    assert "/opt/homebrew/bin" in dirs
-    assert "/usr/local/bin" in dirs
-    assert any(p.endswith("/.local/bin") for p in dirs)
+    dirs = local_cli._static_user_bin_dirs()
+    assert Path("/opt/homebrew/bin") in dirs
+    assert Path("/usr/local/bin") in dirs
+    assert Path.home() / ".local" / "bin" in dirs
 
 
 def test_parse_marked_path_ignores_shell_preamble() -> None:
     from app.runtime.local_cli import _parse_marked_path
 
     text = "welcome\n__TWPATH__/opt/homebrew/bin:/Users/me/.local/bin\n"
-    parsed = [str(p) for p in _parse_marked_path(text)]
-    assert parsed == ["/opt/homebrew/bin", "/Users/me/.local/bin"]
+    assert _parse_marked_path(text) == [
+        Path("/opt/homebrew/bin"),
+        Path("/Users/me/.local/bin"),
+    ]
 
 
 def test_which_finds_homebrew_codex_when_gui_path_stripped(monkeypatch, tmp_path: Path) -> None:
@@ -241,12 +247,12 @@ def test_which_finds_homebrew_codex_when_gui_path_stripped(monkeypatch, tmp_path
 
     brew = tmp_path / "homebrew" / "bin"
     brew.mkdir(parents=True)
-    write_path_cli_stub(brew, "codex", py_body="import sys\nsys.exit(0)\n")
+    stub = write_path_cli_stub(brew, "codex", py_body="import sys\nsys.exit(0)\n")
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [brew])
     found = local_cli._which("codex")
     assert found is not None
-    assert found.endswith("/codex")
+    assert Path(found) == stub
 
 
 def test_resolve_cursor_agent_symlink_not_unrelated_agent(monkeypatch, tmp_path: Path) -> None:
