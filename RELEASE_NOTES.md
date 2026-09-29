@@ -1,19 +1,17 @@
-# TerminalWisely v0.0.3
+# TerminalWisely v0.0.4
 
 ## English
 
-Same chat, different brains. In one AI Engineer conversation you can switch built-in models and Cursor, Codex, or Claude Code, and the work continues.
+A connected Linux host is now a desktop. Click the host icon and the workspace beside the sidebar becomes that machine.
 
 ### Highlights
 
-- **One thread, any runtime** — follow-ups stay on the same TerminalWisely chat whether the answering side is a configured model or an installed agent CLI
-- **Vendor session when it still matches** — Cursor, Codex, and Claude Code resume their own session while that session is still the latest work on the thread
-- **SessionLog when it does not** — if you switched models or agents in between, or the vendor session is missing or rejected, the next turn is rebuilt from the chat record, including tool output such as remote command results
-- **Codex sessions can be resumed** — exec no longer marks the session ephemeral
+- **Host desktop** — wallpaper, icons, and a dock. Sidebar, title bar, and status bar stay. Click the host icon again to return to the terminal
+- **Five apps** — Files, Processes, Browser, Terminal, and AI Linux. Terminal and AI Linux are the session you already have, laid out inside a window
+- **Browser uses the host network** — pages, including `127.0.0.1`, go through the existing SSH session
+- **Windows** — drag, resize, and stack. Leave the desktop and come back: the open windows and their positions are still there
 
 Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where available).
-
-Requires the corresponding CLI installed and signed in when using Cursor / Codex / Claude Code.
 
 ### macOS
 
@@ -27,18 +25,16 @@ xattr -cr /Applications/TerminalWisely.app
 
 ## 中文
 
-同一条对话，换大脑也能接着做。在一条 AI 工程师对话里切换内置大模型，或 Cursor、Codex、Claude Code，工作不会从头再来。
+已连接的 Linux 主机现在可以是一台桌面。点主机图标，侧栏右边的工作区就变成这台机器。
 
 ### 要点
 
-- **一条对话，任意运行时** — 回答方是已配置的大模型，或本机已安装的 Agent CLI，追问都留在同一条 TerminalWisely 聊天里
-- **原厂会话还对得上时接着用** — Cursor、Codex、Claude Code 在自己的会话仍是这条聊天的最新工作时，沿用该会话
-- **对不上时用会话记录重建** — 中途换过模型或 Agent，或原厂会话丢失、被拒绝时，下一句按聊天记录重建，包含远端命令等工具输出
-- **Codex 会话可以续接** — exec 不再把会话标成一次性
+- **主机桌面** — 壁纸、图标、Dock。侧栏、标题栏、状态栏留在原地。再点主机图标回到终端
+- **五个应用** — 文件、进程、浏览器、终端、AI Linux。终端和 AI Linux 就是你已经连上的那条会话，放进窗口里
+- **浏览器走主机网络** — 网页（含 `127.0.0.1`）经现有 SSH 会话出去
+- **窗口** — 可拖动、缩放、叠放。离开桌面再回来，打开的窗口和位置还在
 
 安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
-
-使用 Cursor / Codex / Claude Code 时需本机已安装并登录对应 CLI。
 
 ### macOS
 

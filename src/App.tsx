@@ -17,7 +17,9 @@ import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
 import { LocalFsTool } from "./components/LocalFsTool";
 import { BrowserPanel } from "./components/browser/BrowserPanel";
+import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
 import { DesktopPanel } from "./components/desktop/DesktopPanel";
+import { DesktopTerminalWindow } from "./components/desktop/DesktopTerminalWindow";
 import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
 import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
@@ -52,7 +54,10 @@ import {
   shouldShowAiEngineerPanel,
 } from "./lib/aiEngineer/panelVisibility";
 import { useAiFiberSessions } from "./lib/aiEngineer/useAiFiberSessions";
-import { markHostAiShell } from "./stores/hostWorkspaceMemory";
+import {
+  closeDesktopRemembering,
+  markHostAiShell,
+} from "./stores/hostWorkspaceMemory";
 import { useHostStatsStore } from "./stores/hostStatsStore";
 import { switchWorkspacePanel, switchToAiEngineerPanel } from "./stores/workspacePanelSwitch";
 import { useFindStore } from "./stores/findStore";
@@ -345,6 +350,12 @@ function App() {
       }) ||
       aiFiberSessions.length > 0);
   const desktopOpen = useDesktopStore((s) => s.open);
+  const desktopTerminalOpen = useDesktopStore((s) => s.apps.terminal.open);
+  const desktopTerminalMinimized = useDesktopStore(
+    (s) => s.apps.terminal.minimized,
+  );
+  const desktopAiOpen = useDesktopStore((s) => s.apps.aiLinux.open);
+  const desktopAiMinimized = useDesktopStore((s) => s.apps.aiLinux.minimized);
   const desktopFilesOpen = useDesktopStore((s) => s.apps.files.open);
   const desktopFilesMinimized = useDesktopStore((s) => s.apps.files.minimized);
   const desktopProcessesOpen = useDesktopStore((s) => s.apps.processes.open);
@@ -357,9 +368,12 @@ function App() {
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
   const workspacePanelWidth = useDesktopStore((s) => s.width);
-  const workspacePanelOpen =
-    showAiEngineerPanel ||
-    (sidebarView === "hosts" && activeTabId != null && desktopOpen);
+  const desktopMode =
+    sidebarView === "hosts" && activeTabId != null && desktopOpen;
+  const desktopTerminalShown =
+    desktopMode && desktopTerminalOpen && !desktopTerminalMinimized;
+  const desktopAiShown = desktopMode && desktopAiOpen && !desktopAiMinimized;
+  const workspacePanelOpen = showAiEngineerPanel && !desktopMode;
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -367,8 +381,15 @@ function App() {
 
   const terminalLayoutRevision = useMemo(
     () =>
-      `${sidebarCollapsed}-${sidebarWidth}-${workspacePanelOpen}-${workspacePanelWidth}`,
-    [sidebarCollapsed, sidebarWidth, workspacePanelOpen, workspacePanelWidth],
+      `${sidebarCollapsed}-${sidebarWidth}-${workspacePanelOpen}-${workspacePanelWidth}-${desktopMode ? "desktop" : "term"}-${desktopTerminalShown ? "embed" : "stack"}`,
+    [
+      sidebarCollapsed,
+      sidebarWidth,
+      workspacePanelOpen,
+      workspacePanelWidth,
+      desktopMode,
+      desktopTerminalShown,
+    ],
   );
 
   useEffect(() => {
@@ -760,7 +781,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""} has-host-stats-statusbar`}
+      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""} has-host-stats-statusbar`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -1176,9 +1197,12 @@ function App() {
                   active={desktopOpen}
                   disabled={!activeTabReady}
                   onClick={() => {
-                    if (activeTabId) {
-                      switchWorkspacePanel("desktop", activeTabId);
+                    if (!activeTabId) return;
+                    if (useDesktopStore.getState().open) {
+                      closeDesktopRemembering();
+                      return;
                     }
+                    switchWorkspacePanel("desktop", activeTabId);
                   }}
                 />
                 ) : null}
@@ -1285,6 +1309,12 @@ function App() {
           sessionId={activeTabId}
           sessionTitle={activeSessionTitle ?? undefined}
         />
+      ) : null}
+      {desktopTerminalShown && activeTabId ? (
+        <DesktopTerminalWindow subtitle={activeSessionTitle} />
+      ) : null}
+      {desktopAiShown && activeTabId ? (
+        <DesktopAiWindow subtitle={activeSessionTitle} />
       ) : null}
       {sidebarView === "hosts" && activeTabId && desktopFilesOpen ? (
         <FileManagerPanel

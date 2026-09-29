@@ -1,4 +1,8 @@
 import { useDesktopStore } from "./desktopStore";
+import {
+  closeDesktopRemembering,
+  openDesktopRemembered,
+} from "./hostWorkspaceMemory";
 import { useAiEngineerStore } from "./aiEngineerStore";
 import { useBrowserStore } from "./browserStore";
 import { useFindStore } from "./findStore";
@@ -23,7 +27,7 @@ let animateNextWorkspacePanelEnter = true;
 function closeOtherWorkspacePanels(except?: WorkspacePanelId) {
   if (except !== "aiEngineer")
     useAiEngineerStore.getState().close({ force: true });
-  if (except !== "desktop") useDesktopStore.getState().close();
+  if (except !== "desktop") closeDesktopRemembering();
   if (except !== "localFs") useLocalFsStore.getState().close();
   if (except !== "taskManager") useTaskManagerStore.getState().close();
   if (except !== "find") useFindStore.getState().close();
@@ -69,7 +73,7 @@ function closePanel(id: WorkspacePanelId) {
       useAiEngineerStore.getState().close({ force: true });
       break;
     case "desktop":
-      useDesktopStore.getState().close();
+      closeDesktopRemembering();
       break;
     case "localFs":
       useLocalFsStore.getState().close();
@@ -106,7 +110,7 @@ function openWorkspacePanel(
       );
       break;
     case "desktop":
-      useDesktopStore.getState().openDesktop(sessionId);
+      openDesktopRemembered(sessionId);
       break;
     case "localFs":
       // Legacy: route to desktop + optional files app.

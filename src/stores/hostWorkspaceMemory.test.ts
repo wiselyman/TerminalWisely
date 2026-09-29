@@ -12,6 +12,7 @@ const panel = {
   },
   focusOrder: [] as Array<"files" | "processes" | "browser">,
   filesTab: "files" as "files" | "find",
+  frames: {} as Record<string, { x: number; y: number; width: number; height: number }>,
 };
 
 const closeAi = vi.fn(() => {
@@ -88,6 +89,9 @@ vi.mock("./desktopStore", () => ({
       get filesTab() {
         return panel.filesTab;
       },
+      get frames() {
+        return panel.frames;
+      },
       close: closeDesktop,
       openDesktop,
       applySessionUi,
@@ -155,6 +159,7 @@ describe("hostWorkspaceMemory", () => {
     };
     panel.focusOrder = [];
     panel.filesTab = "files";
+    panel.frames = {};
     closeAi.mockClear();
     bindManagedEntity.mockClear();
     closeDesktop.mockClear();
@@ -195,6 +200,56 @@ describe("hostWorkspaceMemory", () => {
     expect(panel.aiOpen).toBe(false);
     expect(openDesktop).toHaveBeenCalledWith("host-b");
     expect(applySessionUi).toHaveBeenCalled();
+  });
+
+  it("restores open windows after leaving the desktop", async () => {
+    const {
+      closeDesktopRemembering,
+      openDesktopRemembered,
+      peekHostWorkspace,
+    } = await import("./hostWorkspaceMemory");
+    panel.deskOpen = true;
+    panel.deskSession = "host-a";
+    panel.apps.processes = { open: true, minimized: false, maximized: false };
+    panel.focusOrder = ["processes"];
+    panel.frames = {
+      processes: { x: 40, y: 30, width: 800, height: 500 },
+    };
+    closeDesktopRemembering();
+    expect(closeDesktop).toHaveBeenCalled();
+    expect(peekHostWorkspace("host-a")?.desktop?.apps.processes.open).toBe(true);
+    expect(peekHostWorkspace("host-a")?.desktop?.frames?.processes).toEqual({
+      x: 40,
+      y: 30,
+      width: 800,
+      height: 500,
+    });
+    panel.deskOpen = false;
+    openDesktopRemembered("host-a");
+    expect(openDesktop).toHaveBeenCalledWith("host-a");
+    expect(applySessionUi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frames: {
+          processes: { x: 40, y: 30, width: 800, height: 500 },
+        },
+      }),
+    );
+    const ui = applySessionUi.mock.calls[0]?.[0] as {
+      apps: { processes: { open: boolean } };
+    };
+    expect(ui.apps.processes.open).toBe(true);
+  });
+
+  it("keeps a desktop snapshot when AI Linux is open inside it", async () => {
+    const { captureHostWorkspace, peekHostWorkspace } = await import(
+      "./hostWorkspaceMemory"
+    );
+    panel.deskOpen = true;
+    panel.deskSession = "host-a";
+    panel.aiOpen = true;
+    panel.aiSession = "host-a";
+    captureHostWorkspace("host-a");
+    expect(peekHostWorkspace("host-a")?.panel).toBe("desktop");
   });
 
   it("warm-reopens AI without rebinding when returning to same host", async () => {

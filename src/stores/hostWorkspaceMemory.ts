@@ -1,4 +1,6 @@
 import { unstable_batchedUpdates } from "react-dom";
+import type { DesktopWindowFrame } from "../lib/desktopWindowFrame";
+import { registerDesktopAiBridge } from "../lib/desktopAiBridge";
 import {
   useDesktopStore,
   type DesktopAppId,
@@ -17,6 +19,7 @@ export type HostDesktopUiSnapshot = {
   apps: Record<DesktopAppId, DesktopAppWindow>;
   focusOrder: DesktopAppId[];
   filesTab: "files" | "find";
+  frames?: Partial<Record<DesktopAppId, DesktopWindowFrame>>;
 };
 
 export type HostWorkspaceSnapshot = {
@@ -91,15 +94,24 @@ function cloneDesktopUi(
   apps: Record<DesktopAppId, DesktopAppWindow>,
   focusOrder: DesktopAppId[],
   filesTab: "files" | "find",
+  frames?: HostDesktopUiSnapshot["frames"],
 ): HostDesktopUiSnapshot {
+  const copy = (win?: DesktopAppWindow): DesktopAppWindow => ({
+    open: !!win?.open,
+    minimized: !!win?.minimized,
+    maximized: !!win?.maximized,
+  });
   return {
     apps: {
-      files: { ...apps.files },
-      processes: { ...apps.processes },
-      browser: { ...apps.browser },
+      files: copy(apps.files),
+      processes: copy(apps.processes),
+      browser: copy(apps.browser),
+      terminal: copy(apps.terminal),
+      aiLinux: copy(apps.aiLinux),
     },
     focusOrder: [...focusOrder],
     filesTab,
+    frames: frames ? { ...frames } : {},
   };
 }
 
@@ -108,6 +120,8 @@ function idleApps(): Record<DesktopAppId, DesktopAppWindow> {
     files: { open: false, minimized: false, maximized: false },
     processes: { open: false, minimized: false, maximized: false },
     browser: { open: false, minimized: false, maximized: false },
+    terminal: { open: false, minimized: false, maximized: false },
+    aiLinux: { open: false, minimized: false, maximized: false },
   };
 }
 
@@ -140,6 +154,7 @@ function softCloseDesktop() {
     open: false,
     sessionId: null,
     apps: idleApps(),
+    frames: {},
     focusOrder: [],
     filesTab: "files",
   });
@@ -150,15 +165,20 @@ export function captureHostWorkspace(sessionId: string): void {
   const ai = useAiEngineerStore.getState();
   const desk = useDesktopStore.getState();
 
-  if (ai.open && ai.sessionId === sessionId) {
-    markHostAiShell(sessionId);
-    return;
-  }
   if (desk.open && desk.sessionId === sessionId) {
     snapshots.set(sessionId, {
       panel: "desktop",
-      desktop: cloneDesktopUi(desk.apps, desk.focusOrder, desk.filesTab),
+      desktop: cloneDesktopUi(
+        desk.apps,
+        desk.focusOrder,
+        desk.filesTab,
+        desk.frames,
+      ),
     });
+    return;
+  }
+  if (ai.open && ai.sessionId === sessionId) {
+    markHostAiShell(sessionId);
     return;
   }
   // Soft-hidden AI fiber: never wipe aiEngineer → none (connect-tab path
@@ -176,6 +196,24 @@ export function peekHostWorkspace(
   sessionId: string,
 ): HostWorkspaceSnapshot | undefined {
   return snapshots.get(sessionId);
+}
+
+/** Snapshot open windows, then leave the desktop. */
+export function closeDesktopRemembering(): void {
+  const desk = useDesktopStore.getState();
+  if (desk.open && desk.sessionId) {
+    captureHostWorkspace(desk.sessionId);
+  }
+  desk.close();
+}
+
+/** Reopen the desktop and put back the windows from the last leave. */
+export function openDesktopRemembered(sessionId: string): void {
+  const snap = snapshots.get(sessionId);
+  useDesktopStore.getState().openDesktop(sessionId);
+  if (snap?.panel === "desktop" && snap.desktop) {
+    useDesktopStore.getState().applySessionUi(snap.desktop);
+  }
 }
 
 export function discardHostWorkspace(sessionId: string): void {
@@ -229,7 +267,8 @@ export function restoreHostWorkspace(
 
     if (ai.open) {
       // Soft-hide: keep fiber + transcript; do not tear down for host switch.
-      if (ai.sessionId) {
+      // A desktop snapshot already recorded for this host must stay desktop.
+      if (ai.sessionId && snapshots.get(ai.sessionId)?.panel !== "desktop") {
         markHostAiShell(ai.sessionId);
       }
       useAiEngineerStore.setState({ open: false });
@@ -250,3 +289,33 @@ export function restoreHostWorkspace(
     softCloseDesktop();
   });
 }
+
+function bindDesktopAiLinux(sessionId: string) {
+  rememberAiFiber(sessionId);
+  void import("./sessionStore").then(({ useSessionStore }) => {
+    const desk = useDesktopStore.getState();
+    if (!desk.open || desk.sessionId !== sessionId || !desk.apps.aiLinux.open) {
+      return;
+    }
+    const tab = useSessionStore.getState().tabs.find((t) => t.id === sessionId);
+    useAiEngineerStore.getState().bindManagedEntity(
+      {
+        kind: "server",
+        id: tab?.server_id || sessionId,
+        label: tab?.title || sessionId,
+        sessionId,
+        serverId: tab?.server_id ?? null,
+      },
+      { open: true },
+    );
+  });
+}
+
+function parkDesktopAiLinux() {
+  useAiEngineerStore.setState({ open: false });
+}
+
+registerDesktopAiBridge({
+  bind: bindDesktopAiLinux,
+  park: parkDesktopAiLinux,
+});

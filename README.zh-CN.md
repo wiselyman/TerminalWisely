@@ -6,9 +6,9 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.3](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.3)**
+**当前版本：[v0.0.4](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.4)**
 
-**把 Cursor Agent、Codex、Claude Code 接到真实运维上——就在你已打开的 SSH 会话与 Kubernetes 集群上。** TerminalWisely 是桌面驾驶舱：多标签 SSH、主机 Desktop / Browser、K8s 工作台、AI 工程师。日常用的编码 Agent 可以变成**运维 Agent**：它们保留自己的模型与登录，TW 管会话、MCP 工具、批准卡片和随时 STOP。同一条对话里切换模型或 Agent，工作接着做。
+**把已连接的 Linux 主机变成桌面。** 点主机图标，侧栏右边的工作区就是这台机器的桌面：文件、进程、走主机网络的浏览器、终端、AI Linux。TerminalWisely 仍是运维驾驶舱：多标签 SSH、Kubernetes，以及你已经在用的编码 Agent（Cursor、Codex、Claude Code）跑在现有会话上，批准和 STOP 仍在这里。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
@@ -25,7 +25,7 @@
 |------|------|
 | **Agent 运行时** | Cursor Agent / Codex / Claude Code 经 TW MCP 操作已连接 SSH / K8s；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
-| **主机 Desktop** | 已连接主机上的 Dock：Files、Processes、Browser；按主机记忆布局 |
+| **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **Kubernetes** | 侧栏 Hosts ↔ K8s；+ 添加集群（文件或粘贴 kubeconfig）或 SSH kubectl；资源树、YAML、日志、Pod Shell。可一键把最新 kubectl/Helm 装到应用数据目录（也可用 PATH / SSH）。受 Lens 启发的实用子集，非完整 Lens IDE |
 | **文件** | 拖拽上传、`ls` 点击进目录或预览；Markdown 类 Typora 所见即所得；下载、压缩、跨服务器发送 |
@@ -86,44 +86,59 @@
 
 ---
 
-## Linux 主机 Desktop
+## 主机桌面
 
-在已连接 SSH 主机上打开桌面：**Files**、**Processes**、**Browser** 作为 Dock 应用。主流文件可预览与编辑（含 Markdown 所见即所得），无需离开当前会话。
-
-<p align="center">
-  <img src="./docs/images/v002-04-host-desktop.jpg" alt="图 4 — 主机 Desktop" width="920" />
-</p>
-<p align="center"><em>图 4 — 主机 Desktop：与 SSH 终端并排；已连接 Linux 主机上的 Files / Processes / Browser Dock。</em></p>
+点主机图标。侧栏、标题栏、状态栏不动，右边整块变成这台已连接 Linux 主机的桌面。再点一次，回到终端。离开时打开的窗口和位置，回来还在。
 
 <p align="center">
-  <img src="./docs/images/v002-05-host-files.jpg" alt="图 5 — 主机 Files" width="920" />
+  <img src="./docs/images/v004-01-desktop.jpg" alt="图 4 — 主机桌面" width="920" />
 </p>
-<p align="center"><em>图 5 — 主机 Files：类 Finder 的左树右网格浏览远端文件系统。</em></p>
+<p align="center"><em>图 4 — 主机桌面：壁纸、应用图标，以及这台机器上的 Dock。</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-06-markdown-wysiwyg.png" alt="图 6 — Markdown 所见即所得" width="720" />
+  <img src="./docs/images/v004-02-files.jpg" alt="图 5 — 文件管理器" width="920" />
 </p>
-<p align="center"><em>图 6 — 远端主机上的 Markdown 所见即所得编辑（类 Typora）。</em></p>
+<p align="center"><em>图 5 — 文件管理器：浏览远端文件系统。</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-07-host-processes.jpg" alt="图 7 — 主机 Processes" width="920" />
+  <img src="./docs/images/v004-03-processes.jpg" alt="图 6 — 进程管理器" width="920" />
 </p>
-<p align="center"><em>图 7 — 主机 Processes：进程名、端口、内存与 CPU；确认后可结束进程。</em></p>
+<p align="center"><em>图 6 — 进程管理器：主机上的进程名、端口、内存与 CPU。</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-08-host-browser.jpg" alt="图 8 — 主机 Browser" width="920" />
+  <img src="./docs/images/v004-04-browser.jpg" alt="图 7 — 浏览器走主机网络" width="920" />
 </p>
-<p align="center"><em>图 8 — 主机 Browser：以<strong>当前访问主机的网络</strong>访问 HTTP（含 <code>127.0.0.1</code>），走现有 SSH 会话。</em></p>
+<p align="center"><em>图 7 — 浏览器用<strong>主机的网络</strong>上网（含 <code>127.0.0.1</code>），走现有 SSH 会话。</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-09-file-preview-log.jpg" alt="图 9 — 日志 / 文本预览" width="920" />
+  <img src="./docs/images/v004-05-terminal.jpg" alt="图 8 — 终端" width="920" />
 </p>
-<p align="center"><em>图 9 — 远端日志等常见文件可预览与搜索。</em></p>
+<p align="center"><em>图 8 — 终端是同一条 SSH 会话，放在桌面窗口里。</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-10-file-preview-image.jpg" alt="图 10 — 图片预览" width="920" />
+  <img src="./docs/images/v004-06-ai-linux.jpg" alt="图 9 — AI Linux" width="920" />
 </p>
-<p align="center"><em>图 10 — 图片等主流文件类型在预览面板中打开。</em></p>
+<p align="center"><em>图 9 — AI Linux 是同一条 AI 工程师对话，铺满桌面窗口。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v004-07-windows.jpg" alt="图 10 — 多个窗口" width="920" />
+</p>
+<p align="center"><em>图 10 — 几个应用同时开着。可以拖动和缩放，最前面的窗口盖在上面。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-06-markdown-wysiwyg.png" alt="图 11 — Markdown 所见即所得" width="720" />
+</p>
+<p align="center"><em>图 11 — 远端主机上的 Markdown 所见即所得编辑（类 Typora）。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-09-file-preview-log.jpg" alt="图 12 — 日志 / 文本预览" width="920" />
+</p>
+<p align="center"><em>图 12 — 远端日志等常见文件可预览与搜索。</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-10-file-preview-image.jpg" alt="图 13 — 图片预览" width="920" />
+</p>
+<p align="center"><em>图 13 — 图片等主流文件类型在预览面板中打开。</em></p>
 
 ### 终端与传输
 
@@ -141,16 +156,16 @@
 侧栏 **Hosts ↔ K8s**：总览、工作负载、网络、存储与安全资源，并在所选集群上使用 AI。
 
 <p align="center">
-  <img src="./docs/images/v002-11-k8s-ops.png" alt="图 11 — Kubernetes 运维" width="920" />
+  <img src="./docs/images/v002-11-k8s-ops.png" alt="图 14 — Kubernetes 运维" width="920" />
 </p>
-<p align="center"><em>图 11 — Kubernetes 运维：集群总览 + AI 工程师回答「集群是否正常」。</em></p>
+<p align="center"><em>图 14 — Kubernetes 运维：集群总览 + AI 工程师回答「集群是否正常」。</em></p>
 
 ---
 
 ## 快速开始
 
 1. 侧栏添加 SSH 主机并连接——或切到 **K8s** 点 **+** 添加集群（kubeconfig 文件或粘贴）。  
-2. 可选：在已连接主机上打开 **Desktop** 或 **Browser**，管理文件/进程或访问远端 HTTP。  
+2. 可选：点主机图标，打开这台机器的桌面——文件、进程、浏览器、终端、AI Linux。  
 3. 可选：打开 **AI 工程师** → 选择运行时（内置模型，或已安装的 Cursor / Codex / Claude Code）。  
 4. 内置模式：设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。  
 5. 照常使用终端或 K8s 工作台；需要排障时用自然语言提问。  

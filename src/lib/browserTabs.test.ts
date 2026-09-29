@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyBrowserPageEvent,
+  browserTabCaption,
   createBrowserBucket,
   createBrowserTab,
   pushTabNav,
@@ -49,5 +51,27 @@ describe("browserTabs", () => {
     expect(result.tabs.find((t) => t.id === b.id)?.url).toBe("http://10.0.0.1/");
     expect(result.activeUpdated).toBe(false);
     expect(result.url).toBeUndefined();
+  });
+
+  it("does not treat an http address as the tab title", () => {
+    let tab = createBrowserTab(
+      "https://www.youtube.com/",
+      "https://www.youtube.com/",
+    );
+    expect(browserTabCaption(tab.title)).toBe("");
+    tab = pushTabNav(tab, "https://www.youtube.com/watch?v=1");
+    expect(tab.title).toBe("");
+    const ignored = applyBrowserPageEvent([tab], tab.id, {
+      tabId: tab.id,
+      url: "https://www.youtube.com/watch?v=1",
+      title: "https://www.youtube.com/watch?v=1",
+    });
+    expect(ignored.tabs[0]?.title).toBe("");
+    const titled = applyBrowserPageEvent(ignored.tabs, tab.id, {
+      tabId: tab.id,
+      url: "https://www.youtube.com/watch?v=1",
+      title: "A real title",
+    });
+    expect(titled.tabs[0]?.title).toBe("A real title");
   });
 });

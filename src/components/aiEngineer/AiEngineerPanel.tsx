@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent as ReactClipboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -39,6 +39,11 @@ import {
   type ExternalRuntimeStatusKind,
 } from "../../lib/aiEngineer/cursorRuntimeStatus";
 import { openExternalUrl } from "../../lib/aiEngineer/openExternalUrl";
+import {
+  getDesktopAiHost,
+  subscribeDesktopEmbedHosts,
+} from "../../lib/desktopEmbedHost";
+import { useDesktopStore } from "../../stores/desktopStore";
 import { rememberAiFiber } from "../../stores/hostWorkspaceMemory";
 import {
   AI_CHAT_SCROLL_FIX_ID,
@@ -988,6 +993,22 @@ export function AiEngineerPanel({
   const liveSessionId = useAiEngineerStore((s) => s.sessionId);
   // Per-host fiber: only the active host's panel is interactive/visible.
   const open = surfaceActive && storeOpen && liveSessionId === sessionId;
+  const desktopOpen = useDesktopStore((s) => s.open);
+  const desktopSessionId = useDesktopStore((s) => s.sessionId);
+  const desktopAi = useDesktopStore((s) => s.apps.aiLinux);
+  const aiHost = useSyncExternalStore(
+    subscribeDesktopEmbedHosts,
+    getDesktopAiHost,
+    getDesktopAiHost,
+  );
+  const wantDesktopEmbed =
+    desktopOpen &&
+    desktopSessionId === sessionId &&
+    desktopAi.open &&
+    !desktopAi.minimized;
+  const embedHere = wantDesktopEmbed && aiHost != null;
+  const sideOpen = open && !desktopOpen;
+  const shown = sideOpen || embedHere;
   const panelScope = panelFiberChatScopeKey(sessionId, serverId);
   const width = useAiEngineerStore((s) => s.width);
   const setWidth = useAiEngineerStore((s) => s.setWidth);
@@ -2418,9 +2439,9 @@ export function AiEngineerPanel({
 
   // Keep the transcript DOM mounted while soft-hidden (host-tab switch sets
   // open=false). Returning null remounts markdown and makes chat text flash.
-  return (
+  const panelTree = (
     <>
-      {open ? (
+      {sideOpen ? (
         <WorkspacePanelBackdrop
           panelId="aiEngineer"
           dismissible={!busy && !settingsOpen}
@@ -2428,11 +2449,12 @@ export function AiEngineerPanel({
       ) : null}
       <aside
         ref={panelRef}
-        className={`ai-engineer-panel find-panel${open ? "" : " ai-engineer-panel-parked"}`}
-        style={{ width }}
+        className={`ai-engineer-panel find-panel${shown ? "" : " ai-engineer-panel-parked"}${embedHere ? " is-desktop-embed" : ""}`}
+        style={embedHere ? undefined : { width }}
+        data-testid="ai-engineer-panel"
         aria-label={panelTitle}
-        aria-hidden={!open}
-        inert={!open ? true : undefined}
+        aria-hidden={!shown}
+        inert={!shown ? true : undefined}
       >
         <div
           className="find-panel-resizer"
@@ -4315,4 +4337,8 @@ export function AiEngineerPanel({
         : null}
     </>
   );
+  if (embedHere && aiHost) {
+    return createPortal(panelTree, aiHost);
+  }
+  return panelTree;
 }

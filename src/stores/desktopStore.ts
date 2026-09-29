@@ -4,17 +4,24 @@ import {
   setWorkspacePanelWidth,
   subscribeWorkspacePanelWidth,
 } from "../lib/workspacePanelWidth";
+import { bindDesktopAi, parkDesktopAi } from "../lib/desktopAiBridge";
+import type { DesktopWindowFrame } from "../lib/desktopWindowFrame";
 import { useBrowserStore } from "./browserStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 
-export type DesktopAppId = "files" | "processes" | "browser";
+export type DesktopAppId =
+  | "files"
+  | "processes"
+  | "browser"
+  | "terminal"
+  | "aiLinux";
 
 export interface DesktopAppWindow {
   open: boolean;
   minimized: boolean;
-  /** When true, float fills the whole TW app (like Markdown maximize). */
+  /** When true, the float fills the desktop surface (not the sidebar). */
   maximized: boolean;
 }
 
@@ -31,7 +38,26 @@ function idleApps(): AppsState {
     files: idleApp(),
     processes: idleApp(),
     browser: idleApp(),
+    terminal: idleApp(),
+    aiLinux: idleApp(),
   };
+}
+
+export function cloneDesktopApps(
+  apps: Partial<Record<DesktopAppId, DesktopAppWindow>> | null | undefined,
+): AppsState {
+  const next = idleApps();
+  if (!apps) return next;
+  for (const id of Object.keys(next) as DesktopAppId[]) {
+    const win = apps[id];
+    if (!win) continue;
+    next[id] = {
+      open: !!win.open,
+      minimized: !!win.minimized,
+      maximized: !!win.maximized,
+    };
+  }
+  return next;
 }
 
 function bringToFront(
@@ -46,6 +72,10 @@ interface DesktopState {
   sessionId: string | null;
   width: number;
   apps: AppsState;
+  /** Surface-relative rectangles. Missing means "center on next open". */
+  frames: Partial<Record<DesktopAppId, DesktopWindowFrame>>;
+  /** Bumps on every drag/resize so the browser layer can follow. */
+  frameRevision: number;
   /** Last-focused last; used for windowed z-index. */
   focusOrder: DesktopAppId[];
   /** File manager: "find" focuses path-bar search. */
@@ -59,6 +89,7 @@ interface DesktopState {
   restoreApp: (app: DesktopAppId) => void;
   closeApp: (app: DesktopAppId) => void;
   setAppMaximized: (app: DesktopAppId, maximized: boolean) => void;
+  setAppFrame: (app: DesktopAppId, frame: DesktopWindowFrame) => void;
   focusApp: (app: DesktopAppId) => void;
   /** Dock click: launch, restore, or focus. */
   toggleDockApp: (app: DesktopAppId) => void;
@@ -68,6 +99,7 @@ interface DesktopState {
     apps: AppsState;
     focusOrder: DesktopAppId[];
     filesTab: "files" | "find";
+    frames?: Partial<Record<DesktopAppId, DesktopWindowFrame>>;
   }) => void;
 }
 
@@ -89,6 +121,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     sessionId: null,
     width: readWorkspacePanelWidth(),
     apps: idleApps(),
+    frames: {},
+    frameRevision: 0,
     focusOrder: [],
     filesTab: "files",
 
@@ -128,10 +162,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       if (apps.processes.open) {
         useTaskManagerStore.getState().close();
       }
+      parkDesktopAi();
       set({
         open: false,
         sessionId: null,
         apps: idleApps(),
+        frames: {},
         focusOrder: [],
         filesTab: "files",
       });
@@ -155,6 +191,13 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
           minimized: false,
         }),
         focusOrder: bringToFront(get().focusOrder, app),
+      });
+    },
+
+    setAppFrame: (app, frame) => {
+      set({
+        frames: { ...get().frames, [app]: frame },
+        frameRevision: get().frameRevision + 1,
       });
     },
 
@@ -197,6 +240,19 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         return;
       }
 
+      if (app === "terminal" || app === "aiLinux") {
+        set({
+          apps: patchApp(get().apps, app, {
+            open: true,
+            minimized: false,
+            maximized: false,
+          }),
+          focusOrder: bringToFront(get().focusOrder, app),
+        });
+        if (app === "aiLinux") bindDesktopAi(sessionId);
+        return;
+      }
+
       set({
         apps: patchApp(get().apps, "browser", {
           open: true,
@@ -221,6 +277,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       if (app === "browser") {
         void useBrowserStore.getState().restore();
       }
+      if (app === "aiLinux") {
+        const sessionId = get().sessionId;
+        if (sessionId) bindDesktopAi(sessionId);
+      }
       set({
         apps: patchApp(get().apps, app, {
           open: true,
@@ -237,6 +297,8 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         useTaskManagerStore.getState().close();
       } else if (app === "browser") {
         void useBrowserStore.getState().close();
+      } else if (app === "aiLinux") {
+        parkDesktopAi();
       }
       set({
         apps: patchApp(get().apps, app, {
@@ -264,17 +326,17 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     applySessionUi: (ui) => {
       const sessionId = get().sessionId;
       if (!sessionId) return;
+      const apps = cloneDesktopApps(ui.apps);
       set({
-        apps: {
-          files: { ...ui.apps.files },
-          processes: { ...ui.apps.processes },
-          browser: { ...ui.apps.browser },
-        },
+        apps,
+        frames: ui.frames ? { ...ui.frames } : {},
         focusOrder: [...ui.focusOrder],
         filesTab: ui.filesTab,
       });
+      if (apps.aiLinux.open) bindDesktopAi(sessionId);
+      else parkDesktopAi();
 
-      const files = ui.apps.files;
+      const files = apps.files;
       if (files.open) {
         useLocalFsStore.getState().openPanel(sessionId, "files");
         useFindStore.getState().activateSession(sessionId);
@@ -286,12 +348,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         }
       }
 
-      const processes = ui.apps.processes;
+      const processes = apps.processes;
       if (processes.open) {
         useTaskManagerStore.setState({ open: !processes.minimized });
       }
 
-      const browser = ui.apps.browser;
+      const browser = apps.browser;
       if (browser.open) {
         void (async () => {
           await useBrowserStore.getState().openPanel(sessionId);

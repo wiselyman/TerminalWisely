@@ -34,6 +34,7 @@ vi.mock("./aiEngineerStore", () => ({
       bindManagedEntity,
       close: closeAi,
     }),
+    setState: vi.fn(),
   },
 }));
 

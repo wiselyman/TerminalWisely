@@ -117,4 +117,17 @@ describe("desktopStore", () => {
     expect(useDesktopStore.getState().apps.browser.maximized).toBe(false);
     expect(browserOpenPanel).toHaveBeenCalledWith("sess-2");
   });
+
+  it("launches terminal and AI Linux on the same desktop session", async () => {
+    const { useDesktopStore } = await import("./desktopStore");
+    useDesktopStore.getState().openDesktop("sess-2");
+    useDesktopStore.getState().toggleDockApp("terminal");
+    useDesktopStore.getState().toggleDockApp("aiLinux");
+    expect(useDesktopStore.getState().sessionId).toBe("sess-2");
+    expect(useDesktopStore.getState().apps.terminal.open).toBe(true);
+    expect(useDesktopStore.getState().apps.aiLinux.open).toBe(true);
+    useDesktopStore.getState().close();
+    expect(useDesktopStore.getState().open).toBe(false);
+    expect(useDesktopStore.getState().apps.terminal.open).toBe(false);
+  });
 });

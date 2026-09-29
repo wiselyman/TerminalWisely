@@ -1,6 +1,6 @@
 {
   "sectionAria": "Product introduction",
-  "eyebrow": "v0.0.3 · Cursor / Codex / Claude Code → ops",
+  "eyebrow": "v0.0.4 · Host desktop",
   "productName": "TerminalWisely",
   "tagline": "Coding agents meet live SSH & Kubernetes ops",
   "summary": "Manage SSH sessions and Kubernetes clusters in one window. Open a host Desktop (files, processes, browser) through the live SSH session. Use built-in AI Linux / K8S Engineers — or run Cursor Agent, Codex, or Claude Code as the brain while TW owns the session, MCP tools, approvals, and STOP.",

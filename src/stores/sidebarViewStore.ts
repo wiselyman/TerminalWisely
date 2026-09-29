@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { useDesktopStore } from "./desktopStore";
+import { closeDesktopRemembering } from "./hostWorkspaceMemory";
 import { useAiEngineerStore } from "./aiEngineerStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
@@ -22,7 +22,7 @@ function loadView(): SidebarView {
 
 /** Hosts-only right panels must not linger after switching to K8s. */
 function closeHostsWorkspacePanels() {
-  useDesktopStore.getState().close();
+  closeDesktopRemembering();
   useLocalFsStore.getState().close();
   useTaskManagerStore.getState().close();
   useFindStore.getState().close();

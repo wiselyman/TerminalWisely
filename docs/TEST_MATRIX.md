@@ -97,7 +97,7 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| Host Desktop 侧栏 + Dock（Markdown 式浮窗 / 最大化） | `workspacePanelSwitch` + `desktopStore` + `floatStacking` | — | smoke `ui.host-desktop` | **✓** `host-desktop` | ✓ |
+| Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` | — | smoke `ui.host-desktop` | **✓** `host-desktop` | ✓ |
 | Dock → 文件管理器浮窗（含检索） | — | — | smoke | **✓** `local-fs` | ✓ |
 | Dock → 进程管理器浮窗 | — | — | smoke | **✓** `local-fs-actions` | ✓ |
 | Host 左树+右内容（列表/网格） | `localFsTree` + `openDirectory` | — | smoke | — | ✓ |

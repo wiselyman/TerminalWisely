@@ -1,4 +1,5 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -60,6 +61,11 @@ import {
   clearUploadHighlights,
   scheduleUploadHighlight,
 } from "../lib/terminalHighlight";
+import {
+  getDesktopTerminalHost,
+  subscribeDesktopEmbedHosts,
+} from "../lib/desktopEmbedHost";
+import { useDesktopStore } from "../stores/desktopStore";
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
 import { useAiEngineerStore } from "../stores/aiEngineerStore";
@@ -127,6 +133,43 @@ export function TerminalView({
   title,
   layoutRevision = "",
 }: TerminalViewProps) {
+  const desktopOpen = useDesktopStore((s) => s.open);
+  const desktopSessionId = useDesktopStore((s) => s.sessionId);
+  const desktopTerminal = useDesktopStore((s) => s.apps.terminal);
+  const terminalHost = useSyncExternalStore(
+    subscribeDesktopEmbedHosts,
+    getDesktopTerminalHost,
+    getDesktopTerminalHost,
+  );
+  const terminalEmbedHost =
+    active &&
+    desktopOpen &&
+    desktopSessionId === sessionId &&
+    desktopTerminal.open &&
+    !desktopTerminal.minimized
+      ? terminalHost
+      : null;
+  const portalHostRef = useRef<HTMLDivElement | null>(null);
+  if (!portalHostRef.current) {
+    const el = document.createElement("div");
+    el.className = "terminal-portal-host";
+    portalHostRef.current = el;
+  }
+  const stackSlotRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = portalHostRef.current;
+    const parent = terminalEmbedHost ?? stackSlotRef.current;
+    if (!el || !parent || el.parentElement === parent) return;
+    parent.appendChild(el);
+  }, [terminalEmbedHost]);
+
+  useEffect(() => {
+    const el = portalHostRef.current;
+    return () => {
+      el?.remove();
+    };
+  }, []);
   const { t } = useTranslation("terminal");
   const { t: tTools } = useTranslation("tools");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -261,6 +304,7 @@ export function TerminalView({
 
     const width = host.clientWidth;
     const height = host.clientHeight;
+    // A 0-size box is not a finished layout. Do not remember it.
     if (width <= 0 || height <= 0) return;
 
     const last = lastContainerSizeRef.current;
@@ -271,6 +315,7 @@ export function TerminalView({
 
     try {
       fitAddon.fit();
+      terminal.refresh(0, Math.max(0, terminal.rows - 1));
     } catch {
       return;
     }
@@ -941,7 +986,7 @@ export function TerminalView({
       unlistenResized?.();
       resizeObserver?.disconnect();
     };
-  }, [active, isConnecting, kind, sessionId, scheduleSyncSize, layoutRevision]);
+  }, [active, isConnecting, kind, sessionId, scheduleSyncSize, layoutRevision, terminalEmbedHost]);
 
   useEffect(() => {
     let disposed = false;
@@ -1136,7 +1181,7 @@ export function TerminalView({
   const bootMessage = t("bootMessageSsh");
   const connectingMessage = t("connectingMessageSsh");
 
-  return (
+  const terminalNode = (
     <div
       className={`terminal-view ${active ? "active" : ""} ${isDragOver ? "drag-over" : ""}${isConnecting ? " terminal-view-connecting" : ""}`}
       data-testid="terminal-view"
@@ -1486,5 +1531,20 @@ export function TerminalView({
         />
       ) : null}
     </div>
+  );
+  return (
+    <>
+      <div
+        ref={(el) => {
+          stackSlotRef.current = el;
+          const portal = portalHostRef.current;
+          if (el && portal && !terminalEmbedHost && portal.parentElement !== el) {
+            el.appendChild(portal);
+          }
+        }}
+        className={`terminal-stack-slot${active ? " active" : ""}`}
+      />
+      {createPortal(terminalNode, portalHostRef.current)}
+    </>
   );
 }

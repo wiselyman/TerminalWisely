@@ -188,6 +188,11 @@ body,
   margin-right: var(--workspace-panel-width, 520px);
 }
 
+/* Host desktop covers the workspace to the right of the sidebar. */
+.app-shell.desktop-mode .workspace-frame {
+  margin-right: 0;
+}
+
 /* Status bar stays full-width under the panel (panel height stops above it). */
 .host-stats-statusbar {
   display: flex;
@@ -1233,7 +1238,7 @@ body.find-panel-resizing .ai-engineer-panel {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 26000;
+  z-index: 36000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3092,6 +3097,22 @@ body.workspace-resizing {
   overflow: hidden;
 }
 
+.terminal-stack-slot,
+.terminal-portal-host {
+  position: absolute;
+  inset: 0;
+}
+
+.terminal-stack-slot:not(.active) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.desktop-embed-host > .terminal-portal-host {
+  position: absolute;
+  inset: 0;
+}
+
 .terminal-stack > .k8s-workbench {
   position: absolute;
   inset: 0;
@@ -4248,7 +4269,133 @@ body.preview-float-resizing {
   z-index: 36001;
 }
 
-/* —— Host desktop (side panel + dock) —— */
+/* —— Host desktop (full workspace + dock) —— */
+.app-shell.desktop-mode .host-desktop-panel.find-panel,
+.app-shell.desktop-mode .host-desktop-panel.local-fs-panel {
+  left: var(--sidebar-width, 240px);
+  right: 0;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none;
+  border-left: none;
+  z-index: 26000;
+}
+
+.app-shell.desktop-mode .host-desktop-panel .find-panel-resizer {
+  display: none;
+}
+
+.desktop-app-float {
+  position: absolute;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+.desktop-app-float.is-maximized {
+  inset: 0;
+}
+
+.host-desktop-surface .desktop-app-float .preview-float-window,
+.host-desktop-surface .desktop-app-float.is-maximized .preview-float-window {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  min-width: 0;
+  min-height: 0;
+}
+
+.desktop-app-window-head {
+  cursor: grab;
+  touch-action: none;
+}
+
+.desktop-app-window-head:active {
+  cursor: grabbing;
+}
+
+.desktop-app-resize {
+  position: absolute;
+  z-index: 4;
+  touch-action: none;
+}
+
+.desktop-app-resize-n,
+.desktop-app-resize-s {
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.desktop-app-resize-n { top: -3px; }
+.desktop-app-resize-s { bottom: -3px; }
+
+.desktop-app-resize-e,
+.desktop-app-resize-w {
+  top: 10px;
+  bottom: 10px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.desktop-app-resize-e { right: -3px; }
+.desktop-app-resize-w { left: -3px; }
+
+.desktop-app-resize-ne,
+.desktop-app-resize-nw,
+.desktop-app-resize-se,
+.desktop-app-resize-sw {
+  width: 14px;
+  height: 14px;
+}
+
+.desktop-app-resize-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.desktop-app-resize-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.desktop-app-resize-se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.desktop-app-resize-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+
+.desktop-embed-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.desktop-embed-host {
+  position: absolute;
+  inset: 0;
+}
+
+.desktop-embed-host > .terminal-view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.ai-engineer-panel.is-desktop-embed {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  right: auto !important;
+  z-index: 1 !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.ai-engineer-panel.is-desktop-embed .find-panel-resizer {
+  display: none;
+}
+
 .host-desktop-panel.find-panel,
 .host-desktop-panel.local-fs-panel {
   display: flex;
@@ -4328,6 +4475,7 @@ body.preview-float-resizing {
 
 .host-desktop-surface {
   position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 120px;
   border: none;
@@ -4411,12 +4559,20 @@ body.preview-float-resizing {
   background: linear-gradient(160deg, #49d2b4 0%, #178f7c 100%);
 }
 
+.host-desktop-glyph.is-terminal {
+  background: linear-gradient(160deg, #8b97a6 0%, #3d4c5c 100%);
+}
+
+.host-desktop-glyph.is-aiLinux {
+  background: linear-gradient(160deg, #c49bff 0%, #6d3fd4 100%);
+}
+
 .host-desktop-dock {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  z-index: 40;
+  position: relative;
+  align-self: center;
+  flex-shrink: 0;
+  margin: 8px auto 12px;
+  z-index: 2;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -4439,7 +4595,7 @@ body.preview-float-resizing {
 .host-desktop-dock-app {
   position: relative;
   width: 52px;
-  height: 56px;
+  height: 64px;
   padding: 0;
   border: none;
   border-radius: 14px;
@@ -4457,7 +4613,7 @@ body.preview-float-resizing {
 
 .host-desktop-dock-dot {
   position: absolute;
-  bottom: 2px;
+  top: 56px;
   left: 50%;
   transform: translateX(-50%);
   width: 5px;
@@ -4525,9 +4681,18 @@ body.preview-float-resizing {
   gap: 8px;
 }
 
+.desktop-app-window-head.preview-panel-head {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  background: var(--tw-surface-2);
+  border-bottom: 1px solid var(--tw-border);
+  gap: 4px;
+}
+
 .desktop-app-window-head.is-compact {
   justify-content: flex-start;
-  min-height: 36px;
+  min-height: 28px;
 }
 
 .desktop-app-window-head.is-compact .desktop-app-window-title-wrap.is-spacer {
@@ -4542,6 +4707,19 @@ body.preview-float-resizing {
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+}
+
+.desktop-app-window-head .preview-toolbar-icon {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.desktop-app-window-head .preview-toolbar-icon svg {
+  width: 12px;
+  height: 12px;
 }
 
 .desktop-app-window-leading {

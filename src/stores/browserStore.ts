@@ -26,6 +26,22 @@ import {
 } from "../lib/workspacePanelWidth";
 import { isTauriRuntime } from "../lib/isTauri";
 
+let browserTraceStart = 0;
+
+function traceBrowser(phase: string) {
+  const now =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (!browserTraceStart) browserTraceStart = now;
+  console.info(
+    `[host-browser] ${phase} +${Math.round(now - browserTraceStart)}ms`,
+  );
+}
+
+function resetBrowserTrace() {
+  browserTraceStart =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
 export interface BrowserEnsureResult {
   session_id: string;
   profile_key: string;
@@ -240,6 +256,8 @@ interface BrowserState {
     bounds?: BrowserDockRect | null,
   ) => Promise<void>;
   syncBounds: (bounds: BrowserDockRect) => Promise<void>;
+  /** Hide or release the native webview without changing dock minimize state. */
+  setNativeVisible: (visible: boolean) => void;
   newTab: (url?: string) => void;
   closeTab: (tabId: string) => void;
   selectTab: (tabId: string) => void;
@@ -265,6 +283,8 @@ let pageUnlisten: UnlistenFn | null = null;
 let loadUnlisten: UnlistenFn | null = null;
 let boundsInFlight: Promise<void> | null = null;
 let pendingBounds: BrowserDockRect | null = null;
+/** While true, bounds sync must not show the native webview over other windows. */
+let nativeHeld = false;
 
 function syncNavFlagsFromTab(
   set: (partial: Partial<BrowserState>) => void,
@@ -340,8 +360,10 @@ async function ensurePageListener(
           return;
         }
         if (payload.phase === "started") {
+          traceBrowser("load-started");
           set({ loading: true, error: null });
         } else if (payload.phase === "finished") {
+          traceBrowser("load-finished");
           set({ loading: false });
         }
       });
@@ -460,6 +482,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
     },
 
     openPanel: async (sessionId) => {
+      resetBrowserTrace();
+      traceBrowser("open");
       const prev = get();
       if (prev.open && prev.minimized && prev.sessionId === sessionId) {
         await get().restore();
@@ -503,7 +527,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       });
       await ensurePageListener(set, get);
       await ensureMainRestoredListener(get);
-      await get().loadChromeData();
+      void get().loadChromeData();
       const bounds = readContentSlotBounds();
       const tabId = get().activeTabId ?? "default";
       if (warm && isTauriRuntime()) {
@@ -521,6 +545,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
               },
             },
           );
+          traceBrowser("webview-ready");
           set({
             webviewLabel: result.webview_label,
             profileKey: result.profile_key,
@@ -542,7 +567,10 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
               requestAnimationFrame(() => requestAnimationFrame(() => r())),
             );
             const again = readContentSlotBounds() ?? bounds;
-            if (again) await get().syncBounds(again);
+            if (again) {
+              traceBrowser("bounds");
+              await get().syncBounds(again);
+            }
             await setBrowserSurfaceVisible(result.webview_label, true);
           }
           return;
@@ -550,7 +578,9 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
           // fall through to ensure
         }
       }
+      traceBrowser("webview-prepare");
       await get().ensureForSession(sessionId, bounds);
+      traceBrowser("webview-ready");
       // ensure may have created a blank webview — reload the warm URL.
       const target = get().url.trim();
       if (target && (bucket.warm || (live.tabs.find((t) => t.id === live.activeTabId)?.navStack.length ?? 0) > 0)) {
@@ -895,6 +925,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
     },
 
     navigate: async (url) => {
+      resetBrowserTrace();
+      traceBrowser("navigate");
       const trimmed = url.trim();
       if (!trimmed) return;
       if (get().minimized) {
@@ -958,6 +990,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       try {
         const label = get().webviewLabel;
         if (label) {
+          traceBrowser("bounds");
           await invoke("browser_set_webview_bounds", {
             request: {
               webview_label: label,
@@ -969,6 +1002,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
           });
         }
 
+        traceBrowser("navigate-issued");
         await invoke("browser_navigate", {
           request: {
             session_id: sessionId,
@@ -1147,13 +1181,13 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
 
     syncBounds: async (bounds) => {
       if (!isTauriRuntime()) return;
-      if (get().minimized) return;
+      if (nativeHeld || get().minimized) return;
       if (bounds.width < 32 || bounds.height < 32) return;
       pendingBounds = bounds;
       if (!boundsInFlight) {
         boundsInFlight = (async () => {
           while (pendingBounds) {
-            if (get().minimized) {
+            if (nativeHeld || get().minimized) {
               pendingBounds = null;
               break;
             }
@@ -1163,6 +1197,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
             if (sessionId && !webviewLabel) {
               await get().ensureForSession(sessionId, next);
             }
+            if (nativeHeld || get().minimized) break;
             const label = get().webviewLabel;
             if (!label) continue;
             try {
@@ -1175,7 +1210,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
                   height: next.height,
                 },
               });
-              if (!get().minimized) {
+              if (!nativeHeld && !get().minimized) {
                 set({ docked: true });
               }
             } catch (err) {
@@ -1183,14 +1218,21 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
             }
           }
         })().finally(() => {
-          const leftover = pendingBounds;
           boundsInFlight = null;
-          if (leftover && !get().minimized) {
+          const leftover = pendingBounds;
+          if (leftover && !nativeHeld && !get().minimized) {
             void get().syncBounds(leftover);
           }
         });
       }
-      await boundsInFlight;
+    },
+
+    setNativeVisible: (visible) => {
+      nativeHeld = !visible;
+      if (!visible) {
+        pendingBounds = null;
+        void setBrowserSurfaceVisible(get().webviewLabel, false);
+      }
     },
   };
 });

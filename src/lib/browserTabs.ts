@@ -57,16 +57,25 @@ export function activeTab(
   return bucket.tabs.find((t) => t.id === bucket.activeTabId) ?? bucket.tabs[0];
 }
 
+/** An http(s) address is a location, not a page title. */
+export function browserTabCaption(title: string): string {
+  const trimmed = title.trim();
+  if (!trimmed || /^https?:\/\//i.test(trimmed)) return "";
+  return trimmed;
+}
+
 export function pushTabNav(tab: BrowserTab, url: string): BrowserTab {
-  if (tab.navIndex >= 0 && tab.navStack[tab.navIndex] === url) {
-    return { ...tab, url, title: tab.title || url };
+  const same = tab.navIndex >= 0 && tab.navStack[tab.navIndex] === url;
+  const title = same ? browserTabCaption(tab.title) : "";
+  if (same) {
+    return { ...tab, url, title };
   }
   const navStack = tab.navStack.slice(0, tab.navIndex + 1);
   navStack.push(url);
   return {
     ...tab,
     url,
-    title: tab.title || url,
+    title,
     navStack,
     navIndex: navStack.length - 1,
   };
@@ -91,10 +100,12 @@ export function applyBrowserPageEvent(
     return { tabs, url: undefined, pageTitle: undefined, activeUpdated: false };
   }
   const current = tabs[idx];
-  const title = event.title || event.url;
+  const title = browserTabCaption(event.title);
   const favicon = event.favicon?.trim() || current.favicon;
+  const pushed = pushTabNav(current, event.url);
   const updated = {
-    ...pushTabNav({ ...current, title }, event.url),
+    ...pushed,
+    title: title || pushed.title,
     favicon,
   };
   const nextTabs = tabs.map((t, i) => (i === idx ? updated : t));

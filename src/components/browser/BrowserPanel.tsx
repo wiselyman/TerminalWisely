@@ -8,8 +8,10 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { isBookmarked } from "../../lib/browserHistory";
+import { browserTabCaption } from "../../lib/browserTabs";
 import { fallbackFaviconUrl } from "../../lib/browserPageChrome";
 import { useBrowserStore } from "../../stores/browserStore";
+import { browserDesktopIsFront } from "../../lib/desktopWindowFrame";
 import {
   PreviewCloseIcon,
   PreviewMinimizeIcon,
@@ -54,10 +56,15 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
   const removeBookmark = useBrowserStore((s) => s.removeBookmark);
   const clearHistory = useBrowserStore((s) => s.clearHistory);
   const syncBounds = useBrowserStore((s) => s.syncBounds);
+  const setNativeVisible = useBrowserStore((s) => s.setNativeVisible);
   const ensureForSession = useBrowserStore((s) => s.ensureForSession);
   const close = useBrowserStore((s) => s.close);
   const minimize = useBrowserStore((s) => s.minimize);
   const desktopOpen = useDesktopStore((s) => s.open);
+  const frameRevision = useDesktopStore((s) => s.frameRevision);
+  const browserFront = useDesktopStore((s) =>
+    browserDesktopIsFront(s.focusOrder, s.apps),
+  );
   const minimizeDesktopBrowser = useDesktopStore((s) => s.minimizeApp);
   const closeDesktopBrowser = useDesktopStore((s) => s.closeApp);
   const browserDesktopWin = useDesktopStore((s) => s.apps.browser);
@@ -90,6 +97,11 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
 
   useEffect(() => {
     if (!showFloat) return;
+    if (desktopOpen && !browserFront) {
+      setNativeVisible(false);
+      return;
+    }
+    if (desktopOpen) setNativeVisible(true);
     const el = contentRef.current;
     if (!el) return;
 
@@ -172,7 +184,21 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
       unlistenMoved?.();
       unlistenResized?.();
     };
-  }, [showFloat, sessionId, syncBounds, ensureForSession, desktopOpen, browserDesktopWin.maximized]);
+  }, [showFloat, sessionId, syncBounds, ensureForSession, desktopOpen, browserDesktopWin.maximized, browserFront, setNativeVisible]);
+
+  useEffect(() => {
+    if (!showFloat || !desktopOpen || !browserFront) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 32 || rect.height < 32) return;
+    void syncBounds({
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+    });
+  }, [frameRevision, showFloat, desktopOpen, browserFront, syncBounds]);
 
   useEffect(() => {
     lastNavigated.current = null;
@@ -270,7 +296,7 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
         data-testid="host-browser-tabs"
       >
         {tabs.map((tab) => {
-          const label = tab.title || tab.url || t("browser.newTab");
+          const label = browserTabCaption(tab.title) || t("browser.tabLoading");
           const favicon =
             tab.favicon?.trim() || fallbackFaviconUrl(tab.url) || "";
           return (

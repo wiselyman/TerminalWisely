@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -7,340 +8,13 @@ use crate::ssh::client::{exec_command, ClientHandler};
 use crate::types::{ProcessEntry, ProcessListMode, ProcessListResult};
 use russh::client;
 
-const LIST_PROCESSES_BASIC_SCRIPT: &str = r#"bash --noprofile --norc -s <<'TW_BASIC_EOF'
-set -eu
-ps_file=$(mktemp)
-trap 'rm -f "$ps_file"' EXIT
-ps --no-headers -eo pid=,pcpu=,rss=,comm= --sort=-pcpu 2>/dev/null | head -n 250 > "$ps_file" || \
-  ps -eo pid=,pcpu=,rss=,comm= --sort=-pcpu 2>/dev/null | head -n 250 > "$ps_file" || true
-printf '['
-first=1
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  pid=$(printf '%s\n' "$line" | awk '{print $1}')
-  pcpu=$(printf '%s\n' "$line" | awk '{print $2}')
-  rss=$(printf '%s\n' "$line" | awk '{print $3}')
-  comm=$(printf '%s\n' "$line" | awk '{print $4}')
-  case "$comm" in ""|"?"|\[*|kworker*) continue ;; esac
-  name=${comm//\\/\\\\}
-  name=${name//\"/\\\"}
-  mem=$((rss * 1024))
-  if [ "$first" -eq 0 ]; then printf ','; fi
-  printf '{"pid":%s,"name":"%s","cpu_percent":%s,"memory_bytes":%s,"ports":[]}' \
-    "$pid" "$name" "$pcpu" "$mem"
-  first=0
-done < "$ps_file"
-printf ']\n'
-TW_BASIC_EOF"#;
+/// One `ps` invocation. Rows are parsed in Rust, not with per-line awk.
+const PS_LIST_COMMAND: &str = "ps --no-headers -eo pid=,ppid=,pcpu=,rss=,comm= --sort=-pcpu 2>/dev/null | head -n 250 || ps -eo pid=,ppid=,pcpu=,rss=,comm= 2>/dev/null | head -n 250 || true";
 
-const LIST_PROCESS_PORTS_SCRIPT: &str = r#"bash --noprofile --norc -s <<'TW_PORTS_EOF'
-set -eu
-ports_file=$(mktemp)
-ps_file=$(mktemp)
-orphan_ports=$(mktemp)
-trap 'rm -f "$ports_file" "$ps_file" "$orphan_ports"' EXIT
+/// One `ss` (or `lsof`) plus a pid/ppid table. Parent ports are attached in Rust.
+const PORTS_LIST_COMMAND: &str = "ss -H -tlnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN -F pcn 2>/dev/null || true\nprintf '\\n--TW-PPID--\\n'\nps --no-headers -eo pid=,ppid= 2>/dev/null || ps -eo pid=,ppid= 2>/dev/null || true\n";
 
-append_port_pid() {
-  local pid=$1 port=$2
-  if [ -n "$pid" ] && [ -n "$port" ] && [ "$port" -gt 0 ] 2>/dev/null; then
-    printf '%s %s\n' "$pid" "$port" >> "$ports_file"
-  fi
-}
-
-parse_lsof_listen_ports() {
-  if ! command -v lsof >/dev/null 2>&1; then
-    return 0
-  fi
-  local current_pid=""
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    case "$line" in
-      p*) current_pid=${line#p} ;;
-      n*)
-        case "$line" in
-          *TCP*LISTEN*)
-            local port=${line##*:}
-            append_port_pid "$current_pid" "$port"
-            ;;
-        esac
-        ;;
-    esac
-  done < <(lsof -nP -iTCP -sTCP:LISTEN -F pcn 2>/dev/null || true)
-}
-
-parse_lsof_listen_ports
-
-if command -v ss >/dev/null 2>&1; then
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    pid=$(printf '%s\n' "$line" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p')
-    port=$(printf '%s\n' "$line" | awk '{print $4}' | awk -F: '{print $NF}')
-    [ -n "$pid" ] && append_port_pid "$pid" "$port"
-  done < <(ss -H -tlnp 2>/dev/null || true)
-elif command -v netstat >/dev/null 2>&1; then
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    port=$(printf '%s\n' "$line" | awk '{print $4}' | awk -F: '{print $NF}')
-    pid=$(printf '%s\n' "$line" | sed -n 's/.*\/\([0-9][0-9]*\)$/\1/p')
-    [ -n "$pid" ] && append_port_pid "$pid" "$port"
-  done < <(netstat -tlnp 2>/dev/null | tail -n +3 || true)
-fi
-
-if command -v ss >/dev/null 2>&1; then
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    pid=$(printf '%s\n' "$line" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p')
-    port=$(printf '%s\n' "$line" | awk '{print $4}' | awk -F: '{print $NF}')
-    if [ -z "$pid" ] && [ -n "$port" ] && [ "$port" -gt 0 ] 2>/dev/null; then
-      printf '%s\n' "$port" >> "$orphan_ports"
-    fi
-  done < <(ss -H -tlnp 2>/dev/null || true)
-fi
-sort -u "$orphan_ports" -o "$orphan_ports" 2>/dev/null || true
-
-if [ -s "$ports_file" ]; then
-  propagated=$(mktemp)
-  cp "$ports_file" "$propagated"
-  while read -r pid port; do
-    [ -z "$pid" ] && continue
-    parent=$(
-      awk '/^PPid:/ {print $2; exit}' "/proc/$pid/status" 2>/dev/null || true
-    )
-    depth=0
-    while [ -n "$parent" ] && [ "$parent" -gt 1 ] 2>/dev/null && [ "$depth" -lt 4 ]; do
-      printf '%s %s\n' "$parent" "$port" >> "$propagated"
-      parent=$(
-        awk '/^PPid:/ {print $2; exit}' "/proc/$parent/status" 2>/dev/null || true
-      )
-      depth=$((depth + 1))
-    done
-  done < "$ports_file"
-  sort -u "$propagated" -o "$ports_file"
-  rm -f "$propagated"
-fi
-
-ps --no-headers -eo pid=,pcpu=,rss=,comm=,args= 2>/dev/null > "$ps_file" || \
-  ps -eo pid=,pcpu=,rss=,comm=,args= 2>/dev/null > "$ps_file" || true
-
-printf '['
-first=1
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  pid=$(printf '%s\n' "$line" | awk '{print $1}')
-  args=$(printf '%s\n' "$line" | awk '{$1=$2=$3=$4=""; sub(/^[ \t]+/, ""); print}')
-  exe=$(printf '%s\n' "$args" | awk '{print $1}')
-  case "$exe" in \[*) continue ;; esac
-  ports_list=""
-  add_port() {
-    local p=$1
-    [ -z "$p" ] && return 0
-    case ",$ports_list," in
-      *,"$p",*) ;;
-      *)
-        if [ -z "$ports_list" ]; then ports_list="$p"; else ports_list="$ports_list,$p"; fi
-        ;;
-    esac
-  }
-  while read -r hinted_port; do
-    [ -n "$hinted_port" ] && add_port "$hinted_port"
-  done < <(printf '%s' "$args" | awk '{
-    for (i = 1; i <= NF; i++) {
-      if ($i ~ /^(--port|--listen-port|-p)=[0-9]+$/) {
-        split($i, parts, "=");
-        print parts[2];
-      } else if ($i ~ /^(--port|--listen-port|-p)$/ && i < NF && $(i + 1) ~ /^[0-9]+$/) {
-        print $(i + 1);
-      }
-    }
-  }')
-  if [ -f "$ports_file" ]; then
-    while read -r listen_port; do
-      [ -n "$listen_port" ] && add_port "$listen_port"
-    done < <(grep -E "^${pid} " "$ports_file" 2>/dev/null | awk '{print $2}' || true)
-  fi
-  if [ -s "$orphan_ports" ]; then
-    while read -r orphan_port; do
-      [ -z "$orphan_port" ] && continue
-      if printf '%s' "$args" | grep -qE "(^|[[:space:]])(--port|--listen-port|-p)(=${orphan_port}| ${orphan_port})([^0-9]|$)"; then
-        add_port "$orphan_port"
-      fi
-    done < "$orphan_ports"
-  fi
-  if [ -n "$ports_list" ]; then
-    ports="[$ports_list]"
-  else
-    ports='[]'
-  fi
-  if [ "$ports" = '[]' ]; then
-    continue
-  fi
-  if [ "$first" -eq 0 ]; then printf ','; fi
-  printf '{"pid":%s,"name":"","cpu_percent":0,"memory_bytes":0,"ports":%s}' "$pid" "$ports"
-  first=0
-done < "$ps_file"
-printf ']\n'
-TW_PORTS_EOF"#;
-
-const LIST_PROCESSES_SCRIPT: &str = r#"bash --noprofile --norc -s <<'TW_LIST_EOF'
-set -eu
-ports_file=$(mktemp)
-ps_file=$(mktemp)
-orphan_ports=$(mktemp)
-trap 'rm -f "$ports_file" "$ps_file" "$orphan_ports"' EXIT
-
-append_port_pid() {
-  local pid=$1 port=$2
-  if [ -n "$pid" ] && [ -n "$port" ] && [ "$port" -gt 0 ] 2>/dev/null; then
-    printf '%s %s\n' "$pid" "$port" >> "$ports_file"
-  fi
-}
-
-parse_lsof_listen_ports() {
-  if ! command -v lsof >/dev/null 2>&1; then
-    return 0
-  fi
-  local current_pid=""
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    case "$line" in
-      p*) current_pid=${line#p} ;;
-      n*)
-        case "$line" in
-          *TCP*LISTEN*)
-            local port=${line##*:}
-            append_port_pid "$current_pid" "$port"
-            ;;
-        esac
-        ;;
-    esac
-  done < <(lsof -nP -iTCP -sTCP:LISTEN -F pcn 2>/dev/null || true)
-}
-
-parse_lsof_listen_ports
-
-if command -v ss >/dev/null 2>&1; then
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    pid=$(printf '%s\n' "$line" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p')
-    port=$(printf '%s\n' "$line" | awk '{print $4}' | awk -F: '{print $NF}')
-    [ -n "$pid" ] && append_port_pid "$pid" "$port"
-  done < <(ss -H -tlnp 2>/dev/null || true)
-elif command -v netstat >/dev/null 2>&1; then
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    port=$(printf '%s\n' "$line" | awk '{print $4}' | awk -F: '{print $NF}')
-    pid=$(printf '%s\n' "$line" | sed -n 's/.*\/\([0-9][0-9]*\)$/\1/p')
-    [ -n "$pid" ] && append_port_pid "$pid" "$port"
-  done < <(netstat -tlnp 2>/dev/null | tail -n +3 || true)
-fi
-
-if command -v ss >/dev/null 2>&1; then
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    pid=$(printf '%s\n' "$line" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p')
-    port=$(printf '%s\n' "$line" | awk '{print $4}' | awk -F: '{print $NF}')
-    if [ -z "$pid" ] && [ -n "$port" ] && [ "$port" -gt 0 ] 2>/dev/null; then
-      printf '%s\n' "$port" >> "$orphan_ports"
-    fi
-  done < <(ss -H -tlnp 2>/dev/null || true)
-fi
-sort -u "$orphan_ports" -o "$orphan_ports" 2>/dev/null || true
-
-if [ -s "$ports_file" ]; then
-  propagated=$(mktemp)
-  cp "$ports_file" "$propagated"
-  while read -r pid port; do
-    [ -z "$pid" ] && continue
-    parent=$(
-      awk '/^PPid:/ {print $2; exit}' "/proc/$pid/status" 2>/dev/null || true
-    )
-    depth=0
-    while [ -n "$parent" ] && [ "$parent" -gt 1 ] 2>/dev/null && [ "$depth" -lt 4 ]; do
-      printf '%s %s\n' "$parent" "$port" >> "$propagated"
-      parent=$(
-        awk '/^PPid:/ {print $2; exit}' "/proc/$parent/status" 2>/dev/null || true
-      )
-      depth=$((depth + 1))
-    done
-  done < "$ports_file"
-  sort -u "$propagated" -o "$ports_file"
-  rm -f "$propagated"
-fi
-
-ps --no-headers -eo pid=,pcpu=,rss=,comm=,args= 2>/dev/null > "$ps_file" || \
-  ps -eo pid=,pcpu=,rss=,comm=,args= 2>/dev/null > "$ps_file" || true
-
-printf '['
-first=1
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  pid=$(printf '%s\n' "$line" | awk '{print $1}')
-  pcpu=$(printf '%s\n' "$line" | awk '{print $2}')
-  rss=$(printf '%s\n' "$line" | awk '{print $3}')
-  comm=$(printf '%s\n' "$line" | awk '{print $4}')
-  args=$(printf '%s\n' "$line" | awk '{$1=$2=$3=$4=""; sub(/^[ \t]+/, ""); print}')
-  exe=$(printf '%s\n' "$args" | awk '{print $1}')
-  case "$exe" in \[*) continue ;; esac
-  case "$comm" in \[*|kworker*) continue ;; esac
-  if [ -n "$comm" ] && [ "$comm" != "?" ]; then
-    name=$comm
-  else
-    name=$(basename "$exe" 2>/dev/null || printf '%s' "$exe")
-  fi
-  name=${name:-?}
-  name=${name//\\/\\\\}
-  name=${name//\"/\\\"}
-  command=${args//\\/\\\\}
-  command=${command//\"/\\\"}
-  mem=$((rss * 1024))
-  ports_list=""
-  add_port() {
-    local p=$1
-    [ -z "$p" ] && return 0
-    case ",$ports_list," in
-      *,"$p",*) ;;
-      *)
-        if [ -z "$ports_list" ]; then ports_list="$p"; else ports_list="$ports_list,$p"; fi
-        ;;
-    esac
-  }
-  if [ -f "$ports_file" ]; then
-    while read -r listen_port; do
-      [ -n "$listen_port" ] && add_port "$listen_port"
-    done < <(grep -E "^${pid} " "$ports_file" 2>/dev/null | awk '{print $2}' || true)
-  fi
-  while read -r hinted_port; do
-    [ -n "$hinted_port" ] && add_port "$hinted_port"
-  done < <(printf '%s' "$args" | awk '{
-    for (i = 1; i <= NF; i++) {
-      if ($i ~ /^(--port|--listen-port|-p)=[0-9]+$/) {
-        split($i, parts, "=");
-        print parts[2];
-      } else if ($i ~ /^(--port|--listen-port|-p)$/ && i < NF && $(i + 1) ~ /^[0-9]+$/) {
-        print $(i + 1);
-      }
-    }
-  }')
-  if [ -s "$orphan_ports" ]; then
-    while read -r orphan_port; do
-      [ -z "$orphan_port" ] && continue
-      if printf '%s' "$args" | grep -qE "(^|[[:space:]])(--port|--listen-port|-p)(=${orphan_port}| ${orphan_port})([^0-9]|$)"; then
-        add_port "$orphan_port"
-      fi
-    done < "$orphan_ports"
-  fi
-  if [ -n "$ports_list" ]; then
-    ports="[$ports_list]"
-  else
-    ports='[]'
-  fi
-  if [ "$first" -eq 0 ]; then printf ','; fi
-  printf '{"pid":%s,"name":"%s","command":"%s","cpu_percent":%s,"memory_bytes":%s,"ports":%s}' \
-    "$pid" "$name" "$command" "$pcpu" "$mem" "$ports"
-  first=0
-done < "$ps_file"
-printf ']\n'
-TW_LIST_EOF"#;
+const PPID_MARK: &str = "--TW-PPID--";
 
 // POSIX/BusyBox fallback for hosts without bash or GNU ps (OpenWrt / Dropbear).
 // Delivered via base64 | sh so Dropbear/`ash -c` never mangled heredoc/newlines.
@@ -427,6 +101,186 @@ fn parse_busybox_process_list(stdout: &str) -> AppResult<ProcessListResult> {
     Ok(normalize_processes(processes))
 }
 
+fn skip_process_name(name: &str) -> bool {
+    let name = name.trim();
+    name.is_empty() || name == "?" || name.starts_with('[') || name.starts_with("kworker")
+}
+
+fn parse_ps_basic(stdout: &str) -> ProcessListResult {
+    let mut processes = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let Some(pid) = parts.next().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        if parts.next().and_then(|s| s.parse::<u32>().ok()).is_none() {
+            continue;
+        }
+        let Some(cpu) = parts.next().and_then(|s| s.parse::<f32>().ok()) else {
+            continue;
+        };
+        let Some(rss_kb) = parts.next().and_then(|s| s.parse::<u64>().ok()) else {
+            continue;
+        };
+        let name = parts.collect::<Vec<_>>().join(" ");
+        if skip_process_name(&name) {
+            continue;
+        }
+        processes.push(ProcessEntry {
+            pid,
+            name,
+            command: None,
+            cpu_percent: cpu,
+            memory_bytes: rss_kb.saturating_mul(1024),
+            ports: Vec::new(),
+        });
+    }
+    normalize_processes(processes)
+}
+
+fn parse_ss_listen(section: &str) -> Vec<(u32, u16)> {
+    let mut found = Vec::new();
+    for line in section.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut cols = line.split_whitespace();
+        let local = cols.nth(3).unwrap_or("");
+        let Some(port) = local
+            .rsplit(':')
+            .next()
+            .and_then(|s| s.parse::<u16>().ok())
+            .filter(|port| *port > 0)
+        else {
+            continue;
+        };
+        for token in line.split("pid=").skip(1) {
+            let digits: String = token.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(pid) = digits.parse::<u32>() {
+                if pid > 0 {
+                    found.push((pid, port));
+                }
+            }
+        }
+    }
+    found
+}
+
+fn parse_lsof_listen(section: &str) -> Vec<(u32, u16)> {
+    let mut found = Vec::new();
+    let mut pid = 0u32;
+    for line in section.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix('p') {
+            if rest.chars().all(|c| c.is_ascii_digit()) {
+                pid = rest.parse().unwrap_or(0);
+                continue;
+            }
+        }
+        if pid == 0 {
+            continue;
+        }
+        let Some(addr) = line.strip_prefix('n') else { continue };
+        if !addr.contains("TCP") && !line.contains("LISTEN") && !addr.contains(':') {
+            continue;
+        }
+        let port = addr.rsplit(':').next().unwrap_or("").parse::<u16>().ok();
+        if let Some(port) = port.filter(|p| *p > 0) {
+            found.push((pid, port));
+        }
+    }
+    found
+}
+
+fn is_lsof_section(section: &str) -> bool {
+    section.lines().any(|line| {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix('p') else {
+            return false;
+        };
+        !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+    })
+}
+
+fn parse_ppid_table(section: &str) -> HashMap<u32, u32> {
+    let mut map = HashMap::new();
+    for line in section.lines() {
+        let mut parts = line.split_whitespace();
+        let Some(pid) = parts.next().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Some(ppid) = parts.next().and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        map.insert(pid, ppid);
+    }
+    map
+}
+
+fn attach_parent_ports(mut by_pid: HashMap<u32, Vec<u16>>, ppid: &HashMap<u32, u32>) -> HashMap<u32, Vec<u16>> {
+    let seeds: Vec<(u32, Vec<u16>)> = by_pid.iter().map(|(pid, ports)| (*pid, ports.clone())).collect();
+    for (pid, ports) in seeds {
+        let mut parent = ppid.get(&pid).copied();
+        let mut depth = 0;
+        while let Some(current) = parent {
+            if current <= 1 || depth >= 4 {
+                break;
+            }
+            by_pid.entry(current).or_default().extend(ports.iter().copied());
+            parent = ppid.get(&current).copied();
+            depth += 1;
+        }
+    }
+    by_pid
+}
+
+fn parse_ports_output(stdout: &str) -> ProcessListResult {
+    let (listen, ppid_section) = stdout
+        .split_once(PPID_MARK)
+        .unwrap_or((stdout, ""));
+    let pairs = if is_lsof_section(listen) {
+        parse_lsof_listen(listen)
+    } else {
+        parse_ss_listen(listen)
+    };
+    let mut by_pid: HashMap<u32, Vec<u16>> = HashMap::new();
+    for (pid, port) in pairs {
+        by_pid.entry(pid).or_default().push(port);
+    }
+    let by_pid = attach_parent_ports(by_pid, &parse_ppid_table(ppid_section));
+    let processes = by_pid
+        .into_iter()
+        .map(|(pid, ports)| ProcessEntry {
+            pid,
+            name: String::new(),
+            command: None,
+            cpu_percent: 0.0,
+            memory_bytes: 0,
+            ports,
+        })
+        .collect();
+    normalize_processes(processes)
+}
+
+fn merge_ports(mut base: ProcessListResult, ports: &ProcessListResult) -> ProcessListResult {
+    let map: HashMap<u32, Vec<u16>> = ports
+        .processes
+        .iter()
+        .map(|entry| (entry.pid, entry.ports.clone()))
+        .collect();
+    for entry in &mut base.processes {
+        if let Some(ports) = map.get(&entry.pid) {
+            entry.ports = ports.clone();
+        }
+    }
+    normalize_processes(base.processes)
+}
+
 fn is_kernel_process(entry: &ProcessEntry) -> bool {
     if entry.name.starts_with('[') || entry.name.starts_with("kworker") {
         return true;
@@ -462,68 +316,48 @@ fn map_ssh_exec_error(err: AppError) -> AppError {
     }
 }
 
-fn extract_json_array(stdout: &str) -> Option<&str> {
-    let trimmed = stdout.trim();
-    let start = trimmed.find('[')?;
-    let end = trimmed.rfind(']')?;
-    if end < start {
-        return None;
+async fn list_processes_ps(
+    handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+) -> AppResult<ProcessListResult> {
+    match exec_command(handle, PS_LIST_COMMAND).await {
+        Ok(stdout) => {
+            let result = parse_ps_basic(&stdout);
+            if result.processes.is_empty() {
+                match list_processes_busybox(handle).await {
+                    Ok(fallback) if !fallback.processes.is_empty() => return Ok(fallback),
+                    Ok(_) => {}
+                    Err(fallback_err) => return Err(fallback_err),
+                }
+            }
+            Ok(result)
+        }
+        Err(err) => match list_processes_busybox(handle).await {
+            Ok(result) => Ok(result),
+            Err(fallback_err) => Err(AppError::msg(format!(
+                "{}; busybox fallback: {fallback_err}",
+                map_ssh_exec_error(err)
+            ))),
+        },
     }
-    Some(&trimmed[start..=end])
-}
-
-fn parse_process_list(stdout: &str, context: &str) -> AppResult<ProcessListResult> {
-    let payload = extract_json_array(stdout).unwrap_or(stdout.trim());
-    if payload.is_empty() {
-        return Ok(ProcessListResult {
-            processes: Vec::new(),
-        });
-    }
-
-    let processes: Vec<ProcessEntry> = serde_json::from_str(payload)
-        .map_err(|err| AppError::msg(format!("{context}: {err}; 输出: {payload}")))?;
-
-    Ok(normalize_processes(processes))
 }
 
 pub async fn list_processes(
     handle: Arc<Mutex<client::Handle<ClientHandler>>>,
     mode: ProcessListMode,
 ) -> AppResult<ProcessListResult> {
-    let script = match mode {
-        ProcessListMode::Basic => LIST_PROCESSES_BASIC_SCRIPT,
-        ProcessListMode::Ports => LIST_PROCESS_PORTS_SCRIPT,
-        ProcessListMode::Full => LIST_PROCESSES_SCRIPT,
-    };
-    let allow_busybox_fallback = !matches!(mode, ProcessListMode::Ports);
-
-    match exec_command(&handle, script).await {
-        Ok(stdout) => {
-            let result = parse_process_list(&stdout, "解析远程进程列表失败")?;
-            // bash exists but GNU ps flags unsupported → empty list; retry via /proc.
-            if allow_busybox_fallback && result.processes.is_empty() {
-                match list_processes_busybox(&handle).await {
-                    Ok(fallback) if !fallback.processes.is_empty() => return Ok(fallback),
-                    Ok(_) => {}
-                    Err(fallback_err) => {
-                        // Prefer busybox error — more actionable on OpenWrt-class hosts.
-                        return Err(fallback_err);
-                    }
-                }
-            }
-            Ok(result)
+    match mode {
+        ProcessListMode::Basic => list_processes_ps(&handle).await,
+        ProcessListMode::Ports => {
+            let stdout = exec_command(&handle, PORTS_LIST_COMMAND)
+                .await
+                .map_err(map_ssh_exec_error)?;
+            Ok(parse_ports_output(&stdout))
         }
-        // No bash on host (BusyBox/ash, e.g. OpenWrt) → POSIX fallback.
-        Err(err) => {
-            if !allow_busybox_fallback {
-                return Err(map_ssh_exec_error(err));
-            }
-            match list_processes_busybox(&handle).await {
-                Ok(result) => Ok(result),
-                Err(fallback_err) => Err(AppError::msg(format!(
-                    "{}; busybox fallback: {fallback_err}",
-                    map_ssh_exec_error(err)
-                ))),
+        ProcessListMode::Full => {
+            let base = list_processes_ps(&handle).await?;
+            match exec_command(&handle, PORTS_LIST_COMMAND).await {
+                Ok(stdout) => Ok(merge_ports(base, &parse_ports_output(&stdout))),
+                Err(_) => Ok(base),
             }
         }
     }
@@ -560,4 +394,52 @@ pub async fn kill_process(
         )));
     }
     Err(AppError::msg(format!("结束进程失败: {trimmed}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ps_rows_skip_kernel_names_and_scale_rss() {
+        let parsed = parse_ps_basic(
+            "  10 1 1.5 2048 systemd\n\
+             20 2 0.0 4 [kthreadd]\n\
+             30 1 9.0 100 kworker/0:1\n\
+             40 1 0.2 8 ?\n\
+             50 1 3.0 512 python3\n",
+        );
+        let names: Vec<_> = parsed.processes.iter().map(|p| p.name.as_str()).collect();
+        assert!(names.contains(&"systemd"));
+        assert!(names.contains(&"python3"));
+        assert!(!names.iter().any(|n| n.starts_with('[') || n.starts_with("kworker") || *n == "?"));
+        let python = parsed.processes.iter().find(|p| p.pid == 50).unwrap();
+        assert_eq!(python.memory_bytes, 512 * 1024);
+        assert!((python.cpu_percent - 3.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn ss_ports_climb_to_the_parent() {
+        let stdout = "\
+LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=40,fd=3))\n\
+LISTEN 0 128 127.0.0.1:8080 0.0.0.0:* users:((\"python\",pid=50,fd=4))\n\
+--TW-PPID--\n\
+40 10\n\
+50 40\n\
+10 1\n";
+        let parsed = parse_ports_output(stdout);
+        let ports = |pid: u32| {
+            parsed
+                .processes
+                .iter()
+                .find(|p| p.pid == pid)
+                .map(|p| p.ports.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(ports(50), vec![8080]);
+        assert!(ports(40).contains(&22));
+        assert!(ports(40).contains(&8080));
+        assert!(ports(10).contains(&22));
+        assert!(ports(1).is_empty());
+    }
 }

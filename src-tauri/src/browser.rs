@@ -106,7 +106,19 @@ struct PageMetaJs {
     favicon: String,
 }
 
-fn parse_page_meta_json(raw: &str, fallback_url: &str) -> (String, String) {
+fn page_title_or_empty(title: &str) -> String {
+    let trimmed = title.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+    {
+        String::new()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn parse_page_meta_json(raw: &str) -> (String, String) {
     let trimmed = raw.trim().trim_matches('"');
     // eval_with_callback may wrap the JS string result in extra JSON quotes.
     let unescaped = if trimmed.starts_with('{') {
@@ -118,12 +130,59 @@ fn parse_page_meta_json(raw: &str, fallback_url: &str) -> (String, String) {
         title: String::new(),
         favicon: String::new(),
     });
-    let title = if meta.title.is_empty() {
-        fallback_url.to_string()
-    } else {
-        meta.title
-    };
-    (title, meta.favicon)
+    (page_title_or_empty(&meta.title), meta.favicon)
+}
+
+fn emit_page_meta(
+    webview: &tauri::Webview,
+    app: &AppHandle,
+    webview_label: &str,
+    profile_key: &str,
+    tab_id: &str,
+    url: &str,
+) {
+    let app2 = app.clone();
+    let emit_label = webview_label.to_string();
+    let emit_profile = profile_key.to_string();
+    let emit_tab = tab_id.to_string();
+    let page_url = url.to_string();
+    let _ = webview.eval_with_callback(PAGE_META_EVAL, move |raw| {
+        let (title, favicon) = parse_page_meta_json(&raw);
+        let _ = app2.emit(
+            "host-browser-page",
+            BrowserPageEvent {
+                webview_label: emit_label.clone(),
+                profile_key: emit_profile.clone(),
+                tab_id: emit_tab.clone(),
+                url: page_url.clone(),
+                title,
+                favicon,
+            },
+        );
+    });
+}
+
+fn schedule_late_page_meta(
+    app: AppHandle,
+    webview_label: String,
+    profile_key: String,
+    tab_id: String,
+    url: String,
+) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        let Some(webview) = app.get_webview(&webview_label) else {
+            return;
+        };
+        emit_page_meta(
+            &webview,
+            &app,
+            &webview_label,
+            &profile_key,
+            &tab_id,
+            &url,
+        );
+    });
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -645,6 +704,7 @@ impl BrowserManager {
         let emit_profile = profile_key.to_string();
         let emit_tab = tab_id.to_string();
         let display_map = std::sync::Arc::clone(&self.loopback_display);
+        let load_at = std::sync::Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
 
         let mut builder = WebviewBuilder::new(
             label,
@@ -658,7 +718,10 @@ impl BrowserManager {
             let url = display_url_for_bar(&display_map, payload.url());
             match payload.event() {
                 PageLoadEvent::Started => {
-                    log::warn!("host-browser load started tab={emit_tab} {url}");
+                    if let Ok(mut started) = load_at.lock() {
+                        *started = std::time::Instant::now();
+                    }
+                    log::warn!("[host-browser] load-started +0ms tab={emit_tab} {url}");
                     let _ = app_handle.emit(
                         "host-browser-load",
                         BrowserLoadEvent {
@@ -674,7 +737,13 @@ impl BrowserManager {
                     if url.starts_with("about:") {
                         return;
                     }
-                    log::warn!("host-browser load finished tab={emit_tab} {url}");
+                    let finished_ms = load_at
+                        .lock()
+                        .map(|started| started.elapsed().as_millis())
+                        .unwrap_or(0);
+                    log::warn!(
+                        "[host-browser] load-finished +{finished_ms}ms tab={emit_tab} {url}"
+                    );
                     let _ = webview.eval(FIT_WIDTH_EVAL);
                     let _ = app_handle.emit(
                         "host-browser-load",
@@ -686,25 +755,21 @@ impl BrowserManager {
                             phase: "finished".into(),
                         },
                     );
-                    let emit_label2 = emit_label.clone();
-                    let emit_profile2 = emit_profile.clone();
-                    let emit_tab2 = emit_tab.clone();
-                    let url2 = url.clone();
-                    let app2 = app_handle.clone();
-                    let _ = webview.eval_with_callback(PAGE_META_EVAL, move |raw| {
-                        let (title, favicon) = parse_page_meta_json(&raw, &url2);
-                        let _ = app2.emit(
-                            "host-browser-page",
-                            BrowserPageEvent {
-                                webview_label: emit_label2.clone(),
-                                profile_key: emit_profile2.clone(),
-                                tab_id: emit_tab2.clone(),
-                                url: url2.clone(),
-                                title,
-                                favicon,
-                            },
-                        );
-                    });
+                    emit_page_meta(
+                        &webview,
+                        &app_handle,
+                        &emit_label,
+                        &emit_profile,
+                        &emit_tab,
+                        &url,
+                    );
+                    schedule_late_page_meta(
+                        app_handle.clone(),
+                        emit_label.clone(),
+                        emit_profile.clone(),
+                        emit_tab.clone(),
+                        url.clone(),
+                    );
                 }
             }
         });
@@ -1354,14 +1419,16 @@ mod tests {
         assert!(super::PAGE_META_EVAL.contains("favicon.ico"));
         let (title, favicon) = super::parse_page_meta_json(
             r#"{"title":"百度一下","favicon":"https://www.baidu.com/favicon.ico"}"#,
-            "https://www.baidu.com/",
         );
         assert_eq!(title, "百度一下");
         assert_eq!(favicon, "https://www.baidu.com/favicon.ico");
-        let (fallback_title, empty_icon) =
-            super::parse_page_meta_json(r#"{"title":"","favicon":""}"#, "https://example.com/");
-        assert_eq!(fallback_title, "https://example.com/");
+        let (empty_title, empty_icon) =
+            super::parse_page_meta_json(r#"{"title":"","favicon":""}"#);
+        assert!(empty_title.is_empty());
         assert!(empty_icon.is_empty());
+        let (url_title, _) =
+            super::parse_page_meta_json(r#"{"title":"https://www.youtube.com/","favicon":""}"#);
+        assert!(url_title.is_empty());
     }
 
     #[test]

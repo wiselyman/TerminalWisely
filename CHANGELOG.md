@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.4] - 2026-09-30
+
+A connected Linux host becomes a desktop.
+
+- Click the host icon and the workspace beside the sidebar is that machine’s desktop; click again to return to the terminal
+- Dock apps: Files, Processes, Browser (host network, including 127.0.0.1), Terminal, and AI Linux — the last two reuse the existing session
+- Windows drag, resize, and stack. Leaving the desktop remembers which windows were open and where they sat
+
+已连接的 Linux 主机变成桌面。
+
+- 点主机图标，侧栏右边就是这台机器的桌面；再点一次回到终端
+- Dock：文件、进程、浏览器（主机网络，含 127.0.0.1）、终端、AI Linux；后两个复用现有会话
+- 窗口可拖动、缩放、叠放。离开桌面会记住打开的窗口和位置
+
 ## [0.0.3] - 2026-09-29
 
 Same chat stays continuous when switching models and agents.

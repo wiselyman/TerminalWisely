@@ -6,9 +6,9 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.0.3](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.3)**
+**Current version: [v0.0.4](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.4)**
 
-**Bring Cursor Agent, Codex, and Claude Code into real ops — on your live SSH session and Kubernetes cluster.** TerminalWisely is the desktop cockpit: multi-tab SSH, host Desktop / Browser, K8s workbench, and AI Engineers. The coding agents you already use become **ops agents**: they keep their own models and login, while TW owns the session, MCP tools, approval cards, and STOP. One chat keeps its work when you switch models or agents.
+**Turn a connected Linux host into a desktop.** Click the host icon and the workspace beside the sidebar becomes that machine’s desktop: Files, Processes, a Browser that uses the host’s network, Terminal, and AI Linux. TerminalWisely stays the ops cockpit — multi-tab SSH, Kubernetes, and the coding agents you already use (Cursor, Codex, Claude Code) on the live session, with approvals and STOP.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
@@ -25,7 +25,7 @@
 |------|------------|
 | **Agent runtimes** | Cursor Agent, Codex, Claude Code on live SSH / K8s via TW MCP; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
-| **Host Desktop** | Dock apps on the connected host: Files, Processes, Browser; layout remembered per host |
+| **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
 | **Kubernetes** | Sidebar Hosts ↔ K8s; add cluster via + (file or paste kubeconfig) or SSH kubectl; resource tree, YAML, logs, Pod shell. One-click install of kubectl/Helm into the app data dir (or use PATH / SSH). Practical Lens-inspired subset — not a full Lens IDE |
 | **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; Markdown Typora-like WYSIWYG; download, compress, cross-server send |
@@ -86,44 +86,59 @@ Mode follows the sidebar:
 
 ---
 
-## Host Desktop on Linux
+## Host Desktop
 
-Open a desktop surface on the connected SSH host: **Files**, **Processes**, and **Browser** as dock apps. Preview and edit common files WYSIWYG-style (Markdown and more) without leaving the session.
-
-<p align="center">
-  <img src="./docs/images/v002-04-host-desktop.jpg" alt="Figure 4 — Host Desktop" width="920" />
-</p>
-<p align="center"><em>Figure 4 — Host Desktop beside the live SSH terminal: Files / Processes / Browser dock on the connected Linux host.</em></p>
+Click the host icon. Sidebar, title bar, and status bar stay. Everything to the right becomes that connected Linux host’s desktop. Click the icon again and the terminal returns. Open windows and their positions are still there when you come back.
 
 <p align="center">
-  <img src="./docs/images/v002-05-host-files.jpg" alt="Figure 5 — Host Files" width="920" />
+  <img src="./docs/images/v004-01-desktop.jpg" alt="Figure 4 — Host desktop" width="920" />
 </p>
-<p align="center"><em>Figure 5 — Host Files: browse the remote filesystem with a Finder-style tree and grid.</em></p>
+<p align="center"><em>Figure 4 — Host desktop: wallpaper, app icons, and a dock on the connected machine.</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-06-markdown-wysiwyg.png" alt="Figure 6 — Markdown WYSIWYG" width="720" />
+  <img src="./docs/images/v004-02-files.jpg" alt="Figure 5 — Files" width="920" />
 </p>
-<p align="center"><em>Figure 6 — Markdown WYSIWYG editing (Typora-like) on the remote host.</em></p>
+<p align="center"><em>Figure 5 — Files: browse the remote filesystem.</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-07-host-processes.jpg" alt="Figure 7 — Host Processes" width="920" />
+  <img src="./docs/images/v004-03-processes.jpg" alt="Figure 6 — Processes" width="920" />
 </p>
-<p align="center"><em>Figure 7 — Host Processes: name, ports, memory, and CPU; end a process after confirm.</em></p>
+<p align="center"><em>Figure 6 — Processes: name, ports, memory, and CPU on the host.</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-08-host-browser.jpg" alt="Figure 8 — Host Browser" width="920" />
+  <img src="./docs/images/v004-04-browser.jpg" alt="Figure 7 — Browser on the host network" width="920" />
 </p>
-<p align="center"><em>Figure 8 — Host Browser: open HTTP on the <strong>host’s network</strong> (including <code>127.0.0.1</code>) through the existing SSH session.</em></p>
+<p align="center"><em>Figure 7 — Browser uses the <strong>host’s network</strong> (including <code>127.0.0.1</code>) through the existing SSH session.</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-09-file-preview-log.jpg" alt="Figure 9 — Log / text preview" width="920" />
+  <img src="./docs/images/v004-05-terminal.jpg" alt="Figure 8 — Terminal" width="920" />
 </p>
-<p align="center"><em>Figure 9 — Preview and search common files such as logs on the remote host.</em></p>
+<p align="center"><em>Figure 8 — Terminal is the same SSH session, inside a desktop window.</em></p>
 
 <p align="center">
-  <img src="./docs/images/v002-10-file-preview-image.jpg" alt="Figure 10 — Image preview" width="920" />
+  <img src="./docs/images/v004-06-ai-linux.jpg" alt="Figure 9 — AI Linux" width="920" />
 </p>
-<p align="center"><em>Figure 10 — Image and other mainstream file types open in the preview panel.</em></p>
+<p align="center"><em>Figure 9 — AI Linux is the same AI Engineer chat, filling the desktop window.</em></p>
+
+<p align="center">
+  <img src="./docs/images/v004-07-windows.jpg" alt="Figure 10 — Several windows" width="920" />
+</p>
+<p align="center"><em>Figure 10 — Several apps open at once. Drag and resize; the front window stays on top.</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-06-markdown-wysiwyg.png" alt="Figure 11 — Markdown WYSIWYG" width="720" />
+</p>
+<p align="center"><em>Figure 11 — Markdown WYSIWYG editing (Typora-like) on the remote host.</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-09-file-preview-log.jpg" alt="Figure 12 — Log / text preview" width="920" />
+</p>
+<p align="center"><em>Figure 12 — Preview and search common files such as logs on the remote host.</em></p>
+
+<p align="center">
+  <img src="./docs/images/v002-10-file-preview-image.jpg" alt="Figure 13 — Image preview" width="920" />
+</p>
+<p align="center"><em>Figure 13 — Image and other mainstream file types open in the preview panel.</em></p>
 
 ### Terminal & transfers
 
@@ -141,16 +156,16 @@ Open a desktop surface on the connected SSH host: **Files**, **Processes**, and 
 Sidebar **Hosts ↔ K8s**: overview, workloads, network, storage, and security resources — plus AI on the selected cluster.
 
 <p align="center">
-  <img src="./docs/images/v002-11-k8s-ops.png" alt="Figure 11 — Kubernetes ops" width="920" />
+  <img src="./docs/images/v002-11-k8s-ops.png" alt="Figure 14 — Kubernetes ops" width="920" />
 </p>
-<p align="center"><em>Figure 11 — Kubernetes ops: cluster overview and AI Engineer answering whether the cluster is healthy.</em></p>
+<p align="center"><em>Figure 14 — Kubernetes ops: cluster overview and AI Engineer answering whether the cluster is healthy.</em></p>
 
 ---
 
 ## Quick start
 
 1. Add an SSH host in the sidebar and connect — or switch the activity bar to **K8s** and click **+** to add a cluster (kubeconfig file or paste).  
-2. Optional: open **Desktop** or **Browser** on the connected host to manage files/processes or open remote HTTP UIs.  
+2. Optional: click the host icon to open that machine’s desktop — Files, Processes, Browser, Terminal, and AI Linux.  
 3. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed).  
 4. For Built-in: Settings → add a model profile (Base URL + model id; Ollama often needs no key).  
 5. Use the terminal or K8s workbench as usual; ask the AI when you want help.  

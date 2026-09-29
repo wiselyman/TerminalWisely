@@ -1869,16 +1869,25 @@ function exists(rel) {
     read("src/stores/desktopStore.ts").includes("setAppMaximized") &&
     read("src/stores/desktopStore.ts").includes("toggleDockApp") &&
     read("src/components/desktop/DesktopAppWindow.tsx").includes(
-      "preview-float-backdrop",
+      "desktop-app-float",
+    ) &&
+    read("src/components/desktop/DesktopAppWindow.tsx").includes(
+      "onPointerDown",
     ) &&
     read("src/components/desktop/DesktopAppWindow.tsx").includes(
       "preview-float-window",
     ) &&
     exists("src/lib/floatStacking.ts") &&
     read("src/lib/floatStacking.ts").includes("DESKTOP_APP_FLOAT_Z_BASE = 34000") &&
-    read("src/lib/floatStacking.ts").includes("PREVIEW_FLOAT_Z = 35000")
+    read("src/lib/floatStacking.ts").includes("PREVIEW_FLOAT_Z = 35000") &&
+    read("src/components/desktop/DesktopAppWindow.tsx").includes(
+      "getDesktopSurfaceHost",
+    ) &&
+    read("src/components/desktop/desktopApps.ts").includes('"terminal"') &&
+    read("src/components/desktop/desktopApps.ts").includes('"aiLinux"') &&
+    read("src/App.tsx").includes("desktop-mode")
   ) {
-    pass("ui.host-desktop", "desktop dock apps open as Markdown-style floats");
+    pass("ui.host-desktop", "desktop fills the workspace; Terminal and AI Linux reuse the session");
   } else {
     fail("ui.host-desktop", "missing host desktop mode wiring");
   }
