@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.3] - 2026-09-29
+
+Same chat stays continuous when switching models and agents.
+
+- One AI Engineer thread can move between built-in models and Cursor, Codex, or Claude Code without starting a blank task
+- An external CLI resumes its own session while that session is still the latest work on the thread
+- After a switch, or when the vendor session is missing or rejected, the next turn is rebuilt from the SessionLog, including tool output
+- Codex exec sessions are resumable (no ephemeral session)
+
+同一条对话里切换模型和 Agent 后，工作连续。
+
+- 一条 AI 工程师对话可在内置大模型与 Cursor、Codex、Claude Code 之间切换，不会变成一场空任务
+- 外部 CLI 在自己的会话仍是这条聊天的最新工作时，沿用该会话
+- 中途切换后，或原厂会话丢失、被拒绝时，下一句按 SessionLog 重建，包含工具输出
+- Codex exec 会话可续接（不再使用一次性会话）
+
 ## [0.0.2] - 2026-09-26
 
 Cursor / Codex / Claude Code as ops agent runtimes.

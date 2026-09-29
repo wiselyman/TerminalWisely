@@ -121,7 +121,7 @@ Release 工作流会构建以下产物：
 
 1. **打版本 tag**（推荐）  
    1. 更新 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 版本号  
-   2. 更新 [`README.md`](./README.md) 顶部 **当前版本** 号，并补充本次用户可见的新功能（若有）  
+   2. 更新 [`README.md`](./README.md) / [`README.zh-CN.md`](./README.zh-CN.md) 顶部 **当前版本** 号。README 只写产品有哪些大功能，不写某一版的变更；版本功能写在 Release notes  
    3. **编写 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)**（会出现在 GitHub Release 描述顶部，即更新说明红框位置）  
    4. 同步更新 [`CHANGELOG.md`](./CHANGELOG.md)，并将该版本正文归档到 `release-notes/vX.Y.Z.md`  
    5. 提交后打 tag 并推送：

@@ -512,8 +512,8 @@ const catalog = {
   welcome: {
     sectionAria: { zh: "产品介绍", en: "Product introduction" },
     eyebrow: {
-      zh: "v0.0.2 · Cursor / Codex / Claude Code → 运维",
-      en: "v0.0.2 · Cursor / Codex / Claude Code → ops",
+      zh: "v0.0.3 · Cursor / Codex / Claude Code → 运维",
+      en: "v0.0.3 · Cursor / Codex / Claude Code → ops",
     },
     productName: { zh: "TerminalWisely", en: "TerminalWisely" },
     tagline: {

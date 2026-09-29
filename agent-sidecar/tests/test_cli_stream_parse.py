@@ -165,7 +165,7 @@ def test_codex_argv_skips_git_repo_check(monkeypatch, tmp_path: Path) -> None:
     assert "--json" in argv
     assert "--cd" in argv
     assert "--skip-git-repo-check" in argv
-    assert "--ephemeral" in argv
+    assert "--ephemeral" not in argv
     assert "--approve-for-me" in argv
     assert "--disable" in argv
     assert "computer_use" in argv

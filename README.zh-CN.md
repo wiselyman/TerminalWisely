@@ -6,9 +6,9 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.2](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.2)**
+**当前版本：[v0.0.3](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.3)**
 
-**把 Cursor Agent、Codex、Claude Code 接到真实运维上——就在你已打开的 SSH 会话与 Kubernetes 集群上。** TerminalWisely 是桌面驾驶舱：多标签 SSH、主机 Desktop / Browser、K8s 工作台、AI 工程师。**v0.0.2** 起，你日常用的编码 Agent 可以变成**运维 Agent**：它们保留自己的模型与登录，TW 管会话、MCP 工具、批准卡片和随时 STOP。
+**把 Cursor Agent、Codex、Claude Code 接到真实运维上——就在你已打开的 SSH 会话与 Kubernetes 集群上。** TerminalWisely 是桌面驾驶舱：多标签 SSH、主机 Desktop / Browser、K8s 工作台、AI 工程师。日常用的编码 Agent 可以变成**运维 Agent**：它们保留自己的模型与登录，TW 管会话、MCP 工具、批准卡片和随时 STOP。同一条对话里切换模型或 Agent，工作接着做。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
@@ -16,17 +16,6 @@
   <img src="./docs/images/v002-01-chat-agent-ops.png" alt="图 1 — 常规聊天：Cursor 在已连接主机上运维" width="920" />
 </p>
 <p align="center"><em>图 1 — 常规 AI 工程师对话：自然语言提问；Cursor（或其他 Agent）在已连接主机上执行工具，并基于证据回答。</em></p>
-
----
-
-## v0.0.2 新特性
-
-| | |
-|--|--|
-| **Cursor / Codex / Claude Code → 运维** | 选择已安装的 CLI 作为 Agent 运行时。经 **TW MCP** 在**同一** SSH / 集群上排查——不另开静默登录。 |
-| **统一审批面** | 只读可自动；变更走 TW 批准卡片（标注来源 Agent）。**STOP** 终止整次运行。 |
-| **引导式就绪** | 探测安装与登录状态，缺登录时引导完成；自动接线 MCP / 工作区。**不会**静默安装 CLI。 |
-| **内置工程师仍在** | AI Linux / K8S Engineer + 自有模型 Profile（OpenAI 兼容、Ollama、Anthropic 兼容、Gemini）。 |
 
 ---
 
@@ -40,7 +29,7 @@
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **Kubernetes** | 侧栏 Hosts ↔ K8s；+ 添加集群（文件或粘贴 kubeconfig）或 SSH kubectl；资源树、YAML、日志、Pod Shell。可一键把最新 kubectl/Helm 装到应用数据目录（也可用 PATH / SSH）。受 Lens 启发的实用子集，非完整 Lens IDE |
 | **文件** | 拖拽上传、`ls` 点击进目录或预览；Markdown 类 Typora 所见即所得；下载、压缩、跨服务器发送 |
-| **AI 工程师** | Hosts 为 Linux 模式；K8s 为 K8S 模式；长任务续租 SSH；聊天历史按主机/集群隔离 |
+| **AI 工程师** | Hosts 为 Linux 模式；K8s 为 K8S 模式；长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
 | **可观测** | 状态栏显示 CPU、内存、磁盘读写、网络 |

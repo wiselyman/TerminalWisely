@@ -1,6 +1,6 @@
 {
   "sectionAria": "产品介绍",
-  "eyebrow": "v0.0.2 · Cursor / Codex / Claude Code → 运维",
+  "eyebrow": "v0.0.3 · Cursor / Codex / Claude Code → 运维",
   "productName": "TerminalWisely",
   "tagline": "编码 Agent 接到真实 SSH 与 Kubernetes 运维",
   "summary": "同一窗口管理 SSH 会话与 Kubernetes 集群。在已连接主机上打开 Desktop（文件、进程、浏览器）。可用内置 AI Linux / K8S Engineer——或让 Cursor Agent、Codex、Claude Code 当大脑，由 TW 管会话、MCP 工具、批准与 STOP。",

@@ -12,6 +12,19 @@ from pathlib import Path
 from typing import Any
 
 from app.agent.loop import AgentLoop
+from app.runtime.cli_session import (
+    build_runtime_argv,
+    remember_vendor_session,
+    resume_attempt_accepted,
+    stored_vendor_session_id,
+    text_rejects_resume,
+    vendor_session_is_stale,
+)
+from app.runtime.continuity_pack import (
+    prior_evidence_present,
+    render_continuity_pack,
+    render_current_turn,
+)
 from app.runtime.fakes import FakeCodexDriver, FakeCursorDriver, FakeResearch
 from app.runtime.local_cli import (
     LocalCliKind,
@@ -26,7 +39,6 @@ from app.runtime.local_cli import (
 from app.runtime.tw_mcp import TwMcpServer, tw_mcp_list_tools
 from app.runtime.workspace import agent_workspace_dir
 from app.runtime.remote_plane import (
-    REMOTE_PLANE_ADDENDUM,
     is_local_desktop_impersonation,
     write_remote_plane_guidance,
 )
@@ -130,67 +142,23 @@ def build_cli_argv(
     prompt: str,
     workspace: Path,
     mcp_config: Path,
+    resume_id: str | None = None,
 ) -> list[str]:
     resolved = resolve_local_cli(kind)
     if resolved is None:
         raise RuntimeError("install_needed")
-    prefix = list(resolved.argv_prefix)
-    if kind == "cursor":
-        # No --stream-partial-output: partials + final chunk duplicate text in TW UI.
-        # --trust: non-interactive workspace trust for TW-managed temp workspaces.
-        # -f/--force: auto-allow MCP/tool calls in headless mode (otherwise Cursor
-        # rejects MCP tools with skipApproval=false and the agent says "被拒了").
-        return [
-            *prefix,
-            "-p",
-            "--output-format",
-            "stream-json",
-            "--workspace",
-            str(workspace),
-            "--approve-mcps",
-            "--trust",
-            "-f",
-            prompt,
-        ]
-    if kind == "claude":
-        # --verbose is required by Claude Code when -p + stream-json
-        # (otherwise: "stream-json requires --verbose").
-        # --permission-mode bypassPermissions: headless -p otherwise denies MCP
-        # tool calls (Claude's own gate). TW MCP still enforces CommandBroker /
-        # approval for remote mutations — this only unblocks calling TW tools.
-        return [
-            *prefix,
-            "-p",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--include-partial-messages",
-            "--permission-mode",
-            "bypassPermissions",
-            "--mcp-config",
-            str(mcp_config),
-            "--strict-mcp-config",
-            prompt,
-        ]
-    # codex — non-interactive; TW workspaces are temp dirs (not git trusted trees).
-    # --approve-for-me: do not block on Codex's own approval TUI (TW MCP still
-    # gates remote mutations). Implies workspace-write sandbox — do NOT also pass
-    # -s/--sandbox (CLI rejects the combination).
-    # --ephemeral: avoid writing session rollouts.
-    # --disable computer_use: hard-block local desktop/CUA (client Mac ≠ remote host).
-    return [
-        *prefix,
-        "exec",
-        "--json",
-        "--cd",
-        str(workspace),
-        "--skip-git-repo-check",
-        "--ephemeral",
-        "--approve-for-me",
-        "--disable",
-        "computer_use",
-        prompt,
-    ]
+    # Cursor: no --stream-partial-output (partials duplicate the final chunk).
+    # --trust / -f: headless workspace trust and MCP tool calls.
+    # Codex: --approve-for-me implies workspace-write — do not also pass -s.
+    # --disable computer_use blocks local desktop/CUA. No --ephemeral.
+    return build_runtime_argv(
+        kind,
+        prefix=list(resolved.argv_prefix),
+        prompt=prompt,
+        workspace=workspace,
+        mcp_config=mcp_config,
+        resume_id=resume_id,
+    )
 
 
 def _cursor_tool_from_payload(tool_call: dict[str, Any]) -> tuple[str, str, bool | None]:
@@ -251,6 +219,17 @@ def _cursor_tool_from_payload(tool_call: dict[str, Any]) -> tuple[str, str, bool
     return "", "", None
 
 
+def _vendor_session_events(kind: LocalCliKind, obj: dict[str, Any]) -> list[dict[str, Any]]:
+    """Session id carried on a stream object, if this runtime reports one."""
+    if kind == "codex":
+        raw_id = obj.get("thread_id")
+    else:
+        raw_id = obj.get("session_id")
+    if not isinstance(raw_id, str) or not raw_id.strip():
+        return []
+    return [{"type": "vendor_session", "session_id": raw_id.strip()}]
+
+
 def _parse_stream_line(kind: LocalCliKind, line: str) -> list[dict[str, Any]]:
     """Map CLI NDJSON / stream-json lines to internal event dicts."""
     raw = line.strip()
@@ -259,11 +238,14 @@ def _parse_stream_line(kind: LocalCliKind, line: str) -> list[dict[str, Any]]:
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError:
+        if text_rejects_resume(raw):
+            return [{"type": "resume_rejected", "text": raw}]
         return [{"type": "assistant_delta", "text": raw + "\n"}]
     if not isinstance(obj, dict):
         return []
 
     t = str(obj.get("type") or obj.get("event") or "")
+    vendor_events = _vendor_session_events(kind, obj)
     # Noise / lifecycle — never treat as chat text or tool cards.
     if t in {
         "system",
@@ -272,7 +254,7 @@ def _parse_stream_line(kind: LocalCliKind, line: str) -> list[dict[str, Any]]:
         "thread.started",
         "turn.started",
     }:
-        return []
+        return vendor_events
 
     events: list[dict[str, Any]] = []
 
@@ -444,6 +426,14 @@ def _parse_stream_line(kind: LocalCliKind, line: str) -> list[dict[str, Any]]:
     if t in {"result", "done", "message_stop"}:
         # Cursor result.result often concatenates prior assistant chunks — do not
         # re-append as a new message (causes duplicated / glued answers).
+        events = list(vendor_events)
+        if obj.get("is_error") is True or str(obj.get("subtype") or "") == "error":
+            events.append(
+                {
+                    "type": "resume_rejected",
+                    "text": str(obj.get("result") or obj.get("error") or ""),
+                }
+            )
         events.append({"type": "done"})
         return events
 
@@ -460,7 +450,189 @@ def _parse_stream_line(kind: LocalCliKind, line: str) -> list[dict[str, Any]]:
                     )
         elif isinstance(content, str) and content:
             events.append({"type": "assistant_delta", "text": content})
-    return events
+        return events
+
+
+class _CliAttempt:
+    def __init__(self) -> None:
+        self.assistant = ""
+        self.vendor_ids: list[str] = []
+        self.reject_text = ""
+        self.rejected = False
+        self.auth_failure = False
+        self.failed = False
+        self.cancelled = False
+
+
+class _Fold:
+    def __init__(self) -> None:
+        self.confirmed = False
+        self.miss = False
+        self.done = False
+        self.emit: list[dict[str, Any]] = []
+
+
+def _turn_prompts(
+    run: Any, kind: str, plain: str, workspace: Path
+) -> tuple[str, str | None, str | None]:
+    """Return (first prompt, resume id or None, pack prompt if resume can miss)."""
+    prior = list(run.messages)
+    resume_id = stored_vendor_session_id(run, kind)
+    current = render_current_turn(plain)
+    pack = render_continuity_pack(prior, current_plain=plain, workspace=workspace)
+    # Other model/agent turns (or mid-run context) after this vendor bind mean
+    # the CLI thread is behind TW SessionLog — do not resume; rebuild from pack.
+    if resume_id and vendor_session_is_stale(run, kind):
+        resume_id = None
+    if resume_id:
+        return current, resume_id, pack
+    # No usable vendor id. Prior SessionLog evidence is the only memory — start
+    # a fresh CLI session with the pack so a later resume is not an empty thread.
+    if prior_evidence_present(prior):
+        return pack, None, None
+    return current, None, None
+
+
+def _fold_stream_events(
+    attempt: _CliAttempt,
+    parsed: list[dict[str, Any]],
+    staged: list[dict[str, Any]],
+    *,
+    confirmed: bool,
+    resume_id: str | None,
+    kind: str,
+) -> _Fold:
+    """Buffer a resume until the CLI echoes a usable session id."""
+    content: list[dict[str, Any]] = []
+    fold = _Fold()
+    fold.confirmed = confirmed
+    for ev in parsed:
+        et = ev.get("type")
+        if et == "vendor_session":
+            sid = str(ev.get("session_id") or "").strip()
+            if sid:
+                attempt.vendor_ids.append(sid)
+        elif et == "resume_rejected":
+            extra = str(ev.get("text") or "")
+            attempt.reject_text = f"{attempt.reject_text}\n{extra}".strip()
+            attempt.rejected = True
+        elif et == "done":
+            fold.done = True
+        else:
+            content.append(ev)
+    if attempt.rejected:
+        fold.miss = True
+        return fold
+    if (
+        resume_id
+        and attempt.vendor_ids
+        and not resume_attempt_accepted(
+            kind, resume_id, attempt.vendor_ids, reject_text=attempt.reject_text
+        )
+    ):
+        attempt.rejected = True
+        fold.miss = True
+        return fold
+    if resume_id and not confirmed and resume_attempt_accepted(
+        kind, resume_id, attempt.vendor_ids, reject_text=attempt.reject_text
+    ):
+        fold.confirmed = True
+        fold.emit = [*staged, *content]
+        staged.clear()
+        return fold
+    if fold.confirmed:
+        fold.emit = content
+    else:
+        staged.extend(content)
+    return fold
+
+
+def _emit_stream_event(
+    run: Any,
+    attempt: _CliAttempt,
+    ev: dict[str, Any],
+    kind: str,
+    *,
+    replace_assistant: bool,
+) -> None:
+    et = ev.get("type")
+    if et == "assistant_delta":
+        text = str(ev.get("text") or "")
+        attempt.assistant += text
+        run.append_event("assistant_delta", {"text": text})
+    elif et == "assistant_message":
+        text = str(ev.get("text") or "")
+        if not text.strip():
+            return
+        if replace_assistant:
+            attempt.assistant = text
+        else:
+            attempt.assistant += text
+        run.append_message({"role": "assistant", "content": text})
+        payload: dict[str, Any] = {"content": text}
+        if replace_assistant:
+            payload["replace"] = True
+        run.append_event("assistant_message", payload)
+    elif et == "external_tool_activity":
+        run.append_event(
+            "external_tool_activity",
+            {
+                "name": ev.get("name"),
+                "detail": ev.get("detail"),
+                "ok": ev.get("ok"),
+                "runtime": kind,
+            },
+        )
+    elif et == "cancelled":
+        run.status = RunStatus.CANCELLED
+
+
+def _resume_miss(kind: str, requested: str, attempt: _CliAttempt) -> bool:
+    if attempt.auth_failure or attempt.failed or attempt.cancelled:
+        return False
+    if attempt.rejected or text_rejects_resume(attempt.reject_text):
+        return True
+    return not resume_attempt_accepted(
+        kind, requested, attempt.vendor_ids, reject_text=attempt.reject_text
+    )
+
+
+def _remember_kept_session(
+    run: Any,
+    kind: str,
+    attempt: _CliAttempt,
+    *,
+    requested_resume: str | None,
+) -> None:
+    if attempt.rejected or attempt.failed or attempt.cancelled or not attempt.vendor_ids:
+        return
+    if requested_resume and not resume_attempt_accepted(
+        kind,
+        requested_resume,
+        attempt.vendor_ids,
+        reject_text=attempt.reject_text,
+    ):
+        return
+    remember_vendor_session(run, kind, attempt.vendor_ids[-1])
+
+
+def _commit_assistant_tail(run: Any, assistant_buf: str, kind: str) -> None:
+    if assistant_buf.strip():
+        msgs = run.messages
+        last = msgs[-1] if msgs else None
+        already = (
+            isinstance(last, dict)
+            and last.get("role") == "assistant"
+            and str(last.get("content") or "") == assistant_buf
+        )
+        if not already:
+            run.append_message({"role": "assistant", "content": assistant_buf})
+        run.append_event(
+            "assistant_message",
+            {"content": assistant_buf, "replace": True},
+        )
+    run.status = RunStatus.COMPLETED
+    run.append_event("status", {"status": "completed", "runtime": kind})
 
 
 class LocalCliHost:
@@ -547,27 +719,83 @@ class LocalCliHost:
         plain = content_as_plain_text(user_message)
         if not plain.strip():
             plain = str(user_message or "")
-        # Persist this turn on the SessionLog so transcript reconcile cannot
-        # fall back to a prior-turn assistant after resume.
+        # Build prompts before appending this turn so it is not duplicated.
+        first_prompt, first_resume, fallback_prompt = _turn_prompts(
+            run, self.kind, plain, cwd
+        )
         run.append_message({"role": "user", "content": plain})
-        prompt = f"{REMOTE_PLANE_ADDENDUM}\n\n{plain}"
 
+        attempt: _CliAttempt | None = None
         try:
-            argv = build_cli_argv(
-                kind, prompt=prompt, workspace=cwd, mcp_config=mcp_cfg
-            )
-        except RuntimeError:
-            run.status = RunStatus.FAILED
-            run.append_event(
-                "error",
-                {
-                    "code": "install_needed",
-                    "message": f"{kind} CLI disappeared from PATH",
-                    "runtime": kind,
-                },
-            )
-            return
+            try:
+                attempt = await self._spawn_attempt(
+                    run, cwd, mcp_cfg, first_prompt, resume_id=first_resume
+                )
+            except RuntimeError:
+                run.status = RunStatus.FAILED
+                run.append_event(
+                    "error",
+                    {
+                        "code": "install_needed",
+                        "message": f"{kind} CLI disappeared from PATH",
+                        "runtime": kind,
+                    },
+                )
+                return
+            if attempt.cancelled or attempt.failed:
+                return
+            kept_resume: str | None = first_resume
+            if (
+                first_resume
+                and fallback_prompt is not None
+                and _resume_miss(self.kind, first_resume, attempt)
+            ):
+                try:
+                    attempt = await self._spawn_attempt(
+                        run, cwd, mcp_cfg, fallback_prompt, resume_id=None
+                    )
+                except RuntimeError:
+                    run.status = RunStatus.FAILED
+                    run.append_event(
+                        "error",
+                        {
+                            "code": "install_needed",
+                            "message": f"{kind} CLI disappeared from PATH",
+                            "runtime": kind,
+                        },
+                    )
+                    return
+                if attempt.cancelled or attempt.failed:
+                    return
+                kept_resume = None
+            if run.status == RunStatus.RUNNING:
+                _commit_assistant_tail(run, attempt.assistant, kind)
+                _remember_kept_session(
+                    run, kind, attempt, requested_resume=kept_resume
+                )
+        finally:
+            run.metadata.pop("_tw_mcp", None)
 
+    async def _spawn_attempt(
+        self,
+        run: Any,
+        cwd: Path,
+        mcp_cfg: Path,
+        prompt: str,
+        *,
+        resume_id: str | None,
+    ) -> "_CliAttempt":
+        kind = self.kind
+        argv = build_cli_argv(
+            kind,
+            prompt=prompt,
+            workspace=cwd,
+            mcp_config=mcp_cfg,
+            resume_id=resume_id,
+        )
+        attempt = _CliAttempt()
+        staged: list[dict[str, Any]] = []
+        confirmed = resume_id is None
         run.append_event(
             "external_tool_activity",
             {
@@ -576,8 +804,6 @@ class LocalCliHost:
                 "runtime": kind,
             },
         )
-
-        assistant_buf = ""
         try:
             self._proc = await asyncio.create_subprocess_exec(
                 *prepare_cli_argv(argv),
@@ -595,148 +821,155 @@ class LocalCliHost:
                     self.cancel(run)
                     run.status = RunStatus.CANCELLED
                     run.append_event("cancelled", {"reason": "user_stop"})
-                    return
+                    attempt.cancelled = True
+                    return attempt
                 line_b = await self._proc.stdout.readline()
                 if not line_b:
                     break
                 line = line_b.decode("utf-8", errors="replace")
-                for ev in _parse_stream_line(kind, line):
-                    et = ev.get("type")
-                    if et == "assistant_delta":
-                        text = str(ev.get("text") or "")
-                        assistant_buf += text
-                        run.append_event("assistant_delta", {"text": text})
-                    elif et == "assistant_message":
-                        text = str(ev.get("text") or "")
-                        if text.strip():
-                            # Prefer authoritative final text (Codex item.completed).
-                            assistant_buf = text
-                            run.append_message(
-                                {"role": "assistant", "content": text}
-                            )
-                            run.append_event(
-                                "assistant_message",
-                                {"content": text, "replace": True},
-                            )
-                    elif et == "external_tool_activity":
-                        run.append_event(
-                            "external_tool_activity",
-                            {
-                                "name": ev.get("name"),
-                                "detail": ev.get("detail"),
-                                "ok": ev.get("ok"),
-                                "runtime": kind,
-                            },
-                        )
-                    elif et == "done":
-                        stream_done = True
-                        break
-                if stream_done:
-                    # Codex prints "Reading additional input from stdin..." and
-                    # waits after turn.completed — terminate instead of hanging.
+                action = _fold_stream_events(
+                    attempt,
+                    _parse_stream_line(kind, line),
+                    staged,
+                    confirmed=confirmed,
+                    resume_id=resume_id,
+                    kind=kind,
+                )
+                confirmed = action.confirmed
+                if action.miss:
+                    attempt.rejected = True
+                    self._terminate_proc()
                     proc = self._proc
-                    if proc is not None and proc.returncode is None:
+                    if proc is not None:
                         try:
-                            if sys.platform != "win32":
-                                os.killpg(proc.pid, signal.SIGTERM)
-                            else:
-                                proc.terminate()
-                        except (ProcessLookupError, OSError):
-                            try:
-                                proc.terminate()
-                            except ProcessLookupError:
-                                pass
+                            await asyncio.wait_for(proc.wait(), timeout=2.0)
+                        except (TimeoutError, asyncio.TimeoutError):
+                            self._kill_proc()
+                    return attempt
+                if action.emit:
+                    for ev in action.emit:
+                        _emit_stream_event(run, attempt, ev, kind, replace_assistant=True)
+                if action.done:
+                    stream_done = True
+                    self._terminate_proc()
                     break
             stderr = ""
             if self._proc.stderr:
-                # Drain briefly; process may already be dying after SIGTERM.
                 try:
                     err_b = await asyncio.wait_for(self._proc.stderr.read(), timeout=2.0)
                     stderr = err_b.decode("utf-8", errors="replace")[:2000]
                 except (TimeoutError, asyncio.TimeoutError):
                     stderr = ""
+            if text_rejects_resume(stderr):
+                attempt.reject_text = (
+                    f"{attempt.reject_text}\n{stderr}".strip()
+                )
+                if not confirmed:
+                    attempt.rejected = True
+                    return attempt
+            if resume_id and not confirmed:
+                if resume_attempt_accepted(
+                    kind,
+                    resume_id,
+                    attempt.vendor_ids,
+                    reject_text=attempt.reject_text,
+                ):
+                    for ev in staged:
+                        _emit_stream_event(
+                            run, attempt, ev, kind, replace_assistant=True
+                        )
+                    confirmed = True
+                else:
+                    attempt.rejected = True
+                    return attempt
             try:
                 code = await asyncio.wait_for(self._proc.wait(), timeout=5.0)
             except (TimeoutError, asyncio.TimeoutError):
-                proc = self._proc
-                if proc is not None and proc.returncode is None:
-                    try:
-                        if sys.platform != "win32":
-                            os.killpg(proc.pid, signal.SIGKILL)
-                        else:
-                            proc.kill()
-                    except (ProcessLookupError, OSError):
-                        pass
+                self._kill_proc()
                 try:
                     code = await asyncio.wait_for(self._proc.wait(), timeout=2.0)
                 except (TimeoutError, asyncio.TimeoutError):
                     code = -1
-            # Normal Codex finish after turn.completed + SIGTERM is not a failure.
-            if stream_done and code not in (0, None) and assistant_buf.strip():
+            if stream_done and code not in (0, None) and attempt.assistant.strip():
                 code = 0
             if run.cancel_requested:
                 run.status = RunStatus.CANCELLED
-                return
-            if code not in (0, None) and not assistant_buf:
-                auth = looks_like_auth_failure(stderr)
-                hint = LOGIN_HINTS.get(kind, "")
-                run.status = RunStatus.FAILED
-                run.append_event(
-                    "error",
-                    {
-                        "code": "login_needed" if auth else "cli_failed",
-                        "message": (
-                            f"{kind} CLI not logged in. {hint}"
-                            if auth
-                            else f"{kind} CLI exited {code}: {stderr or 'no output'}"
-                        ),
-                        "login_hint": hint if auth else "",
-                        "runtime": kind,
-                    },
-                )
-                return
-            # Auth failure even when some stdout was parsed.
+                attempt.cancelled = True
+                return attempt
+            if attempt.rejected:
+                return attempt
+            if code not in (0, None) and not attempt.assistant:
+                self._fail_cli(run, code, stderr)
+                attempt.failed = True
+                attempt.auth_failure = looks_like_auth_failure(stderr)
+                return attempt
             if code not in (0, None) and looks_like_auth_failure(stderr):
-                hint = LOGIN_HINTS.get(kind, "")
-                run.status = RunStatus.FAILED
-                run.append_event(
-                    "error",
-                    {
-                        "code": "login_needed",
-                        "message": f"{kind} CLI not logged in. {hint}",
-                        "login_hint": hint,
-                        "runtime": kind,
-                    },
-                )
-                return
+                self._fail_cli(run, code, stderr, auth=True)
+                attempt.failed = True
+                attempt.auth_failure = True
+                return attempt
         except Exception as exc:  # noqa: BLE001
             logger.exception("%s CLI host failed", kind)
             run.status = RunStatus.FAILED
             run.append_event("error", {"message": str(exc), "runtime": kind})
-            return
+            attempt.failed = True
+            return attempt
         finally:
             self._proc = None
-            run.metadata.pop("_tw_mcp", None)
+        return attempt
 
-        if run.status == RunStatus.RUNNING:
-            if assistant_buf.strip():
-                msgs = run.messages
-                last = msgs[-1] if msgs else None
-                already = (
-                    isinstance(last, dict)
-                    and last.get("role") == "assistant"
-                    and str(last.get("content") or "") == assistant_buf
-                )
-                if not already:
-                    # Resume SessionLogs already contain prior assistants — always
-                    # record this turn's answer so transcript reconcile is correct.
-                    run.append_message({"role": "assistant", "content": assistant_buf})
-                run.append_event(
-                    "assistant_message",
-                    {"content": assistant_buf, "replace": True},
-                )
-            run.status = RunStatus.COMPLETED
-            run.append_event("status", {"status": "completed", "runtime": kind})
+    def _terminate_proc(self) -> None:
+        proc = self._proc
+        if proc is None or proc.returncode is not None:
+            return
+        try:
+            if sys.platform != "win32":
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except (ProcessLookupError, OSError):
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+
+    def _kill_proc(self) -> None:
+        proc = self._proc
+        if proc is None or proc.returncode is not None:
+            return
+        try:
+            if sys.platform != "win32":
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
+
+    def _fail_cli(
+        self,
+        run: Any,
+        code: int | None,
+        stderr: str,
+        *,
+        auth: bool | None = None,
+    ) -> None:
+        kind = self.kind
+        is_auth = looks_like_auth_failure(stderr) if auth is None else auth
+        hint = LOGIN_HINTS.get(kind, "")
+        run.status = RunStatus.FAILED
+        run.append_event(
+            "error",
+            {
+                "code": "login_needed" if is_auth else "cli_failed",
+                "message": (
+                    f"{kind} CLI not logged in. {hint}"
+                    if is_auth
+                    else f"{kind} CLI exited {code}: {stderr or 'no output'}"
+                ),
+                "login_hint": hint if is_auth else "",
+                "runtime": kind,
+            },
+        )
 
     async def _run_fake(self, run: Any, user_message: Any) -> None:
         research = FakeResearch()
@@ -752,66 +985,92 @@ class LocalCliHost:
         else:
             driver = FakeCursorDriver(reply="[ci-stub] cursor ok")
         self._active_driver = driver
+        cwd = agent_workspace_dir(run)
         plain = content_as_plain_text(user_message) or str(user_message or "")
+        first_prompt, first_resume, fallback_prompt = _turn_prompts(
+            run, self.kind, plain, cwd
+        )
         run.append_message({"role": "user", "content": plain})
-        prompt = f"{REMOTE_PLANE_ADDENDUM}\n\n{plain}"
 
         async def call_mcp(name: str, args: dict[str, Any]) -> dict[str, Any]:
             return await mcp.call_tool(name, args)
 
-        assistant_buf = ""
         try:
-            async for ev in driver.run(prompt, call_mcp=call_mcp):
-                if run.cancel_requested:
-                    run.status = RunStatus.CANCELLED
-                    run.append_event("cancelled", {"reason": "user_stop"})
+            attempt = await self._consume_fake(
+                run, driver, first_prompt, call_mcp, resume_id=first_resume
+            )
+            if attempt.cancelled or run.status == RunStatus.CANCELLED:
+                return
+            kept_resume: str | None = first_resume
+            if (
+                first_resume
+                and fallback_prompt is not None
+                and _resume_miss(self.kind, first_resume, attempt)
+            ):
+                attempt = await self._consume_fake(
+                    run, driver, fallback_prompt, call_mcp, resume_id=None
+                )
+                if attempt.cancelled or run.status == RunStatus.CANCELLED:
                     return
-                et = ev.get("type")
-                if et == "assistant_delta":
-                    text = str(ev.get("text") or "")
-                    assistant_buf += text
-                    run.append_event("assistant_delta", {"text": text})
-                elif et == "assistant_message":
-                    text = str(ev.get("text") or "")
-                    assistant_buf += text
-                    run.append_message({"role": "assistant", "content": text})
-                    run.append_event("assistant_message", {"content": text})
-                elif et == "external_tool_activity":
-                    run.append_event(
-                        "external_tool_activity",
-                        {
-                            "name": ev.get("name"),
-                            "detail": ev.get("detail"),
-                            "ok": ev.get("ok"),
-                            "runtime": self.kind,
-                        },
-                    )
-                elif et == "cancelled":
-                    run.status = RunStatus.CANCELLED
-                    return
-                elif et == "done":
-                    break
+                kept_resume = None
         finally:
             self._active_driver = None
         if run.status == RunStatus.RUNNING:
-            if assistant_buf.strip():
-                msgs = run.messages
-                last = msgs[-1] if msgs else None
-                already = (
-                    isinstance(last, dict)
-                    and last.get("role") == "assistant"
-                    and str(last.get("content") or "") == assistant_buf
-                )
-                if not already:
-                    run.append_message({"role": "assistant", "content": assistant_buf})
-                run.append_event(
-                    "assistant_message",
-                    {"content": assistant_buf, "replace": True},
-                )
-            run.status = RunStatus.COMPLETED
-            run.append_event(
-                "status", {"status": "completed", "runtime": self.kind}
+            _commit_assistant_tail(run, attempt.assistant, self.kind)
+            _remember_kept_session(
+                run, self.kind, attempt, requested_resume=kept_resume
             )
+
+    async def _consume_fake(
+        self,
+        run: Any,
+        driver: Any,
+        prompt: str,
+        call_mcp: Any,
+        *,
+        resume_id: str | None,
+    ) -> _CliAttempt:
+        attempt = _CliAttempt()
+        staged: list[dict[str, Any]] = []
+        confirmed = resume_id is None
+        async for ev in driver.run(prompt, call_mcp=call_mcp):
+            if run.cancel_requested:
+                run.status = RunStatus.CANCELLED
+                run.append_event("cancelled", {"reason": "user_stop"})
+                attempt.cancelled = True
+                return attempt
+            action = _fold_stream_events(
+                attempt,
+                [ev],
+                staged,
+                confirmed=confirmed,
+                resume_id=resume_id,
+                kind=self.kind,
+            )
+            confirmed = action.confirmed
+            if action.miss:
+                attempt.rejected = True
+                return attempt
+            for item in action.emit:
+                _emit_stream_event(
+                    run, attempt, item, self.kind, replace_assistant=False
+                )
+            if action.done:
+                break
+        if resume_id and not confirmed:
+            if resume_attempt_accepted(
+                self.kind,
+                resume_id,
+                attempt.vendor_ids,
+                reject_text=attempt.reject_text,
+            ):
+                for item in staged:
+                    _emit_stream_event(
+                        run, attempt, item, self.kind, replace_assistant=False
+                    )
+            else:
+                attempt.rejected = True
+        return attempt
 
 
 # Silence unused import lint for list_tools (used by HTTP handlers via tw_mcp).

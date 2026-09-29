@@ -1363,12 +1363,13 @@ function exists(rel) {
   } else {
     fail("ai.codex-mcp-config", "Codex project MCP config.toml missing");
   }
+  const cliSession = read("agent-sidecar/app/runtime/cli_session.py");
   if (
-    cliHost.includes('"stream-json"') &&
-    cliHost.includes("--verbose") &&
-    cliHost.includes("--include-partial-messages") &&
-    cliHost.includes("--strict-mcp-config") &&
-    cliHost.includes("bypassPermissions")
+    cliSession.includes('"stream-json"') &&
+    cliSession.includes("--verbose") &&
+    cliSession.includes("--include-partial-messages") &&
+    cliSession.includes("--strict-mcp-config") &&
+    cliSession.includes("bypassPermissions")
   ) {
     pass(
       "ai.claude-stream-json-verbose",

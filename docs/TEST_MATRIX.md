@@ -190,6 +190,7 @@
 | External agent 执行 UX（抑制 `cursor.terminal_exec` 等与 TW 工具卡重复的 activity；ToolExecCard/WebCard 仅挂 Cursor/Codex/Claude 来源徽标） | vitest `externalAgentActivity` / `agentRuntime` / `approvalOptimisticExec` | smoke `ai.runtime-exec-agent-source` | 单卡脚本执行 + 来源标识 | — | ✓ |
 | External agent 远端平面（「这台电脑」= SSH 被控主机；Codex `--disable computer_use` + workspace AGENTS.md；抑制 CUA/桌面冒充远端证据） | pytest `test_remote_plane` / `test_cli_stream_parse` | — | 不问本机显示器当远端事实 | — | ✓ |
 | Local CLI stream 卡片（无空 cursor.tool）+ Cursor `.cursor/mcp.json` + Codex `.codex/config.toml` + Codex `item.completed`/`turn.completed` 解析 + `--approve-for-me` | pytest cli_stream_parse | 有内容的工具卡；远程走 TW MCP | 空 `{}` 卡被过滤；Codex 不再卡在等 stdin | — | ✓ |
+| External agent 问答连续性（原厂 resume；SessionLog 证据包含 tool；resume 被拒 / thread id 对不上 / 换模型或 Agent 后原厂会话过期 → 证据包重建；Codex 不再 `--ephemeral`） | pytest `test_cli_session_continuity` / `test_cli_prompt_history` | — | 同 Agent 追问 resume；跨模型/Agent 切换仍见完整 SessionLog | — | ✓ |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |
 | AI SSH lease（禁重连） | `sshLease.test` + Rust `ai_ssh_lease_tests` | — | TerminalView 闸门 | — | ✓ |
