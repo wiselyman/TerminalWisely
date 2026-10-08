@@ -27,7 +27,7 @@ import {
   savedServerKey,
   sshKubectlProbeOk,
 } from "../lib/k8s/sshHostBind";
-import { useEntityLayoutStore } from "../stores/entityLayoutStore";
+import { selectHostGroups, useEntityLayoutStore } from "../stores/entityLayoutStore";
 import { UNGROUPED_SECTION } from "../lib/entityListLayout";
 import { useAppUpdateStore } from "../stores/appUpdateStore";
 import { UpdateAvailableBadge } from "./UpdateAvailableBadge";
@@ -121,7 +121,7 @@ export function ConnectionPanel({
   const [rememberPassword, setRememberPassword] = useState(true);
   const [rememberSavedPassword, setRememberSavedPassword] = useState(true);
   const [hostGroupId, setHostGroupId] = useState(UNGROUPED_SECTION);
-  const hostGroups = useEntityLayoutStore((s) => s.layouts.hosts?.groups ?? []);
+  const hostGroups = useEntityLayoutStore(selectHostGroups);
 
   const {
     savedConnections,
@@ -896,6 +896,13 @@ export function ConnectionPanel({
                 />
               ) : null}
             </EntityCatalog>
+          ) : null}
+          {sidebarView === "db" ? (
+            <div
+              id="tw-db-sidebar-host"
+              className="db-sidebar-host"
+              data-testid="db-sidebar-host"
+            />
           ) : null}
 
           {(sidebarView === "k8s" || hasPendingUpdate) ? (

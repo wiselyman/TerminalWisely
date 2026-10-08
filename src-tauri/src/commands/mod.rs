@@ -484,6 +484,40 @@ pub async fn insert_terminal_command(
 }
 
 #[tauri::command]
+pub fn take_catalog_restore_notice(app: AppHandle) -> Vec<String> {
+    crate::durable::take_notice(&crate::durable::app_roots(&app))
+}
+
+#[tauri::command]
+pub fn save_entity_layout(
+    app: AppHandle,
+    scope: String,
+    layout: serde_json::Value,
+    allow_empty: bool,
+) -> Result<(), String> {
+    if scope != "hosts" && scope != "k8s" {
+        return Err("unknown layout scope".into());
+    }
+    let roots = crate::durable::app_roots(&app);
+    let mut document = crate::durable::load_value(&roots, "entity-layout.json")?;
+    if !document.is_object() {
+        document = serde_json::json!({});
+    }
+    document[scope] = layout;
+    let mode = if allow_empty {
+        crate::durable::WriteMode::AllowEmpty
+    } else {
+        crate::durable::WriteMode::KeepRecords
+    };
+    crate::durable::save_value(&roots, "entity-layout.json", &document, mode)
+}
+
+#[tauri::command]
+pub fn load_entity_layout(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::durable::load_value(&crate::durable::app_roots(&app), "entity-layout.json")
+}
+
+#[tauri::command]
 pub async fn get_saved_connections(app: AppHandle) -> Result<Vec<SavedConnectionView>, String> {
     load_connections(&app)
         .map(|connections| connections.iter().map(SavedConnectionView::from).collect())
@@ -519,7 +553,8 @@ pub async fn save_connection(
     } else {
         connections.push(saved.clone());
     }
-    store_connections(&app, &connections).map_err(|e| e.to_string())?;
+    store_connections(&app, &connections, crate::durable::WriteMode::KeepRecords)
+        .map_err(|e| e.to_string())?;
     Ok(SavedConnectionView::from(&saved))
 }
 
@@ -536,7 +571,8 @@ pub async fn reorder_saved_connections(
         }
     }
     reordered.extend(connections);
-    store_connections(&app, &reordered).map_err(|e| e.to_string())?;
+    store_connections(&app, &reordered, crate::durable::WriteMode::KeepRecords)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -575,13 +611,8 @@ pub async fn update_saved_connection(
     match request.auth_method {
         AuthMethod::Password => {
             if remember_password {
-                let new_password = request
-                    .password
-                    .as_ref()
-                    .map(|value| value.trim())
-                    .filter(|value| !value.is_empty());
-                if let Some(password) = new_password {
-                    saved.password = Some(password.to_string());
+                if let Some(password) = request.password.clone().filter(|value| !value.is_empty()) {
+                    saved.password = Some(password);
                 }
             } else {
                 saved.password = None;
@@ -592,7 +623,8 @@ pub async fn update_saved_connection(
         }
     }
 
-    store_connections(&app, &connections).map_err(|e| e.to_string())?;
+    store_connections(&app, &connections, crate::durable::WriteMode::KeepRecords)
+        .map_err(|e| e.to_string())?;
     Ok(SavedConnectionView::from(&connections[index]))
 }
 
@@ -600,7 +632,8 @@ pub async fn update_saved_connection(
 pub async fn delete_saved_connection(app: AppHandle, id: String) -> Result<(), String> {
     let mut connections = load_connections(&app).map_err(|e| e.to_string())?;
     connections.retain(|c| c.id != id);
-    store_connections(&app, &connections).map_err(|e| e.to_string())?;
+    store_connections(&app, &connections, crate::durable::WriteMode::AllowEmpty)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -629,7 +662,8 @@ pub async fn connect_saved(
     if remember_password {
         if let Some(password) = password.as_ref() {
             connections[index].password = Some(password.clone());
-            store_connections(&app, &connections).map_err(|e| e.to_string())?;
+            store_connections(&app, &connections, crate::durable::WriteMode::KeepRecords)
+                .map_err(|e| e.to_string())?;
         }
     }
 
@@ -650,7 +684,8 @@ pub async fn get_device_history(app: AppHandle) -> Result<Vec<DeviceRecord>, Str
 pub async fn remove_device_history(app: AppHandle, id: String) -> Result<(), String> {
     let mut devices = crate::session::load_device_history(&app).map_err(|e| e.to_string())?;
     devices.retain(|device| device.id != id);
-    crate::session::store_device_history(&app, &devices).map_err(|e| e.to_string())
+    crate::session::store_device_history(&app, &devices, crate::durable::WriteMode::AllowEmpty)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

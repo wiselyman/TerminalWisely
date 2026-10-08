@@ -17,35 +17,32 @@ from app.tools.schema import TOOL_SUBMIT_OPS_PLAN, TOOL_TERMINAL_EXEC, TOOL_UPDA
 
 def test_normalize_interaction_mode() -> None:
     assert normalize_interaction_mode(None) == "agent"
-    assert normalize_interaction_mode("ASK") == "ask"
+    assert normalize_interaction_mode("ASK") == "agent"
+    assert normalize_interaction_mode("plan") == "agent"
     assert normalize_interaction_mode("weird") == "agent"
 
 
-def test_ask_mode_tool_set() -> None:
+def test_pose_does_not_hide_tools() -> None:
     names = {(t.get("function") or {}).get("name") for t in tools_for_interaction_mode("ask")}
     assert TOOL_TERMINAL_EXEC in names
-    assert TOOL_SUBMIT_OPS_PLAN not in names
+    assert TOOL_SUBMIT_OPS_PLAN in names
     assert TOOL_UPDATE_PLAN in names
+    assert tool_allowed_in_mode(TOOL_TERMINAL_EXEC, "plan")
+    assert tool_allowed_in_mode(TOOL_SUBMIT_OPS_PLAN, "plan")
 
 
-def test_plan_mode_denies_terminal_and_ops() -> None:
-    assert not tool_allowed_in_mode(TOOL_TERMINAL_EXEC, "plan")
-    assert not tool_allowed_in_mode(TOOL_SUBMIT_OPS_PLAN, "plan")
-    assert tool_allowed_in_mode(TOOL_UPDATE_PLAN, "plan")
-
-
-def test_interaction_mode_gate_denies() -> None:
+def test_interaction_mode_gate_does_not_deny() -> None:
     async def _run() -> None:
         pipe = ToolPipeline(pre_hooks=[InteractionModeGate("ask")])
         tool = ToolExec(call_id="c1", name=TOOL_SUBMIT_OPS_PLAN, arguments={})
+        ran = {"ok": False}
 
         async def body() -> None:
-            raise AssertionError("should not run")
+            ran["ok"] = True
 
         result = await pipe.run(tool, body)
-        assert isinstance(result, dict)
-        assert result.get("denied") is True
-        assert result.get("_pipeline_deny") is True
+        assert ran["ok"] is True
+        assert result is None
 
     asyncio.run(_run())
 

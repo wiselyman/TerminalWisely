@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { enqueueHostExec } from "./hostExecQueue";
 import { isTauriRuntime } from "../isTauri";
 import { sidecarFetch, type SidecarInfo, type TraceSpanRow } from "./api";
 import { postToolResultWithRetry } from "./postToolResult";
@@ -489,7 +490,7 @@ async function handleProtocolEvent(opts: {
       // Do NOT await host exec on the stream chain — otherwise a hung sudo/
       // systemctl blocks approvals and later messages while the card stays "running".
       void (async () => {
-        const result = await executeToolCall(
+        const result = await enqueueHostExec(sessionId, () => executeToolCall(
           sessionId,
           {
             call_id: callId,
@@ -499,7 +500,7 @@ async function handleProtocolEvent(opts: {
             lease: (p.lease as ToolCallEvent["lease"]) || null,
           },
           { onOutput: onToolExec?.onOutput },
-        );
+        ));
         if (settledHostCalls.has(callId)) return;
         settledHostCalls.add(callId);
         onToolExec?.onDone?.({
@@ -751,7 +752,17 @@ export async function runAgentChat(opts: {
   sidecar: SidecarInfo;
   sessionId: string;
   message: string;
-  engineerMode?: "linux" | "k8s";
+  engineerMode?: "linux" | "k8s" | "db";
+  dbContext?: {
+    connection_id: string | null;
+    revision: number;
+    engine: string | null;
+    name: string | null;
+    ssh_session_id: string | null;
+    database?: string | null;
+    schema?: string | null;
+    selected_sql?: string | null;
+  };
   clusterId?: string;
   clusterName?: string;
   clusterTarget?: K8sClusterTarget;
@@ -767,6 +778,10 @@ export async function runAgentChat(opts: {
   interactionMode?: string;
   /** Agent runtime adapter: builtin | cursor | codex | claude. */
   runtime?: "builtin" | "cursor" | "codex" | "claude";
+  /** Stored model profile. Rust attaches credentials; the webview never sends the key. */
+  profileId?: string | null;
+  /** Shared id for parallel read-only voices on one SSH session. */
+  compareGroup?: string | null;
   attachments?: Array<Record<string, unknown>>;
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
@@ -792,6 +807,7 @@ export async function runAgentChat(opts: {
     clusterId,
     clusterName,
     clusterTarget,
+    dbContext,
     securityMode,
     serverId,
     hostFingerprint,
@@ -800,6 +816,8 @@ export async function runAgentChat(opts: {
     resumeRunId,
     interactionMode,
     runtime,
+    profileId,
+    compareGroup,
     attachments,
     onEvent,
     onAskUser,
@@ -814,6 +832,18 @@ export async function runAgentChat(opts: {
   if (clusterId) metadata.cluster_id = clusterId;
   if (clusterName) metadata.cluster_name = clusterName;
   if (clusterTarget) metadata.cluster_target = clusterTarget;
+  if (dbContext?.connection_id) {
+    metadata.db_context = {
+      connection_id: dbContext.connection_id,
+      revision: dbContext.revision,
+      engine: dbContext.engine,
+      name: dbContext.name,
+      ssh_session_id: dbContext.ssh_session_id || undefined,
+      database: dbContext.database || undefined,
+      schema: dbContext.schema || undefined,
+      selected_sql: dbContext.selected_sql || undefined,
+    };
+  }
 
   const startRes = await sidecarFetch(sidecar, "/v1/chat/start", {
     method: "POST",
@@ -824,6 +854,8 @@ export async function runAgentChat(opts: {
       security_mode: securityMode ?? null,
       interaction_mode: interactionMode ?? null,
       runtime: runtime ?? "builtin",
+      profile_id: profileId || null,
+      compare_group: compareGroup || null,
       server_id: serverId ?? null,
       host_fingerprint: hostFingerprint ?? null,
       remote_user: remoteUser ?? null,

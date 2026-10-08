@@ -33,6 +33,9 @@ TOOL_K8S_APPLY = "k8s_apply"
 TOOL_K8S_DELETE = "k8s_delete"
 TOOL_K8S_SCALE = "k8s_scale"
 TOOL_K8S_EXEC = "k8s_exec"
+TOOL_DB_SEARCH = "db_search_objects"
+TOOL_DB_QUERY = "db_query"
+TOOL_DB_EXPLAIN = "db_explain"
 
 K8S_TOOLS = frozenset(
     {
@@ -227,8 +230,88 @@ def _k8s_tool_defs() -> list[dict[str, Any]]:
     ]
 
 
-def openai_tools(*, engineer_mode: str | None = None) -> list[dict[str, Any]]:
-    if (engineer_mode or "linux").strip().lower() == "k8s":
+def _db_tool_defs() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_DB_SEARCH,
+                "description": "List schemas, tables, and columns on the selected database connection.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_DB_QUERY,
+                "description": "Run one SQL statement on the selected connection. Writes need approval.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "sql": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["sql", "intent"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": TOOL_DB_EXPLAIN,
+                "description": "Explain one statement on the selected connection. sql is the statement itself; the host adds EXPLAIN once.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "sql": {"type": "string"},
+                        "intent": {"type": "string"},
+                    },
+                    "required": ["sql", "intent"],
+                },
+            },
+        },
+    ]
+
+
+def openai_tools(
+    *,
+    engineer_mode: str | None = None,
+    ssh_session_id: str | None = None,
+) -> list[dict[str, Any]]:
+    mode = (engineer_mode or "linux").strip().lower()
+    if mode == "db":
+        shared_names = {
+            TOOL_WEB_SEARCH,
+            TOOL_WEB_FETCH,
+            TOOL_ASK_USER,
+            TOOL_HOST_MEMORY_GET,
+            TOOL_HOST_MEMORY_PUT,
+            TOOL_USER_MEMORY_GET,
+            TOOL_USER_MEMORY_PUT,
+            TOOL_SKILL_SAVE,
+        }
+        linux = openai_tools_linux()
+        shared = [
+            t
+            for t in linux
+            if (t.get("function") or {}).get("name") in shared_names
+        ]
+        tools = [*_db_tool_defs(), *shared]
+        if (ssh_session_id or "").strip():
+            terminal = next(
+                t
+                for t in linux
+                if (t.get("function") or {}).get("name") == TOOL_TERMINAL_EXEC
+            )
+            tools.append(terminal)
+        return tools
+    if mode == "k8s":
         # Shared ask/web/plan tools + k8s_* (no terminal_exec / OpsPlan).
         # OpsPlan steps are shell-shaped and break on synthetic k8s sessions —
         # prefer sequential k8s_* tools instead.

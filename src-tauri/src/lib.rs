@@ -23,7 +23,9 @@ mod types;
 mod updater_support;
 mod app_menu;
 mod k8s;
+mod db;
 mod webkit_localstorage;
+mod durable;
 
 use session::SessionManager;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -197,6 +199,7 @@ pub fn run() {
         .manage(preview::PreviewManager::new())
         .manage(browser::BrowserManager::new())
         .setup(|app| {
+            durable::startup(app.handle());
             apply_window_icon(app)?;
             app_menu::install(app)?;
             if let Some(window) = app.get_webview_window("main") {
@@ -265,6 +268,9 @@ pub fn run() {
             commands::insert_local_paths_command,
             commands::insert_terminal_command,
             commands::get_saved_connections,
+            commands::take_catalog_restore_notice,
+            commands::save_entity_layout,
+            commands::load_entity_layout,
             commands::save_connection,
             commands::update_saved_connection,
             commands::reorder_saved_connections,
@@ -393,6 +399,20 @@ pub fn run() {
             commands::k8s_pod_shell_input,
             commands::k8s_pod_shell_resize,
             commands::k8s_pod_shell_stop,
+            db::commands::db_list_connections,
+            db::commands::db_save_connection,
+            db::commands::db_test_connection,
+            db::commands::db_delete_connection,
+            db::commands::db_query,
+            db::commands::db_cancel_query,
+            db::commands::db_explain,
+            db::commands::db_list_databases,
+            db::commands::db_search_objects,
+            db::commands::db_search_structure,
+            db::commands::db_status,
+            db::commands::db_register_lease,
+            db::commands::db_list_saved_queries,
+            db::commands::db_write_saved_queries,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

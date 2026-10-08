@@ -42,6 +42,7 @@ vi.mock("./managedEntityStore", () => ({
   useManagedEntityStore: {
     getState: () => ({
       focused: focusManaged,
+      leaveHome: vi.fn(),
     }),
   },
 }));
@@ -60,6 +61,12 @@ describe("sidebarViewStore setView", () => {
     vi.resetModules();
   });
 
+  it("opens on the hosts list when the saved view is the database workbench", async () => {
+    localStorage.setItem("tw.sidebar.view", "db");
+    const { useSidebarViewStore } = await import("./sidebarViewStore");
+    expect(useSidebarViewStore.getState().view).toBe("hosts");
+  });
+
   it("closes hosts LocalFs panel when switching to k8s", async () => {
     const { useSidebarViewStore } = await import("./sidebarViewStore");
     useSidebarViewStore.getState().setView("k8s");
@@ -68,6 +75,14 @@ describe("sidebarViewStore setView", () => {
     expect(closeFind).toHaveBeenCalled();
     expect(closeAi).toHaveBeenCalled();
     expect(setEngineerMode).toHaveBeenCalledWith("k8s");
+  });
+
+  it("switches to db without binding a host", async () => {
+    const { useSidebarViewStore } = await import("./sidebarViewStore");
+    useSidebarViewStore.getState().setView("db");
+    expect(closeLocalFs).toHaveBeenCalled();
+    expect(setEngineerMode).toHaveBeenCalledWith("db");
+    expect(bindManagedEntity).not.toHaveBeenCalled();
   });
 
   it("binds focused cluster AI when switching to k8s with focus", async () => {

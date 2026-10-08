@@ -97,8 +97,11 @@ pub struct SavedConnection {
     pub username: String,
     pub auth_method: AuthMethod,
     pub private_key_path: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+    /// Keychain account. The password itself is not stored in the catalog.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_id: Option<String>,
     #[serde(default)]
     pub os_id: Option<String>,
     #[serde(default)]

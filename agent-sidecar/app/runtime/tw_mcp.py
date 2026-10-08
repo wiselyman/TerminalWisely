@@ -21,6 +21,9 @@ from app.tools.schema import (
     TOOL_K8S_LIST,
     TOOL_K8S_LOGS,
     TOOL_K8S_SCALE,
+    TOOL_DB_EXPLAIN,
+    TOOL_DB_QUERY,
+    TOOL_DB_SEARCH,
     TOOL_TERMINAL_EXEC,
     TOOL_WEB_FETCH,
     TOOL_WEB_SEARCH,
@@ -66,6 +69,15 @@ _K8S_TOOLS: tuple[str, ...] = (
     TOOL_ASK_USER,
 )
 
+_DB_TOOLS: tuple[str, ...] = (
+    TOOL_DB_SEARCH,
+    TOOL_DB_QUERY,
+    TOOL_DB_EXPLAIN,
+    TOOL_WEB_SEARCH,
+    TOOL_WEB_FETCH,
+    TOOL_ASK_USER,
+)
+
 _TOOL_DESCRIPTIONS: dict[str, str] = {
     TOOL_TERMINAL_EXEC: (
         "Run a command on the connected SSH/K8s host via TerminalWisely "
@@ -85,20 +97,51 @@ _TOOL_DESCRIPTIONS: dict[str, str] = {
     TOOL_K8S_DELETE: "Delete a Kubernetes resource (requires TW approval).",
     TOOL_K8S_SCALE: "Scale a workload (requires TW approval).",
     TOOL_K8S_EXEC: "Short non-interactive kubectl exec.",
+    TOOL_DB_SEARCH: "List schemas, tables, and columns on the selected database.",
+    TOOL_DB_QUERY: "Run one SQL statement on the selected database.",
+    TOOL_DB_EXPLAIN: "Explain one SQL statement on the selected database.",
 }
 
 
-def tw_mcp_tool_names(*, engineer_mode: str | None = None) -> list[str]:
+def tw_mcp_tool_names(
+    *,
+    engineer_mode: str | None = None,
+    interaction_mode: str | None = None,
+    ssh_session_id: str | None = None,
+) -> list[str]:
     mode = (engineer_mode or "linux").strip().lower()
-    if mode == "k8s":
-        return list(_K8S_TOOLS)
-    return list(_LINUX_TOOLS)
+    if mode == "db":
+        names = list(_DB_TOOLS)
+        if (ssh_session_id or "").strip():
+            names.append(TOOL_TERMINAL_EXEC)
+    else:
+        names = list(_K8S_TOOLS if mode == "k8s" else _LINUX_TOOLS)
+    if not interaction_mode:
+        return names
+    from app.harness.interaction_mode import (
+        normalize_interaction_mode,
+        tool_allowed_in_mode,
+    )
+
+    pose = normalize_interaction_mode(interaction_mode)
+    if pose == "agent":
+        return names
+    return [name for name in names if tool_allowed_in_mode(name, pose)]
 
 
-def tw_mcp_list_tools(*, engineer_mode: str | None = None) -> list[dict[str, Any]]:
+def tw_mcp_list_tools(
+    *,
+    engineer_mode: str | None = None,
+    interaction_mode: str | None = None,
+    ssh_session_id: str | None = None,
+) -> list[dict[str, Any]]:
     """MCP-shaped tool descriptors (name + description + inputSchema stub)."""
     out: list[dict[str, Any]] = []
-    for name in tw_mcp_tool_names(engineer_mode=engineer_mode):
+    for name in tw_mcp_tool_names(
+        engineer_mode=engineer_mode,
+        interaction_mode=interaction_mode,
+        ssh_session_id=ssh_session_id,
+    ):
         out.append(
             {
                 "name": name,
@@ -143,7 +186,10 @@ class TwMcpServer:
 
     def list_tools(self) -> list[dict[str, Any]]:
         mode = str(self._loop.run.metadata.get("engineer_mode") or "linux")
-        return tw_mcp_list_tools(engineer_mode=mode)
+        return tw_mcp_list_tools(
+            engineer_mode=mode,
+            interaction_mode=getattr(self._loop.run, "interaction_mode", None),
+        )
 
     async def call_tool(
         self,

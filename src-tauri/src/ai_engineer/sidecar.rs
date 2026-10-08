@@ -308,6 +308,13 @@ fn requirements_stamp_hash(req: &std::path::Path) -> String {
 
 /// Move aside then delete so a locked `python.exe` cannot block the next create.
 fn clear_dir_for_rebuild(dir: &std::path::Path, log_path: &std::path::Path) {
+    if !crate::durable::python_env_dir_allowed(dir) {
+        append_log(
+            log_path,
+            &format!("[sidecar] refused to delete {}", dir.display()),
+        );
+        return;
+    }
     if !dir.exists() {
         return;
     }
@@ -1155,7 +1162,11 @@ pub fn sidecar_http(app: &AppHandle, req: SidecarHttpRequest) -> AppResult<Sidec
         .base_url
         .trim_start_matches("http://")
         .trim_end_matches('/');
-    let body = req.body.unwrap_or_default();
+    let body = crate::ai_engineer::secrets::inject_profile_binding(
+        app,
+        &path,
+        req.body.unwrap_or_default(),
+    );
     let mut stream = TcpStream::connect(host_port).map_err(AppError::from)?;
     stream.set_read_timeout(Some(timeout)).ok();
     stream.set_write_timeout(Some(timeout)).ok();
@@ -1446,6 +1457,17 @@ mod tests {
         } else {
             assert_eq!(found.as_deref(), Some("python3"));
         }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_dir_for_rebuild_refuses_catalog_roots() {
+        let dir = std::env::temp_dir().join(format!("tw-not-pyenv-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let marker = dir.join("connections.json");
+        fs::write(&marker, br#"{"connections":[{"id":"h1"}]}"#).unwrap();
+        super::clear_dir_for_rebuild(&dir, &dir.join("sidecar.log"));
+        assert!(marker.is_file(), "catalog root must survive a python rebuild");
         let _ = fs::remove_dir_all(&dir);
     }
 }

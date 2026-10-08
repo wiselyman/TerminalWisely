@@ -7,14 +7,17 @@ import { useManagedEntityStore } from "./managedEntityStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import { useBrowserStore } from "./browserStore";
 
-export type SidebarView = "hosts" | "k8s";
+export type SidebarView = "hosts" | "k8s" | "db";
 
 const STORAGE_KEY = "tw.sidebar.view";
 
 function loadView(): SidebarView {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    return v === "k8s" ? "k8s" : "hosts";
+    // Home is the first screen. The database tree only mounts after leaving Home,
+    // so restoring "db" would leave the hosts list as an empty sidebar.
+    if (v === "k8s") return v;
+    return "hosts";
   } catch {
     return "hosts";
   }
@@ -42,6 +45,14 @@ export const useSidebarViewStore = create<SidebarViewState>((set) => ({
     } catch {
       /* ignore */
     }
+    if (view === "db") {
+      closeHostsWorkspacePanels();
+      useManagedEntityStore.getState().leaveHome();
+      useAiEngineerStore.getState().setEngineerMode("db");
+      set({ view });
+      return;
+    }
+
     useAiEngineerStore
       .getState()
       .setEngineerMode(view === "k8s" ? "k8s" : "linux");
@@ -64,6 +75,6 @@ export const useSidebarViewStore = create<SidebarViewState>((set) => ({
 }));
 
 // Sync engineer mode on cold start.
-useAiEngineerStore
-  .getState()
-  .setEngineerMode(loadView() === "k8s" ? "k8s" : "linux");
+useAiEngineerStore.getState().setEngineerMode(
+  loadView() === "k8s" ? "k8s" : loadView() === "db" ? "db" : "linux",
+);

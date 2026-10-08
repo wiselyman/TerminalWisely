@@ -332,6 +332,15 @@ export function saveEntityListLayout(
   } catch {
     /* ignore quota */
   }
+  void import("@tauri-apps/api/core")
+    .then(({ invoke }) =>
+      invoke("save_entity_layout", {
+        scope,
+        layout,
+        allowEmpty: layout.groups.length === 0,
+      }),
+    )
+    .catch(() => undefined);
 }
 
 export function syncLayoutWithEntities(

@@ -14,7 +14,9 @@ export function AiEngineerTool({ active, disabled, onClick }: Props) {
   const label =
     mode === "k8s"
       ? t("aiEngineer.k8sTitle")
-      : t("aiEngineer.linuxTitle");
+      : mode === "db"
+        ? t("aiEngineer.dbTitle")
+        : t("aiEngineer.linuxTitle");
   return (
     <button
       type="button"

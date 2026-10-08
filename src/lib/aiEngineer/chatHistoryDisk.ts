@@ -15,6 +15,8 @@ export type DiskChatThread = {
   interactionMode?: string;
   messages: unknown[];
   lastRunId?: string | null;
+  compareEnabled?: boolean;
+  compareVoiceKeys?: string[];
 };
 
 export type DiskScopeBundle = {

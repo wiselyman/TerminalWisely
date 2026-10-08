@@ -143,6 +143,8 @@ def build_cli_argv(
     workspace: Path,
     mcp_config: Path,
     resume_id: str | None = None,
+    read_only: bool = False,
+    read_only_mode: str | None = None,
 ) -> list[str]:
     resolved = resolve_local_cli(kind)
     if resolved is None:
@@ -158,6 +160,8 @@ def build_cli_argv(
         workspace=workspace,
         mcp_config=mcp_config,
         resume_id=resume_id,
+        read_only=read_only,
+        read_only_mode=read_only_mode,
     )
 
 
@@ -786,13 +790,34 @@ class LocalCliHost:
         resume_id: str | None,
     ) -> "_CliAttempt":
         kind = self.kind
-        argv = build_cli_argv(
-            kind,
-            prompt=prompt,
-            workspace=cwd,
-            mcp_config=mcp_cfg,
-            resume_id=resume_id,
-        )
+        read_only = bool(getattr(run, "metadata", {}).get("read_only_launch"))
+        try:
+            argv = build_cli_argv(
+                kind,
+                prompt=prompt,
+                workspace=cwd,
+                mcp_config=mcp_cfg,
+                resume_id=None if read_only else resume_id,
+                read_only=read_only,
+                read_only_mode=getattr(run, "interaction_mode", None) if read_only else None,
+            )
+        except RuntimeError as exc:
+            if str(exc) == "read_only_unsupported":
+                run.status = RunStatus.FAILED
+                run.append_event(
+                    "error",
+                    {
+                        "code": "read_only_unsupported",
+                        "message": (
+                            f"{kind} cannot start read-only."
+                        ),
+                        "runtime": kind,
+                    },
+                )
+                attempt = _CliAttempt()
+                attempt.failed = True
+                return attempt
+            raise
         attempt = _CliAttempt()
         staged: list[dict[str, Any]] = []
         confirmed = resume_id is None

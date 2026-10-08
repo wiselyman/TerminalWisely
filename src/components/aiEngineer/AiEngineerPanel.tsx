@@ -29,7 +29,6 @@ import {
 } from "../../lib/aiEngineer/webToolCard";
 import {
   panelFiberChatScopeKey,
-  normalizeInteractionMode,
   normalizeSecurityMode,
   useAiEngineerStore,
 } from "../../stores/aiEngineerStore";
@@ -82,7 +81,6 @@ import {
   AiEngineerComposerTextarea,
 } from "./AiEngineerComposerInput";
 import { SecurityModePicker } from "./SecurityModePicker";
-import { InteractionModePicker } from "./InteractionModePicker";
 import { AiMarkdown } from "./AiMarkdown";
 import { TurnMediaGallery } from "./TurnMediaGallery";
 import {
@@ -126,13 +124,16 @@ import {
   wholeAssistantReplyText,
 } from "../../lib/aiEngineer/chatCopy";
 import {
+  DB_WORKFLOW_CHIP_IDS,
   K8S_WORKFLOW_CHIP_IDS,
   WORKFLOW_CHIP_IDS,
   classifyLocalFile,
+  dbWorkflowPrompt,
   k8sWorkflowPrompt,
   nextAttachmentId,
   readLocalImageBase64,
   readLocalTextFile,
+  type DbWorkflowChipId,
   type K8sWorkflowChipId,
   type PendingAttachment,
   type WorkflowChipId,
@@ -556,6 +557,18 @@ function ToolExecCard({
         ) : null}
         {line.detail ? (
           <code className="ai-engineer-tool-detail">{line.detail}</code>
+        ) : null}
+        {(line.name === "db_query" || line.name === "db_explain") &&
+        line.detail?.trim() ? (
+          <button
+            type="button"
+            data-testid="db-insert-sql"
+            onClick={() =>
+              useAiEngineerStore.getState().insertDbSql(line.detail!.trim())
+            }
+          >
+            {t("aiEngineer.dbInsertSql")}
+          </button>
         ) : null}
       </details>
     );
@@ -1083,7 +1096,6 @@ export function AiEngineerPanel({
   const resolveApproval = useAiEngineerStore((s) => s.resolveApproval);
   const activePlan = useAiEngineerStore((s) => s.activePlan);
   const activeInvestigation = useAiEngineerStore((s) => s.activeInvestigation);
-  const setThreadInteractionMode = useAiEngineerStore((s) => s.setThreadInteractionMode);
   const pendingAttachments = useAiEngineerStore((s) => s.pendingAttachments);
   const addPendingAttachment = useAiEngineerStore((s) => s.addPendingAttachment);
   const removePendingAttachment = useAiEngineerStore((s) => s.removePendingAttachment);
@@ -1118,7 +1130,6 @@ export function AiEngineerPanel({
   const [modelOpen, setModelOpen] = useState(false);
   const [pickerTab, setPickerTab] = useState<"model" | "agent">("model");
   const [securityOpen, setSecurityOpen] = useState(false);
-  const [interactionOpen, setInteractionOpen] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -1191,10 +1202,6 @@ export function AiEngineerPanel({
   const threadSecurityMode = normalizeSecurityMode(
     threads.find((th) => th.id === activeThreadId)?.securityMode,
   );
-  const threadInteractionMode = normalizeInteractionMode(
-    threads.find((th) => th.id === activeThreadId)?.interactionMode,
-  );
-
   const findMatches = useMemo(
     () => findChatMatches(messages, findQuery),
     [messages, findQuery],
@@ -1205,7 +1212,6 @@ export function AiEngineerPanel({
     setModelOpen(false);
     setHistoryOpen(false);
     setSecurityOpen(false);
-    setInteractionOpen(false);
     setAttachMenuOpen(false);
     setOutlineOpen(false);
   };
@@ -1389,14 +1395,18 @@ export function AiEngineerPanel({
     void onLocalFiles(images);
   };
 
-  const applyWorkflowChip = (id: WorkflowChipId | K8sWorkflowChipId) => {
-    if (engineerMode === "k8s") {
+  const applyWorkflowChip = (
+    id: WorkflowChipId | K8sWorkflowChipId | DbWorkflowChipId,
+  ) => {
+    if (engineerMode === "db") {
+      setComposerInput(dbWorkflowPrompt(id as DbWorkflowChipId));
+    } else if (engineerMode === "k8s") {
       setComposerInput(
-        k8sWorkflowPrompt(id as K8sWorkflowChipId, threadInteractionMode),
+        k8sWorkflowPrompt(id as K8sWorkflowChipId),
       );
     } else {
       setComposerInput(
-        workflowPrompt(id as WorkflowChipId, threadInteractionMode),
+        workflowPrompt(id as WorkflowChipId),
       );
     }
   };
@@ -1425,6 +1435,7 @@ export function AiEngineerPanel({
 
   useEffect(() => {
     if (!open) return;
+    if (engineerMode === "db") return;
     if (engineerMode === "k8s" && clusterId) {
       const live = useAiEngineerStore.getState();
       // Same cluster already bound — skip re-entry (avoids hydrate write churn).
@@ -3088,9 +3099,11 @@ export function AiEngineerPanel({
                   <div className="ai-engineer-empty">
                     <p className="find-panel-empty">{emptyHint}</p>
                     <div className="ai-engineer-workflow-chips" role="group">
-                      {(engineerMode === "k8s"
-                        ? K8S_WORKFLOW_CHIP_IDS
-                        : WORKFLOW_CHIP_IDS
+                      {(engineerMode === "db"
+                        ? DB_WORKFLOW_CHIP_IDS
+                        : engineerMode === "k8s"
+                          ? K8S_WORKFLOW_CHIP_IDS
+                          : WORKFLOW_CHIP_IDS
                       ).map((id) => (
                         <button
                           key={id}
@@ -3791,21 +3804,6 @@ export function AiEngineerPanel({
                 />
                 <div className="ai-engineer-composer-foot">
                   <div className="ai-engineer-composer-tools">
-                    <InteractionModePicker
-                      mode={threadInteractionMode}
-                      disabled={!ready}
-                      open={interactionOpen}
-                      onOpenChange={(v) => {
-                        setInteractionOpen(v);
-                        if (v) {
-                          setModelOpen(false);
-                          setSecurityOpen(false);
-                          setAttachMenuOpen(false);
-                          setHistoryOpen(false);
-                        }
-                      }}
-                      onChange={(m) => setThreadInteractionMode(m)}
-                    />
                     <div className="ai-engineer-menu-wrap ai-engineer-model-wrap">
                       <button
                         type="button"
@@ -3839,7 +3837,6 @@ export function AiEngineerPanel({
                             });
                             setHistoryOpen(false);
                             setSecurityOpen(false);
-                            setInteractionOpen(false);
                             setAttachMenuOpen(false);
                             setOutlineOpen(false);
                           });
@@ -4170,7 +4167,6 @@ export function AiEngineerPanel({
                         if (openSec) {
                           setModelOpen(false);
                           setHistoryOpen(false);
-                          setInteractionOpen(false);
                           setAttachMenuOpen(false);
                         }
                       }}
@@ -4206,7 +4202,6 @@ export function AiEngineerPanel({
                             setAttachMenuOpen((v) => !v);
                             setModelOpen(false);
                             setSecurityOpen(false);
-                            setInteractionOpen(false);
                             setHistoryOpen(false);
                           });
                         }}

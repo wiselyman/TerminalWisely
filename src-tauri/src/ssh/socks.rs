@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
 use russh::client;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -16,6 +17,7 @@ pub struct SocksBridge {
     pub port: u16,
     shutdown_tx: Option<oneshot::Sender<()>>,
     accept_task: Option<JoinHandle<()>>,
+    children: Arc<StdMutex<Vec<JoinHandle<()>>>>,
 }
 
 impl Drop for SocksBridge {
@@ -25,6 +27,11 @@ impl Drop for SocksBridge {
         }
         if let Some(task) = self.accept_task.take() {
             task.abort();
+        }
+        if let Ok(mut children) = self.children.lock() {
+            for task in children.drain(..) {
+                task.abort();
+            }
         }
     }
 }
@@ -42,6 +49,8 @@ impl SocksBridge {
             .port();
 
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+        let children = Arc::new(StdMutex::new(Vec::new()));
+        let children_task = children.clone();
         let accept_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -50,9 +59,14 @@ impl SocksBridge {
                         match accepted {
                             Ok((stream, _)) => {
                                 let h = handle.clone();
-                                tokio::spawn(async move {
+                                let task = tokio::spawn(async move {
                                     let _ = handle_socks_client(stream, h).await;
                                 });
+                                if let Ok(mut guard) = children_task.lock() {
+                                    guard.push(task);
+                                } else {
+                                    task.abort();
+                                }
                             }
                             Err(_) => break,
                         }
@@ -65,6 +79,7 @@ impl SocksBridge {
             port,
             shutdown_tx: Some(shutdown_tx),
             accept_task: Some(accept_task),
+            children,
         })
     }
 }

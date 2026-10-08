@@ -156,3 +156,53 @@ jobs:
       - name: Playwright UI E2E
         if: matrix.playwright
         run: bash scripts/e2e-playwright.sh
+
+  db-live:
+    name: database live
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: twreview
+          POSTGRES_PASSWORD: twtest
+          POSTGRES_DB: twreview
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U twreview"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: twtest
+          MYSQL_DATABASE: twreview
+          MYSQL_USER: twreview
+          MYSQL_PASSWORD: twtest
+        ports:
+          - 13306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -utwreview -ptwtest"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Live database driver
+        working-directory: src-tauri
+        env:
+          TW_DB_PG_HOST: 127.0.0.1
+          TW_DB_PG_PORT: "15432"
+          TW_DB_MY_HOST: 127.0.0.1
+          TW_DB_MY_PORT: "13306"
+          TW_DB_USER: twreview
+          TW_DB_NAME: twreview
+          TW_DB_PASSWORD: twtest
+        run: cargo test --lib db::driver::tests::live_postgres_and_mysql_match_the_security_contract -- --ignored --test-threads=1

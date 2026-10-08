@@ -1,4 +1,4 @@
-export type AiPanelSidebarView = "hosts" | "k8s";
+export type AiPanelSidebarView = "hosts" | "k8s" | "db";
 
 /** AI Engineer panel is hidden in K8s view until a cluster is selected. */
 export function shouldShowAiEngineerPanel(opts: {

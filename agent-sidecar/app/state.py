@@ -186,6 +186,27 @@ class SessionStore:
             return None
         return self._runs.get(rid)
 
+    def _cancel_run(self, run: AgentRun, reason: str) -> None:
+        if run.status not in (
+            RunStatus.RUNNING,
+            RunStatus.WAITING_TOOL,
+            RunStatus.WAITING_USER,
+            RunStatus.WAITING_APPROVAL,
+        ):
+            return
+        run.cancel_requested = True
+        if run.task and not run.task.done():
+            run.task.cancel()
+        run.status = RunStatus.CANCELLED
+        run.append_event("cancelled", {"reason": reason})
+
+    def _cancel_other_runs(self, session_id: str, *, reason: str) -> None:
+        """One writer per SSH session."""
+        for run in list(self._runs.values()):
+            if run.session_id != session_id:
+                continue
+            self._cancel_run(run, reason)
+
     def create_run(
         self,
         session_id: str,
@@ -196,19 +217,7 @@ class SessionStore:
         identity: TargetSessionIdentity | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> AgentRun:
-        # Cancel any prior active run on the same session (single active AI owner).
-        prev = self.get_session_run(session_id)
-        if prev and prev.status in (
-            RunStatus.RUNNING,
-            RunStatus.WAITING_TOOL,
-            RunStatus.WAITING_USER,
-            RunStatus.WAITING_APPROVAL,
-        ):
-            prev.cancel_requested = True
-            if prev.task and not prev.task.done():
-                prev.task.cancel()
-            prev.status = RunStatus.CANCELLED
-            prev.append_event("cancelled", {"reason": "superseded_by_new_run"})
+        self._cancel_other_runs(session_id, reason="superseded_by_new_run")
 
         from app.harness.interaction_mode import normalize_interaction_mode
 
@@ -302,19 +311,7 @@ class SessionStore:
         if source_log is None:
             return None
 
-        # Cancel any active run on this session.
-        prev = self.get_session_run(session_id)
-        if prev and prev.status in (
-            RunStatus.RUNNING,
-            RunStatus.WAITING_TOOL,
-            RunStatus.WAITING_USER,
-            RunStatus.WAITING_APPROVAL,
-        ):
-            prev.cancel_requested = True
-            if prev.task and not prev.task.done():
-                prev.task.cancel()
-            prev.status = RunStatus.CANCELLED
-            prev.append_event("cancelled", {"reason": "superseded_by_resume"})
+        self._cancel_other_runs(session_id, reason="superseded_by_resume")
 
         from app.harness.interaction_mode import normalize_interaction_mode
 

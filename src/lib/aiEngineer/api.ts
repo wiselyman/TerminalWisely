@@ -374,7 +374,7 @@ export interface UserSkillsCatalog {
 
 export async function fetchUserSkills(
   sidecar: SidecarInfo,
-  engineerMode: "linux" | "k8s" = "linux",
+  engineerMode: "linux" | "k8s" | "db" = "linux",
 ): Promise<UserSkillsCatalog> {
   const q = new URLSearchParams({ engineer_mode: engineerMode });
   const res = await sidecarFetch(sidecar, `/v1/skills?${q}`);
@@ -404,7 +404,7 @@ export interface MemoryMetaCatalog {
 
 export async function fetchMemoryMeta(
   sidecar: SidecarInfo,
-  engineerMode: "linux" | "k8s" = "linux",
+  engineerMode: "linux" | "k8s" | "db" = "linux",
 ): Promise<MemoryMetaCatalog> {
   const q = new URLSearchParams({ engineer_mode: engineerMode });
   const res = await sidecarFetch(sidecar, `/v1/memory/meta?${q}`);

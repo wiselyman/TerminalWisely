@@ -1,9 +1,7 @@
 use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use once_cell::sync::Lazy;
 use uuid::Uuid;
 
@@ -13,28 +11,32 @@ static BINDINGS: Lazy<Mutex<Vec<K8sClusterTarget>>> = Lazy::new(|| {
     Mutex::new(load_bindings_file().unwrap_or_default())
 });
 
-fn bindings_path() -> Result<PathBuf> {
-    let dir = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .context("data dir")?
-        .join("TerminalWisely");
-    fs::create_dir_all(&dir).ok();
-    Ok(dir.join("k8s-ssh-bindings.json"))
-}
-
 fn load_bindings_file() -> Result<Vec<K8sClusterTarget>> {
-    let path = bindings_path()?;
-    if !path.is_file() {
-        return Ok(vec![]);
+    let value = crate::durable::load_value(
+        &crate::durable::fallback_roots(),
+        "k8s-ssh-bindings.json",
+    )
+    .map_err(|err| anyhow::anyhow!(err))?;
+    match value {
+        serde_json::Value::Array(_) => Ok(serde_json::from_value(value).unwrap_or_default()),
+        _ => Ok(Vec::new()),
     }
-    let raw = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&raw).unwrap_or_default())
 }
 
 fn save_bindings_file(bindings: &[K8sClusterTarget]) -> Result<()> {
-    let path = bindings_path()?;
-    let raw = serde_json::to_string_pretty(bindings)?;
-    fs::write(path, raw)?;
+    let value = serde_json::to_value(bindings)?;
+    let mode = if bindings.is_empty() {
+        crate::durable::WriteMode::AllowEmpty
+    } else {
+        crate::durable::WriteMode::KeepRecords
+    };
+    crate::durable::save_value(
+        &crate::durable::fallback_roots(),
+        "k8s-ssh-bindings.json",
+        &value,
+        mode,
+    )
+    .map_err(|err| anyhow::anyhow!(err))?;
     Ok(())
 }
 

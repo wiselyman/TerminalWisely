@@ -20,8 +20,8 @@ pub use media_cache::{
 };
 pub use leases::{register_privilege_lease, RegisterLeaseRequest, RegisterLeaseResponse};
 pub use secrets::{
-    get_ai_settings, list_ai_models, save_ai_settings, AiListModelsRequest, AiListModelsResponse,
-    AiSettingsUpdate, AiSettingsView,
+    current_security_mode, get_ai_settings, list_ai_models, save_ai_settings, AiListModelsRequest,
+    AiListModelsResponse, AiSettingsUpdate, AiSettingsView,
 };
 pub use sidecar::{
     ensure_sidecar, get_sidecar_info, sidecar_http, sidecar_sse_stream, stop_sidecar,

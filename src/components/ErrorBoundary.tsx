@@ -11,11 +11,12 @@ interface ErrorBoundaryState {
 
 function isQuotaError(error: Error | null): boolean {
   if (!error) return false;
-  const msg = `${error.name} ${error.message}`.toLowerCase();
+  const msg = `${error.name} ${error.message}`;
   return (
-    msg.includes("quota") ||
-    msg.includes("exceeded") ||
-    error.name === "QuotaExceededError"
+    error.name === "QuotaExceededError" ||
+    msg.includes("QuotaExceeded") ||
+    msg.includes("QUOTA_EXCEEDED") ||
+    msg.includes("NS_ERROR_DOM_QUOTA_REACHED")
   );
 }
 

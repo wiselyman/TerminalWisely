@@ -15,6 +15,7 @@ import {
   toggleEntityGroupCollapsed,
   layoutsEqual,
   layoutLooksStripped,
+  type EntityGroup,
   type EntityLayoutScope,
   type EntityListLayout,
 } from "../lib/entityListLayout";
@@ -71,6 +72,13 @@ interface EntityLayoutState {
     onOrderChange?: (orderedIds: string[]) => void,
     defaultGroupName?: string,
   ) => void;
+}
+
+const EMPTY_GROUPS: EntityGroup[] = [];
+
+/** Same array when hosts layout is absent, so subscribers do not re-render forever. */
+export function selectHostGroups(state: { layouts: EntityLayoutState["layouts"] }): EntityGroup[] {
+  return state.layouts.hosts?.groups ?? EMPTY_GROUPS;
 }
 
 export const useEntityLayoutStore = create<EntityLayoutState>((set, get) => ({

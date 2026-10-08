@@ -198,6 +198,8 @@ async def chat_start(body: ChatStartRequest, _: AuthDep) -> ChatStartResponse:
         force_current_turn=bool(body.resume_run_id),
     )
     meta = {**(body.metadata or {}), "runtime": runtime_kind}
+    if body.model_binding is not None and str(body.model_binding.model or "").strip():
+        meta["_model_binding"] = body.model_binding.model_dump()
     resumed_from: str | None = None
     stream_cursor = 0
     if body.resume_run_id:
@@ -887,7 +889,14 @@ async def mcp_tools_list(
     from app.runtime.tw_mcp import tw_mcp_list_tools
 
     mode = str(run.metadata.get("engineer_mode") or "linux")
-    return {"tools": tw_mcp_list_tools(engineer_mode=mode)}
+    from app.agent.db_context import bound_ssh_session_id
+
+    return {
+        "tools": tw_mcp_list_tools(
+            engineer_mode=mode,
+            ssh_session_id=bound_ssh_session_id(run.metadata),
+        )
+    }
 
 
 @app.post("/v1/runs/{run_id}/mcp/call")

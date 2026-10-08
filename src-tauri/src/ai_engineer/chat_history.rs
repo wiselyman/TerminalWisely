@@ -342,6 +342,16 @@ pub fn save_scope_bundle(
     }
 
     tx.commit().map_err(|e| AppError::msg(e.to_string()))?;
+    drop(conn);
+    if let Ok(primary) = app.path().app_data_dir() {
+        if let Ok(path) = db_path(app) {
+            crate::durable::mirror_file(&primary, &path);
+            let wal = path.with_extension("sqlite3-wal");
+            if wal.is_file() {
+                crate::durable::mirror_file(&primary, &wal);
+            }
+        }
+    }
     Ok(())
 }
 

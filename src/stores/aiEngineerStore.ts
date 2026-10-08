@@ -19,6 +19,7 @@ import {
   runAgentChat,
   type AgentUiEvent,
 } from "../lib/aiEngineer/chatClient";
+import { historyForNextTurn } from "../lib/aiEngineer/compareVoices";
 import { externalAgentActivityFromEvent } from "../lib/aiEngineer/externalAgentActivity";
 import { ResumeMissError } from "../lib/aiEngineer/resumeMiss";
 import { remoteUserFromServerId } from "../lib/aiEngineer/targetIdentity";
@@ -141,6 +142,14 @@ export type ChatLine =
       streaming?: boolean;
       /** True when this answer turn included tool evidence. */
       toolEvidence?: boolean;
+      /** Compare voice. Reference answers stay visible but skip the next turn. */
+      voiceKey?: string;
+      voiceLabel?: string;
+      voiceRuntime?: AgentRuntimeKind;
+      voiceProfileId?: string;
+      compareGroupId?: string;
+      reference?: boolean;
+      adopted?: boolean;
     }
   | {
       id: string;
@@ -220,7 +229,7 @@ export type ChatLine =
 export const SECURITY_MODES = ["observe", "safe", "autonomous", "production"] as const;
 export type SecurityMode = (typeof SECURITY_MODES)[number];
 
-export const INTERACTION_MODES = ["ask", "plan", "agent"] as const;
+export const INTERACTION_MODES = ["agent"] as const;
 export type InteractionMode = (typeof INTERACTION_MODES)[number];
 
 export function normalizeSecurityMode(raw: unknown): SecurityMode {
@@ -230,11 +239,9 @@ export function normalizeSecurityMode(raw: unknown): SecurityMode {
     : "safe";
 }
 
-export function normalizeInteractionMode(raw: unknown): InteractionMode {
-  const value = typeof raw === "string" ? raw.trim().toLowerCase() : "";
-  return (INTERACTION_MODES as readonly string[]).includes(value)
-    ? (value as InteractionMode)
-    : "agent";
+/** Older threads stored ask/plan. Those poses are not a host gate anymore. */
+export function normalizeInteractionMode(_raw: unknown): InteractionMode {
+  return "agent";
 }
 
 export type ChatThread = {
@@ -249,6 +256,9 @@ export type ChatThread = {
   lastRunId?: string | null;
   /** Skip SessionLog resume once after the sidecar reports a missing run. */
   skipNextResume?: boolean; // in-memory one-shot; not persisted
+  /** Ask/Plan: send the next message to every selected read-only voice. */
+  compareEnabled?: boolean;
+  compareVoiceKeys?: string[];
 };
 
 export type ScopeThreadBundle = {
@@ -317,6 +327,13 @@ function slimMessagesForPersist(lines: ChatLine[]): ChatLine[] {
           ...(typeof line.toolEvidence === "boolean"
             ? { toolEvidence: line.toolEvidence }
             : {}),
+          ...(line.voiceKey ? { voiceKey: line.voiceKey } : {}),
+          ...(line.voiceLabel ? { voiceLabel: line.voiceLabel } : {}),
+          ...(line.voiceRuntime ? { voiceRuntime: line.voiceRuntime } : {}),
+          ...(line.voiceProfileId ? { voiceProfileId: line.voiceProfileId } : {}),
+          ...(line.compareGroupId ? { compareGroupId: line.compareGroupId } : {}),
+          ...(line.reference ? { reference: true } : {}),
+          ...(line.adopted ? { adopted: true } : {}),
         };
       }
       if (line.kind === "tool") {
@@ -453,6 +470,10 @@ function parseV2Bundle(raw: unknown): ScopeThreadBundle | null {
           : typeof t.last_run_id === "string"
             ? t.last_run_id
             : null,
+      compareEnabled: t.compareEnabled === true,
+      compareVoiceKeys: Array.isArray(t.compareVoiceKeys)
+        ? t.compareVoiceKeys.filter((key): key is string => typeof key === "string")
+        : [],
     });
   }
   if (threads.length === 0) return null;
@@ -484,6 +505,10 @@ function toDiskBundle(bundle: ScopeThreadBundle): DiskScopeBundle {
       interactionMode: t.interactionMode,
       messages: ensureUniqueMessageIds(slimMessagesForPersist(t.messages)),
       ...(t.lastRunId ? { lastRunId: t.lastRunId } : {}),
+      ...(t.compareEnabled ? { compareEnabled: true } : {}),
+      ...(t.compareVoiceKeys?.length
+        ? { compareVoiceKeys: t.compareVoiceKeys }
+        : {}),
     })),
   };
 }
@@ -742,7 +767,7 @@ export type ActiveInvestigation = {
   summaryPreview?: string;
 };
 
-export type EngineerMode = "linux" | "k8s";
+export type EngineerMode = "linux" | "k8s" | "db";
 
 /** Isolate chat by cluster, host, or terminal session. */
 export function aiChatScopeKey(
@@ -754,6 +779,10 @@ export function aiChatScopeKey(
   if (cid) return `cluster:${cid}`;
   const sid = (serverId ?? "").trim();
   return sid ? `server:${sid}` : `session:${sessionId}`;
+}
+
+export function dbSyntheticSessionId(connectionId: string): string {
+  return `db:${connectionId.replace(/\//g, "|")}`;
 }
 
 export function k8sSyntheticSessionId(clusterId: string): string {
@@ -787,6 +816,7 @@ export function panelFiberChatScopeKey(
 
 let chatAbort: AbortController | null = null;
 let activeRunId: string | null = null;
+let dbSqlSink: ((sql: string) => void) | null = null;
 /** Scope that owns the in-flight run; events for other scopes are ignored. */
 let activeRunScope: string | null = null;
 let activeRunThreadId: string | null = null;
@@ -832,6 +862,15 @@ type AiEngineerState = {
   clusterId: string | null;
   clusterName: string | null;
   clusterTarget: K8sClusterTarget | null;
+  dbConnectionId: string | null;
+  dbConnectionName: string | null;
+  dbEngine: string | null;
+  dbRevision: number;
+  dbSshSessionId: string | null;
+  dbDatabase: string | null;
+  dbSchema: string | null;
+  dbSelectedSql: string | null;
+  insertDbSql: (sql: string) => void;
   /** Current chat bucket key (cluster:*, server:*, or session:*). */
   chatScope: string | null;
   activeThreadId: string | null;
@@ -887,6 +926,17 @@ type AiEngineerState = {
     clusterName?: string,
     clusterTarget?: K8sClusterTarget | null,
   ) => void;
+  bindDbContext: (connection: {
+    id: string;
+    name: string;
+    engine: string;
+    revision: number;
+    sshSessionId?: string | null;
+    database?: string | null;
+    schema?: string | null;
+    selectedSql?: string | null;
+  }) => void;
+  setDbSqlSink: (sink: ((sql: string) => void) | null) => void;
   setEngineerMode: (mode: EngineerMode) => void;
   /** Soft-close kept for callers; side panels stay open until explicit collapse. */
   close: (opts?: { force?: boolean }) => void;
@@ -895,7 +945,6 @@ type AiEngineerState = {
   setSettingsOpen: (v: boolean) => void;
   setAgentRuntime: (runtime: AgentRuntimeKind) => void;
   setThreadSecurityMode: (mode: string) => void;
-  setThreadInteractionMode: (mode: string) => void;
   addPendingAttachment: (att: PendingAttachment) => void;
   removePendingAttachment: (id: string) => void;
   clearPendingAttachments: () => void;
@@ -1071,6 +1120,20 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   clusterId: null,
   clusterName: null,
   clusterTarget: null,
+  dbConnectionId: null,
+  dbConnectionName: null,
+  dbEngine: null,
+  dbRevision: 0,
+  dbSshSessionId: null,
+  dbDatabase: null,
+  dbSchema: null,
+  dbSelectedSql: null,
+  insertDbSql: (sql) => {
+    dbSqlSink?.(sql);
+  },
+  setDbSqlSink: (sink) => {
+    dbSqlSink = sink;
+  },
   chatScope: null,
   activeThreadId: null,
   ready: false,
@@ -1217,6 +1280,58 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     applyScopeAfterDiskLoad(get, set, nextScope);
   },
 
+  bindDbContext: (connection) => {
+    const sessionId = dbSyntheticSessionId(connection.id);
+    const nextScope = aiChatScopeKey(sessionId, null, null);
+    const prev = get();
+    const dbFields = {
+      engineerMode: "db" as const,
+      dbConnectionId: connection.id,
+      dbConnectionName: connection.name,
+      dbEngine: connection.engine,
+      dbRevision: connection.revision,
+      dbSshSessionId: connection.sshSessionId || null,
+      dbDatabase: connection.database || null,
+      dbSchema: connection.schema || null,
+      dbSelectedSql: connection.selectedSql || null,
+      clusterId: null,
+      clusterName: null,
+      clusterTarget: null,
+    };
+    if (prev.chatScope === nextScope && prev.sessionId === sessionId) {
+      set(dbFields);
+      return;
+    }
+    const persisted = persistCurrentThread(get);
+    const switchingAway = prev.chatScope != null && prev.chatScope !== nextScope;
+    if (switchingAway && (prev.busy || prev.pendingAsk || prev.pendingApproval)) {
+      const { sidecar, sessionId: oldSession } = prev;
+      const runId = activeRunId;
+      abortActiveRun(() => prev, "switch");
+      if (sidecar && oldSession && runId) {
+        void cancelAgentRun(sidecar, oldSession, runId).catch(() => undefined);
+      }
+    }
+    const loaded = loadScopeIntoState(
+      persisted.threadsByScope,
+      nextScope,
+      persisted.inputsByThread,
+    );
+    set({
+      ...persisted,
+      ...loaded,
+      ...dbFields,
+      sessionId,
+      serverId: null,
+      chatScope: nextScope,
+      busy: switchingAway ? false : prev.busy,
+      modelPhase: switchingAway ? "idle" : prev.modelPhase,
+      pendingAsk: switchingAway ? null : prev.pendingAsk,
+      pendingApproval: switchingAway ? null : prev.pendingApproval,
+      activeInvestigation: switchingAway ? null : prev.activeInvestigation,
+    });
+  },
+
   bindContext: (sessionId, serverId) => {
     const nextScope = aiChatScopeKey(sessionId, serverId);
     const prev = get();
@@ -1325,25 +1440,6 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const threads = bundle.threads.map((t) =>
       t.id === activeThreadId
         ? { ...t, securityMode: nextMode, updatedAt: Date.now() }
-        : t,
-    );
-    const nextByScope = {
-      ...threadsByScope,
-      [chatScope]: { ...bundle, threads },
-    };
-    savePersistedThreads(nextByScope, chatScope);
-    set({ threadsByScope: nextByScope });
-  },
-
-  setThreadInteractionMode: (mode) => {
-    const { chatScope, activeThreadId, threadsByScope } = get();
-    if (!chatScope || !activeThreadId) return;
-    const nextMode = normalizeInteractionMode(mode);
-    const bundle = threadsByScope[chatScope];
-    if (!bundle) return;
-    const threads = bundle.threads.map((t) =>
-      t.id === activeThreadId
-        ? { ...t, interactionMode: nextMode, updatedAt: Date.now() }
         : t,
     );
     const nextByScope = {
@@ -1832,23 +1928,13 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
     if (!runThreadId) return;
 
-    const priorHistory = get()
-      .messages.filter(
-        (m): m is Extract<ChatLine, { kind: "user" | "assistant" }> =>
-          m.kind === "user" || m.kind === "assistant",
-      )
-      .slice(-16)
-      .map((m) => ({
-        role: m.kind as "user" | "assistant",
-        content: m.content.slice(0, 4000),
-      }));
+    const priorHistory = historyForNextTurn(get().messages);
     const threadMeta = get()
       .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId);
     const skipResume = Boolean(threadMeta?.skipNextResume);
     const resumeRunId = skipResume
       ? null
       : (threadMeta?.lastRunId ?? null);
-    const interactionMode = normalizeInteractionMode(threadMeta?.interactionMode);
     const userLine: ChatLine | null = text
       ? { id: nextId(), kind: "user", content: text }
       : null;
@@ -2095,7 +2181,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       activeRunScope = runScope;
       activeRunThreadId = runThreadId;
       activeLeaseSessionId = runSessionId;
-      void acquireAiSshLease(runSessionId);
+      const dbSshSessionId = get().dbSshSessionId;
+      if (get().engineerMode === "db") {
+        if (dbSshSessionId) void acquireAiSshLease(dbSshSessionId);
+      } else {
+        void acquireAiSshLease(runSessionId);
+      }
 
       /** Last SSE / tool activity — used to unstick 「模型思考中」 if the stream dies. */
       let lastStreamActivityAt = Date.now();
@@ -2145,8 +2236,26 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         sidecar,
         sessionId: runSessionId,
         message: text,
-        engineerMode: effectiveClusterId ? "k8s" : "linux",
+        engineerMode:
+          get().engineerMode === "db"
+            ? "db"
+            : effectiveClusterId
+              ? "k8s"
+              : "linux",
         clusterId: effectiveClusterId ?? undefined,
+        dbContext:
+          get().engineerMode === "db" && get().dbConnectionId
+            ? {
+                connection_id: get().dbConnectionId,
+                revision: get().dbRevision,
+                engine: get().dbEngine,
+                name: get().dbConnectionName,
+                ssh_session_id: get().dbSshSessionId,
+                database: get().dbDatabase,
+                schema: get().dbSchema,
+                selected_sql: get().dbSelectedSql,
+              }
+            : undefined,
         clusterName: get().clusterName ?? undefined,
         clusterTarget: get().clusterTarget ?? undefined,
         securityMode: normalizeSecurityMode(
@@ -2154,7 +2263,6 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId)
             ?.securityMode,
         ),
-        interactionMode,
         runtime,
         serverId: resolvedServerId,
         hostFingerprint,
@@ -2586,7 +2694,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             }
           } else if (event.type === "tool_call") {
             const detail = String(
-              (event.arguments.command as string) ||
+              (event.arguments.sql as string) ||
+                (event.arguments.command as string) ||
                 (event.arguments.query as string) ||
                 (event.arguments.url as string) ||
                 (event.arguments.question as string) ||
@@ -2789,7 +2898,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           const next = msgs.map((line) => {
             if (line.kind === "assistant" && line.streaming) {
               changed = true;
-              return { id: line.id, kind: "assistant" as const, content: line.content };
+              return { ...line, streaming: false };
             }
             return line;
           });

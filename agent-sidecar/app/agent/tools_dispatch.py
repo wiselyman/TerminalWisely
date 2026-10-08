@@ -20,6 +20,9 @@ from app.tools.schema import (
     TOOL_K8S_LIST,
     TOOL_K8S_LOGS,
     TOOL_K8S_SCALE,
+    TOOL_DB_EXPLAIN,
+    TOOL_DB_QUERY,
+    TOOL_DB_SEARCH,
     TOOL_SPAWN_INVESTIGATOR,
     TOOL_SUBMIT_OPS_PLAN,
     TOOL_TERMINAL_EXEC,
@@ -60,6 +63,9 @@ TOOL_HANDLER_METHODS: dict[str, str] = {
     TOOL_K8S_DELETE: "_k8s_tool",
     TOOL_K8S_SCALE: "_k8s_tool",
     TOOL_K8S_EXEC: "_k8s_tool",
+    TOOL_DB_SEARCH: "_db_tool",
+    TOOL_DB_QUERY: "_db_tool",
+    TOOL_DB_EXPLAIN: "_db_tool",
 }
 
 TOOLS_EMIT_CALL_EVENT_UPFRONT: frozenset[str] = frozenset(
@@ -88,6 +94,7 @@ class ToolHandlerHost(Protocol):
     async def _read_remote_file(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _spawn_investigator(self, call_id: str, args: dict[str, Any]) -> None: ...
     async def _k8s_tool(self, call_id: str, args: dict[str, Any], *, name: str) -> None: ...
+    async def _db_tool(self, call_id: str, args: dict[str, Any], *, name: str) -> None: ...
 
 
 def resolve_handler(
@@ -99,7 +106,7 @@ def resolve_handler(
     method = getattr(host, method_name, None)
     if method is None:
         return None
-    if method_name == "_k8s_tool":
+    if method_name in {"_k8s_tool", "_db_tool"}:
         async def _bound(call_id: str, args: dict[str, Any]) -> None:
             await method(call_id, args, name=name)
 

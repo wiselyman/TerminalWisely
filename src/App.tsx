@@ -24,6 +24,7 @@ import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
 import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { DbWorkbench } from "./components/db/DbWorkbench";
 import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
 import { AddK8sClusterModal } from "./components/k8s/AddK8sClusterModal";
 import { K8sClusterIcon } from "./components/k8s/K8sClusterIcon";
@@ -76,7 +77,7 @@ import {
   ChromePlusIcon,
   SidebarToggleIcon,
 } from "./components/SidebarIcons";
-import { SystemInfoIcon } from "./components/WorkspaceToolIcons";
+import { DatabaseIcon, SystemInfoIcon } from "./components/WorkspaceToolIcons";
 import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
 import { isTauriRuntime } from "./lib/isTauri";
 import { showManualUpdateCheckResult } from "./lib/updateCheckFeedback";
@@ -115,6 +116,15 @@ function App() {
     startRemoteTransfer,
   } = useSessionStore();
   const pushToast = useToastStore((s) => s.pushToast);
+  useEffect(() => {
+    void invoke<string[]>("take_catalog_restore_notice")
+      .then((names) => {
+        if (names.length > 0) {
+          pushToast(t("catalogRestored", { files: names.join(", ") }), true);
+        }
+      })
+      .catch(() => undefined);
+  }, [pushToast, t]);
   const updateDialog = useAppUpdateStore((s) => s.dialog);
   const closeUpdateDialog = useAppUpdateStore((s) => s.closeDialog);
   const markUpdateInstalled = useAppUpdateStore((s) => s.markInstalled);
@@ -311,6 +321,7 @@ function App() {
   const aiEngineerSessionId = useAiEngineerStore((s) => s.sessionId);
   const aiEngineerServerId = useAiEngineerStore((s) => s.serverId);
   const engineerMode = useAiEngineerStore((s) => s.engineerMode);
+  const dbConnectionId = useAiEngineerStore((s) => s.dbConnectionId);
   const sidebarView = useSidebarViewStore((s) => s.view);
   const setSidebarView = useSidebarViewStore((s) => s.setView);
   const selectedCluster = useK8sStore((s) => s.selectedCluster);
@@ -323,6 +334,7 @@ function App() {
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
   /** K8s workbench only when not on shared Home. */
   const showK8sWorkbench = sidebarView === "k8s" && !homeOpen;
+  const showDbWorkbench = sidebarView === "db" && !homeOpen;
   const showHostsSession = sidebarView === "hosts" && !homeOpen;
   const aiPanelSessionId = aiEngineerSessionId;
   const showAiEngineerPanel = shouldShowAiEngineerPanel({
@@ -844,6 +856,18 @@ function App() {
                   >
                     <K8sClusterIcon />
                   </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`chrome-sidebar-view-btn${sidebarView === "db" ? " active" : ""}`}
+                    aria-label={t("sidebarViewDb")}
+                    title={t("sidebarViewDb")}
+                    aria-selected={sidebarView === "db"}
+                    data-testid="sidebar-view-db"
+                    onClick={() => setSidebarView("db")}
+                  >
+                    <DatabaseIcon />
+                  </button>
                 </div>
               </div>
             </div>
@@ -868,6 +892,7 @@ function App() {
                       return;
                     }
                     if (Date.now() < suppressTabClickUntilRef.current) return;
+                    if (sidebarView === "db") setSidebarView("hosts");
                     activateHome();
                   }}
                   onContextMenu={(event) => event.preventDefault()}
@@ -1167,9 +1192,16 @@ function App() {
                   disabled={
                     sidebarView === "k8s"
                       ? !selectedCluster
-                      : !activeTabReady
+                      : sidebarView === "db"
+                        ? !dbConnectionId
+                        : !activeTabReady
                   }
                   onClick={() => {
+                    if (sidebarView === "db" && dbConnectionId) {
+                      useAiEngineerStore.setState({ open: true });
+                      void useAiEngineerStore.getState().ensureReady();
+                      return;
+                    }
                     if (sidebarView === "k8s" && selectedCluster) {
                       switchToAiEngineerPanel(
                         {
@@ -1244,6 +1276,7 @@ function App() {
               <div className="terminal-stack">
                 {homeOpen ? <WorkspaceWelcome /> : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}
+                {showDbWorkbench ? <DbWorkbench /> : null}
                 {tabs.map((tab) => (
                   <TerminalView
                     key={tab.id}

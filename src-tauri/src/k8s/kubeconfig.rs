@@ -28,22 +28,16 @@ static IMPORTED: Lazy<Mutex<Vec<ImportedKubeconfig>>> = Lazy::new(|| {
     Mutex::new(load_imported().unwrap_or_default())
 });
 
-fn imported_paths_file() -> Result<PathBuf> {
-    let dir = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .context("data dir")?
-        .join("TerminalWisely");
-    fs::create_dir_all(&dir).ok();
-    Ok(dir.join("k8s-kubeconfig-paths.json"))
-}
-
 fn load_imported() -> Result<Vec<ImportedKubeconfig>> {
-    let path = imported_paths_file()?;
-    if !path.is_file() {
-        return Ok(vec![]);
-    }
-    let raw = fs::read_to_string(path)?;
-    let wire: Vec<ImportedWire> = serde_json::from_str(&raw).unwrap_or_default();
+    let value = crate::durable::load_value(
+        &crate::durable::fallback_roots(),
+        "k8s-kubeconfig-paths.json",
+    )
+    .map_err(|err| anyhow::anyhow!(err))?;
+    let wire: Vec<ImportedWire> = match value {
+        serde_json::Value::Array(_) => serde_json::from_value(value).unwrap_or_default(),
+        _ => Vec::new(),
+    };
     Ok(wire
         .into_iter()
         .map(|w| match w {
@@ -56,9 +50,15 @@ fn load_imported() -> Result<Vec<ImportedKubeconfig>> {
         .collect())
 }
 
-fn save_imported(entries: &[ImportedKubeconfig]) -> Result<()> {
-    let path = imported_paths_file()?;
-    fs::write(path, serde_json::to_string_pretty(entries)?)?;
+fn save_imported(entries: &[ImportedKubeconfig], mode: crate::durable::WriteMode) -> Result<()> {
+    let value = serde_json::to_value(entries)?;
+    crate::durable::save_value(
+        &crate::durable::fallback_roots(),
+        "k8s-kubeconfig-paths.json",
+        &value,
+        mode,
+    )
+    .map_err(|err| anyhow::anyhow!(err))?;
     Ok(())
 }
 
@@ -84,7 +84,7 @@ fn upsert_imported(path: String, display_name: Option<String>) -> Result<()> {
             display_name,
         });
     }
-    save_imported(&guard)?;
+    save_imported(&guard, crate::durable::WriteMode::KeepRecords)?;
     Ok(())
 }
 
@@ -121,7 +121,7 @@ pub fn set_imported_display_name(path: &str, display_name: &str) -> Result<Vec<K
                 display_name: Some(alias.to_string()),
             });
         }
-        save_imported(&guard)?;
+        save_imported(&guard, crate::durable::WriteMode::KeepRecords)?;
     }
     discover_contexts()
 }
@@ -199,21 +199,18 @@ pub fn import_kubeconfig_yaml(
         anyhow::bail!("empty kubeconfig");
     }
     let _ = parse_contexts_from_str(trimmed)?;
-    let dir = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .context("data dir")?
-        .join("TerminalWisely")
-        .join("kubeconfigs");
+    let dir = crate::durable::primary_dir().join("kubeconfigs");
     fs::create_dir_all(&dir).ok();
     let file = dir.join(format!("{}.yaml", uuid::Uuid::new_v4()));
     fs::write(&file, trimmed).context("write pasted kubeconfig")?;
+    crate::durable::mirror_file(&crate::durable::primary_dir(), &file);
     import_kubeconfig_path(file.to_string_lossy().as_ref(), display_name)
 }
 
 pub fn remove_imported_kubeconfig_path(path: &str) -> Result<()> {
     let mut guard = IMPORTED.lock().unwrap();
     guard.retain(|e| e.path != path);
-    save_imported(&guard)?;
+    save_imported(&guard, crate::durable::WriteMode::AllowEmpty)?;
     let p = PathBuf::from(path);
     if let Some(parent) = p.parent() {
         if parent

@@ -56,6 +56,9 @@ let lastK8sHelmInstall: Record<string, unknown> | null = null;
 let lastK8sOpenKubectlTerminal: Record<string, unknown> | null = null;
 let lastK8sDelete: Record<string, unknown> | null = null;
 let createSshCallCount = 0;
+const e2eDbConnections: Array<Record<string, unknown>> = [];
+const e2eDbLeases = new Set<string>();
+const e2eSavedQueries: Record<string, Array<{ id: string; name: string; sql: string }>> = {};
 
 export function __e2eResetMocks() {
   lastUploadRequest = null;
@@ -626,6 +629,149 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   k8s_pod_shell_stop: () => null,
   k8s_kubectl: () => ({ ok: true, stdout: "{}", stderr: "", exit_code: 0, parsed: {} }),
   "plugin:resources|close": () => null,
+  db_list_connections: () => e2eDbConnections.map(({ password: _password, ...item }) => item),
+  db_test_connection: () => "ok",
+  db_save_connection: (args) => {
+    const request = (args?.request ?? {}) as Record<string, unknown>;
+    const password = String(request.password ?? "");
+    const saved = {
+      id: `db-${e2eDbConnections.length + 1}`,
+      name: String(request.name ?? ""),
+      engine: String(request.engine ?? "postgres"),
+      host: String(request.host ?? ""),
+      port: Number(request.port ?? 5432),
+      database: String(request.database ?? ""),
+      user: String(request.user ?? ""),
+      tls: String(request.tls ?? "disabled"),
+      ssh_session_id: request.ssh_session_id ? String(request.ssh_session_id) : null,
+      revision: 1,
+      secret_id: `secret-${e2eDbConnections.length + 1}`,
+      password,
+    };
+    e2eDbConnections.push(saved);
+    return { ...saved, password: undefined };
+  },
+  db_delete_connection: () => null,
+  db_list_databases: async (args) => {
+    const connectionId = String(args?.connectionId ?? args?.connection_id ?? "");
+    const match = e2eDbConnections.find((item) => item.id === connectionId);
+    if (match?.host === "closed.example") {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      throw new Error("Input/output error: connection closed");
+    }
+    const name = match?.database || e2eDbConnections[e2eDbConnections.length - 1]?.database || "app";
+    return {
+      kind: "rows",
+      columns: ["datname"],
+      rows: [[name]],
+      truncated: false,
+      risk: "",
+      connection_id: connectionId || match?.id || "db-1",
+      revision: 1,
+      operation: "search",
+      sql: "",
+    };
+  },
+  db_search_structure: (args) => ({
+    kind: "rows",
+    columns: ["schema", "table", "name", "detail", "group"],
+    rows: [],
+    truncated: false,
+    risk: "",
+    connection_id: String(
+      args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
+    ),
+    revision: 1,
+    operation: "search",
+    sql: "",
+  }),
+  db_search_objects: (args) => ({
+    kind: "rows",
+    columns: ["table_schema", "table_name", "column_name", "data_type"],
+    rows: [["public", "orders", "id", "integer"]],
+    truncated: false,
+    risk: "",
+    connection_id: String(
+      args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
+    ),
+    revision: 1,
+    operation: "search",
+    sql: "",
+  }),
+  db_cancel_query: () => null,
+  db_list_saved_queries: (args) =>
+    e2eSavedQueries[String(args?.connectionId ?? args?.connection_id ?? "")] ?? [],
+  db_write_saved_queries: (args) => {
+    const id = String(args?.connectionId ?? args?.connection_id ?? "");
+    e2eSavedQueries[id] = Array.isArray(args?.queries) ? (args.queries as Array<{ id: string; name: string; sql: string }>) : [];
+    return null;
+  },
+  db_query: (args) => {
+    const sql = String(args?.sql ?? "");
+    const leaseId = String(args?.leaseId ?? args?.lease_id ?? "");
+    const connectionId = String(args?.connectionId ?? args?.connection_id ?? e2eDbConnections[0]?.id ?? "db-1");
+    if (sql.includes("BROKEN")) {
+      throw new Error("password authentication failed");
+    }
+    if (/^\s*update\b/i.test(sql) && !e2eDbLeases.has(leaseId)) {
+      return {
+        kind: "needs_approval",
+        columns: [],
+        rows: [],
+        truncated: false,
+        risk: "R2",
+        connection_id: connectionId,
+        revision: 1,
+        operation: "query",
+        sql: sql.trim(),
+      };
+    }
+    return {
+      kind: "rows",
+      columns: ["ok"],
+      rows: sql.trim() === "SELECT empty" ? [] : [[sql.trim() || "1"]],
+      truncated: false,
+      risk: "",
+      connection_id: connectionId,
+      revision: 1,
+      operation: "query",
+      sql: sql.trim(),
+    };
+  },
+  db_status: (args) => {
+    if (String(args?.page ?? "") === "denied") {
+      throw new Error("permission denied");
+    }
+    return {
+    kind: "rows",
+    columns: ["page"],
+    rows: [[String(args?.page ?? "")]],
+    truncated: false,
+    risk: "",
+    connection_id: String(
+      args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
+    ),
+    revision: 1,
+    operation: "status",
+    sql: "",
+    };
+  },
+  db_explain: (args) => ({
+    kind: "rows",
+    columns: ["plan"],
+    rows: [["scan"]],
+    truncated: false,
+    risk: "",
+    connection_id: String(args?.connectionId ?? "db-1"),
+    revision: 1,
+    operation: "explain",
+    sql: "",
+  }),
+  db_register_lease: () => {
+    const id = `lease-${e2eDbLeases.size + 1}`;
+    e2eDbLeases.add(id);
+    return id;
+  },
 };
 
 export async function invoke<T>(cmd: string, args?: InvokeArgs): Promise<T> {

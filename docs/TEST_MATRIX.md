@@ -179,7 +179,9 @@
 | Skill curator 归档 | `test_skill_curator` | — | — | — | ✓ |
 | terminal_exec 桥接 | Rust terminal | pytest gate | — | **✓** | ✓ |
 | K8s 工具 (k8s_*) | — | pytest k8s | — | mock_ollama | ✓ |
-| 交互模式 ask/plan/act | — | pytest | — | — | ✓ |
+| 单一写者（无 Ask/Plan、无一起回答、无审批第二意见） | vitest `compareVoices` history | pytest `test_compare_voices` one writer | — | chat e2e composer 无模式切换 | ✓ |
+| 数据库工作台（Postgres/MySQL/MariaDB/SQLite/MongoDB/Redis/SQL Server/Oracle；ClickHouse 已退出下拉框） | vitest `workbenchModel`（库顺序、对象列表、标识符引用、表查看排序筛选分页、插入删除、建表删表清空、CSV 预览/列跳过/分批、本机查询、Redis/Mongo 命令、SQL Server/Oracle 端口与 schema）+ db api + sidebar | pytest `test_sql_risk` + `test_db_tools` | cargo `durable::` 与 `db::`（SQLite 只读打开不能改文件、取消标志中断长读、命名查询 `db-queries.json` 往返与删除、MariaDB 独立 id、SQL Server/Oracle 可保存、未知引擎和 ClickHouse 不能保存、库列表和对象搜索各一条 read、命令写入要审批、表查看语句仍单条且写/DDL 要批准、定义读取仍是 read）。真实库 ignored：`TW_DB_*` 的 Postgres/MySQL；`TW_ENGINE_HOST` + `TW_ENGINE_PASSWORD` 的 MariaDB/Redis/Mongo（读、错误语句、写入停在审批）。2026-10-01 对本机可达的 `192.168.100.176` 跑过这两项 ignored 测试并通过。SQL Server `TW_DB_MSSQL_*`、Oracle `TW_DB_ORACLE_*` 保持 ignored，当前未测。CI 默认不跑 | e2e `db-workbench` 覆盖 mock 界面（左树每一级缩进、面包屑 `→`、连接表单两列、不同引擎图标、查询标签、选区、错误态、审批、AI 入口、打开表、排序、筛选、导出本页说明、CSV 导入预览与错行、保存并删除查询） | 权威范围见 `docs/superpowers/specs/2026-09-30-engine-matrix.md`「当前能力」 |
+| 本地目录（主机、K8s、数据库、AI 配置） | — | — | cargo `durable::tests`、`saved_password_tests`、`api_key_moves_to_secret_store`、`file_vault_round_trip_and_one_legacy_import` | — | 正本在 app data，镜像在 `~/.terminal-wisely/catalog`。密码在 `vault.bin`，启动不再读登录钥匙串 |
 | Investigator 子代理 | — | pytest | — | — | ✓ |
 | Run trace 追踪 | — | pytest trace | — | — | ✓ |
 | 中途 user_context | — | API surface | — | — | ✓ |

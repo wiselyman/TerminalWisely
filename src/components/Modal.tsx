@@ -5,9 +5,10 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  wide?: boolean;
 }
 
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, children, wide = false }: ModalProps) {
   const { t } = useTranslation("common");
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -27,7 +28,7 @@ export function Modal({ title, onClose, children }: ModalProps) {
       }}
     >
       <div
-        className="modal"
+        className={wide ? "modal modal-wide" : "modal"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

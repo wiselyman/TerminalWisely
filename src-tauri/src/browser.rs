@@ -17,7 +17,6 @@ use tauri::{
     WebviewBuilder, WebviewUrl,
 };
 use tauri::webview::PageLoadEvent;
-use tauri_plugin_store::StoreExt;
 use tokio::sync::Mutex;
 
 use crate::error::{AppError, AppResult};
@@ -1110,24 +1109,40 @@ pub struct BrowserBookmark {
     pub created_at: i64,
 }
 
-fn read_history(app: &AppHandle) -> AppResult<Vec<BrowserHistoryEntry>> {
-    let store = app
-        .store(HISTORY_STORE)
-        .map_err(|e| AppError::msg(e.to_string()))?;
-    let value = store.get("entries").unwrap_or(serde_json::json!([]));
-    serde_json::from_value(value).map_err(|e| AppError::msg(e.to_string()))
+fn read_json_entries<T: serde::de::DeserializeOwned>(
+    app: &AppHandle,
+    name: &str,
+) -> AppResult<Vec<T>> {
+    let value = crate::durable::load_value(&crate::durable::app_roots(app), name)
+        .map_err(AppError::msg)?;
+    let entries = value
+        .get("entries")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    serde_json::from_value(entries).map_err(|e| AppError::msg(e.to_string()))
 }
 
-fn write_history(app: &AppHandle, entries: &[BrowserHistoryEntry]) -> AppResult<()> {
-    let store = app
-        .store(HISTORY_STORE)
-        .map_err(|e| AppError::msg(e.to_string()))?;
-    store.set(
-        "entries",
-        serde_json::to_value(entries).map_err(|e| AppError::msg(e.to_string()))?,
-    );
-    store.save().map_err(|e| AppError::msg(e.to_string()))?;
-    Ok(())
+fn write_json_entries<T: serde::Serialize>(
+    app: &AppHandle,
+    name: &str,
+    entries: &[T],
+    mode: crate::durable::WriteMode,
+) -> AppResult<()> {
+    let value = serde_json::json!({ "entries": entries });
+    crate::durable::save_value(&crate::durable::app_roots(app), name, &value, mode)
+        .map_err(AppError::msg)
+}
+
+fn read_history(app: &AppHandle) -> AppResult<Vec<BrowserHistoryEntry>> {
+    read_json_entries(app, HISTORY_STORE)
+}
+
+fn write_history(
+    app: &AppHandle,
+    entries: &[BrowserHistoryEntry],
+    mode: crate::durable::WriteMode,
+) -> AppResult<()> {
+    write_json_entries(app, HISTORY_STORE, entries, mode)
 }
 
 pub fn history_list(app: &AppHandle, profile_key: Option<&str>) -> AppResult<Vec<BrowserHistoryEntry>> {
@@ -1162,37 +1177,35 @@ pub fn history_record(
     if entries.len() > HISTORY_CAP {
         entries.truncate(HISTORY_CAP);
     }
-    write_history(app, &entries)
+    write_history(app, &entries, crate::durable::WriteMode::KeepRecords)
 }
 
 pub fn history_clear(app: &AppHandle, profile_key: Option<&str>) -> AppResult<()> {
     if let Some(pk) = profile_key {
         let mut entries = read_history(app)?;
         entries.retain(|e| e.profile_key != pk);
-        write_history(app, &entries)
+        let mode = if entries.is_empty() {
+            crate::durable::WriteMode::AllowEmpty
+        } else {
+            crate::durable::WriteMode::KeepRecords
+        };
+        write_history(app, &entries, mode)
     } else {
-        write_history(app, &[])
+        write_history(app, &[], crate::durable::WriteMode::AllowEmpty)
     }
 }
 
 fn read_bookmarks(app: &AppHandle) -> AppResult<Vec<BrowserBookmark>> {
-    let store = app
-        .store(BOOKMARK_STORE)
-        .map_err(|e| AppError::msg(e.to_string()))?;
-    let value = store.get("entries").unwrap_or(serde_json::json!([]));
-    serde_json::from_value(value).map_err(|e| AppError::msg(e.to_string()))
+    read_json_entries(app, BOOKMARK_STORE)
 }
 
 fn write_bookmarks(app: &AppHandle, entries: &[BrowserBookmark]) -> AppResult<()> {
-    let store = app
-        .store(BOOKMARK_STORE)
-        .map_err(|e| AppError::msg(e.to_string()))?;
-    store.set(
-        "entries",
-        serde_json::to_value(entries).map_err(|e| AppError::msg(e.to_string()))?,
-    );
-    store.save().map_err(|e| AppError::msg(e.to_string()))?;
-    Ok(())
+    let mode = if entries.is_empty() {
+        crate::durable::WriteMode::AllowEmpty
+    } else {
+        crate::durable::WriteMode::KeepRecords
+    };
+    write_json_entries(app, BOOKMARK_STORE, entries, mode)
 }
 
 pub fn bookmarks_list(app: &AppHandle, profile_key: Option<&str>) -> AppResult<Vec<BrowserBookmark>> {

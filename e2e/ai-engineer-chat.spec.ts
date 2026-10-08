@@ -13,6 +13,8 @@ test.describe("AI Engineer chat", () => {
       timeout: 20_000,
     });
     await expect(page.locator(".ai-engineer-composer")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("ai-engineer-interaction-mode")).toHaveCount(0);
+    await expect(page.getByTestId("ai-engineer-compare-toggle")).toHaveCount(0);
   });
 
   test("model settings has no agent CLI block", async ({ page }) => {

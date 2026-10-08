@@ -40,6 +40,16 @@ class ChatAttachment(BaseModel):
     data_base64: str | None = None
 
 
+class ModelBinding(BaseModel):
+    """Per-run model credentials. Process env stays on the active profile."""
+
+    provider: str = ""
+    model: str = ""
+    base_url: str = ""
+    ollama_base_url: str = ""
+    api_key: str = ""
+
+
 class ChatStartRequest(BaseModel):
     session_id: str
     message: str
@@ -57,6 +67,11 @@ class ChatStartRequest(BaseModel):
     attachments: list[ChatAttachment] = Field(default_factory=list)
     # Agent runtime: builtin | cursor | codex | claude (local CLIs).
     runtime: Literal["builtin", "cursor", "codex", "claude"] = "builtin"
+    # Set together on a compare turn so sibling read-only runs are not cancelled.
+    compare_group: str | None = None
+    # Rust injects this from the stored profile. The webview only sends profile_id.
+    profile_id: str | None = None
+    model_binding: ModelBinding | None = None
 
 
 class ChatStartResponse(BaseModel):

@@ -14,7 +14,7 @@ use tar::Archive;
 pub struct K8sToolInfo {
     pub name: String,
     pub installed: bool,
-    /// true when binary lives under TerminalWisely/bin
+    /// true when binary lives under the app data bin directory
     pub app_managed: bool,
     pub path: Option<String>,
     pub version: Option<String>,
@@ -49,11 +49,7 @@ struct ToolsMeta {
 }
 
 pub fn tools_bin_dir() -> Result<PathBuf> {
-    let dir = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .context("data dir")?
-        .join("TerminalWisely")
-        .join("bin");
+    let dir = crate::durable::primary_dir().join("bin");
     fs::create_dir_all(&dir).ok();
     Ok(dir)
 }

@@ -13,6 +13,8 @@ import {
 } from "../k8s/api";
 import type { K8sClusterTarget, K8sResourceCategory } from "../k8s/types";
 import { useK8sStore } from "../../stores/k8sStore";
+import { useAiEngineerStore } from "../../stores/aiEngineerStore";
+import { dbExplain, dbQuery, dbRegisterLease, dbSearchObjects } from "../db/api";
 import { aiRegisterPrivilegeLease, aiTerminalExec } from "./api";
 import {
   interactivePasswordError,
@@ -26,6 +28,7 @@ export type ToolCallEvent = {
   name: string;
   arguments: Record<string, unknown>;
   requires_lease?: boolean;
+  policy?: { approved?: boolean };
   lease?: {
     lease_id: string;
     session_id: string;
@@ -227,11 +230,79 @@ async function execK8sTool(
   }
 }
 
+async function execDbTool(call: ToolCallEvent): Promise<Record<string, unknown>> {
+  const state = useAiEngineerStore.getState();
+  const connectionId = state.dbConnectionId;
+  if (!connectionId) {
+    return { ok: false, error: "no database connection selected", _untrusted: true };
+  }
+  const requested = String(call.arguments.connection_id ?? "");
+  if (requested && requested !== connectionId) {
+    return { ok: false, error: "connection mismatch", _untrusted: true };
+  }
+  if (call.name === "db_search_objects") {
+    const rows = await dbSearchObjects(connectionId, String(call.arguments.query ?? ""));
+    return {
+      ok: rows.kind === "rows",
+      columns: rows.columns,
+      rows: rows.rows,
+      truncated: rows.truncated,
+      _untrusted: true,
+    };
+  }
+  const sql = String(call.arguments.sql ?? "");
+  const operation = call.name === "db_explain" ? "explain" : "query";
+  const inner = sql.trim();
+  const statement = call.name === "db_explain" ? `EXPLAIN ${inner}` : sql;
+  const approvedRevision = Number(call.arguments.revision);
+  if (Number.isFinite(approvedRevision) && approvedRevision !== state.dbRevision) {
+    return { ok: false, error: "connection revision mismatch", _untrusted: true };
+  }
+  const revision = Number.isFinite(approvedRevision) ? approvedRevision : state.dbRevision;
+  let leaseId: string | null = null;
+  if (call.policy?.approved) {
+    leaseId = await dbRegisterLease({
+      connectionId,
+      revision,
+      operation,
+      sql: statement,
+    });
+  }
+  const response =
+    call.name === "db_explain"
+      ? await dbExplain({ connectionId, sql: inner, leaseId })
+      : await dbQuery({ connectionId, sql, leaseId });
+  if (response.kind === "needs_approval") {
+    return {
+      ok: false,
+      error: "approval required",
+      risk: response.risk,
+      sql: response.sql,
+      _untrusted: true,
+    };
+  }
+  return {
+    ok: true,
+    columns: response.columns,
+    rows: response.rows,
+    truncated: response.truncated,
+    _untrusted: true,
+  };
+}
+
 export async function executeToolCall(
   sessionId: string,
   call: ToolCallEvent,
   callbacks?: ToolExecCallbacks,
 ): Promise<Record<string, unknown>> {
+  if (
+    call.name === "db_query" ||
+    call.name === "db_explain" ||
+    call.name === "db_search_objects"
+  ) {
+    return execDbTool(call);
+  }
+
   if (call.name.startsWith("k8s_")) {
     if (call.requires_lease && !call.lease?.lease_id) {
       return {
@@ -247,6 +318,19 @@ export async function executeToolCall(
     const command = String(call.arguments.command ?? "").trim();
     if (!command) {
       return { ok: false, error: "empty command" };
+    }
+    let hostSessionId = sessionId;
+    if (useAiEngineerStore.getState().engineerMode === "db") {
+      const ssh = useAiEngineerStore.getState().dbSshSessionId || "";
+      const requested = String(call.arguments.session_id ?? "");
+      if (!ssh || (requested && requested !== ssh)) {
+        return {
+          ok: false,
+          error: "terminal_exec is bound to the connection SSH session",
+          _untrusted: true,
+        };
+      }
+      hostSessionId = ssh;
     }
     const unlisten =
       callbacks?.onOutput && call.call_id
@@ -284,7 +368,7 @@ export async function executeToolCall(
       const result = await invokeWithSudoRetry(
         (sudoPassword) =>
           aiTerminalExec({
-            sessionId,
+            sessionId: hostSessionId,
             command,
             callId: call.call_id,
             leaseId,

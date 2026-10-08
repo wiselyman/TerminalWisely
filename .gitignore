@@ -26,6 +26,10 @@ dist-ssr
 # Cursor IDE（本地 AI 规则与配置，不纳入版本库）
 .cursor/
 
+# Cursor ↔ Codex 交接（本机队列，不纳入版本库）
+docs/codex-review.md
+docs/codex-feedback.md
+
 # Python
 **/__pycache__/
 **/*.py[cod]

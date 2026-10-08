@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_store::StoreExt;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -163,11 +162,26 @@ impl SessionManager {
 
     pub async fn close(&self, session_id: &str) -> AppResult<()> {
         self.set_ai_ssh_lease(session_id, false).await;
+        crate::db::cancel_ssh(session_id);
         let mut sessions = self.sessions.lock().await;
         if let Some(mut session) = sessions.remove(session_id) {
             session.close()?;
         }
         Ok(())
+    }
+
+    pub async fn ssh_handle(
+        &self,
+        session_id: &str,
+    ) -> AppResult<std::sync::Arc<tokio::sync::Mutex<russh::client::Handle<crate::ssh::client::ClientHandler>>>>
+    {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::msg("Session not found"))?;
+        match session {
+            SessionHandle::Ssh(ssh) => Ok(ssh.handle()),
+        }
     }
 
     pub async fn reconnect_ssh(
@@ -1206,9 +1220,60 @@ pub fn saved_connection_from_request(
         auth_method: request.auth_method.clone(),
         private_key_path: request.private_key_path.clone(),
         password: None,
+        secret_id: None,
         os_id: None,
         os_name: None,
     }
+}
+
+pub fn seal_saved_passwords(
+    connections: &mut [crate::types::SavedConnection],
+    secrets: &dyn crate::db::secrets::SecretStore,
+) -> Result<(), String> {
+    for connection in connections {
+        if let Some(password) = connection
+            .password
+            .clone()
+            .filter(|value| !value.is_empty())
+        {
+            let id = connection
+                .secret_id
+                .clone()
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| format!("ssh-{}", connection.id));
+            secrets.put(&id, &password)?;
+            connection.secret_id = Some(id);
+        }
+        connection.password = None;
+    }
+    Ok(())
+}
+
+pub fn open_saved_passwords(
+    connections: &mut [crate::types::SavedConnection],
+    secrets: &dyn crate::db::secrets::SecretStore,
+) -> Result<bool, String> {
+    let mut migrated = false;
+    for connection in connections {
+        if let Some(password) = connection
+            .password
+            .clone()
+            .filter(|value| !value.is_empty())
+        {
+            let id = connection
+                .secret_id
+                .clone()
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| format!("ssh-{}", connection.id));
+            secrets.put(&id, &password)?;
+            connection.secret_id = Some(id);
+            migrated = true;
+        }
+        if let Some(id) = connection.secret_id.clone() {
+            connection.password = secrets.get(&id)?;
+        }
+    }
+    Ok(migrated)
 }
 
 pub fn update_matching_saved_connections_os(
@@ -1229,7 +1294,7 @@ pub fn update_matching_saved_connections_os(
         }
     }
     if changed {
-        store_connections(app, &connections)?;
+        store_connections(app, &connections, crate::durable::WriteMode::KeepRecords)?;
     }
     Ok(())
 }
@@ -1247,19 +1312,48 @@ pub fn request_from_saved(saved: &SavedConnection, password: Option<String>) -> 
     }
 }
 
-pub fn store_connections(app: &AppHandle, connections: &[SavedConnection]) -> AppResult<()> {
-    let store = app.store("connections.json")?;
-    store.set("connections", serde_json::to_value(connections)?);
-    store.save()?;
-    Ok(())
+pub fn store_connections(
+    app: &AppHandle,
+    connections: &[SavedConnection],
+    mode: crate::durable::WriteMode,
+) -> AppResult<()> {
+    let mut disk = connections.to_vec();
+    let secrets = crate::db::secrets::FileVault::open(
+        &crate::durable::app_roots(app).primary,
+        crate::db::secrets::SSH_KEYCHAIN_SERVICE,
+    )?;
+    seal_saved_passwords(&mut disk, &secrets)?;
+    let value = serde_json::json!({ "connections": disk });
+    crate::durable::save_value(&crate::durable::app_roots(app), "connections.json", &value, mode)
+        .map_err(AppError::msg)
 }
 
 pub fn load_connections(app: &AppHandle) -> AppResult<Vec<SavedConnection>> {
-    let store = app.store("connections.json")?;
-    match store.get("connections") {
-        Some(value) => Ok(serde_json::from_value(value.clone())?),
-        None => Ok(Vec::new()),
+    let roots = crate::durable::app_roots(app);
+    let value = crate::durable::load_value(&roots, "connections.json").map_err(AppError::msg)?;
+    let mut connections: Vec<SavedConnection> = match value.get("connections") {
+        Some(item) => serde_json::from_value(item.clone())?,
+        None => Vec::new(),
+    };
+    let dir = crate::durable::app_roots(app).primary;
+    let ids = connections
+        .iter()
+        .filter_map(|item| item.secret_id.clone().filter(|id| !id.is_empty()))
+        .collect::<Vec<_>>();
+    crate::db::secrets::FileVault::import_legacy_once(
+        &dir,
+        crate::db::secrets::SSH_KEYCHAIN_SERVICE,
+        &ids,
+        &crate::db::secrets::KeyringSecretStore::ssh(),
+    )
+    .map_err(AppError::msg)?;
+    let secrets = crate::db::secrets::FileVault::open(&dir, crate::db::secrets::SSH_KEYCHAIN_SERVICE)
+        .map_err(AppError::msg)?;
+    let migrated = open_saved_passwords(&mut connections, &secrets).map_err(AppError::msg)?;
+    if migrated {
+        store_connections(app, &connections, crate::durable::WriteMode::KeepRecords)?;
     }
+    Ok(connections)
 }
 
 fn device_key(host: &str, port: u16, username: &str) -> String {
@@ -1308,27 +1402,39 @@ pub fn record_device_history(app: &AppHandle, request: &SshConnectRequest) -> Ap
         existing.private_key_path = request.private_key_path.clone();
         let updated = existing.clone();
         devices.sort_by(|a, b| b.last_connected_at.cmp(&a.last_connected_at));
-        store_device_history(app, &devices)?;
+        store_device_history(app, &devices, crate::durable::WriteMode::KeepRecords)?;
         return Ok(updated);
     }
 
     let record = device_record_from_request(request);
     devices.insert(0, record.clone());
-    store_device_history(app, &devices)?;
+    store_device_history(app, &devices, crate::durable::WriteMode::KeepRecords)?;
     Ok(record)
 }
 
-pub fn store_device_history(app: &AppHandle, devices: &[DeviceRecord]) -> AppResult<()> {
-    let store = app.store("device-history.json")?;
-    store.set("devices", serde_json::to_value(devices)?);
-    store.save()?;
-    Ok(())
+pub fn store_device_history(
+    app: &AppHandle,
+    devices: &[DeviceRecord],
+    mode: crate::durable::WriteMode,
+) -> AppResult<()> {
+    let value = serde_json::json!({ "devices": devices });
+    crate::durable::save_value(
+        &crate::durable::app_roots(app),
+        "device-history.json",
+        &value,
+        mode,
+    )
+    .map_err(AppError::msg)
 }
 
 pub fn load_device_history(app: &AppHandle) -> AppResult<Vec<DeviceRecord>> {
-    let store = app.store("device-history.json")?;
-    match store.get("devices") {
-        Some(value) => Ok(serde_json::from_value(value.clone())?),
+    let value = crate::durable::load_value(
+        &crate::durable::app_roots(app),
+        "device-history.json",
+    )
+    .map_err(AppError::msg)?;
+    match value.get("devices") {
+        Some(item) => Ok(serde_json::from_value(item.clone())?),
         None => Ok(Vec::new()),
     }
 }
@@ -1502,5 +1608,37 @@ mod ai_ssh_lease_tests {
     fn reconnect_blocked_when_ai_lease_active() {
         assert!(assert_reconnect_allowed(true).is_err());
         assert!(assert_reconnect_allowed(false).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod saved_password_tests {
+    use super::{open_saved_passwords, seal_saved_passwords};
+    use crate::db::secrets::{MemorySecretStore, SecretStore};
+    use crate::types::{AuthMethod, SavedConnection};
+
+    #[test]
+    fn password_round_trip_keeps_bytes_out_of_json() {
+        let secrets = MemorySecretStore::default();
+        let mut connections = vec![SavedConnection {
+            id: "h1".into(),
+            name: "home".into(),
+            host: "10.0.0.1".into(),
+            port: 22,
+            username: "me".into(),
+            auth_method: AuthMethod::Password,
+            private_key_path: None,
+            password: Some(" pw ".into()),
+            secret_id: None,
+            os_id: None,
+            os_name: None,
+        }];
+        assert!(open_saved_passwords(&mut connections, &secrets).unwrap());
+        assert_eq!(connections[0].password.as_deref(), Some(" pw "));
+        seal_saved_passwords(&mut connections, &secrets).unwrap();
+        let raw = serde_json::to_string(&connections).unwrap();
+        assert!(!raw.contains(" pw "));
+        assert!(raw.contains("ssh-h1"));
+        assert_eq!(secrets.get("ssh-h1").unwrap().as_deref(), Some(" pw "));
     }
 }

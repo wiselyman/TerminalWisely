@@ -232,58 +232,50 @@ export const K8S_WORKFLOW_CHIP_IDS = [
   "recentEvents",
 ] as const;
 
+export const DB_WORKFLOW_CHIP_IDS = [
+  "dbWaiting",
+  "dbSlow",
+  "dbSize",
+] as const;
+
 export type WorkflowChipId = (typeof WORKFLOW_CHIP_IDS)[number];
 export type K8sWorkflowChipId = (typeof K8S_WORKFLOW_CHIP_IDS)[number];
+export type DbWorkflowChipId = (typeof DB_WORKFLOW_CHIP_IDS)[number];
 
 /** English prompts; FE maps via i18n keys for display labels. */
-export function workflowPrompt(
-  id: WorkflowChipId,
-  interactionMode: "ask" | "plan" | "agent",
-): string {
-  const ask = interactionMode === "ask";
-  const plan = interactionMode === "plan";
+export function workflowPrompt(id: WorkflowChipId): string {
   switch (id) {
     case "ports":
-      if (ask) return "Who is listening on the important TCP ports? Inspect only; explain findings.";
-      if (plan) return "Plan how to identify what listens on key ports (update_plan). Do not mutate.";
       return "Check which processes listen on key TCP ports and summarize.";
     case "systemd":
-      if (ask) return "Investigate failed or inactive systemd services. Read-only; explain.";
-      if (plan) return "Plan steps to diagnose systemd service failures (update_plan). No mutations.";
       return "Find failed systemd units and diagnose the top issue.";
     case "disk":
-      if (ask) return "Check disk usage on mounts. Read-only; explain what is full.";
-      if (plan) return "Plan how to investigate disk space pressure (update_plan). No mutations.";
       return "Check disk usage and identify what is consuming space.";
     case "nginx502":
-      if (ask) return "Investigate a possible nginx 502. Read configs/logs only; explain.";
-      if (plan) return "Plan diagnosis for nginx 502 (update_plan). Do not restart services yet.";
       return "Diagnose nginx 502: check listeners, upstream, and recent error logs.";
   }
 }
 
-export function k8sWorkflowPrompt(
-  id: K8sWorkflowChipId,
-  interactionMode: "ask" | "plan" | "agent",
-): string {
-  const ask = interactionMode === "ask";
-  const plan = interactionMode === "plan";
+export function dbWorkflowPrompt(id: DbWorkflowChipId): string {
+  switch (id) {
+    case "dbWaiting":
+      return "Who is waiting on this database, and what are they waiting for?";
+    case "dbSlow":
+      return "Why is the selected statement slow? If none is selected, find the heaviest one.";
+    case "dbSize":
+      return "How large are the databases on this connection?";
+  }
+}
+
+export function k8sWorkflowPrompt(id: K8sWorkflowChipId): string {
   switch (id) {
     case "podIssues":
-      if (ask) return "Summarize non-Running pods in the current namespace. Read-only; explain.";
-      if (plan) return "Plan how to triage unhealthy pods with k8s_list/k8s_describe (update_plan). No mutations.";
       return "List pods, find unhealthy ones, and diagnose the worst issue with describe/logs.";
     case "crashLoop":
-      if (ask) return "Is any pod CrashLoopBackOff or ImagePullBackOff? Explain using describe/logs only.";
-      if (plan) return "Plan CrashLoop/ImagePull diagnosis with k8s_* tools (update_plan). No mutations.";
       return "Find CrashLoopBackOff or ImagePullBackOff pods and diagnose root cause from events/logs.";
     case "deployStatus":
-      if (ask) return "Are Deployments Available and Ready? Explain readiness without mutating.";
-      if (plan) return "Plan how to verify Deployment readiness (update_plan). No scale/apply yet.";
       return "Check Deployments Ready/Available status and explain any gaps.";
     case "recentEvents":
-      if (ask) return "What Warning events happened recently? Summarize from k8s_list events.";
-      if (plan) return "Plan how to review Warning events and linked objects (update_plan).";
       return "List recent Warning events and investigate the most severe one.";
   }
 }

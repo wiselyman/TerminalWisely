@@ -6,6 +6,7 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
 use russh::client;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -22,6 +23,7 @@ pub struct TcpTunnel {
     pub remote_port: u16,
     shutdown_tx: Option<oneshot::Sender<()>>,
     accept_task: Option<JoinHandle<()>>,
+    children: Arc<StdMutex<Vec<JoinHandle<()>>>>,
 }
 
 impl Drop for TcpTunnel {
@@ -32,6 +34,19 @@ impl Drop for TcpTunnel {
         if let Some(task) = self.accept_task.take() {
             task.abort();
         }
+        if let Ok(mut children) = self.children.lock() {
+            for task in children.drain(..) {
+                task.abort();
+            }
+        }
+    }
+}
+
+fn track_child(children: &Arc<StdMutex<Vec<JoinHandle<()>>>>, task: JoinHandle<()>) {
+    if let Ok(mut guard) = children.lock() {
+        guard.push(task);
+    } else {
+        task.abort();
     }
 }
 
@@ -52,6 +67,8 @@ impl TcpTunnel {
 
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
         let remote_host_task = remote_host.clone();
+        let children = Arc::new(StdMutex::new(Vec::new()));
+        let children_task = children.clone();
         let accept_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -60,13 +77,14 @@ impl TcpTunnel {
                         match accepted {
                             Ok((stream, _)) => {
                                 let host = remote_host_task.clone();
-                                tokio::spawn(async move {
+                                let task = tokio::spawn(async move {
                                     if let Err(e) =
                                         relay_via_socks(stream, socks_port, &host, remote_port).await
                                     {
                                         log::warn!("host-browser tunnel via socks: {e}");
                                     }
                                 });
+                                track_child(&children_task, task);
                             }
                             Err(_) => break,
                         }
@@ -81,6 +99,7 @@ impl TcpTunnel {
             remote_port,
             shutdown_tx: Some(shutdown_tx),
             accept_task: Some(accept_task),
+            children,
         })
     }
 
@@ -99,6 +118,8 @@ impl TcpTunnel {
 
         let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
         let remote_host_task = remote_host.clone();
+        let children = Arc::new(StdMutex::new(Vec::new()));
+        let children_task = children.clone();
         let accept_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -108,12 +129,13 @@ impl TcpTunnel {
                             Ok((stream, _)) => {
                                 let h = handle.clone();
                                 let host = remote_host_task.clone();
-                                tokio::spawn(async move {
+                                let task = tokio::spawn(async move {
                                     if let Err(e) = relay_direct(stream, h, host, remote_port).await
                                     {
                                         log::warn!("host-browser tunnel direct: {e}");
                                     }
                                 });
+                                track_child(&children_task, task);
                             }
                             Err(_) => break,
                         }
@@ -128,6 +150,7 @@ impl TcpTunnel {
             remote_port,
             shutdown_tx: Some(shutdown_tx),
             accept_task: Some(accept_task),
+            children,
         })
     }
 }

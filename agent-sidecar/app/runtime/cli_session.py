@@ -16,6 +16,15 @@ from app.session.log import SurfaceOp
 EXTERNAL_SESSIONS_EVENT = "external_session"
 
 
+def supports_read_only_launch(kind: str) -> bool:
+    """True when this CLI adapter can start without write permission.
+
+    Cursor uses ``--mode ask`` or ``--mode plan`` (both read-only) and omits
+    ``-f``. Codex uses ``--sandbox read-only``. Claude uses permission mode plan.
+    """
+    return kind in {"cursor", "codex", "claude"}
+
+
 def build_runtime_argv(
     kind: LocalCliKind,
     *,
@@ -24,13 +33,19 @@ def build_runtime_argv(
     workspace: Path,
     mcp_config: Path,
     resume_id: str | None = None,
+    read_only: bool = False,
+    read_only_mode: str | None = None,
 ) -> list[str]:
     """Headless argv. ``resume_id`` selects the vendor's resume form.
 
     Codex never gets ``--ephemeral``: those sessions cannot be resumed, and
     ``exec resume`` of an ephemeral id silently starts a new thread.
+
+    ``read_only`` drops write flags and does not resume a writable vendor thread.
     """
-    resume = (resume_id or "").strip() or None
+    if read_only and not supports_read_only_launch(kind):
+        raise RuntimeError("read_only_unsupported")
+    resume = None if read_only else ((resume_id or "").strip() or None)
     if kind == "cursor":
         argv = [
             *prefix,
@@ -41,8 +56,12 @@ def build_runtime_argv(
             str(workspace),
             "--approve-mcps",
             "--trust",
-            "-f",
         ]
+        if read_only:
+            pose = "plan" if (read_only_mode or "").strip().lower() == "plan" else "ask"
+            argv.extend(["--mode", pose])
+        else:
+            argv.append("-f")
         if resume:
             argv.append(f"--resume={resume}")
         argv.append(prompt)
@@ -59,7 +78,7 @@ def build_runtime_argv(
             "--verbose",
             "--include-partial-messages",
             "--permission-mode",
-            "bypassPermissions",
+            "plan" if read_only else "bypassPermissions",
             "--mcp-config",
             str(mcp_config),
             "--strict-mcp-config",
@@ -75,10 +94,18 @@ def build_runtime_argv(
         "--cd",
         str(workspace),
         "--skip-git-repo-check",
-        "--approve-for-me",
-        "--disable",
-        "computer_use",
     ]
+    if read_only:
+        # --approve-for-me implies workspace-write. Read-only compare must not pass it.
+        argv.extend(["--sandbox", "read-only"])
+    else:
+        argv.append("--approve-for-me")
+    argv.extend(
+        [
+            "--disable",
+            "computer_use",
+        ]
+    )
     if resume:
         # Parent `exec` options, then the resume subcommand and the thread id.
         argv.extend(["resume", resume])

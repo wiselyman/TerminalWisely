@@ -282,20 +282,37 @@ class AgentLoop:
         )
 
     def _tool_schemas(self) -> list[dict[str, Any]]:
+        from app.agent.db_context import bound_ssh_session_id
+
         engineer_mode = str(self.run.metadata.get("engineer_mode") or "linux")
         return tools_for_interaction_mode(
             self.run.interaction_mode,
             engineer_mode=engineer_mode,
+            ssh_session_id=bound_ssh_session_id(self.run.metadata),
         )
 
     def _engineer_mode(self) -> str:
         mode = str(self.run.metadata.get("engineer_mode") or "linux").strip().lower()
-        return mode if mode in {"linux", "k8s"} else "linux"
+        return mode if mode in {"linux", "k8s", "db"} else "linux"
 
     def _engineer_prompt_kwargs(self) -> dict[str, Any]:
+        from app.agent.db_context import bound_ssh_session_id, db_context
+
         scope = self._memory_scope()
+        ctx = db_context(self.run.metadata)
+        ssh = bound_ssh_session_id(self.run.metadata)
         return {
             "engineer_mode": self._engineer_mode(),
+            "connection_name": str(ctx.get("name") or "") or None,
+            "engine": str(ctx.get("engine") or "") or None,
+            "database": str(ctx.get("database") or "") or None,
+            "schema": str(ctx.get("schema") or "") or None,
+            "selected_sql": str(ctx.get("selected_sql") or "") or None,
+            "terminal_note": (
+                "terminal_exec may run only on the SSH session already bound to this connection."
+                if ssh
+                else "terminal_exec is unavailable because this connection is direct."
+            ),
             "cluster_id": (
                 str(self.run.metadata.get("cluster_id"))
                 if self.run.metadata.get("cluster_id")
@@ -1437,6 +1454,26 @@ class AgentLoop:
         )
 
     async def _terminal_exec(self, call_id: str, args: dict[str, Any]) -> None:
+        from app.agent.db_context import resolve_db_terminal_session
+
+        if self._engineer_mode() == "db":
+            bound = resolve_db_terminal_session(
+                self.run.metadata,
+                str(args.get("session_id") or ""),
+                self.run.session_id,
+            )
+            if not bound:
+                await self._add_tool_result(
+                    call_id,
+                    {
+                        "ok": False,
+                        "denied": True,
+                        "reason": "terminal_exec is not available for this connection",
+                        "_untrusted": True,
+                    },
+                )
+                return
+            args = {**args, "session_id": bound}
         raw_command = str(args.get("command") or "").strip()
         command = sanitize_terminal_command(raw_command) or raw_command
         intent_raw = str(args.get("intent") or "").strip()
@@ -1600,6 +1637,94 @@ class AgentLoop:
         ):
             # Defer until all tool_calls in this assistant turn are answered.
             self.run.metadata["_pending_verify_nudge"] = True
+
+    async def _db_tool(
+        self, call_id: str, args: dict[str, Any], *, name: str
+    ) -> None:
+        from app.agent.db_context import db_context
+        from app.policy.sql_risk import assess_db_sql, explain_text
+
+        ctx = db_context(self.run.metadata)
+        connection_id = str(ctx.get("connection_id") or "").strip()
+        engine = str(ctx.get("engine") or "postgres").strip() or "postgres"
+        if not connection_id:
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "error": "no database connection selected",
+                    "_untrusted": True,
+                },
+            )
+            return
+        args = {**args, "connection_id": connection_id}
+        if ctx.get("revision") is not None:
+            args = {**args, "revision": ctx.get("revision")}
+        sql = str(args.get("sql") or "").strip()
+        classified = explain_text(sql) if name == "db_explain" and sql else sql
+        if name == "db_search_objects":
+            decision = {"action": "allow", "risk": "R0", "reason": ""}
+        else:
+            decision = assess_db_sql(classified, engine, self.run.security_mode)
+        action = decision.get("action")
+        if action in {"deny", "error"}:
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "denied": action == "deny",
+                    "reason": decision.get("reason") or "statement rejected",
+                    "risk": decision.get("risk") or "",
+                    "_untrusted": True,
+                },
+            )
+            return
+        if action == "require_approval":
+            risk_raw = str(decision.get("risk") or "R2")
+            try:
+                risk_level = RiskLevel(risk_raw)
+            except ValueError:
+                risk_level = RiskLevel.R2
+            approved = await self._wait_approval(
+                call_id,
+                classified,
+                risk_level,
+                decision.get("reason") or "",
+                intent=str(args.get("intent") or name),
+                resume=name,
+                timeout_seconds=60,
+            )
+            if not approved:
+                await self._add_tool_result(
+                    call_id,
+                    {
+                        "ok": False,
+                        "denied": True,
+                        "reason": "User rejected mutation approval",
+                        "risk": decision.get("risk") or "",
+                        "_untrusted": True,
+                    },
+                )
+                return
+        result = await self._await_host_k8s(
+            call_id=call_id,
+            name=name,
+            args=args,
+            risk=decision.get("risk") or "R0",
+            reason=decision.get("reason") or "",
+            intent=str(args.get("intent") or name),
+            approved=action == "require_approval",
+        )
+        if result is None:
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "cancelled": True,
+                    "error": "cancelled",
+                    "_untrusted": True,
+                },
+            )
 
     async def _k8s_tool(
         self, call_id: str, args: dict[str, Any], *, name: str

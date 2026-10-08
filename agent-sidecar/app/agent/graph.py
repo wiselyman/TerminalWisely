@@ -58,6 +58,16 @@ def _langgraph_checkpointer() -> Any:
     return _CHECKPOINTER
 
 
+def _loop_for(run: AgentRun) -> AgentLoop:
+    """Use the run's profile binding when a compare voice named one."""
+    from app.llm.binding import gateway_for_run
+
+    model = gateway_for_run(run)
+    if model is None:
+        return AgentLoop(run)
+    return AgentLoop(run, model=model)
+
+
 async def _run_loop_node(state: GraphState) -> GraphState:
     """Macro node: drive AgentLoop until pause or done. Waits stay inside AgentLoop."""
     from app.state import STORE
@@ -65,7 +75,7 @@ async def _run_loop_node(state: GraphState) -> GraphState:
     run = STORE.get_run(state["run_id"])
     if run is None:
         return {"status": "failed"}
-    loop = AgentLoop(run)
+    loop = _loop_for(run)
     await loop.run_until_pause_or_done(state.get("user_message"))
     # Persist interrupt surface for operators / restart.
     if run.status in (
@@ -218,7 +228,7 @@ async def _watch_wait_and_resume(run: AgentRun) -> None:
     live = STORE.get_run(run.run_id) or run
     snap = live.metadata.get("wait_snapshot") or load_wait_snapshot(live.session_id, live.run_id) or {}
     kind = str(snap.get("kind") or "")
-    loop = AgentLoop(live)
+    loop = _loop_for(live)
 
     if kind == "tool" and live.pending_tool is not None:
         payload = await live.pending_tool.future
