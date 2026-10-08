@@ -2239,6 +2239,7 @@ export function DbWorkbench() {
               {t("dbEngine")}
               <EngineSelect
                 testId="db-connection-engine"
+                fieldLabel={t("dbEngine")}
                 value={form.engine}
                 engines={OFFERED_ENGINES}
                 onChange={(engine) => {

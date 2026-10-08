@@ -49,10 +49,15 @@ test.describe("Database workbench", () => {
 
     await page.getByTestId("db-connection-new").click();
     await expect(page.getByTestId("db-connection-engine").locator(".db-engine-icon--postgres")).toBeVisible();
+    // Regression: ISSUE-001 — engine button accessible name omitted the selected engine
+    // Found by /qa on 2026-10-08
+    // Report: .gstack/qa-reports/run-20261008T072354Z/qa-report-127.0.0.1-2026-10-08.md
+    await expect(page.getByTestId("db-connection-engine")).toHaveAccessibleName(/postgres/);
     await page.getByTestId("db-connection-engine").click();
     const engineMenu = page.getByTestId("db-connection-engine-menu");
     await expect(engineMenu.locator(".db-engine-icon")).toHaveCount(8);
     await page.getByTestId("db-connection-engine-mysql").click();
+    await expect(page.getByTestId("db-connection-engine")).toHaveAccessibleName(/mysql/);
     await expect(page.getByTestId("db-connection-port")).toHaveValue("3306");
     await page.getByTestId("db-connection-name").fill("shop");
     await page.getByTestId("db-connection-host").fill("db.internal");

@@ -8,11 +8,13 @@ export function EngineSelect({
   engines,
   onChange,
   testId,
+  fieldLabel,
 }: {
   value: string;
   engines: readonly string[];
   onChange: (engine: string) => void;
   testId: string;
+  fieldLabel: string;
 }) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,7 @@ export function EngineSelect({
         type="button"
         className="db-engine-select-trigger"
         data-testid={testId}
+        aria-label={`${fieldLabel} ${value}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
