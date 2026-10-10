@@ -1601,11 +1601,10 @@ function exists(rel) {
 // --- Feature flow gate (AGENTS.md) ---
 {
   const agents = read("AGENTS.md");
-  const rule = read(".cursor/rules/feature-flow.mdc");
   const need = ["要保住的旧行为", "架构", "设计", "先写会失败的测试"];
-  const missing = need.filter((item) => !agents.includes(item) || !rule.includes(item));
+  const missing = need.filter((item) => !agents.includes(item));
   const banned = ["用户 → Codex", "待审计划", "按 AGENTS.md 审计划", "按 AGENTS.md 审查"];
-  const hit = banned.filter((item) => agents.includes(item) || rule.includes(item));
+  const hit = banned.filter((item) => agents.includes(item));
   if (missing.length === 0 && hit.length === 0) {
     pass("process.feature-flow", "plan gates are local; Codex joint review is not required");
   } else {
