@@ -35,7 +35,9 @@ def test_probe_finds_cursor_agent(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
     p = probe_local_cli("cursor")
     assert p["installed"] is True
-    assert p["code"] == "ready"
+    # Empty `status` is not a login. The UI must offer browser sign-in.
+    assert p["code"] == "login_needed"
+    assert p["authenticated"] is False
     assert p["fake"] is False
     assert "cursor-agent" in p["binary"]
 

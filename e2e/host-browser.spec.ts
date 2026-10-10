@@ -53,9 +53,15 @@ test.describe("Host browser (SOCKS panel)", () => {
     await expect(page.getByTestId("host-browser-content")).toBeVisible();
     await expect(page.getByTestId("host-browser-tab-favicon")).toBeAttached();
     await page.getByTestId("host-browser-url").fill("127.0.0.1");
-    await expect(page.getByTestId("host-browser-suggest")).toBeVisible({
+    const suggest = page.getByTestId("host-browser-suggest");
+    await expect(suggest).toBeVisible({
       timeout: 10_000,
     });
+    const suggestBox = await suggest.boundingBox();
+    const contentBox = await page.getByTestId("host-browser-content").boundingBox();
+    expect(suggestBox).not.toBeNull();
+    expect(contentBox).not.toBeNull();
+    expect(suggestBox!.y + suggestBox!.height).toBeLessThanOrEqual(contentBox!.y + 1);
     await page.getByTestId("host-browser-library-toggle").click();
     await expect(page.getByTestId("host-browser-library")).toBeVisible();
     await expect(page.getByTestId("host-browser-star")).toBeVisible();

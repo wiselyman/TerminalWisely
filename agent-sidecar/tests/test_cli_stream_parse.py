@@ -84,6 +84,16 @@ def test_write_tw_mcp_also_writes_cursor_and_codex_project_mcp(
 ) -> None:
     monkeypatch.setenv("TW_AI_TOKEN", "tok")
     monkeypatch.setenv("TW_AI_SIDECAR_URL", "http://127.0.0.1:8765")
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    user_mcp = home / ".cursor" / "mcp.json"
+    user_mcp.parent.mkdir(parents=True)
+    user_mcp.write_text(
+        json.dumps({"mcpServers": {"other": {"command": "echo"}}}),
+        encoding="utf-8",
+    )
 
     class R:
         run_id = "r1"
@@ -91,15 +101,48 @@ def test_write_tw_mcp_also_writes_cursor_and_codex_project_mcp(
 
     cfg = write_tw_mcp_config(R(), tmp_path)
     assert cfg.name == "tw_mcp.json"
+    tw = json.loads(cfg.read_text(encoding="utf-8"))
+    server = tw["mcpServers"]["terminalwisely"]
+    # Claude --mcp-config ignores user/project files. Print mode only connects
+    # servers marked alwaysLoad, and the schema expects type stdio.
+    assert server["type"] == "stdio"
+    assert server["alwaysLoad"] is True
+    claude_project = tmp_path / ".mcp.json"
+    assert json.loads(claude_project.read_text(encoding="utf-8"))["mcpServers"][
+        "terminalwisely"
+    ]["command"]
     cursor_mcp = tmp_path / ".cursor" / "mcp.json"
     assert cursor_mcp.is_file()
     data = json.loads(cursor_mcp.read_text(encoding="utf-8"))
     assert "terminalwisely" in data["mcpServers"]
+    # Cursor has no --mcp-config. A temp workspace whose git root is elsewhere
+    # skips project mcp.json, so the same server must be merged into the user file.
+    user = json.loads(user_mcp.read_text(encoding="utf-8"))
+    assert user["mcpServers"]["other"]["command"] == "echo"
+    assert user["mcpServers"]["terminalwisely"]["command"] == server["command"]
     codex_toml = tmp_path / ".codex" / "config.toml"
     assert codex_toml.is_file()
     text = codex_toml.read_text(encoding="utf-8")
     assert "[mcp_servers.terminalwisely]" in text
     assert "command" in text
+
+
+def test_cursor_user_mcp_keeps_unparseable_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    user_mcp = tmp_path / ".cursor" / "mcp.json"
+    user_mcp.parent.mkdir(parents=True)
+    raw = "{not json"
+    user_mcp.write_text(raw, encoding="utf-8")
+
+    class R:
+        run_id = "r1"
+        session_id = "s1"
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    write_tw_mcp_config(R(), ws)
+    assert user_mcp.read_text(encoding="utf-8") == raw
 
 
 def test_cursor_argv_has_trust_force_no_partial(monkeypatch, tmp_path: Path) -> None:
@@ -169,6 +212,22 @@ def test_codex_argv_skips_git_repo_check(monkeypatch, tmp_path: Path) -> None:
     assert "--approve-for-me" in argv
     assert "--disable" in argv
     assert "computer_use" in argv
+    # Project .codex/config.toml is ignored on untrusted temp dirs (Windows included).
+    # MCP must be passed with -c so Codex registers server terminalwisely.
+    mcp = tmp_path / "tw_mcp.json"
+    mcp.write_text(
+        '{"mcpServers":{"terminalwisely":{"command":"python","args":["-m","app.runtime.mcp_stdio"],"env":{"TW_AI_TOKEN":"tok"}}}}',
+        encoding="utf-8",
+    )
+    argv = build_cli_argv(
+        "codex",
+        prompt="hi",
+        workspace=tmp_path,
+        mcp_config=mcp,
+    )
+    joined = " ".join(argv)
+    assert "mcp_servers.terminalwisely.command" in joined
+    assert "mcp_servers.terminalwisely.args" in joined
     assert "-s" not in argv
     assert "workspace-write" not in argv
     assert argv[-1] == "hi"

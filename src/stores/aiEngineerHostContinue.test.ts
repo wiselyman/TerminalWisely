@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   aiChatScopeKey,
+  __testGetActiveAiRun,
+  __testSetActiveAiRun,
   useAiEngineerStore,
 } from "./aiEngineerStore";
 import {
@@ -11,14 +13,16 @@ import {
 } from "./hostWorkspaceMemory";
 
 /**
- * Soft-hide must keep a mid-run AI alive when switching to another host's
- * terminal and back. Abort only when binding AI to a different host.
+ * Soft-hide / host switch must keep a mid-run AI alive in the background.
+ * Abort only on explicit STOP or same-host thread switch — never on host tab change.
  */
 describe("AI host soft-hide continue", () => {
   beforeEach(() => {
     const scopeA = aiChatScopeKey("host-a", "srv-a");
     forgetAiFiber("host-a");
     forgetAiFiber("host-b");
+    __testSetActiveAiRun(null, null, null);
+    __testSetActiveAiRun(scopeA, "t1", "run-a");
     useAiEngineerStore.setState({
       open: true,
       sessionId: "host-a",
@@ -96,7 +100,8 @@ describe("AI host soft-hide continue", () => {
     expect(s.sessionId).toBe("host-a");
   });
 
-  it("binding AI to a different host aborts the prior run", () => {
+  it("binding AI to a different host parks UI but keeps the prior run", () => {
+    const scopeA = aiChatScopeKey("host-a", "srv-a");
     useAiEngineerStore.getState().bindManagedEntity(
       {
         kind: "server",
@@ -107,10 +112,36 @@ describe("AI host soft-hide continue", () => {
       },
       { open: true },
     );
-    const s = useAiEngineerStore.getState();
-    expect(s.sessionId).toBe("host-b");
-    expect(s.busy).toBe(false);
-    expect(s.modelPhase).toBe("idle");
+    const onB = useAiEngineerStore.getState();
+    expect(onB.sessionId).toBe("host-b");
+    // B is not the running host — local busy indicator off.
+    expect(onB.busy).toBe(false);
+    expect(onB.modelPhase).toBe("idle");
+    // A's transcript must survive; run marker must stay for background continue.
+    expect(
+      onB.threadsByScope[scopeA]?.threads[0]?.messages[0],
+    ).toMatchObject({ content: "streaming…", streaming: true });
+    expect(__testGetActiveAiRun()).toEqual({
+      scope: scopeA,
+      threadId: "t1",
+      runId: "run-a",
+    });
+
+    // Return to A — busy restores from the still-active background run.
+    useAiEngineerStore.getState().bindManagedEntity(
+      {
+        kind: "server",
+        id: "srv-a",
+        label: "A",
+        sessionId: "host-a",
+        serverId: "srv-a",
+      },
+      { open: true },
+    );
+    const back = useAiEngineerStore.getState();
+    expect(back.sessionId).toBe("host-a");
+    expect(back.busy).toBe(true);
+    expect(back.modelPhase).not.toBe("idle");
   });
 
   it("stream commits land in threadsByScope for parked fibers", () => {

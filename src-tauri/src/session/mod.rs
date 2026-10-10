@@ -673,58 +673,68 @@ impl SessionManager {
                 )
                 .await?;
 
-                let app_for_scp = app_progress.clone();
-                let tid_for_scp = progress_transfer_id.clone();
-                let sid_for_scp = progress_session_id.clone();
-                let fname_for_scp = fname.clone();
+                // Keyless cross-server send: relay through the already-authenticated
+                // app sessions (cat for files, tar for directories). No source→dest
+                // SSH keys or passwords required.
+                let app_for_stream = app_progress.clone();
+                let tid = progress_transfer_id.clone();
+                let sid = progress_session_id.clone();
+                let fname_progress = fname.clone();
+                let dest = to_path_progress.clone();
+                let sudo_password_send = sudo_password.clone();
 
-                let to_path_for_progress = to_path_progress.clone();
-                let sudo_password_scp = sudo_password.clone();
-
-                match crate::ssh::scp_transfer::transfer_remote_via_server_scp(
+                let relay = crate::ssh::stream_transfer::transfer_remote_path(
                     &from_conn.handle(),
-                    Some(&to_conn.handle()),
+                    &to_conn.handle(),
                     &from_path,
-                    &to_request,
                     &to_path,
                     size,
                     recursive,
                     Some(cancel.clone()),
-                    move |transferred, total, method| {
-                        let _ = app_for_scp.emit(
+                    move |transferred, total| {
+                        let _ = app_for_stream.emit(
                             "transfer-progress",
                             TransferProgressPayload {
-                                transfer_id: tid_for_scp.clone(),
-                                session_id: sid_for_scp.clone(),
-                                filename: fname_for_scp.clone(),
+                                transfer_id: tid.clone(),
+                                session_id: sid.clone(),
+                                filename: fname_progress.clone(),
                                 transferred,
                                 total,
-                                method: Some(method.to_string()),
+                                method: Some(
+                                    crate::ssh::stream_transfer::TRANSFER_METHOD_STREAM
+                                        .to_string(),
+                                ),
                                 direction: "send".to_string(),
-                                destination_path: Some(to_path_for_progress.clone()),
+                                destination_path: Some(dest.clone()),
                             },
                         );
                     },
                 )
-                .await
-                {
+                .await;
+
+                match relay {
                     Ok(()) => Ok(()),
                     Err(err) if err.is_cancelled() => Err(err),
                     Err(err)
                         if preview_sudo::is_permission_denied(&err)
                             || err.to_string().to_lowercase().contains("permission denied") =>
                     {
-                        let tmp_dest = format!("/tmp/.tw-{}", Uuid::new_v4());
-                        crate::ssh::scp_transfer::transfer_remote_via_server_scp(
+                        // Directory tar extracts by archive entry name, so stage
+                        // under /tmp/.tw-<id>/<basename> to keep the leaf name.
+                        let tmp_dest = if recursive {
+                            format!("/tmp/.tw-{}/{}", Uuid::new_v4(), fname)
+                        } else {
+                            format!("/tmp/.tw-{}", Uuid::new_v4())
+                        };
+                        crate::ssh::stream_transfer::transfer_remote_path(
                             &from_conn.handle(),
-                            Some(&to_conn.handle()),
+                            &to_conn.handle(),
                             &from_path,
-                            &to_request,
                             &tmp_dest,
                             size,
                             recursive,
                             Some(cancel),
-                            |_, _, _| {},
+                            |_, _| {},
                         )
                         .await?;
                         let quoted_tmp = shell_quote_remote_path(&tmp_dest);
@@ -732,7 +742,7 @@ impl SessionManager {
                         preview_sudo::exec_remote_sudo(
                             &to_conn.handle(),
                             &format!("mv -f {quoted_tmp} {quoted_dest}"),
-                            sudo_password_scp.as_deref(),
+                            sudo_password_send.as_deref(),
                             "发送",
                             &to_path,
                         )

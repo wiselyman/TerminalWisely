@@ -1,10 +1,13 @@
 import { Check, CircleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useToastStore } from "../stores/toastStore";
 
 /** Renders the latest toast(s) on the status bar far right. */
 export function StatusBarToasts() {
+  const { t } = useTranslation("terminal");
   const toasts = useToastStore((s) => s.toasts);
   const removeToast = useToastStore((s) => s.removeToast);
+  const pushToast = useToastStore((s) => s.pushToast);
   // Show newest first; keep at most 2 so the bar stays readable.
   const visible = [...toasts].reverse().slice(0, 2);
 
@@ -20,8 +23,27 @@ export function StatusBarToasts() {
         <div
           key={toast.id}
           className={`statusbar-toast ${toast.success ? "is-ok" : "is-err"}`}
-          title={toast.message}
+          title={
+            toast.success
+              ? toast.message
+              : `${toast.message}\n${t("toastErrorClickHint")}`
+          }
           role="status"
+          data-testid={toast.success ? "statusbar-toast-ok" : "statusbar-toast-err"}
+          onClick={
+            toast.success
+              ? undefined
+              : () => {
+                  void navigator.clipboard?.writeText(toast.message).then(
+                    () => {
+                      pushToast(t("toastCopiedError"), true);
+                    },
+                    () => {
+                      /* clipboard unavailable — title still has full text */
+                    },
+                  );
+                }
+          }
         >
           {toast.success ? (
             <Check className="statusbar-toast-icon" size={12} strokeWidth={1.75} aria-hidden />
@@ -34,7 +56,8 @@ export function StatusBarToasts() {
               type="button"
               className="statusbar-toast-action"
               data-testid="statusbar-toast-action"
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation();
                 toast.onAction?.();
                 removeToast(toast.id);
               }}
@@ -45,7 +68,10 @@ export function StatusBarToasts() {
           <button
             type="button"
             className="statusbar-toast-close"
-            onClick={() => removeToast(toast.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              removeToast(toast.id);
+            }}
             aria-label="Dismiss"
           >
             ×

@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isExtractableArchivePath } from "../lib/archivePath";
 import { formatAppError } from "../lib/formatAppError";
 import { invokeWithSudoRetry } from "../lib/invokeWithSudoRetry";
-import { pasteTargetDir, parentRemotePath, isSameOrDescendantPath, normalizeRemotePath, sanitizeDeleteSelection, isProtectedDeletePath } from "../lib/localFsOps";
+import { pasteTargetDir, parentRemotePath, isSameOrDescendantPath, normalizeRemotePath, resolveSendToPaths, sanitizeDeleteSelection, isProtectedDeletePath } from "../lib/localFsOps";
 import { downloadRemotePath } from "../lib/sessionDownload";
 import {
   canSendPathToChat,
@@ -580,9 +580,11 @@ export function LocalFsPanel({
             }
           : undefined,
       onSendToRemote: () => {
+        const sendPaths = resolveSendToPaths(selectedPaths, entry.path);
         openSendTo({
           fromSessionId: sessionId,
-          remotePath: entry.path,
+          remotePath: sendPaths[0] ?? entry.path,
+          remotePaths: sendPaths,
         });
       },
       onPreview:

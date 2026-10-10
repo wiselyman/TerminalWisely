@@ -1,11 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, X, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../Modal";
 import { DatabaseIcon } from "../WorkspaceToolIcons";
-import { ColumnMark, EngineMark, GroupMark, ObjectMark } from "./DbIcons";
+import { ColumnMark, EngineMark, GroupMark, ObjectMark, QueryMark } from "./DbIcons";
 import { EngineSelect } from "./EngineSelect";
+import {
+  ColumnHeaderMenu,
+  type ColumnHeaderMenuAction,
+  type ColumnHeaderMenuTarget,
+} from "./ColumnHeaderMenu";
+import { emptyFilterRule, FilterSortPane } from "./FilterSortPane";
+import { ObjectContextMenu, type ObjectMenuTarget } from "./ObjectContextMenu";
 import {
   approvalStillMatches,
   dbCancelQuery,
@@ -26,7 +33,10 @@ import {
   type DbQueryResponse,
 } from "../../lib/db/api";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
+import { useDbWorkspaceStore } from "../../stores/dbWorkspaceStore";
+import { leaveManagedHome, useManagedEntityStore } from "../../stores/managedEntityStore";
 import { useSessionStore } from "../../stores/sessionStore";
+import { DateTimeCellPicker } from "./DateTimeCellPicker";
 import {
   ENGINE_PORTS,
   EXPORT_ROW_BUDGET,
@@ -39,24 +49,49 @@ import {
   csvInsertBatches,
   definitionSql,
   dropTableSql,
+  emptyTableSql,
   engineFamily,
   filterGridRows,
+  findObjectTab,
   forgetSavedQueries,
+  formatDbFormError,
+  freshObjectTab,
   freshQueryTab,
+  nextSqlTabTitle,
+  browseConnection,
+  browseDatabase,
+  browseGroup,
+  browseKind,
+  browseSchema,
   groupRows,
   hasTableStructure,
+  maintainActionFromMenu,
+  maintainSql,
   mongoAuthDatabase,
   mongoDeleteCommand,
   mongoInsertCommand,
   mongoReplaceCommand,
   objectKinds,
+  objectPaneRows,
+  objectPaneSummary,
   objectsIn,
+  cellEditorValue,
+  cellEditorInputType,
+  cellUsesDateTimePicker,
+  resolveCellEditorKind,
   readSavedQueries,
   redisAuthMode,
   redisDelCommand,
   redisSetCommand,
   rememberQuery,
+  objectMenuActions,
+  type ObjectMenuAction,
+  parseMongoJson,
+  renameObjectSql,
   resultPresentation,
+  redisExpireCommand,
+  redisPersistCommand,
+  shortDbFormError,
   rowDeleteSql,
   rowInsertSql,
   rowsToCsv,
@@ -67,20 +102,22 @@ import {
   tableGroups,
   tableSelectSql,
   tableViewSql,
-  tabsAfterConnectionSwitch,
   truncateTableSql,
   orderDatabases,
   pageWindow,
   previewCsvImport,
   type CsvColumnMap,
   type CsvImportPreview,
+  type ObjectBrowseState,
   type NewColumn,
   type ObjectColumn,
   type ObjectKind,
   type ObjectNode,
-  type QueryTab,
+  type WorkbenchTab,
+  type FilterRule,
   type SavedQuery,
   type SortDir,
+  type SortRule,
   type TableGroup,
 } from "./workbenchModel";
 
@@ -99,7 +136,7 @@ type FormState = {
   sshSessionId: string;
 };
 
-type ResultPane = "grid" | "summary" | "plan";
+type ResultPane = "grid" | "plan";
 
 const EMPTY_FORM: FormState = {
   name: "",
@@ -115,6 +152,8 @@ const EMPTY_FORM: FormState = {
   tunnel: false,
   sshSessionId: "",
 };
+
+const EMPTY_WORKBENCH_TABS: WorkbenchTab[] = [];
 
 const KIND_LABEL: Record<ObjectKind, "dbTables" | "dbViews" | "dbMaterializedViews" | "dbRoutines" | "dbEvents" | "dbKeys" | "dbCollections"> = {
   table: "dbTables",
@@ -137,17 +176,8 @@ const GROUP_LABEL: Record<TableGroup, "dbFields" | "dbIndexes" | "dbForeignKeys"
   trigger: "dbTriggers",
 };
 
-type ObjectBrowse = {
-  database: string;
-  kind: ObjectKind | null;
-  schema: string | null;
-  table: string | null;
-  group: TableGroup | null;
-};
-
 type ObjectCacheEntry = { rows: unknown[][]; error: string; structureError: string };
 
-type KeyspaceStat = { keys: number; expires: number; avgTtl: number };
 type KeyView = { name: string; type: string; ttl: string; value: string; error: string };
 type TableView = {
   schema: string;
@@ -157,12 +187,15 @@ type TableView = {
   sortColumn: string | null;
   sortDir: SortDir;
   filter: string;
+  filterRules: FilterRule[];
+  sortRules: SortRule[];
   page: number;
 };
 type RunStatus = "rows" | "approval" | "error" | "idle";
 
 export function DbWorkbench() {
   const { t } = useTranslation(["shell", "common"]);
+  const homeOpen = useManagedEntityStore((s) => s.homeOpen);
   const bindDbContext = useAiEngineerStore((s) => s.bindDbContext);
   const setDbSqlSink = useAiEngineerStore((s) => s.setDbSqlSink);
   const sessions = useSessionStore((s) => s.tabs);
@@ -179,24 +212,44 @@ export function DbWorkbench() {
   const [formError, setFormError] = useState("");
   const [testOk, setTestOk] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [keyspace, setKeyspace] = useState<Record<string, KeyspaceStat>>({});
   const [keyView, setKeyView] = useState<KeyView | null>(null);
-  const [contextOpen, setContextOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [openDbs, setOpenDbs] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [tabs, setTabs] = useState<QueryTab[]>(() => [freshQueryTab("q1", "SQL 1")]);
-  const [activeTabId, setActiveTabId] = useState("q1");
   const [databases, setDatabases] = useState<string[]>([]);
+  const activeWsId = useDbWorkspaceStore((s) => s.activeId);
+  const openWorkspace = useDbWorkspaceStore((s) => s.openWorkspace);
+  const replaceWorkspaceTabs = useDbWorkspaceStore((s) => s.replaceTabs);
+  const setWorkspaceActiveTab = useDbWorkspaceStore((s) => s.setActiveTab);
+  const closeWorkspaceTab = useDbWorkspaceStore((s) => s.closeTab);
+  const clearConnectionWorkspaces = useDbWorkspaceStore((s) => s.clearConnection);
+  // Stable empty array — inline `[]` in the selector re-creates every getSnapshot and
+  // trips React 19 "getSnapshot should be cached" → max update depth.
+  const tabs = useDbWorkspaceStore((s) =>
+    activeWsId ? (s.tabsByWorkspace[activeWsId] ?? EMPTY_WORKBENCH_TABS) : EMPTY_WORKBENCH_TABS,
+  );
+  const activeTabId = useDbWorkspaceStore((s) =>
+    activeWsId ? s.activeTabByWorkspace[activeWsId] ?? null : null,
+  );
   const [objectCache, setObjectCache] = useState<Record<string, ObjectCacheEntry>>({});
-  const [browse, setBrowse] = useState<ObjectBrowse | null>(null);
+  const [browse, setBrowse] = useState<ObjectBrowseState | null>(null);
   const [gridFilter, setGridFilter] = useState("");
+  const [filterPaneOpen, setFilterPaneOpen] = useState(false);
+  const [draftFilterRules, setDraftFilterRules] = useState<FilterRule[]>([]);
+  const [filterSeedId, setFilterSeedId] = useState<string | null>(null);
   const [gridPage, setGridPage] = useState(1);
+  const [editingCell, setEditingCell] = useState<{
+    row: number;
+    col: number;
+    rect: DOMRect | null;
+  } | null>(null);
   const [dataTarget, setDataTarget] = useState<{ schema: string; table: string } | null>(null);
   const [tableView, setTableView] = useState<TableView | null>(null);
   const [mongoCollection, setMongoCollection] = useState<string | null>(null);
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
   const [queryName, setQueryName] = useState("");
   const [redisDraft, setRedisDraft] = useState("");
+  const [redisTtlDraft, setRedisTtlDraft] = useState("");
   const [mongoDraft, setMongoDraft] = useState("{}");
   const [insertOpen, setInsertOpen] = useState(false);
   const [insertValues, setInsertValues] = useState<string[]>([]);
@@ -212,14 +265,23 @@ export function DbWorkbench() {
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [filter, setFilter] = useState("");
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
+  /** Live sessions keep brand-colored icons even if the tree row is collapsed. */
+  const [liveIds, setLiveIds] = useState<Record<string, boolean>>({});
+  /** Schemas stay colored after first successful open (Navicat). */
+  const [liveSchemas, setLiveSchemas] = useState<Record<string, boolean>>({});
   const [openNodes, setOpenNodes] = useState<Record<string, boolean>>({});
   const [activeSchema, setActiveSchema] = useState<string | null>(null);
   const [pane, setPane] = useState<ResultPane>("grid");
   const [planText, setPlanText] = useState("");
   const [pending, setPending] = useState<DbQueryResponse | null>(null);
   const [submittedSql, setSubmittedSql] = useState("SELECT 1");
+  const [objectMenu, setObjectMenu] = useState<ObjectMenuTarget | null>(null);
+  const [columnMenu, setColumnMenu] = useState<ColumnHeaderMenuTarget | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ObjectMenuTarget | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const sqlRef = useRef<HTMLTextAreaElement>(null);
+  const gridFilterRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = useState(36);
   const activeDatabase = useRef<string | null>(null);
@@ -228,36 +290,148 @@ export function DbWorkbench() {
   const catalogSeq = useRef(0);
   const gutterRef = useRef<HTMLPreElement>(null);
   const chosenSql = useRef<string | null>(null);
+  const refreshDbAfterWrite = useRef<string | null>(null);
   const requestSeq = useRef(0);
   const tableViewRef = useRef<TableView | null>(null);
   const mongoRef = useRef<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   tableViewRef.current = tableView;
   mongoRef.current = mongoCollection;
-  const tabSeq = useRef(1);
+  const tabSeq = useRef(0);
+  const tabsRef = useRef(tabs);
+  const activeTabIdRef = useRef(activeTabId);
+  tabsRef.current = tabs;
+  activeTabIdRef.current = activeTabId;
   const [sidebarSlot, setSidebarSlot] = useState<HTMLElement | null>(null);
-  const active = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const active =
+    (activeTabId ? tabs.find((tab) => tab.id === activeTabId) : undefined) ??
+    null;
+  /** Results + editor chrome when any inner tab is focused. */
+  const queryFocused = active != null;
 
   useLayoutEffect(() => {
     setSidebarSlot(document.getElementById("tw-db-sidebar-host"));
   }, []);
 
+  useEffect(() => {
+    setTestOk(false);
+  }, [form]);
+
   const selected = connections.find((item) => item.id === selectedId) ?? null;
 
-  function replaceActive(patch: Partial<QueryTab>) {
-    setTabs((current) =>
-      current.map((tab) => (tab.id === activeTabId ? { ...tab, ...patch } : tab)),
+  useEffect(() => {
+    if (!activeWsId) return;
+    const ws = useDbWorkspaceStore.getState().workspaces.find((item) => item.id === activeWsId);
+    if (!ws) return;
+    tabsRef.current = useDbWorkspaceStore.getState().tabsByWorkspace[activeWsId] ?? [];
+    activeTabIdRef.current =
+      useDbWorkspaceStore.getState().activeTabByWorkspace[activeWsId] ?? null;
+    if (selectedId !== ws.connectionId) {
+      setSelectedId(ws.connectionId);
+      setConnectRequestId(ws.connectionId);
+      setConnectAttempt((attempt) => attempt + 1);
+      return;
+    }
+    rememberDatabase(ws.database);
+    setOpenDbs((current) =>
+      current[ws.database] ? current : { ...current, [ws.database]: true },
     );
+    if (activeTabIdRef.current) return;
+    const engine = connections.find((item) => item.id === ws.connectionId)?.engine;
+    if (!engine) return;
+    setBrowse((current) => {
+      if (
+        current?.level === "database" &&
+        current.database === ws.database &&
+        current.schema == null
+      ) {
+        return current;
+      }
+      return browseDatabase(engine, ws.database);
+    });
+  }, [activeWsId, selectedId, connections]);
+
+  function commitTabs(next: WorkbenchTab[], focusId: string | null, workspaceId = activeWsId) {
+    if (!workspaceId) return;
+    tabsRef.current = next;
+    activeTabIdRef.current = focusId;
+    replaceWorkspaceTabs(workspaceId, next);
+    setWorkspaceActiveTab(workspaceId, focusId);
+  }
+
+  function ensureWorkspaceFor(database: string): string | null {
+    if (!selected) return null;
+    leaveManagedHome();
+    return openWorkspace({
+      connectionId: selected.id,
+      connectionName: selected.name,
+      database,
+      engine: selected.engine,
+    });
+  }
+
+  /** Keep a focused query tab (create one if Object Pane has none). Sync via refs for same-tick callers. */
+  function ensureQueryTab(patch: Partial<WorkbenchTab> = {}): string {
+    const database =
+      (typeof patch.database === "string" && patch.database) ||
+      browse?.database ||
+      activeDatabase.current ||
+      selected?.database ||
+      "";
+    const workspaceId = database ? ensureWorkspaceFor(database) : activeWsId;
+    if (!workspaceId) {
+      const id = `q${(tabSeq.current += 1)}`;
+      return id;
+    }
+    const current =
+      useDbWorkspaceStore.getState().tabsByWorkspace[workspaceId] ?? tabsRef.current;
+    const focused = activeTabIdRef.current;
+    if (focused && current.some((tab) => tab.id === focused)) {
+      const next = current.map((tab) => (tab.id === focused ? { ...tab, ...patch } : tab));
+      commitTabs(next, focused, workspaceId);
+      return focused;
+    }
+    const id = `q${(tabSeq.current += 1)}`;
+    const title = nextSqlTabTitle(current);
+    const next = [...current, { ...freshQueryTab(id, title), ...patch }];
+    commitTabs(next, id, workspaceId);
+    return id;
+  }
+
+  function ensureObjectTab(
+    database: string,
+    node: Pick<ObjectNode, "kind" | "schema" | "name">,
+    patch: Partial<WorkbenchTab> = {},
+  ): string {
+    const workspaceId = ensureWorkspaceFor(database);
+    if (!workspaceId) return `o${(tabSeq.current += 1)}`;
+    const current =
+      useDbWorkspaceStore.getState().tabsByWorkspace[workspaceId] ?? tabsRef.current;
+    const existing = findObjectTab(current, database, node.kind, node.schema, node.name);
+    if (existing) {
+      const next = current.map((tab) =>
+        tab.id === existing.id ? { ...tab, ...patch } : tab,
+      );
+      commitTabs(next, existing.id, workspaceId);
+      return existing.id;
+    }
+    const id = `o${(tabSeq.current += 1)}`;
+    const next = [...current, { ...freshObjectTab(id, database, node), ...patch }];
+    commitTabs(next, id, workspaceId);
+    return id;
+  }
+
+  function replaceActive(patch: Partial<WorkbenchTab>) {
+    patchFocusedOrQuery(patch);
   }
 
   function clearWork() {
     requestSeq.current += 1;
-    const id = `q${(tabSeq.current += 1)}`;
-    setTabs(tabsAfterConnectionSwitch(id));
-    setActiveTabId(id);
+    if (selectedId) clearConnectionWorkspaces(selectedId);
+    tabsRef.current = [];
+    activeTabIdRef.current = null;
     setDatabases([]);
     setObjectCache({});
-    setKeyspace({});
     setKeyView(null);
     setBrowse(null);
     setPending(null);
@@ -285,6 +459,17 @@ export function DbWorkbench() {
       await dbDeleteConnection(id);
       forgetSavedQueries(id, localStorage);
       await dbWriteSavedQueries(id, []).catch(() => undefined);
+      clearConnectionWorkspaces(id);
+      setLiveIds((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setOpenIds((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
       if (selectedId === id) clearWork();
       await refresh(selectedId === id ? null : selectedId);
     } catch (err) {
@@ -298,16 +483,21 @@ export function DbWorkbench() {
 
   useEffect(() => {
     setDbSqlSink((sql) => {
-      setTabs((current) =>
-        current.map((tab) => {
-          if (tab.id !== activeTabId) return tab;
-          const base = tab.sql.trim();
-          return { ...tab, sql: base ? `${base}\n${sql}` : sql };
-        }),
-      );
+      const focused = activeTabIdRef.current;
+      const current = tabsRef.current;
+      if (focused && current.some((tab) => tab.id === focused)) {
+        ensureQueryTab({
+          sql: (() => {
+            const base = current.find((tab) => tab.id === focused)?.sql.trim() ?? "";
+            return base ? `${base}\n${sql}` : sql;
+          })(),
+        });
+        return;
+      }
+      ensureQueryTab({ sql });
     });
     return () => setDbSqlSink(null);
-  }, [activeTabId, setDbSqlSink]);
+  }, [setDbSqlSink]);
 
   function rememberDatabase(name: string) {
     activeDatabase.current = name;
@@ -375,7 +565,6 @@ export function DbWorkbench() {
         setSavedQueries(local);
       })
       .catch(() => setSavedQueries(readSavedQueries(selected.id, localStorage)));
-    setKeyspace({});
     setEditorHeight(36);
     void dbListDatabases(connectionId)
       .then((rows) => {
@@ -386,22 +575,12 @@ export function DbWorkbench() {
         setDatabases(orderDatabases(names, home));
         setConnectFailure((current) => (current?.id === connectionId ? null : current));
         setOpenIds((current) => ({ ...current, [connectionId]: true }));
-        setOpenDbs({ [home]: true });
-        setBrowse({ database: home, kind: objectKinds(selected.engine)[0], schema: null, table: null, group: null });
-        if (selected.engine === "redis") {
-          const stats: Record<string, KeyspaceStat> = {};
-          for (const row of rows.rows) {
-            stats[String(row[0] ?? "")] = {
-              keys: Number(row[1] ?? 0) || 0,
-              expires: Number(row[2] ?? 0) || 0,
-              avgTtl: Number(row[3] ?? 0) || 0,
-            };
-          }
-          setKeyspace(stats);
-        } else {
-          setKeyspace({});
-        }
-        loadObjects(connectionId, revision, home, seq, selected.engine);
+        setLiveIds((current) => ({ ...current, [connectionId]: true }));
+        setLiveSchemas({});
+        setOpenDbs({});
+        setOpenNodes({});
+        setBrowse(browseConnection());
+        leaveManagedHome();
       })
       .catch((err: unknown) => {
         if (catalogSeq.current !== seq) return;
@@ -411,12 +590,23 @@ export function DbWorkbench() {
         setBrowse(null);
         setConnectFailure({ id: connectionId, message: String(err) });
         setOpenIds((current) => ({ ...current, [connectionId]: false }));
+        setLiveIds((current) => ({ ...current, [connectionId]: false }));
       });
   }, [selected, connectRequestId, connectAttempt]);
 
   useEffect(() => {
     setRedisDraft(keyView?.value ?? "");
+    const ttl = keyView?.ttl ?? "";
+    setRedisTtlDraft(ttl === "-1" || ttl === "-2" ? "" : ttl);
   }, [keyView]);
+
+  useEffect(() => {
+    setEditingCell(null);
+  }, [active?.result, dataTarget, tableView?.table, tableView?.schema]);
+
+  useEffect(() => {
+    if (!queryFocused) setToolsOpen(false);
+  }, [queryFocused]);
 
   useEffect(() => {
     if (!selected || !active) return;
@@ -451,15 +641,52 @@ export function DbWorkbench() {
         buildObjectTree(objectCache[name]?.rows ?? [], filter).length > 0,
     );
   });
-  const listed = browse ? objectsIn(nodesFor(browse.database), browse.kind, browse.schema) : [];
+  const paneNodes = browse?.database ? nodesFor(browse.database) : [];
+  const listed = browse ? objectPaneRows(browse, databases, paneNodes) : [];
+  const listSummary = browse ? objectPaneSummary(browse, databases, paneNodes) : null;
   const groupNode =
-    browse?.group && browse.table
-      ? nodesFor(browse.database).find(
+    browse?.level === "group" && browse.group && browse.table && browse.database
+      ? paneNodes.find(
           (node) => node.name === browse.table && node.schema === browse.schema && node.kind === browse.kind,
         ) ?? null
       : null;
-  const groupListing = browse?.group && groupNode ? groupRows(groupNode, browse.group) : null;
+  const groupListing = browse?.level === "group" && browse.group && groupNode ? groupRows(groupNode, browse.group) : null;
   const listingGroup = groupListing && browse?.group ? browse.group : null;
+
+  function typeLabel(typeKey: string): string {
+    if (typeKey === "database") return t("dbDatabase");
+    if (typeKey === "schema") return t("dbSchema");
+    if (typeKey in KIND_LABEL) return t(KIND_LABEL[typeKey as ObjectKind]);
+    if (typeKey in GROUP_LABEL) return t(GROUP_LABEL[typeKey as TableGroup]);
+    return typeKey;
+  }
+
+  function focusObjectPane(next: ObjectBrowseState) {
+    setBrowse(next);
+    activeTabIdRef.current = null;
+    if (activeWsId) setWorkspaceActiveTab(activeWsId, null);
+    setKeyView(null);
+    setTableView(null);
+    setDataTarget(null);
+    setMongoCollection(null);
+    setPending(null);
+    setPane("grid");
+  }
+
+  function mapTab(tabId: string, patch: Partial<WorkbenchTab>) {
+    // Prefer store activeId — React hook state can lag one frame after openWorkspace.
+    const workspaceId = useDbWorkspaceStore.getState().activeId ?? activeWsId;
+    if (!workspaceId) return;
+    const current =
+      useDbWorkspaceStore.getState().tabsByWorkspace[workspaceId] ?? tabsRef.current;
+    const next = current.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab));
+    commitTabs(next, activeTabIdRef.current, workspaceId);
+  }
+
+  /** Patch the focused tab (object or SQL); create a SQL tab only when none is focused. */
+  function patchFocusedOrQuery(patch: Partial<WorkbenchTab> = {}): string {
+    return ensureQueryTab(patch);
+  }
 
   function statementToRun(): string {
     const sql = active?.sql ?? "";
@@ -472,6 +699,7 @@ export function DbWorkbench() {
   }
 
   function openCreateForm() {
+    leaveManagedHome();
     setForm(EMPTY_FORM);
     setEditingId(null);
     setFormError("");
@@ -487,7 +715,10 @@ export function DbWorkbench() {
       name: form.name,
       engine: form.engine,
       host: form.host,
-      port: Number(form.port) || null,
+      port: (() => {
+        const parsed = Number.parseInt(form.port, 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+      })(),
       database: redis ? form.database || "0" : form.database,
       user: redis && form.redisAuth !== "user" ? "" : form.user,
       password: redis && form.redisAuth === "none" ? "" : form.password,
@@ -499,6 +730,7 @@ export function DbWorkbench() {
   }
 
   function openPasswordForm(item: DbConnection) {
+    leaveManagedHome();
     setForm({
       name: item.name,
       engine: item.engine,
@@ -521,13 +753,11 @@ export function DbWorkbench() {
 
   async function save() {
     if (form.tunnel && !liveSessions.some((tab) => tab.id === form.sshSessionId)) {
-      const message = t("dbTunnelRequired");
-      setFormError(message);
-      replaceActive({ error: message });
+      setTestOk(false);
+      setFormError(t("dbTunnelRequired"));
       return;
     }
     setFormError("");
-    replaceActive({ error: "" });
     setBusy(true);
     try {
       const saved = await dbSaveConnection(connectionRequest());
@@ -538,9 +768,8 @@ export function DbWorkbench() {
       setFormOpen(false);
       await refresh(saved.id);
     } catch (err) {
-      const message = String(err);
-      setFormError(message);
-      replaceActive({ error: message });
+      setTestOk(false);
+      setFormError(formatDbFormError(err, t("dbSaveFailed")));
     } finally {
       setBusy(false);
     }
@@ -554,15 +783,44 @@ export function DbWorkbench() {
       await dbTestConnection(connectionRequest());
       setTestOk(true);
     } catch (err) {
-      setFormError(String(err));
+      setTestOk(false);
+      setFormError(formatDbFormError(err, t("dbTestFailed")));
     } finally {
       setBusy(false);
     }
   }
 
+  function isObjectDataTab(tab: WorkbenchTab | null | undefined): boolean {
+    return (
+      !!tab &&
+      (tab.kind === "table" || tab.kind === "view" || tab.kind === "materialized_view")
+    );
+  }
+
+  /** Rebuild browse chrome from the focused object tab (after Run cleared it, remount, etc.). */
+  function tableViewFromObjectTab(tab: WorkbenchTab): TableView | null {
+    if (!isObjectDataTab(tab) || !tab.objectName || !tab.database) return null;
+    const kind = tab.kind as "table" | "view" | "materialized_view";
+    return {
+      schema: tab.schema ?? "",
+      table: tab.objectName,
+      kind,
+      columns: columnsForObject(tab.database, tab.schema ?? "", tab.objectName),
+      sortColumn: null,
+      sortDir: "asc",
+      filter: "",
+      filterRules: [],
+      sortRules: [],
+      page: 1,
+    };
+  }
+
   async function run(leaseId?: string, sqlOverride?: string, keepTarget = false): Promise<RunStatus> {
-    if (!selected || !active) return "idle";
-    if (!keepTarget) {
+    if (!selected) return "idle";
+    // Object-table tabs stay in browse mode (Navicat). Clearing tableView here used to
+    // replace the funnel/+ chrome with a full-width client "筛选" input.
+    const preserveBrowse = keepTarget || isObjectDataTab(active);
+    if (!preserveBrowse) {
       tableViewRef.current = null;
       setDataTarget(null);
       setTableView(null);
@@ -571,8 +829,18 @@ export function DbWorkbench() {
       setInsertOpen(false);
       setGridFilter("");
       setGridPage(1);
+    } else if (!tableViewRef.current && isObjectDataTab(active) && active) {
+      const restored = tableViewFromObjectTab(active);
+      if (restored) {
+        tableViewRef.current = restored;
+        setTableView(restored);
+        if (restored.kind === "table") {
+          setDataTarget({ schema: restored.schema, table: restored.table });
+        }
+      }
     }
     const statement = sqlOverride ?? statementToRun();
+    if (!statement.trim() && !sqlOverride) return "idle";
     chosenSql.current = null;
     setSubmittedSql(statement);
     if (pending && !approvalStillMatches(pending.sql, statement)) {
@@ -583,8 +851,9 @@ export function DbWorkbench() {
     operationId.current = op;
     const connectionId = selected.id;
     const revision = selected.revision;
-    const tabId = active.id;
-    replaceActive({ error: "" });
+    const tabId = patchFocusedOrQuery(
+      sqlOverride ? { sql: statement, error: "" } : { error: "" },
+    );
     setBusy(true);
     try {
       const response = await dbQuery({
@@ -598,39 +867,26 @@ export function DbWorkbench() {
       if (response.connection_id !== connectionId || response.revision !== revision) return "idle";
       if (response.kind === "needs_approval") {
         setPending(response);
-        setTabs((current) =>
-          current.map((tab) => (tab.id === tabId ? { ...tab, result: null } : tab)),
-        );
+        mapTab(tabId, { result: null });
         return "approval";
       }
       setPending(null);
       setPane("grid");
-      setTabs((current) =>
-        current.map((tab) =>
-          tab.id === tabId
-            ? {
-                ...tab,
-                result: {
-                  columns: response.columns,
-                  rows: response.rows,
-                  truncated: response.truncated,
-                  connection_id: response.connection_id,
-                  revision: response.revision,
-                },
-                error: "",
-              }
-            : tab,
-        ),
-      );
+      mapTab(tabId, {
+        result: {
+          columns: response.columns,
+          rows: response.rows,
+          truncated: response.truncated,
+          connection_id: response.connection_id,
+          revision: response.revision,
+        },
+        error: "",
+      });
       return "rows";
     } catch (err) {
       if (requestSeq.current !== seq) return "idle";
       setPending(null);
-      setTabs((current) =>
-        current.map((tab) =>
-          tab.id === tabId ? { ...tab, result: null, error: String(err) } : tab,
-        ),
-      );
+      mapTab(tabId, { result: null, error: String(err) });
       return "error";
     } finally {
       if (requestSeq.current === seq) setBusy(false);
@@ -639,6 +895,13 @@ export function DbWorkbench() {
 
   function columnNames(view: TableView, extra: string[] = []): string[] {
     return [...new Set([...view.columns.map((column) => column.name), ...extra])];
+  }
+
+  function tableSqlOptions(view: TableView) {
+    return {
+      filterRules: view.filterRules,
+      sortRules: view.sortRules.length > 0 ? view.sortRules : undefined,
+    };
   }
 
   async function loadTable(view: TableView) {
@@ -653,11 +916,13 @@ export function DbWorkbench() {
       view.sortDir,
       view.filter,
       view.page,
+      tableSqlOptions(view),
     );
     if (!sql) return;
     setTableView(view);
     setDataTarget(view.kind === "table" ? { schema: view.schema, table: view.table } : null);
     setGridFilter(view.filter);
+    setDraftFilterRules(view.filterRules);
     setGridPage(1);
     setInsertOpen(false);
     replaceActive({ sql, error: "" });
@@ -684,17 +949,29 @@ export function DbWorkbench() {
     }
   }
 
+  function reloadObjectsIfNeeded() {
+    if (!selected) return;
+    const database = refreshDbAfterWrite.current ?? activeDatabase.current;
+    refreshDbAfterWrite.current = null;
+    if (!database) return;
+    loadObjects(selected.id, selected.revision, database, catalogSeq.current, selected.engine);
+  }
+
   async function mutate(sql: string) {
     const status = await run(undefined, sql, true);
-    if (status === "rows") await refreshOpenTarget();
+    if (status === "rows") {
+      await refreshOpenTarget();
+      reloadObjectsIfNeeded();
+    }
   }
 
   async function approve() {
-    if (!selected || !pending || !active) return;
+    if (!selected || !pending) return;
     if (!approvalStillMatches(pending.sql, submittedSql)) {
       setPending(null);
       return;
     }
+    ensureQueryTab({ sql: pending.sql, error: "" });
     const leaseId = await dbRegisterLease({
       connectionId: pending.connection_id,
       revision: pending.revision,
@@ -704,6 +981,7 @@ export function DbWorkbench() {
     const status = await run(leaseId, pending.sql, true);
     if (status === "rows") {
       await refreshOpenTarget();
+      reloadObjectsIfNeeded();
       const next = importQueue.current.shift();
       if (next) {
         setImportProgress((current) =>
@@ -720,33 +998,26 @@ export function DbWorkbench() {
   }
 
   async function openStatus(page: string) {
-    if (!selected || !active) return;
+    if (!selected) return;
     const seq = requestSeq.current;
     const connectionId = selected.id;
     const revision = selected.revision;
-    const tabId = active.id;
+    const tabId = ensureQueryTab({ error: "" });
     try {
       const response = await dbStatus(selected.id, page);
       if (requestSeq.current !== seq) return;
       if (response.connection_id !== connectionId || response.revision !== revision) return;
       setPending(null);
       setPane("grid");
-      setTabs((current) =>
-        current.map((tab) =>
-          tab.id === tabId
-            ? {
-                ...tab,
-                result: {
-                  columns: response.columns,
-                  rows: response.rows,
-                  truncated: response.truncated,
-                  connection_id: response.connection_id,
-                  revision: response.revision,
-                },
-              }
-            : tab,
-        ),
-      );
+      mapTab(tabId, {
+        result: {
+          columns: response.columns,
+          rows: response.rows,
+          truncated: response.truncated,
+          connection_id: response.connection_id,
+          revision: response.revision,
+        },
+      });
     } catch (err) {
       if (requestSeq.current !== seq) return;
       replaceActive({ error: String(err) });
@@ -786,40 +1057,60 @@ export function DbWorkbench() {
     }
   }
 
-  function openAi() {
-    if (!selected) return;
-    useAiEngineerStore.setState({ open: true });
-    void useAiEngineerStore.getState().ensureReady();
-  }
-
   function addQueryTab() {
+    const database =
+      browse?.database || activeDatabase.current || selected?.database || "";
+    const workspaceId = database ? ensureWorkspaceFor(database) : activeWsId;
+    if (!workspaceId) return;
+    const current =
+      useDbWorkspaceStore.getState().tabsByWorkspace[workspaceId] ?? tabsRef.current;
     const id = `q${(tabSeq.current += 1)}`;
-    const title = `SQL ${tabs.length + 1}`;
-    setTabs((current) => [...current, freshQueryTab(id, title)]);
-    setActiveTabId(id);
-    setPending(null);
+    const title = nextSqlTabTitle(current);
+    const next = [...current, freshQueryTab(id, title)];
+    commitTabs(next, id, workspaceId);
     setBrowse(null);
+    setPending(null);
+    setKeyView(null);
+    setTableView(null);
+    setDataTarget(null);
+    setMongoCollection(null);
     setEditorHeight(220);
   }
 
-  function showObjects(database: string, kind: ObjectKind | null, schema: string | null) {
+  function showConnectionPane() {
+    focusObjectPane(browseConnection());
+  }
+
+  function showDatabasePane(engine: string, database: string) {
+    if (selected) {
+      leaveManagedHome();
+      openWorkspace({
+        connectionId: selected.id,
+        connectionName: selected.name,
+        database,
+        engine: selected.engine || engine,
+      });
+    }
+    rememberDatabase(database);
+    focusObjectPane(browseDatabase(engine, database));
+  }
+
+  function showSchemaPane(engine: string, database: string, schema: string) {
+    rememberDatabase(database);
+    setActiveSchema(schema);
+    focusObjectPane(browseSchema(engine, database, schema));
+  }
+
+  function showKindPane(database: string, kind: ObjectKind, schema: string | null) {
     rememberDatabase(database);
     if (schema) setActiveSchema(schema);
-    setBrowse({ database, kind, schema, table: null, group: null });
-    setKeyView(null);
-    replaceActive({ result: null, error: "" });
-    setPending(null);
-    setPane("grid");
+    focusObjectPane(browseKind(database, kind, schema));
   }
 
   function showGroup(database: string, node: ObjectNode, group: TableGroup) {
     rememberDatabase(database);
     if (node.schema) setActiveSchema(node.schema);
-    setBrowse({ database, kind: node.kind, schema: node.schema, table: node.name, group });
-    setKeyView(null);
-    replaceActive({ result: null, error: "" });
-    setPending(null);
-    setPane("grid");
+    focusObjectPane(browseGroup(database, node.kind, node.schema, node.name, group));
   }
 
   async function openRedisKey(database: string, name: string) {
@@ -829,7 +1120,11 @@ export function DbWorkbench() {
     setBrowse(null);
     setKeyView(null);
     setEditorHeight(36);
-    replaceActive({ sql: `GET ${name}`, result: null, error: "" });
+    const tabId = ensureObjectTab(
+      database,
+      { kind: "key", schema: "", name },
+      { sql: `GET ${name}`, result: null, error: "" },
+    );
     const seq = requestSeq.current;
     const connectionId = selected.id;
     setBusy(true);
@@ -850,11 +1145,13 @@ export function DbWorkbench() {
       const valueCell = cell(settled[2]);
       const error = [typeCell.error, ttlCell.error, valueCell.error].filter(Boolean).join("\n");
       if (error && !typeCell.text && !ttlCell.text && !valueCell.text) {
-        replaceActive({ error });
+        mapTab(tabId, { error });
         return;
       }
       setKeyView({ name, type: typeCell.text, ttl: ttlCell.text, value: valueCell.text, error: valueCell.error });
-      if (typeCell.error || ttlCell.error) replaceActive({ error: [typeCell.error, ttlCell.error].filter(Boolean).join("\n") });
+      if (typeCell.error || ttlCell.error) {
+        mapTab(tabId, { error: [typeCell.error, ttlCell.error].filter(Boolean).join("\n") });
+      }
     } finally {
       if (requestSeq.current === seq) setBusy(false);
     }
@@ -878,12 +1175,13 @@ export function DbWorkbench() {
       setDataTarget(null);
       setMongoCollection(node.name);
       setMongoDraft("{}");
-      replaceActive({ sql, result: null, error: "" });
+      ensureObjectTab(database, node, { sql, result: null, error: "" });
       void run(undefined, sql, true);
       return;
     }
     if (node.kind === "table" || node.kind === "view" || node.kind === "materialized_view") {
       setMongoCollection(null);
+      ensureObjectTab(database, node, { result: null, error: "" });
       void loadTable({
         schema: node.schema,
         table: node.name,
@@ -892,8 +1190,12 @@ export function DbWorkbench() {
         sortColumn: null,
         sortDir: "asc",
         filter: "",
+        filterRules: [],
+        sortRules: [],
         page: 1,
       });
+      setFilterPaneOpen(false);
+      setFilterSeedId(null);
       return;
     }
     const sql = tableSelectSql(engine, node.kind, node.schema, node.name);
@@ -901,8 +1203,8 @@ export function DbWorkbench() {
     setTableView(null);
     setDataTarget(null);
     setMongoCollection(null);
-    replaceActive({ sql, result: null, error: "" });
-    void run(undefined, sql, false);
+    ensureObjectTab(database, node, { sql, result: null, error: "" });
+    void run(undefined, sql, true);
   }
 
   function sortBy(column: string) {
@@ -911,27 +1213,81 @@ export function DbWorkbench() {
       ...tableView,
       sortColumn: column,
       sortDir: tableView.sortColumn === column && tableView.sortDir === "asc" ? "desc" : "asc",
+      sortRules: [],
       page: 1,
     };
     void loadTable(next);
   }
 
-  function applyTableFilter(filter: string) {
+  function applyColumnSort(column: string, dir: SortDir) {
     if (!tableView) return;
-    void loadTable({ ...tableView, filter, page: 1 });
+    void loadTable({ ...tableView, sortColumn: column, sortDir: dir, sortRules: [], page: 1 });
+  }
+
+  function clearColumnSort() {
+    if (!tableView) return;
+    void loadTable({ ...tableView, sortColumn: null, sortDir: "asc", sortRules: [], page: 1 });
+  }
+
+  function handleColumnMenuAction(action: ColumnHeaderMenuAction, column: string) {
+    setColumnMenu(null);
+    if (action === "asc") {
+      applyColumnSort(column, "asc");
+      return;
+    }
+    if (action === "desc") {
+      applyColumnSort(column, "desc");
+      return;
+    }
+    if (action === "clear") {
+      clearColumnSort();
+      return;
+    }
+    if (!tableView) return;
+    const rule = emptyFilterRule(column);
+    setDraftFilterRules([...tableView.filterRules, rule]);
+    setFilterSeedId(rule.id);
+    setFilterPaneOpen(true);
+  }
+
+  function applyFilterSortPane() {
+    if (!tableView) return;
+    void loadTable({
+      ...tableView,
+      filter: "",
+      filterRules: draftFilterRules,
+      page: 1,
+    });
   }
 
   function turnPage(delta: number) {
     if (!tableView) {
-      setGridPage((page) => Math.max(1, page + delta));
+      if (delta < 0) {
+        setGridPage((page) => Math.max(1, page - 1));
+        return;
+      }
+      const visible = pageWindow(filterGridRows(result?.rows ?? [], gridFilter), gridPage);
+      if (visible.page >= visible.pages) return;
+      setGridPage(visible.page + 1);
       return;
     }
-    void loadTable({ ...tableView, page: Math.max(1, tableView.page + delta) });
+    if (delta < 0) {
+      if (tableView.page <= 1) return;
+      void loadTable({ ...tableView, page: tableView.page - 1 });
+      return;
+    }
+    // Stay on the current page when this page is already short (no more rows).
+    if ((result?.rows.length ?? 0) < GRID_PAGE_SIZE) return;
+    void loadTable({ ...tableView, page: tableView.page + 1 });
   }
 
-  function showDefinition() {
-    if (!selected || !tableView) return;
-    const read = definitionSql(selected.engine, tableView.kind, tableView.schema, tableView.table);
+  function showDefinition(target?: { kind: ObjectKind; schema: string; table: string; columns?: ObjectColumn[] }) {
+    if (!selected) return;
+    const view = target ?? (tableView
+      ? { kind: tableView.kind, schema: tableView.schema, table: tableView.table, columns: tableView.columns }
+      : null);
+    if (!view) return;
+    const read = definitionSql(selected.engine, view.kind, view.schema, view.table);
     if (read) {
       setTableView(null);
       setDataTarget(null);
@@ -939,11 +1295,87 @@ export function DbWorkbench() {
       void run(undefined, read, false);
       return;
     }
-    const local = tableDefinitionFromColumns(selected.engine, tableView.schema, tableView.table, tableView.columns);
+    const local = tableDefinitionFromColumns(selected.engine, view.schema, view.table, view.columns ?? []);
     if (!local) return;
     setTableView(null);
     setDataTarget(null);
     replaceActive({ sql: local, result: null, error: "" });
+  }
+
+  function handleObjectMenuAction(action: ObjectMenuAction) {
+    if (!selected || !objectMenu) return;
+    const target = objectMenu;
+    const cached = nodesFor(target.database).find(
+      (item) => item.name === target.name && item.schema === target.schema && item.kind === target.kind,
+    );
+    const node: ObjectNode = cached ?? {
+      kind: target.kind as ObjectKind,
+      schema: target.schema,
+      name: target.name,
+      columns: [],
+      members: [],
+    };
+    setObjectMenu(null);
+    if (action === "open") {
+      openTable(selected.engine, target.database, node);
+      return;
+    }
+    if (action === "definition") {
+      showDefinition({ kind: node.kind, schema: node.schema, table: node.name, columns: node.columns });
+      return;
+    }
+    if (action === "refresh") {
+      loadObjects(selected.id, selected.revision, target.database, catalogSeq.current, selected.engine);
+      return;
+    }
+    if (action === "rename") {
+      setRenameTarget(target);
+      setRenameDraft(target.name);
+      return;
+    }
+    if (action === "empty") {
+      const sql = emptyTableSql(selected.engine, target.schema, target.name);
+      if (!sql) return;
+      refreshDbAfterWrite.current = target.database;
+      replaceActive({ sql, error: "" });
+      void mutate(sql);
+      return;
+    }
+    if (action === "truncate") {
+      const sql = truncateTableSql(selected.engine, target.schema, target.name);
+      if (!sql) return;
+      refreshDbAfterWrite.current = target.database;
+      replaceActive({ sql, error: "" });
+      void mutate(sql);
+      return;
+    }
+    if (action === "drop") {
+      const sql = dropTableSql(selected.engine, target.schema, target.name);
+      if (!sql) return;
+      refreshDbAfterWrite.current = target.database;
+      replaceActive({ sql, error: "" });
+      void mutate(sql);
+      return;
+    }
+    const maintain = maintainActionFromMenu(action);
+    if (maintain) {
+      const sql = maintainSql(selected.engine, maintain, target.schema, target.name);
+      if (!sql) return;
+      refreshDbAfterWrite.current = target.database;
+      replaceActive({ sql, error: "" });
+      void mutate(sql);
+    }
+  }
+
+  function applyRename() {
+    if (!selected || !renameTarget) return;
+    const sql = renameObjectSql(selected.engine, renameTarget.schema, renameTarget.name, renameDraft.trim());
+    refreshDbAfterWrite.current = renameTarget.database;
+    setRenameTarget(null);
+    setRenameDraft("");
+    if (!sql) return;
+    replaceActive({ sql, error: "" });
+    void mutate(sql);
   }
 
   function openCreateTable() {
@@ -1007,6 +1439,7 @@ export function DbWorkbench() {
         tableView.sortDir,
         tableView.filter,
         page,
+        tableSqlOptions(tableView),
       );
       if (!sql) break;
       const op = crypto.randomUUID();
@@ -1083,9 +1516,15 @@ export function DbWorkbench() {
     persistQueries(savedQueries.filter((query) => query.id !== id));
   }
 
+  function insertColumnNames(view: TableView): string[] {
+    if (view.columns.length > 0) return view.columns.map((column) => column.name);
+    return active?.result?.columns ?? [];
+  }
+
   function submitInsert() {
     if (!selected || !tableView || tableView.kind !== "table") return;
-    const names = tableView.columns.map((column) => column.name);
+    const names = insertColumnNames(tableView);
+    if (names.length === 0) return;
     const values = names.map((_, index) => {
       const text = insertValues[index] ?? "";
       return text === "" ? null : text;
@@ -1098,16 +1537,86 @@ export function DbWorkbench() {
 
   function closeQueryTab(id: string) {
     setPending(null);
-    setTabs((current) => {
-      const next = current.filter((tab) => tab.id !== id);
-      if (next.length === 0) {
-        const freshId = `q${(tabSeq.current += 1)}`;
-        setActiveTabId(freshId);
-        return [freshQueryTab(freshId, "SQL 1")];
-      }
-      if (id === activeTabId) setActiveTabId(next[next.length - 1].id);
-      return next;
-    });
+    if (!activeWsId) return;
+    closeWorkspaceTab(activeWsId, id);
+    const next = useDbWorkspaceStore.getState().tabsByWorkspace[activeWsId] ?? [];
+    const focus = useDbWorkspaceStore.getState().activeTabByWorkspace[activeWsId] ?? null;
+    tabsRef.current = next;
+    activeTabIdRef.current = focus;
+  }
+
+  function columnsForObject(database: string, schema: string, name: string): ObjectColumn[] {
+    const nodes = nodesFor(database);
+    const hit = nodes.find(
+      (node) =>
+        node.name === name &&
+        node.schema === schema &&
+        (node.kind === "table" || node.kind === "view" || node.kind === "materialized_view"),
+    );
+    return hit?.columns ?? [];
+  }
+
+  // If Run (or remount) dropped tableView while an object tab is focused, put browse chrome back.
+  useEffect(() => {
+    if (tableView || !active || !isObjectDataTab(active)) return;
+    const restored = tableViewFromObjectTab(active);
+    if (!restored) return;
+    tableViewRef.current = restored;
+    setTableView(restored);
+    if (restored.kind === "table") {
+      setDataTarget({ schema: restored.schema, table: restored.table });
+    }
+  }, [active, tableView]);
+
+  function focusInnerTab(tab: WorkbenchTab) {
+    const workspaceId = useDbWorkspaceStore.getState().activeId ?? activeWsId;
+    if (workspaceId) setWorkspaceActiveTab(workspaceId, tab.id);
+    activeTabIdRef.current = tab.id;
+    setBrowse(null);
+    setPending(null);
+    setEditorHeight(tab.kind === "query" ? 220 : 36);
+    if (tab.kind === "query") {
+      setKeyView(null);
+      setTableView(null);
+      setDataTarget(null);
+      setMongoCollection(null);
+      return;
+    }
+    if (tab.database) rememberDatabase(tab.database);
+    if (tab.schema) setActiveSchema(tab.schema);
+    if (tab.kind === "key") {
+      setTableView(null);
+      setDataTarget(null);
+      setMongoCollection(null);
+      if (tab.objectName && tab.database) void openRedisKey(tab.database, tab.objectName);
+      return;
+    }
+    if (tab.kind === "collection") {
+      setTableView(null);
+      setDataTarget(null);
+      setKeyView(null);
+      setMongoCollection(tab.objectName);
+      return;
+    }
+    if (tab.kind === "table" || tab.kind === "view" || tab.kind === "materialized_view") {
+      setKeyView(null);
+      setMongoCollection(null);
+      if (!selected || !tab.database || !tab.objectName) return;
+      void loadTable({
+        schema: tab.schema ?? "",
+        table: tab.objectName,
+        kind: tab.kind,
+        columns: columnsForObject(tab.database, tab.schema ?? "", tab.objectName),
+        sortColumn: null,
+        sortDir: "asc",
+        filter: "",
+        filterRules: [],
+        sortRules: [],
+        page: 1,
+      });
+      setFilterPaneOpen(false);
+      setFilterSeedId(null);
+    }
   }
 
   function toggleNode(key: string, defaultOpen: boolean) {
@@ -1133,10 +1642,23 @@ export function DbWorkbench() {
         <button
           type="button"
           className="k8s-tree-group-label db-tree-object"
+          data-testid={`db-tree-object-${node.name}`}
           onClick={() => toggleNode(nodeKey, false)}
           onDoubleClick={(event) => {
             event.preventDefault();
             if (selected) openTable(selected.engine, databaseName, node);
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setObjectMenu({
+              database: databaseName,
+              schema: node.schema,
+              name: node.name,
+              kind: node.kind,
+              x: event.clientX,
+              y: event.clientY,
+            });
           }}
         >
           {nodeOpen ? <ChevronDown size={12} className="k8s-tree-chevron" /> : <ChevronRight size={12} className="k8s-tree-chevron" />}
@@ -1187,23 +1709,29 @@ export function DbWorkbench() {
 
   function renderKindBranch(databaseName: string, schemaName: string | null, kind: ObjectKind, keyPrefix: string, nodes: ObjectNode[], deeper = false) {
     const kindKey = `${keyPrefix}:${kind}`;
-    const kindOpen = openNodes[kindKey] ?? true;
+    const kindOpen = openNodes[kindKey] ?? false;
     const schemaNodes = nodes.filter((node) => node.kind === kind && (schemaName == null || node.schema === schemaName));
     return (
       <div key={kind} className="k8s-tree-group">
         <button
           type="button"
           className={`k8s-tree-group-label ${deeper ? "db-tree-under-schema" : "db-tree-deeper"}`}
+          data-testid={`db-tree-kind-${kind}`}
           onClick={() => {
-            toggleNode(kindKey, true);
-            showObjects(databaseName, kind, schemaName);
+            toggleNode(kindKey, false);
+            showKindPane(databaseName, kind, schemaName);
           }}
         >
           {kindOpen ? <ChevronDown size={12} className="k8s-tree-chevron" /> : <ChevronRight size={12} className="k8s-tree-chevron" />}
           <span className="k8s-tree-icon">
             <ObjectMark kind={kind} />
           </span>
-          <span>{t(KIND_LABEL[kind])}</span>
+          <span>
+            {t("dbTreeCount", {
+              label: t(KIND_LABEL[kind]),
+              count: schemaNodes.length,
+            })}
+          </span>
         </button>
         {kindOpen
           ? schemaNodes.map((node) =>
@@ -1258,6 +1786,7 @@ export function DbWorkbench() {
                       setConnectAttempt((attempt) => attempt + 1);
                       return;
                     }
+                    showConnectionPane();
                     if (open) {
                       setOpenIds((current) => ({ ...current, [item.id]: false }));
                       return;
@@ -1274,7 +1803,7 @@ export function DbWorkbench() {
                     <ChevronRight size={12} className="k8s-tree-chevron" />
                   )}
                   <span className="k8s-tree-icon">
-                    <EngineMark engine={item.engine} />
+                    <EngineMark engine={item.engine} connected={!!liveIds[item.id]} />
                   </span>
                   <span>{item.name}</span>
                   <span className="db-engine-label">{item.engine}</span>
@@ -1330,11 +1859,12 @@ export function DbWorkbench() {
                           <button
                             type="button"
                             className="k8s-tree-group-label db-tree-nested"
+                            data-testid={`db-tree-database-${databaseName}`}
                             onClick={() => {
                               const willOpen = !dbOpen;
                               setOpenDbs((current) => ({ ...current, [databaseName]: willOpen }));
-                              showObjects(databaseName, objectKinds(item.engine)[0], null);
-                              if (willOpen && !entry) {
+                              showDatabasePane(item.engine, databaseName);
+                              if ((willOpen || schemasFirst(item.engine)) && !entry) {
                                 loadObjects(item.id, item.revision, databaseName, catalogSeq.current, item.engine);
                               }
                             }}
@@ -1345,9 +1875,21 @@ export function DbWorkbench() {
                               <ChevronRight size={12} className="k8s-tree-chevron" />
                             )}
                             <span className="k8s-tree-icon">
-                              <ObjectMark kind="database" />
+                              <ObjectMark
+                                kind="database"
+                                active={Boolean(entry && !entry.error)}
+                              />
                             </span>
-                            <span>{databaseName}</span>
+                            <span>
+                              {entry && !entry.error
+                                ? t("dbTreeCount", {
+                                    label: databaseName,
+                                    count: schemasFirst(item.engine)
+                                      ? schemaNames(nodes).length
+                                      : objectsIn(nodes, "table", null).length,
+                                  })
+                                : databaseName}
+                            </span>
                           </button>
                           {dbOpen ? (
                             <>
@@ -1370,15 +1912,23 @@ export function DbWorkbench() {
                                 {schemasFirst(item.engine) ? (
                                   schemaNames(nodes).map((schemaName) => {
                                     const schemaKey = `${dbKey}:${schemaName}`;
-                                    const schemaOpen = openNodes[schemaKey] ?? true;
+                                    const schemaOpen = openNodes[schemaKey] ?? false;
                                     return (
                                       <div key={schemaName} className="k8s-tree-group">
                                         <button
                                           type="button"
                                           className="k8s-tree-group-label db-tree-schema"
+                                          data-testid={`db-tree-schema-${schemaName}`}
                                           onClick={() => {
-                                            toggleNode(schemaKey, true);
-                                            showObjects(databaseName, null, schemaName);
+                                            const willOpen = !schemaOpen;
+                                            toggleNode(schemaKey, false);
+                                            if (willOpen) {
+                                              setLiveSchemas((current) => ({
+                                                ...current,
+                                                [schemaKey]: true,
+                                              }));
+                                            }
+                                            showSchemaPane(item.engine, databaseName, schemaName);
                                           }}
                                         >
                                           {schemaOpen ? (
@@ -1387,7 +1937,10 @@ export function DbWorkbench() {
                                             <ChevronRight size={12} className="k8s-tree-chevron" />
                                           )}
                                           <span className="k8s-tree-icon">
-                                            <ObjectMark kind="schema" />
+                                            <ObjectMark
+                                              kind="schema"
+                                              active={Boolean(liveSchemas[schemaKey]) || schemaOpen}
+                                            />
                                           </span>
                                           <span>{schemaName}</span>
                                         </button>
@@ -1425,80 +1978,117 @@ export function DbWorkbench() {
   );
 
   return (
-    <section className="db-workbench" data-testid="db-workbench">
+    <section
+      className={`db-workbench${homeOpen ? " db-workbench--home" : ""}`}
+      data-testid="db-workbench"
+      data-home={homeOpen ? "1" : "0"}
+    >
       {sidebarSlot ? createPortal(nav, sidebarSlot) : nav}
-      <div className="db-workbench-main" ref={mainRef}>
-        <div className="db-query-tabs" data-testid="db-query-tabs">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`tab${tab.id === activeTabId ? " active" : ""}`}
-              data-testid="db-query-tab"
-              aria-pressed={tab.id === activeTabId}
-              onClick={() => {
-                setActiveTabId(tab.id);
-                setPending(null);
-              }}
-            >
-              <span className="tab-title">{tab.title}</span>
-              <button
-                type="button"
-                className="tab-close"
-                aria-label={t("dbClose")}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeQueryTab(tab.id);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
+      {objectMenu ? (
+        <ObjectContextMenu
+          target={objectMenu}
+          actions={objectMenuActions(selected?.engine ?? "postgres", objectMenu.kind)}
+          labels={{
+            dbMenuOpen: t("dbMenuOpen"),
+            dbMenuDefinition: t("dbMenuDefinition"),
+            dbMenuRename: t("dbMenuRename"),
+            dbMenuEmpty: t("dbMenuEmpty"),
+            dbMenuTruncate: t("dbMenuTruncate"),
+            dbMenuDrop: t("dbMenuDrop"),
+            dbMenuRefresh: t("dbMenuRefresh"),
+            dbMenuAnalyze: t("dbMenuAnalyze"),
+            dbMenuVacuum: t("dbMenuVacuum"),
+            dbMenuReindex: t("dbMenuReindex"),
+            dbMenuOptimize: t("dbMenuOptimize"),
+          }}
+          onAction={handleObjectMenuAction}
+          onClose={() => setObjectMenu(null)}
+        />
+      ) : null}
+      {columnMenu ? (
+        <ColumnHeaderMenu
+          target={columnMenu}
+          labels={{
+            asc: t("dbSortAsc"),
+            desc: t("dbSortDesc"),
+            clear: t("dbSortClear"),
+            filter: t("dbAddFilter"),
+          }}
+          onAction={handleColumnMenuAction}
+          onClose={() => setColumnMenu(null)}
+        />
+      ) : null}
+      {renameTarget ? (
+        <div className="db-rename-bar" data-testid="db-rename-bar">
+          <input
+            data-testid="db-rename-input"
+            value={renameDraft}
+            onChange={(event) => setRenameDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") applyRename();
+              if (event.key === "Escape") {
+                setRenameTarget(null);
+                setRenameDraft("");
+              }
+            }}
+            autoFocus
+          />
+          <button type="button" className="find-panel-run primary" data-testid="db-rename-apply" onClick={applyRename}>
+            {t("dbRenameApply")}
+          </button>
           <button
             type="button"
-            className="tab"
-            data-testid="db-new-query"
-            title={t("dbNewQuery")}
-            aria-label={t("dbNewQuery")}
-            onClick={addQueryTab}
+            data-testid="db-rename-cancel"
+            onClick={() => {
+              setRenameTarget(null);
+              setRenameDraft("");
+            }}
           >
-            +
+            {t("dbReject")}
           </button>
         </div>
-        {selected ? (
-          <div className="db-context-bar">
+      ) : null}
+      <div className="db-workbench-main" ref={mainRef}>
+        {tabs.length > 0 ? (
+          <div className="db-query-tabs" data-testid="db-query-tabs">
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={`tab${tab.id === activeTabId ? " active" : ""}`}
+                data-testid={tab.kind === "query" ? "db-query-tab" : "db-object-tab"}
+                data-tab-kind={tab.kind}
+                aria-pressed={tab.id === activeTabId}
+                onClick={() => {
+                  focusInnerTab(tab);
+                }}
+              >
+                <span className="db-inner-tab-icon" aria-hidden="true">
+                  {tab.kind === "query" ? <QueryMark /> : <ObjectMark kind={tab.kind} />}
+                </span>
+                <span className="tab-title">{tab.title}</span>
+                <button
+                  type="button"
+                  className="tab-close"
+                  aria-label={t("dbClose")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    closeQueryTab(tab.id);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
             <button
               type="button"
-              data-testid="db-context-toggle"
-              aria-expanded={contextOpen}
-              onClick={() => setContextOpen((open) => !open)}
+              className="tab"
+              data-testid="db-new-query"
+              title={t("dbNewQuery")}
+              aria-label={t("dbNewQuery")}
+              onClick={addQueryTab}
             >
-              {contextOpen ? "▾" : "▸"}
+              +
             </button>
-            {contextOpen ? (
-              <p data-testid="db-context">
-                {[
-                  selected.engine,
-                  browse?.database || selected.database,
-                  browse?.schema || activeSchema || "",
-                  keyView?.name || dataTarget?.table || "",
-                ]
-                  .filter((crumb) => crumb.trim())
-                  .map((crumb, index) => (
-                    <span key={`${index}:${crumb}`}>
-                      {index > 0 ? <span className="db-context-sep"> → </span> : null}
-                      {crumb}
-                    </span>
-                  ))}
-                {selected.engine === "redis" ? (
-                  <span>
-                    {t("dbKeyCount")} {keyspace[browse?.database || selected.database]?.keys ?? 0} {t("dbKeyExpires")}{" "}
-                    {keyspace[browse?.database || selected.database]?.expires ?? 0} {t("dbKeyAvgTtl")}{" "}
-                    {keyspace[browse?.database || selected.database]?.avgTtl ?? 0}
-                  </span>
-                ) : null}
-              </p>
-            ) : null}
           </div>
         ) : null}
         <div className="db-result">
@@ -1534,12 +2124,27 @@ export function DbWorkbench() {
             </div>
           </div>
         ) : null}
-        {browse && !active?.error && !result && !keyView && objectCache[browse.database]?.error ? (
+        {!queryFocused && browse?.database && objectCache[browse.database]?.error ? (
           <p className="db-error" data-testid="db-error">
             {objectCache[browse.database]?.error}
           </p>
-        ) : browse && !active?.error && !result && !keyView && !(pending && approvalMatches) ? (
+        ) : !queryFocused && browse ? (
           <div className="db-object-list" data-testid="db-object-list">
+            {selected && engineFamily(selected.engine) === "sql" ? (
+              <div className="db-object-list-toolbar">
+                <button
+                  type="button"
+                  className="db-action-btn"
+                  data-testid="db-new-query"
+                  title={t("dbNewQuery")}
+                  aria-label={t("dbNewQuery")}
+                  onClick={addQueryTab}
+                >
+                  <Plus size={14} strokeWidth={2} aria-hidden="true" />
+                  <span>{t("dbNewQuery")}</span>
+                </button>
+              </div>
+            ) : null}
             <table className="k8s-table">
               <thead>
                 <tr>
@@ -1558,50 +2163,100 @@ export function DbWorkbench() {
                     </tr>
                   ))
                 ) : (
-                  listed.map((node) => (
+                  listed.map((row) => (
                     <tr
-                      key={`${node.kind}:${node.schema}:${node.name}`}
-                      onDoubleClick={() => selected && openTable(selected.engine, browse.database, node)}
+                      key={`${row.action}:${row.schema}:${row.name}`}
+                      data-testid={`db-object-row-${row.name}`}
+                      onDoubleClick={() => {
+                        if (!selected) return;
+                        if (row.action === "open-database") {
+                          setOpenDbs((current) => ({ ...current, [row.name]: true }));
+                          showDatabasePane(selected.engine, row.name);
+                          if (!objectCache[row.name]) {
+                            loadObjects(
+                              selected.id,
+                              selected.revision,
+                              row.name,
+                              catalogSeq.current,
+                              selected.engine,
+                            );
+                          }
+                          return;
+                        }
+                        if (row.action === "open-schema" && browse.database) {
+                          const schemaKey = `${selected.id}:${browse.database}:${row.name}`;
+                          setOpenNodes((current) => ({ ...current, [schemaKey]: true }));
+                          setOpenDbs((current) => ({ ...current, [browse.database!]: true }));
+                          showSchemaPane(selected.engine, browse.database, row.name);
+                          return;
+                        }
+                        if (row.action === "open-object" && browse.database) {
+                          const node = paneNodes.find(
+                            (item) =>
+                              item.name === row.name &&
+                              item.schema === row.schema &&
+                              item.kind === row.typeKey,
+                          );
+                          if (node) openTable(selected.engine, browse.database, node);
+                        }
+                      }}
                     >
-                      <td>{node.name}</td>
-                      <td>{node.schema}</td>
-                      <td>{t(KIND_LABEL[node.kind])}</td>
+                      <td>{row.name}</td>
+                      <td>{row.schema}</td>
+                      <td>{typeLabel(row.typeKey)}</td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
+            {listSummary ? (
+              <p className="db-object-summary" data-testid="db-object-summary">
+                {t(`dbObjectCount_${listSummary.typeKey}`, { count: listSummary.count })}
+              </p>
+            ) : null}
           </div>
-        ) : (
+        ) : queryFocused ? (
           <>
-        <div className="db-result-panes">
-          <button type="button" className={`tab${pane === "grid" ? " active" : ""}`} data-testid="db-result-grid" aria-pressed={pane === "grid"} onClick={() => setPane("grid")}>
-            {t("dbResultGrid")}
-          </button>
-          <button type="button" className={`tab${pane === "summary" ? " active" : ""}`} data-testid="db-result-summary" aria-pressed={pane === "summary"} onClick={() => setPane("summary")}>
-            {t("dbResultSummary")}
-          </button>
-          <button type="button" className={`tab${pane === "plan" ? " active" : ""}`} data-testid="db-result-plan-tab" aria-pressed={pane === "plan"} onClick={() => setPane("plan")}>
-            {t("dbResultPlan")}
-          </button>
-        </div>
         <div className="db-result-body">
-        {pane === "summary" && result ? (
-          <p data-testid="db-summary">
-            {t("dbSummaryCount", { count: result.rows.length, truncated: result.truncated ? 1 : 0 })}
-          </p>
+        {pane === "plan" ? (
+          <div className="db-plan-view" data-testid="db-plan-view">
+            <div className="db-plan-toolbar">
+              <button
+                type="button"
+                className="db-action-btn"
+                data-testid="db-show-data"
+                onClick={() => setPane("grid")}
+              >
+                {t("dbResultGrid")}
+              </button>
+              <span className="db-plan-toolbar-label">{t("dbResultPlan")}</span>
+            </div>
+            <pre data-testid="db-plan">{planText}</pre>
+          </div>
         ) : null}
-        {pane === "plan" ? <pre data-testid="db-plan">{planText}</pre> : null}
         {pane === "grid" && keyView ? (
           <div className="db-key-view" data-testid="db-key-view">
             <p>{keyView.name}</p>
-            <p>
-              {t("dbKeyType")} {keyView.type}
+            <p data-testid="db-redis-type">
+              <span className="db-redis-type-badge">{keyView.type || "unknown"}</span>
+              <span>
+                {" "}
+                {t("dbKeyType")}
+              </span>
             </p>
-            <p>
+            <p data-testid="db-redis-ttl">
               {t("dbKeyTtl")} {keyView.ttl}
             </p>
             {keyView.error ? <p className="db-error">{keyView.error}</p> : null}
+            <label className="db-redis-ttl-edit">
+              {t("dbRedisTtlSeconds")}
+              <input
+                data-testid="db-redis-ttl-input"
+                value={redisTtlDraft}
+                inputMode="numeric"
+                onChange={(event) => setRedisTtlDraft(event.target.value)}
+              />
+            </label>
             <p>{t("dbKeyValue")}</p>
             <textarea
               data-testid="db-redis-value"
@@ -1624,6 +2279,34 @@ export function DbWorkbench() {
                 }}
               >
                 {t("dbRedisSet")}
+              </button>
+              <button
+                type="button"
+                data-testid="db-redis-expire"
+                onClick={() => {
+                  const seconds = Number.parseInt(redisTtlDraft, 10);
+                  const sql = redisExpireCommand(keyView.name, seconds);
+                  if (!sql) {
+                    replaceActive({ error: t("dbCommandFailed") });
+                    return;
+                  }
+                  replaceActive({ sql, error: "" });
+                  void mutate(sql);
+                }}
+              >
+                {t("dbRedisExpire")}
+              </button>
+              <button
+                type="button"
+                data-testid="db-redis-persist"
+                onClick={() => {
+                  const sql = redisPersistCommand(keyView.name);
+                  if (!sql) return;
+                  replaceActive({ sql, error: "" });
+                  void mutate(sql);
+                }}
+              >
+                {t("dbRedisPersist")}
               </button>
               <button
                 type="button"
@@ -1656,9 +2339,18 @@ export function DbWorkbench() {
                   spellCheck={false}
                   onChange={(event) => setMongoDraft(event.target.value)}
                 />
+                {!parseMongoJson(mongoDraft).ok ? (
+                  <span className="db-form-status-error" data-testid="db-mongo-json-error">
+                    <span className="db-form-status-icon" aria-hidden>
+                      !
+                    </span>
+                    <span className="db-form-status-text">{t("dbMongoJsonInvalid")}</span>
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   data-testid="db-mongo-insert"
+                  disabled={!parseMongoJson(mongoDraft).ok}
                   onClick={() => {
                     const sql = mongoInsertCommand(mongoCollection, mongoDraft);
                     if (!sql) {
@@ -1685,7 +2377,12 @@ export function DbWorkbench() {
                         data-testid="db-mongo-replace"
                         onClick={(event) => {
                           const field = event.currentTarget.parentElement?.parentElement?.querySelector("textarea");
-                          const sql = mongoReplaceCommand(mongoCollection, text, field?.value ?? text);
+                          const next = field?.value ?? text;
+                          if (!parseMongoJson(next).ok) {
+                            replaceActive({ error: t("dbMongoJsonInvalid") });
+                            return;
+                          }
+                          const sql = mongoReplaceCommand(mongoCollection, text, next);
                           if (!sql) {
                             replaceActive({ error: t("dbCommandFailed") });
                             return;
@@ -1723,166 +2420,350 @@ export function DbWorkbench() {
           </div>
         ) : null}
         {pane === "grid" && !keyView && result && (result.rows.length > 0 || tableView) && (!selected || resultPresentation(selected.engine) === "grid") ? (
-          <div data-testid="db-results">
+          <div data-testid="db-results" className="db-grid-chrome">
             {result.truncated ? <p data-testid="db-truncated">{t("dbTruncated")}</p> : null}
-            {result.rows.length === 0 ? <p data-testid="db-empty">{t("dbEmpty")}</p> : null}
-            <div className="db-grid-nav">
-              <input
-                data-testid="db-grid-filter"
-                value={gridFilter}
-                placeholder={t("dbGridFilter")}
-                onChange={(event) => {
-                  setGridFilter(event.target.value);
-                  if (!tableView) setGridPage(1);
-                }}
-                onBlur={() => {
-                  if (tableView) applyTableFilter(gridFilter);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && tableView) {
-                    event.preventDefault();
-                    applyTableFilter(gridFilter);
-                  }
-                }}
-              />
-              <button type="button" data-testid="db-grid-prev" onClick={() => turnPage(-1)}>
-                {t("dbGridPrev")}
-              </button>
-              <button type="button" data-testid="db-grid-next" onClick={() => turnPage(1)}>
-                {t("dbGridNext")}
-              </button>
-              {tableView ? (
-                <>
-                  {tableView.kind === "table" ? (
-                    <button
-                      type="button"
-                      data-testid="db-row-insert"
-                      onClick={() => {
-                        setInsertValues(tableView.columns.map(() => ""));
-                        setInsertOpen(true);
-                      }}
-                    >
-                      {t("dbInsert")}
-                    </button>
-                  ) : null}
-                  <button type="button" data-testid="db-definition" onClick={showDefinition}>
-                    {t("dbDefinition")}
-                  </button>
-                  {tableView.kind === "table" ? (
-                    <>
-                      <button
-                        type="button"
-                        data-testid="db-drop-table"
-                        onClick={() => {
-                          if (!selected) return;
-                          const sql = dropTableSql(selected.engine, tableView.schema, tableView.table);
-                          if (!sql) return;
-                          replaceActive({ sql, error: "" });
-                          void run(undefined, sql, false);
-                        }}
-                      >
-                        {t("dbDropTable")}
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="db-truncate-table"
-                        onClick={() => {
-                          if (!selected) return;
-                          const sql = truncateTableSql(selected.engine, tableView.schema, tableView.table);
-                          if (!sql) return;
-                          replaceActive({ sql, error: "" });
-                          void mutate(sql);
-                        }}
-                      >
-                        {t("dbTruncate")}
-                      </button>
-                    </>
-                  ) : null}
-                </>
+            {/* Table browse: empty page stays quiet (Navicat). Ad-hoc SQL still shows db-empty. */}
+            {result.rows.length === 0 && !tableView ? <p data-testid="db-empty">{t("dbEmpty")}</p> : null}
+            <div className="db-grid-toolbar-top">
+              {tableView || isObjectDataTab(active) ? (
+                <button
+                  type="button"
+                  className={`db-filter-toggle${filterPaneOpen ? " active" : ""}`}
+                  data-testid="db-filter-toggle"
+                  aria-label={t("dbFilterToggle")}
+                  aria-pressed={filterPaneOpen}
+                  title={t("dbFilterToggle")}
+                  onClick={() => {
+                    const view = tableView ?? (active ? tableViewFromObjectTab(active) : null);
+                    if (!view) return;
+                    if (!tableView) {
+                      tableViewRef.current = view;
+                      setTableView(view);
+                    }
+                    setFilterPaneOpen((open) => {
+                      const next = !open;
+                      if (next) {
+                        setDraftFilterRules(view.filterRules);
+                      } else {
+                        setFilterSeedId(null);
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <Filter size={14} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              ) : (
+                <input
+                  ref={gridFilterRef}
+                  data-testid="db-grid-filter"
+                  value={gridFilter}
+                  placeholder={t("dbGridFilter")}
+                  onChange={(event) => {
+                    setGridFilter(event.target.value);
+                    setGridPage(1);
+                  }}
+                />
+              )}
+              {(tableView?.kind === "table" || active?.kind === "table") ? (
+                <button
+                  type="button"
+                  className="db-action-btn db-row-insert"
+                  data-testid="db-row-insert"
+                  aria-label={t("dbInsert")}
+                  title={t("dbInsert")}
+                  onClick={() => {
+                    const view = tableView ?? (active ? tableViewFromObjectTab(active) : null);
+                    if (!view || view.kind !== "table") return;
+                    if (!tableView) {
+                      tableViewRef.current = view;
+                      setTableView(view);
+                      setDataTarget({ schema: view.schema, table: view.table });
+                    }
+                    const names = insertColumnNames(view);
+                    setInsertValues(names.map(() => ""));
+                    setInsertOpen(true);
+                  }}
+                >
+                  <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                </button>
               ) : null}
             </div>
-            {insertOpen && tableView?.kind === "table" ? (
-              <div className="db-insert-row" data-testid="db-insert-row">
-                {tableView.columns.map((column, index) => (
-                  <label key={column.name}>
-                    {column.name}
-                    <input
-                      value={insertValues[index] ?? ""}
-                      onChange={(event) => {
-                        const next = [...insertValues];
-                        next[index] = event.target.value;
-                        setInsertValues(next);
-                      }}
-                    />
-                  </label>
-                ))}
-                <button type="button" data-testid="db-insert-save" onClick={submitInsert}>
-                  {t("dbRun")}
-                </button>
-              </div>
+            {tableView && filterPaneOpen ? (
+              <FilterSortPane
+                columns={columnNames(tableView, result.columns)}
+                filterRules={draftFilterRules}
+                onFilterRulesChange={setDraftFilterRules}
+                onApply={applyFilterSortPane}
+                seedFocusId={filterSeedId}
+              />
             ) : null}
-            <table className="k8s-table">
+            <table className="k8s-table db-data-grid">
               <thead>
                 <tr>
                   {(result.columns.length > 0 ? result.columns : tableView?.columns.map((column) => column.name) ?? []).map((column) => (
                     <th key={column}>
                       {tableView ? (
-                        <button type="button" className="db-sort" data-testid={`db-sort-${column}`} onClick={() => sortBy(column)}>
-                          {column}
-                          {tableView.sortColumn === column ? (tableView.sortDir === "asc" ? " ↑" : " ↓") : ""}
-                        </button>
+                        <div className="db-column-head">
+                          <button type="button" className="db-sort" data-testid={`db-sort-${column}`} onClick={() => sortBy(column)}>
+                            {column}
+                            {tableView.sortColumn === column ? (tableView.sortDir === "asc" ? " ↑" : " ↓") : ""}
+                          </button>
+                          <button
+                            type="button"
+                            className="db-column-menu-trigger"
+                            data-testid={`db-column-menu-${column}`}
+                            aria-label={t("dbAddFilter")}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setColumnMenu({ column, x: event.clientX, y: event.clientY });
+                            }}
+                          >
+                            <ChevronDown size={12} strokeWidth={2} aria-hidden="true" />
+                          </button>
+                        </div>
                       ) : (
                         column
                       )}
                     </th>
                   ))}
-                  {dataTarget ? <th /> : null}
+                  {dataTarget || insertOpen ? <th className="db-row-actions-col" /> : null}
                 </tr>
               </thead>
               <tbody>
+                {insertOpen && tableView?.kind === "table" ? (
+                  <tr className="db-insert-draft" data-testid="db-insert-row">
+                    {insertColumnNames(tableView).map((column, index) => (
+                      <td key={column} className="db-cell-editing">
+                        <input
+                          autoFocus={index === 0}
+                          data-testid={index === 0 ? "db-insert-cell-0" : undefined}
+                          value={insertValues[index] ?? ""}
+                          aria-label={column}
+                          onChange={(event) => {
+                            const next = [...insertValues];
+                            next[index] = event.target.value;
+                            setInsertValues(next);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              submitInsert();
+                            }
+                            if (event.key === "Escape") {
+                              event.preventDefault();
+                              setInsertOpen(false);
+                            }
+                          }}
+                        />
+                      </td>
+                    ))}
+                    <td className="db-row-actions">
+                      <button
+                        type="button"
+                        className="db-row-action"
+                        data-testid="db-insert-save"
+                        aria-label={t("dbInsert")}
+                        title={t("dbInsert")}
+                        onClick={submitInsert}
+                      >
+                        <Check size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="db-row-action"
+                        data-testid="db-insert-cancel"
+                        aria-label={t("dbInsertCancel")}
+                        title={t("dbInsertCancel")}
+                        onClick={() => setInsertOpen(false)}
+                      >
+                        <X size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                ) : null}
                 {(tableView ? result.rows : pageWindow(filterGridRows(result.rows, gridFilter), gridPage).rows).map((row, index) => (
                   <tr key={index}>
                     {row.map((cell, cellIndex) => {
-                      const editable = dataTarget != null && selected != null && engineFamily(selected.engine) === "sql";
+                      const editable =
+                        dataTarget != null && selected != null && engineFamily(selected.engine) === "sql";
+                      const editing =
+                        editable &&
+                        editingCell?.row === index &&
+                        editingCell?.col === cellIndex;
+                      if (!editable) {
+                        return (
+                          <td key={cellIndex}>
+                            {cell == null ? (
+                              <span className="db-cell-null-value">{t("dbCellNull")}</span>
+                            ) : (
+                              String(cell)
+                            )}
+                          </td>
+                        );
+                      }
+                      if (!editing) {
+                        const beginEdit = (target: HTMLElement) => {
+                          setEditingCell({
+                            row: index,
+                            col: cellIndex,
+                            rect: target.getBoundingClientRect(),
+                          });
+                        };
+                        return (
+                          <td
+                            key={cellIndex}
+                            className="db-cell-display db-cell-editable"
+                            data-testid={index === 0 && cellIndex === 0 ? "db-cell-display" : undefined}
+                            tabIndex={0}
+                            title={t("dbCellEditHint")}
+                            onClick={(event) => beginEdit(event.currentTarget)}
+                            onDoubleClick={(event) => beginEdit(event.currentTarget)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === "F2") {
+                                event.preventDefault();
+                                beginEdit(event.currentTarget);
+                              }
+                            }}
+                          >
+                            {cell == null ? (
+                              <span className="db-cell-null-value">{t("dbCellNull")}</span>
+                            ) : (
+                              String(cell)
+                            )}
+                          </td>
+                        );
+                      }
+                      const columnName = result.columns[cellIndex] ?? "";
+                      const sqlType =
+                        tableView?.columns.find((column) => column.name === columnName)?.type ?? "";
+                      const editorKind = resolveCellEditorKind(sqlType, cell);
+                      const inputType = cellEditorInputType(editorKind);
+                      const commitCell = (next: string | null) => {
+                        setEditingCell(null);
+                        if (!selected || !dataTarget) return;
+                        const sql = cellUpdateSql(
+                          selected.engine,
+                          dataTarget.schema,
+                          dataTarget.table,
+                          result.columns,
+                          row,
+                          cellIndex,
+                          next,
+                        );
+                        if (sql) void mutate(sql);
+                      };
+                      if (cellUsesDateTimePicker(editorKind)) {
+                        const pickerKind = editorKind as "time" | "date" | "datetime";
+                        return (
+                          <td key={cellIndex} className="db-cell-editing">
+                            <span className="db-cell-edit db-cell-edit--picker-open">
+                              {cell == null ? (
+                                <span className="db-cell-null-value">{t("dbCellNull")}</span>
+                              ) : (
+                                String(cell)
+                              )}
+                            </span>
+                            <DateTimeCellPicker
+                              kind={pickerKind}
+                              initial={cell}
+                              anchorRect={editingCell?.rect ?? null}
+                              testId={
+                                editorKind === "time"
+                                  ? "db-cell-input-time"
+                                  : editorKind === "date"
+                                    ? "db-cell-input-date"
+                                    : "db-cell-input-datetime"
+                              }
+                              onCancel={() => setEditingCell(null)}
+                              onCommit={(next) => commitCell(next)}
+                            />
+                          </td>
+                        );
+                      }
+                      if (editorKind === "boolean") {
+                        const checked =
+                          cell === true ||
+                          cell === "t" ||
+                          cell === "true" ||
+                          cell === 1 ||
+                          cell === "1";
+                        return (
+                          <td key={cellIndex} className="db-cell-editing">
+                            <span className="db-cell-edit">
+                              <input
+                                autoFocus
+                                type="checkbox"
+                                data-testid={
+                                  index === 0 && cellIndex === 0
+                                    ? "db-cell-input"
+                                    : "db-cell-input-boolean"
+                                }
+                                defaultChecked={checked}
+                                onChange={(event) => {
+                                  commitCell(event.target.checked ? "true" : "false");
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    setEditingCell(null);
+                                  }
+                                }}
+                              />
+                            </span>
+                          </td>
+                        );
+                      }
                       return (
-                        <td key={cellIndex}>
-                          {editable ? (
+                        <td key={cellIndex} className="db-cell-editing">
+                          <span className="db-cell-edit">
                             <input
-                              defaultValue={cell == null ? "" : String(cell)}
+                              autoFocus
+                              type={inputType}
+                              data-testid={
+                                index === 0 && cellIndex === 0
+                                  ? "db-cell-input"
+                                  : editorKind !== "text"
+                                    ? `db-cell-input-${editorKind}`
+                                    : undefined
+                              }
+                              defaultValue={cellEditorValue(editorKind, cell)}
                               onBlur={(event) => {
-                                if (!selected || !dataTarget) return;
-                                const sql = cellUpdateSql(
-                                  selected.engine,
-                                  dataTarget.schema,
-                                  dataTarget.table,
-                                  result.columns,
-                                  row,
-                                  cellIndex,
-                                  event.target.value,
-                                );
-                                if (sql) void mutate(sql);
+                                commitCell(event.target.value);
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  setEditingCell(null);
+                                }
                               }}
                             />
-                          ) : cell == null ? (
-                            ""
-                          ) : (
-                            String(cell)
-                          )}
+                          </span>
                         </td>
                       );
                     })}
                     {dataTarget && selected && tableView ? (
-                      <td>
+                      <td className="db-row-actions-col">
                         <button
                           type="button"
+                          className="db-row-delete"
                           data-testid="db-row-delete"
                           onClick={() => {
-                            const names = tableView.columns.length > 0 ? tableView.columns.map((column) => column.name) : result.columns;
+                            const names =
+                              tableView.columns.length > 0
+                                ? tableView.columns.map((column) => column.name)
+                                : result.columns;
                             const values = names.map((name) => {
                               const cellIndex = result.columns.indexOf(name);
                               return cellIndex < 0 ? null : row[cellIndex];
                             });
-                            const sql = rowDeleteSql(selected.engine, tableView.schema, tableView.table, names, values);
+                            const sql = rowDeleteSql(
+                              selected.engine,
+                              tableView.schema,
+                              tableView.table,
+                              names,
+                              values,
+                            );
                             if (sql) void mutate(sql);
                           }}
                         >
@@ -1894,15 +2775,51 @@ export function DbWorkbench() {
                 ))}
               </tbody>
             </table>
+            <div className="db-grid-toolbar-bottom">
+              <div className="db-grid-pager">
+                <button
+                  type="button"
+                  data-testid="db-grid-prev"
+                  disabled={tableView ? tableView.page <= 1 : gridPage <= 1}
+                  aria-label={t("dbGridPrev")}
+                  title={t("dbGridPrev")}
+                  onClick={() => turnPage(-1)}
+                >
+                  <ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
+                </button>
+                <span className="db-grid-page" data-testid="db-grid-page">
+                  {t("dbGridPage", { page: tableView?.page ?? gridPage })}
+                </span>
+                <button
+                  type="button"
+                  data-testid="db-grid-next"
+                  disabled={
+                    tableView
+                      ? result.rows.length < GRID_PAGE_SIZE
+                      : pageWindow(filterGridRows(result.rows, gridFilter), gridPage).page >=
+                        pageWindow(filterGridRows(result.rows, gridFilter), gridPage).pages
+                  }
+                  aria-label={t("dbGridNext")}
+                  title={t("dbGridNext")}
+                  onClick={() => turnPage(1)}
+                >
+                  <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
         </div>
           </>
-        )}
-        <p className="db-readonly-hint" data-testid="db-readonly-hint">
-          {t("dbReadonlyHint")}
-        </p>
+        ) : null}
+        {queryFocused ? (
+          <p className="db-readonly-hint" data-testid="db-readonly-hint">
+            {t("dbReadonlyHint")}
+          </p>
+        ) : null}
         </div>
+        {queryFocused ? (
+          <>
         <div
           className="db-editor-resize"
           role="separator"
@@ -1953,9 +2870,14 @@ export function DbWorkbench() {
         <div className="db-status-actions">
           <button
             type="button"
-            className="find-panel-run primary"
+            className="db-action-btn db-action-btn--primary"
             data-testid="db-run"
             disabled={!selected || busy}
+            title={
+              sqlRef.current && sqlRef.current.selectionStart !== sqlRef.current.selectionEnd
+                ? t("dbRunSelection")
+                : t("dbRun")
+            }
             onMouseDown={(event) => {
               event.preventDefault();
               const field = sqlRef.current;
@@ -1971,6 +2893,7 @@ export function DbWorkbench() {
           </button>
           <button
             type="button"
+            className="db-action-btn"
             data-testid="db-cancel"
             disabled={!busy}
             onClick={() => {
@@ -1985,22 +2908,14 @@ export function DbWorkbench() {
           >
             {t("dbCancel")}
           </button>
-          <button type="button" data-testid="db-explain" disabled={!selected || busy} onClick={() => void explain()}>
-            {t("dbResultPlan")}
-          </button>
-          <button type="button" data-testid="db-export-page" disabled={!result} onClick={exportPage}>
-            {t("dbExportPage")}
-          </button>
-          <button type="button" data-testid="db-export-filtered" disabled={!result || busy} onClick={() => void exportFiltered()}>
-            {t("dbExportFiltered")}
-          </button>
           <button
             type="button"
-            data-testid="db-import-csv"
-            disabled={!tableView || tableView.kind !== "table" || busy}
-            onClick={() => importRef.current?.click()}
+            className="db-action-btn"
+            data-testid="db-explain"
+            disabled={!selected || busy}
+            onClick={() => void explain()}
           >
-            {t("dbImportCsv")}
+            {t("dbResultPlan")}
           </button>
           <input
             ref={importRef}
@@ -2014,69 +2929,167 @@ export function DbWorkbench() {
               if (file) void importCsv(file);
             }}
           />
-          {selected && engineFamily(selected.engine) === "sql" ? (
-            <button type="button" data-testid="db-create-table" onClick={openCreateTable}>
-              {t("dbCreateTable")}
+          <div className="db-tools">
+            <button
+              type="button"
+              className="db-action-btn db-tools-trigger"
+              data-testid="db-tools-menu"
+              aria-label={t("dbTools")}
+              title={t("dbTools")}
+              aria-expanded={toolsOpen}
+              aria-haspopup="menu"
+              onClick={() => setToolsOpen((open) => !open)}
+            >
+              <Wrench size={14} strokeWidth={1.75} aria-hidden="true" />
             </button>
-          ) : null}
-          <input
-            data-testid="db-query-name"
-            value={queryName}
-            placeholder={t("dbQueryName")}
-            onChange={(event) => setQueryName(event.target.value)}
-          />
-          <button type="button" data-testid="db-save-query" disabled={!selected || !active} onClick={saveCurrentQuery}>
-            {t("dbSaveQuery")}
-          </button>
-          <select
-            data-testid="db-saved-queries"
-            value=""
-            onChange={(event) => {
-              const item = savedQueries.find((query) => query.id === event.target.value);
-              if (!item) return;
-              setQueryName(item.name);
-              tableViewRef.current = null;
-              setTableView(null);
-              setDataTarget(null);
-              replaceActive({ sql: item.sql, result: null, error: "" });
-            }}
-          >
-            <option value="">{t("dbSavedQueries")}</option>
-            {savedQueries.map((query) => (
-              <option key={query.id} value={query.id}>
-                {query.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid="db-delete-query"
-            disabled={!savedQueries.some((query) => query.name === queryName.trim())}
-            onClick={() => {
-              const item = savedQueries.find((query) => query.name === queryName.trim());
-              if (item) deleteSavedQuery(item.id);
-            }}
-          >
-            {t("dbDeleteQuery")}
-          </button>
-          <div className="db-status-secondary">
-            <button type="button" data-testid="db-status-sessions" onClick={() => void openStatus("sessions")}>
-              {t("dbSessions")}
-            </button>
-            <button type="button" data-testid="db-status-locks" onClick={() => void openStatus("locks")}>
-              {t("dbLocks")}
-            </button>
-            <button type="button" data-testid="db-status-sizes" onClick={() => void openStatus("sizes")}>
-              {t("dbSizes")}
-            </button>
-            <button type="button" data-testid="db-open-ai" disabled={!selected} onClick={openAi}>
-              {t("dbOpenAi")}
-            </button>
+            {toolsOpen ? (
+              <div className="db-tools-panel" data-testid="db-tools-panel" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-export-page"
+                  disabled={!result}
+                  onClick={() => {
+                    exportPage();
+                    setToolsOpen(false);
+                  }}
+                >
+                  {t("dbExportPage")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-export-filtered"
+                  disabled={!result || busy}
+                  onClick={() => {
+                    void exportFiltered();
+                    setToolsOpen(false);
+                  }}
+                >
+                  {t("dbExportFiltered")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-import-csv"
+                  disabled={!tableView || tableView.kind !== "table" || busy}
+                  onClick={() => {
+                    importRef.current?.click();
+                    setToolsOpen(false);
+                  }}
+                >
+                  {t("dbImportCsv")}
+                </button>
+                {selected && engineFamily(selected.engine) === "sql" ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="db-create-table"
+                    onClick={() => {
+                      openCreateTable();
+                      setToolsOpen(false);
+                    }}
+                  >
+                    {t("dbCreateTable")}
+                  </button>
+                ) : null}
+                <div className="db-tools-separator" role="separator" />
+                <label className="db-tools-field">
+                  <span>{t("dbQueryName")}</span>
+                  <input
+                    data-testid="db-query-name"
+                    value={queryName}
+                    placeholder={t("dbQueryName")}
+                    onChange={(event) => setQueryName(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-save-query"
+                  disabled={!selected || !active}
+                  onClick={() => {
+                    saveCurrentQuery();
+                  }}
+                >
+                  {t("dbSaveQuery")}
+                </button>
+                <select
+                  data-testid="db-saved-queries"
+                  value=""
+                  onChange={(event) => {
+                    const item = savedQueries.find((query) => query.id === event.target.value);
+                    if (!item) return;
+                    setQueryName(item.name);
+                    tableViewRef.current = null;
+                    setTableView(null);
+                    setDataTarget(null);
+                    replaceActive({ sql: item.sql, result: null, error: "" });
+                    setToolsOpen(false);
+                  }}
+                >
+                  <option value="">{t("dbSavedQueries")}</option>
+                  {savedQueries.map((query) => (
+                    <option key={query.id} value={query.id}>
+                      {query.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-delete-query"
+                  disabled={!savedQueries.some((query) => query.name === queryName.trim())}
+                  onClick={() => {
+                    const item = savedQueries.find((query) => query.name === queryName.trim());
+                    if (item) deleteSavedQuery(item.id);
+                  }}
+                >
+                  {t("dbDeleteQuery")}
+                </button>
+                <div className="db-tools-separator" role="separator" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-status-sessions"
+                  onClick={() => {
+                    void openStatus("sessions");
+                    setToolsOpen(false);
+                  }}
+                >
+                  {t("dbSessions")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-status-locks"
+                  onClick={() => {
+                    void openStatus("locks");
+                    setToolsOpen(false);
+                  }}
+                >
+                  {t("dbLocks")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="db-status-sizes"
+                  onClick={() => {
+                    void openStatus("sizes");
+                    setToolsOpen(false);
+                  }}
+                >
+                  {t("dbSizes")}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
         {exportNote ? <p data-testid="db-export-note">{exportNote}</p> : null}
         {importProgress ? (
           <p data-testid="db-import-progress">{t("dbImportProgress", { done: importProgress.done, total: importProgress.total })}</p>
+        ) : null}
+          </>
         ) : null}
       </div>
       {importPreview && tableView ? (
@@ -2382,14 +3395,29 @@ export function DbWorkbench() {
                 </select>
               </label>
             ) : null}
-            {formError ? (
-              <p className="db-error" data-testid="db-form-error">
-                {formError}
-              </p>
-            ) : null}
-            {testOk ? (
-              <p data-testid="db-test-ok">{t("dbTestOk")}</p>
-            ) : null}
+            <div className="db-form-status" data-testid="db-form-status" aria-live="polite">
+              {formError ? (
+                <span className="db-form-status-error" data-testid="db-form-error" title={formError}>
+                  <span className="db-form-status-icon" aria-hidden>
+                    !
+                  </span>
+                  <span className="db-form-status-text">{shortDbFormError(formError)}</span>
+                </span>
+              ) : testOk ? (
+                <span
+                  className="db-form-status-ok"
+                  data-testid="db-test-ok"
+                  title={t("dbTestOk")}
+                  aria-label={t("dbTestOk")}
+                >
+                  <span className="db-form-status-icon" aria-hidden>
+                    ✅
+                  </span>
+                </span>
+              ) : (
+                <span className="db-form-status-placeholder" aria-hidden />
+              )}
+            </div>
             <div className="form-row">
               <button type="button" data-testid="db-connection-test" disabled={busy} onClick={() => void testConnection()}>
                 {t("dbTest")}

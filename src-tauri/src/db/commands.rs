@@ -12,7 +12,7 @@ use super::catalog::{
 };
 use super::secrets::{FileVault, KeyringSecretStore, DB_KEYCHAIN_SERVICE};
 use super::driver::{self, database_name, explain_sql, status_sql};
-use super::gate::{authorize, Authorized, SqlJob, SqlRows, MAX_ROW_LIMIT};
+use super::gate::{authorize, Authorized, SqlJob, SqlRows, CATALOG_ROW_LIMIT, MAX_ROW_LIMIT};
 use super::lease::{register_db_lease, DbLease};
 
 const STORE_FILE: &str = "db-connections.json";
@@ -196,26 +196,41 @@ pub async fn db_save_connection(
             .await
             .map_err(|_| "ssh session is not connected".to_string())?;
     }
-    let mut catalog = load_catalog(&app)?;
-    let secrets = secret_store(&app)?;
-    let saved = catalog.save(
-        SaveDbConnection {
-            id: request.id,
-            name: request.name,
-            engine: request.engine,
-            host: request.host,
-            port: request.port,
-            database: request.database,
-            user: request.user,
-            tls: request.tls,
-            ssh_session_id: request.ssh_session_id,
-            password: request.password,
-            auth_database: request.auth_database,
-            clear_secret: request.clear_secret,
-        },
-        &secrets,
-    )?;
-    let password = catalog.password(&saved.connection.id, &secrets)?;
+    let typed_password = request
+        .password
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let mut catalog = load_catalog(&app).map_err(|err| format!("could not load connections: {err}"))?;
+    let secrets = secret_store(&app).map_err(|err| format!("could not open secret store: {err}"))?;
+    let saved = catalog
+        .save(
+            SaveDbConnection {
+                id: request.id,
+                name: request.name,
+                engine: request.engine,
+                host: request.host,
+                port: request.port,
+                database: request.database,
+                user: request.user,
+                tls: request.tls,
+                ssh_session_id: request.ssh_session_id,
+                password: request.password,
+                auth_database: request.auth_database,
+                clear_secret: request.clear_secret,
+            },
+            &secrets,
+        )
+        .map_err(|err| format!("could not save connection: {err}"))?;
+    // Prefer the typed password for the same check as "Test connection".
+    // Fall back to the vault only when editing and the password field was left blank.
+    let password = match &typed_password {
+        Some(value) => value.clone(),
+        None => catalog
+            .password(&saved.connection.id, &secrets)
+            .map_err(|err| format!("could not read saved password: {err}"))?,
+    };
     let probe = SqlJob {
         sql: driver::probe_command(&saved.connection.engine).into(),
         read_only: true,
@@ -223,11 +238,11 @@ pub async fn db_save_connection(
     };
     if let Err(err) = driver::execute(&sessions, &saved.connection, &password, &probe, None, None).await {
         let _ = rollback_save(&saved, &secrets);
-        return Err(err);
+        return Err(format!("connection check failed: {err}"));
     }
     if let Err(err) = store_catalog(&app, &catalog, crate::durable::WriteMode::KeepRecords) {
         let _ = rollback_save(&saved, &secrets);
-        return Err(err);
+        return Err(format!("could not store connection: {err}"));
     }
     Ok(saved.connection)
 }
@@ -427,7 +442,7 @@ pub async fn db_search_objects(
         &connection_id,
         "search",
         driver::search_command(&connection.engine),
-        MAX_ROW_LIMIT,
+        CATALOG_ROW_LIMIT,
         None,
         Some(&pattern),
         database.as_deref(),
@@ -460,7 +475,7 @@ pub async fn db_search_structure(
         &connection_id,
         "search",
         sql,
-        MAX_ROW_LIMIT,
+        CATALOG_ROW_LIMIT,
         None,
         Some(&pattern),
         database.as_deref(),

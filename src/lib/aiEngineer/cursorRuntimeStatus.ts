@@ -30,6 +30,11 @@ export function externalRuntimeStatusKind(
   return "not_ready";
 }
 
+/** Run failed because the local CLI has no login — open the guided browser sign-in. */
+export function shouldAutoStartRuntimeLogin(code: string | undefined | null): boolean {
+  return code === "login_needed";
+}
+
 /** Installed CLIs can be the answering agent. A missing CLI cannot. */
 export function canSelectExternalRuntime(
   status: ExternalRuntimeStatusKind,

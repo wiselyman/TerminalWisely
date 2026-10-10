@@ -10,6 +10,8 @@ import {
   pathBreadcrumbSegments,
   pathsIntersectingMarquee,
   rangeSelectPaths,
+  resolveContentsPrimaryClickAction,
+  resolveSendToPaths,
   sanitizeDeleteSelection,
   togglePathInSelection,
 } from "./localFsOps";
@@ -136,5 +138,28 @@ describe("localFsOps", () => {
         bottom: 5,
       }),
     ).toEqual(["a"]);
+  });
+
+  it("contents primary click selects directories instead of opening them", () => {
+    expect(resolveContentsPrimaryClickAction("directory")).toBe("select");
+    expect(resolveContentsPrimaryClickAction("file")).toBe("select");
+    expect(resolveContentsPrimaryClickAction("directory", { shift: true })).toBe(
+      "range",
+    );
+    expect(resolveContentsPrimaryClickAction("directory", { meta: true })).toBe(
+      "toggle",
+    );
+  });
+
+  it("resolveSendToPaths uses full multi-select when entry is selected", () => {
+    expect(
+      resolveSendToPaths(
+        ["/videos/a", "/videos/b", "/videos/c"],
+        "/videos/b",
+      ),
+    ).toEqual(["/videos/a", "/videos/b", "/videos/c"]);
+    expect(resolveSendToPaths(["/videos/a"], "/videos/other")).toEqual([
+      "/videos/other",
+    ]);
   });
 });

@@ -11,11 +11,15 @@ import {
 import {
   activeTab as pickActiveTab,
   applyBrowserPageEvent,
+  applyBrowserTitle,
+  browserTabCaption,
+  choosePopupUrl,
   createBrowserBucket,
   createBrowserTab,
   pushTabNav,
   tabCanGoBack,
   tabCanGoForward,
+  withBrowserScheme,
   type BrowserSessionBucket,
   type BrowserTab,
 } from "../lib/browserTabs";
@@ -243,7 +247,7 @@ interface BrowserState {
   setWidth: (width: number) => void;
   setUrl: (url: string) => void;
   refreshSuggestions: (query?: string) => void;
-  navigate: (url: string) => Promise<void>;
+  navigate: (url: string, tabId?: string) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
   reload: () => Promise<void>;
@@ -281,6 +285,23 @@ let ensureInFlight: Promise<void> | null = null;
 let ensureInFlightSession: string | null = null;
 let pageUnlisten: UnlistenFn | null = null;
 let loadUnlisten: UnlistenFn | null = null;
+let popupUnlisten: UnlistenFn | null = null;
+let titleUnlisten: UnlistenFn | null = null;
+let popupBurst: string[] = [];
+let popupBurstTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Open Link can emit several URLs in one gesture. Keep a single destination tab. */
+function queueBrowserPopup(get: () => BrowserState, url: string) {
+  popupBurst.push(url);
+  if (popupBurstTimer) clearTimeout(popupBurstTimer);
+  popupBurstTimer = setTimeout(() => {
+    popupBurstTimer = null;
+    const urls = popupBurst;
+    popupBurst = [];
+    const chosen = choosePopupUrl(get().url, urls);
+    if (chosen) get().newTab(chosen);
+  }, 80);
+}
 let boundsInFlight: Promise<void> | null = null;
 let pendingBounds: BrowserDockRect | null = null;
 /** While true, bounds sync must not show the native webview over other windows. */
@@ -366,6 +387,44 @@ async function ensurePageListener(
           traceBrowser("load-finished");
           set({ loading: false });
         }
+      });
+    } catch {
+      // non-Tauri / E2E
+    }
+  }
+  if (!titleUnlisten) {
+    try {
+      titleUnlisten = await listen<{ tab_id?: string; title?: string }>(
+        "host-browser-title",
+        (event) => {
+          const tabId = (event.payload.tab_id ?? "").trim();
+          const title = event.payload.title ?? "";
+          if (!tabId || !browserTabCaption(title)) return;
+          const state = get();
+          const tabs = applyBrowserTitle(state.tabs, tabId, title);
+          const patch: Partial<BrowserState> = { tabs };
+          if (state.activeTabId === tabId) {
+            patch.pageTitle = browserTabCaption(title);
+          }
+          set(patch);
+          flushLiveToBucket({ ...get(), tabs });
+        },
+      );
+    } catch {
+      // non-Tauri / E2E
+    }
+  }
+  if (!popupUnlisten) {
+    try {
+      popupUnlisten = await listen<{
+        session_id?: string;
+        url?: string;
+      }>("host-browser-popup", (event) => {
+        const url = (event.payload.url ?? "").trim();
+        const sessionId = event.payload.session_id ?? "";
+        const state = get();
+        if (!url || !sessionId || state.sessionId !== sessionId) return;
+        queueBrowserPopup(get, url);
       });
     } catch {
       // non-Tauri / E2E
@@ -790,7 +849,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       });
       flushLiveToBucket(get());
       if (url) {
-        void get().navigate(url);
+        void get().navigate(url, tab.id);
         return;
       }
       void (async () => {
@@ -924,7 +983,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       await ensureInFlight;
     },
 
-    navigate: async (url) => {
+    navigate: async (url, tabId) => {
       resetBrowserTrace();
       traceBrowser("navigate");
       const trimmed = url.trim();
@@ -932,12 +991,10 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       if (get().minimized) {
         await get().restore();
       }
-      const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)
-        ? trimmed
-        : `http://${trimmed}`;
+      const withScheme = withBrowserScheme(trimmed);
 
       const state = get();
-      const activeId = state.activeTabId;
+      const activeId = tabId || state.activeTabId;
       let nextTabs = state.tabs;
       if (activeId) {
         const current = state.tabs.find((t) => t.id === activeId);
@@ -1007,7 +1064,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
           request: {
             session_id: sessionId,
             profile_key: get().profileKey ?? "",
-            tab_id: get().activeTabId ?? "default",
+            tab_id: activeId ?? "default",
             url: withScheme,
             x: bounds.x,
             y: bounds.y,

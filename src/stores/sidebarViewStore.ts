@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import { closeDesktopRemembering } from "./hostWorkspaceMemory";
 import { useAiEngineerStore } from "./aiEngineerStore";
+import { useDbWorkspaceStore } from "./dbWorkspaceStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
 import { useManagedEntityStore } from "./managedEntityStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import { useBrowserStore } from "./browserStore";
+import { useK8sStore } from "./k8sStore";
 
 export type SidebarView = "hosts" | "k8s" | "db";
 
@@ -46,12 +48,15 @@ export const useSidebarViewStore = create<SidebarViewState>((set) => ({
       /* ignore */
     }
     if (view === "db") {
+      // Stay on Home until the user opens a connection/workspace (Navicat-like).
       closeHostsWorkspacePanels();
-      useManagedEntityStore.getState().leaveHome();
       useAiEngineerStore.getState().setEngineerMode("db");
       set({ view });
       return;
     }
+
+    // Leaving DB must not remount into an auto-expanded live tree.
+    useDbWorkspaceStore.getState().setActive(null);
 
     useAiEngineerStore
       .getState()
@@ -59,6 +64,10 @@ export const useSidebarViewStore = create<SidebarViewState>((set) => ({
 
     if (view === "k8s") {
       closeHostsWorkspacePanels();
+      // No cluster selected → stay on Home (no empty CTA in the workbench).
+      if (!useK8sStore.getState().selectedCluster) {
+        useManagedEntityStore.getState().openHome();
+      }
     }
 
     const focused =

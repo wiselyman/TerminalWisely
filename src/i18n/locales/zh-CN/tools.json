@@ -98,6 +98,7 @@
   "transfer.methodStream": "流式中转",
   "transfer.methodSftp": "SFTP 中转",
   "transfer.filesCount": "{{count}} 个文件",
+  "aiEngineer.backgroundRunOtherHost": "另一台主机的 AI 仍在后台运行。请先切回该主机，或在该主机点停止后再发送。",
   "aiEngineer.railLabel": "AI 工程师",
   "aiEngineer.linuxTitle": "AI Linux Engineer",
   "aiEngineer.k8sTitle": "AI K8S Engineer",

@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   applyBrowserPageEvent,
+  applyBrowserTitle,
   browserTabCaption,
+  browserTabLabel,
+  choosePopupUrl,
   createBrowserBucket,
   createBrowserTab,
   pushTabNav,
   tabCanGoBack,
   tabCanGoForward,
+  withBrowserScheme,
 } from "./browserTabs";
 
 describe("browserTabs", () => {
@@ -73,5 +77,55 @@ describe("browserTabs", () => {
       title: "A real title",
     });
     expect(titled.tabs[0]?.title).toBe("A real title");
+  });
+
+  it("opens one destination when Open Link reports several urls", () => {
+    const current =
+      "https://www.google.com.hk/search?q=hello&newwindow=1&sca_esv=abc";
+    const chosen = choosePopupUrl(current, [
+      current,
+      "https://www.google.com.hk/search?q=hello&newwindow=1&sca_esv=abc",
+      "https://en.wikipedia.org/wiki/Hello",
+    ]);
+    expect(chosen).toBe("https://en.wikipedia.org/wiki/Hello");
+    expect(choosePopupUrl(current, ["about:blank", current])).toBeNull();
+  });
+
+  it("keeps a document title that arrives after the address is known", () => {
+    const tab = createBrowserTab("https://en.wikipedia.org/wiki/Hello", "");
+    expect(browserTabCaption(tab.title)).toBe("");
+    const titled = applyBrowserTitle([tab], tab.id, "Hello");
+    expect(titled.find((item) => item.id === tab.id)?.title).toBe("Hello");
+    const kept = applyBrowserTitle(titled, tab.id, "https://en.wikipedia.org/wiki/Hello");
+    expect(kept.find((item) => item.id === tab.id)?.title).toBe("Hello");
+  });
+
+  it("keeps a document title when a later load event has an empty title", () => {
+    const tab = createBrowserTab(
+      "https://en.wikipedia.org/wiki/Hello",
+      "Hello - Wikipedia",
+    );
+    const result = applyBrowserPageEvent([tab], tab.id, {
+      tabId: tab.id,
+      url: "https://en.wikipedia.org/wiki/Hello",
+      title: "",
+      favicon: "https://en.wikipedia.org/favicon.ico",
+    });
+    expect(result.tabs[0]?.title).toBe("Hello - Wikipedia");
+    expect(browserTabLabel(result.tabs[0]!.title, result.tabs[0]!.url)).toBe(
+      "Hello - Wikipedia",
+    );
+  });
+
+  it("uses the host as the tab label until a document title arrives", () => {
+    const tab = createBrowserTab("https://en.wikipedia.org/wiki/Hello", "");
+    expect(browserTabLabel(tab.title, tab.url)).toBe("en.wikipedia.org");
+    expect(browserTabLabel("", "")).toBe("");
+  });
+
+  it("defaults a bare host to https and keeps an explicit scheme", () => {
+    expect(withBrowserScheme("www.baidu.com")).toBe("https://www.baidu.com");
+    expect(withBrowserScheme("http://www.baidu.com")).toBe("http://www.baidu.com");
+    expect(withBrowserScheme("https://example.com/a")).toBe("https://example.com/a");
   });
 });

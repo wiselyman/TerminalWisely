@@ -58,10 +58,15 @@ export function SendToDialog() {
 
   if (!sendTo) return null;
 
-  const fileLabel =
+  const pathCount = sendTo.remotePaths?.length ?? 1;
+  const singleLabel =
     sendTo.remotePath.length > 48
       ? `…${sendTo.remotePath.slice(-45)}`
       : sendTo.remotePath;
+  const fileLabel =
+    pathCount > 1
+      ? `${t("sendToItems", { count: pathCount })} · ${singleLabel}`
+      : singleLabel;
 
   const handleSend = () => {
     if (!selectedTargetId || pending) return;

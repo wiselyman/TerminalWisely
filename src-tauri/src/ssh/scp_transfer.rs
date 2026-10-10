@@ -315,8 +315,10 @@ where
     };
     // Directory copies need -r; for files -r is harmless.
     let recursive_flag = if recursive { "-r " } else { "" };
+    // Merge stderr into the channel so failure reasons (Permission denied, No space, …)
+    // are not dropped — OpenSSH scp writes diagnostics to stderr (ExtendedData).
     let scp_cmd = format!(
-        "{}scp {}{} {} {}; ec=$?; {}; exit $ec",
+        "{}scp {}{} {} {} 2>&1; ec=$?; {}; exit $ec",
         auth.prefix, recursive_flag, auth.scp_args, quoted_from, dest_target, cleanup,
     );
 
@@ -354,6 +356,9 @@ where
                 match msg {
                     None => break,
                     Some(ChannelMsg::Data { data }) => detail.extend_from_slice(&data),
+                    Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        detail.extend_from_slice(&data);
+                    }
                     Some(ChannelMsg::ExitStatus { exit_status: code }) => {
                         exit_status = Some(code);
                         break;
@@ -427,22 +432,30 @@ where
         }
         Some(code) => {
             let text = String::from_utf8_lossy(&detail).trim().to_string();
-            let message = if text.is_empty() {
-                format!(
-                    "SCP 失败（退出码 {code}）。请确认目标书签密码/私钥正确，且源机可访问目标 {host}:{port}",
-                    host = to_request.host,
-                    port = to_request.port,
-                )
-            } else {
-                format!("SCP 失败（退出码 {code}）: {text}")
-            };
-            Err(AppError::msg(message))
+            Err(AppError::msg(format_scp_failure(
+                code,
+                &text,
+                &to_request.host,
+                to_request.port,
+            )))
         }
         None if dest_complete => {
             on_progress(total, total, TRANSFER_METHOD_SCP);
             Ok(())
         }
         None => Err(AppError::msg("SCP 未返回退出状态")),
+    }
+}
+
+/// Prefer scp stderr/stdout detail; fall back to auth/reachability hint.
+fn format_scp_failure(code: u32, detail: &str, host: &str, port: u16) -> String {
+    let text = detail.trim();
+    if text.is_empty() {
+        format!(
+            "SCP 失败（退出码 {code}）。请确认目标书签密码/私钥正确，且源机可访问目标 {host}:{port}"
+        )
+    } else {
+        format!("SCP 失败（退出码 {code}）: {text}")
     }
 }
 
@@ -520,5 +533,24 @@ mod tests {
             scp_destination("root", "spark", "/home/a/my file"),
             "root@spark:'/home/a/my file'"
         );
+    }
+
+    #[test]
+    fn format_scp_failure_includes_stderr_detail() {
+        let msg = format_scp_failure(
+            1,
+            "scp: /data/videos/clip: No space left on device\n",
+            "10.0.0.2",
+            22,
+        );
+        assert!(msg.contains("No space left on device"), "{msg}");
+        assert!(!msg.contains("请确认目标书签"), "{msg}");
+    }
+
+    #[test]
+    fn format_scp_failure_falls_back_when_detail_empty() {
+        let msg = format_scp_failure(1, "   ", "10.0.0.2", 22);
+        assert!(msg.contains("10.0.0.2:22"), "{msg}");
+        assert!(msg.contains("请确认目标书签"), "{msg}");
     }
 }

@@ -57,6 +57,7 @@ let lastK8sOpenKubectlTerminal: Record<string, unknown> | null = null;
 let lastK8sDelete: Record<string, unknown> | null = null;
 let createSshCallCount = 0;
 const e2eDbConnections: Array<Record<string, unknown>> = [];
+let e2eDbTableName = "orders";
 const e2eDbLeases = new Set<string>();
 const e2eSavedQueries: Record<string, Array<{ id: string; name: string; sql: string }>> = {};
 
@@ -633,6 +634,9 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   db_test_connection: () => "ok",
   db_save_connection: (args) => {
     const request = (args?.request ?? {}) as Record<string, unknown>;
+    if (String(request.name ?? "") === "bad-save") {
+      throw { message: "could not write the secret file" };
+    }
     const password = String(request.password ?? "");
     const saved = {
       id: `db-${e2eDbConnections.length + 1}`,
@@ -649,6 +653,7 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       password,
     };
     e2eDbConnections.push(saved);
+    e2eDbTableName = "orders";
     return { ...saved, password: undefined };
   },
   db_delete_connection: () => null,
@@ -685,19 +690,33 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     operation: "search",
     sql: "",
   }),
-  db_search_objects: (args) => ({
-    kind: "rows",
-    columns: ["table_schema", "table_name", "column_name", "data_type"],
-    rows: [["public", "orders", "id", "integer"]],
-    truncated: false,
-    risk: "",
-    connection_id: String(
+  db_search_objects: (args) => {
+    const connectionId = String(
       args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
-    ),
-    revision: 1,
-    operation: "search",
-    sql: "",
-  }),
+    );
+    const match = e2eDbConnections.find((item) => item.id === connectionId);
+    const engine = String(match?.engine ?? "postgres");
+    const rows =
+      engine === "redis"
+        ? [["0", "user:1", "", "", "KEY"]]
+        : engine === "mongodb"
+          ? [["", "orders", "", "", "COLLECTION"]]
+          : [
+              ["public", e2eDbTableName, "id", "integer", "BASE TABLE"],
+              ["public", e2eDbTableName, "start_time", "time(6)", "BASE TABLE"],
+            ];
+    return {
+      kind: "rows",
+      columns: ["table_schema", "table_name", "column_name", "data_type", "table_type"],
+      rows,
+      truncated: false,
+      risk: "",
+      connection_id: connectionId,
+      revision: 1,
+      operation: "search",
+      sql: "",
+    };
+  },
   db_cancel_query: () => null,
   db_list_saved_queries: (args) =>
     e2eSavedQueries[String(args?.connectionId ?? args?.connection_id ?? "")] ?? [],
@@ -713,7 +732,13 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     if (sql.includes("BROKEN")) {
       throw new Error("password authentication failed");
     }
-    if (/^\s*update\b/i.test(sql) && !e2eDbLeases.has(leaseId)) {
+    const writing =
+      /^\s*(update|delete|truncate|alter|rename|insert|drop|create|exec|vacuum|analyze|optimize|reindex|expire|persist|set|del)\b/i.test(
+        sql,
+      ) ||
+      /\bsp_rename\b/i.test(sql) ||
+      /\.(insertOne|replaceOne|deleteOne)\s*\(/i.test(sql);
+    if (writing && !e2eDbLeases.has(leaseId)) {
       return {
         kind: "needs_approval",
         columns: [],
@@ -726,10 +751,66 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
         sql: sql.trim(),
       };
     }
+    if (e2eDbLeases.has(leaseId)) {
+      const renamed = sql.match(/RENAME\s+TO\s+[`"]?([A-Za-z_][A-Za-z0-9_]*)/i)
+        || sql.match(/sp_rename\s+N'[^']*',\s*N'([A-Za-z_][A-Za-z0-9_]*)'/i)
+        || sql.match(/TO\s+[`"]?[A-Za-z_][A-Za-z0-9_]*[`"]*\.?\s*[`"]?([A-Za-z_][A-Za-z0-9_]*)[`"]?\s*$/i);
+      if (/rename/i.test(sql) && renamed?.[1]) {
+        e2eDbTableName = renamed[1];
+      }
+    }
+    if (/^\s*TYPE\b/i.test(sql)) {
+      return {
+        kind: "rows",
+        columns: ["type"],
+        rows: [["string"]],
+        truncated: false,
+        risk: "",
+        connection_id: connectionId,
+        revision: 1,
+        operation: "query",
+        sql: sql.trim(),
+      };
+    }
+    if (/^\s*TTL\b/i.test(sql)) {
+      return {
+        kind: "rows",
+        columns: ["ttl"],
+        rows: [["120"]],
+        truncated: false,
+        risk: "",
+        connection_id: connectionId,
+        revision: 1,
+        operation: "query",
+        sql: sql.trim(),
+      };
+    }
+    if (/^\s*GET\b/i.test(sql)) {
+      return {
+        kind: "rows",
+        columns: ["value"],
+        rows: [["hello"]],
+        truncated: false,
+        risk: "",
+        connection_id: connectionId,
+        revision: 1,
+        operation: "query",
+        sql: sql.trim(),
+      };
+    }
+    const tableOpen = /^\s*select\b/i.test(sql) && /from/i.test(sql) && !/select\s+empty/i.test(sql.trim());
+    const mongoFind = /\.find\s*\(/i.test(sql);
     return {
       kind: "rows",
-      columns: ["ok"],
-      rows: sql.trim() === "SELECT empty" ? [] : [[sql.trim() || "1"]],
+      columns: tableOpen ? ["id", "start_time"] : mongoFind ? ["doc"] : ["ok"],
+      rows:
+        sql.trim() === "SELECT empty"
+          ? []
+          : tableOpen
+            ? [["1", "19:30:00.000000"]]
+            : mongoFind
+              ? [['{"_id":"1","n":1}']]
+              : [[sql.trim() || "1"]],
       truncated: false,
       risk: "",
       connection_id: connectionId,

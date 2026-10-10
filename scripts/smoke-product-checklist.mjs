@@ -1598,6 +1598,67 @@ function exists(rel) {
   }
 }
 
+// --- Feature flow gate (AGENTS.md) ---
+{
+  const agents = read("AGENTS.md");
+  const rule = read(".cursor/rules/feature-flow.mdc");
+  const need = ["要保住的旧行为", "架构", "设计", "先写会失败的测试"];
+  const missing = need.filter((item) => !agents.includes(item) || !rule.includes(item));
+  const banned = ["用户 → Codex", "待审计划", "按 AGENTS.md 审计划", "按 AGENTS.md 审查"];
+  const hit = banned.filter((item) => agents.includes(item) || rule.includes(item));
+  if (missing.length === 0 && hit.length === 0) {
+    pass("process.feature-flow", "plan gates are local; Codex joint review is not required");
+  } else {
+    fail(
+      "process.feature-flow",
+      [
+        missing.length ? `missing ${missing.join(", ")}` : "",
+        hit.length ? `still requires Codex: ${hit.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("; "),
+    );
+  }
+}
+
+// --- App type / density tokens ---
+{
+  const css = read("src/App.css");
+  if (
+    css.includes("--tw-font-dense") &&
+    css.includes("--tw-font-ui") &&
+    css.includes("--tw-space-1")
+  ) {
+    pass("ui.type-density-tokens", "App.css defines dense/ui font and space tokens");
+  } else {
+    fail("ui.type-density-tokens", "missing --tw-font-dense / --tw-font-ui / --tw-space-1");
+  }
+}
+
+// --- Navicat basic-layer matrix (0.0.5) ---
+{
+  const matrix = read("docs/superpowers/specs/2026-09-30-engine-matrix.md");
+  if (matrix.includes("## Navicat 18 基本层对照") && matrix.includes("Empty vs Truncate")) {
+    pass("db.navicat-basic-matrix", "engine-matrix names Navicat basic-layer gaps");
+  } else {
+    fail("db.navicat-basic-matrix", "missing Navicat 18 基本层对照 section");
+  }
+  if (
+    matrix.includes("## 引擎能力差异（Navicat Mac") &&
+    matrix.includes("navicat_mac_en.pdf") &&
+    matrix.includes("Chapter 5")
+  ) {
+    pass("db.engine-capability-diff", "engine-matrix names Mac PDF capability diff");
+  } else {
+    fail("db.engine-capability-diff", "missing 引擎能力差异（Navicat Mac） section");
+  }
+  if (exists("docs/superpowers/plans/2026-10-08-engine-capability-diff.md")) {
+    pass("db.engine-capability-plan", "engine capability plan file present");
+  } else {
+    fail("db.engine-capability-plan", "missing engine-capability-diff plan");
+  }
+}
+
 // --- Test infrastructure ---
 {
   if (exists("vitest.config.ts")) pass("test.vitest-config", "vitest.config.ts");

@@ -23,6 +23,17 @@ use super::live::QueryWatch;
 use super::route::dial_plan;
 
 pub(crate) const BYTE_CAP: usize = 1_048_576;
+/// Catalog search can return tens of thousands of column rows.
+pub(crate) const CATALOG_BYTE_CAP: usize = 16 * 1_048_576;
+
+fn byte_cap_for_limit(row_limit: u32) -> usize {
+    // Data queries stay on the 500 soft cap; catalog uses CATALOG_ROW_LIMIT.
+    if row_limit > 500 {
+        CATALOG_BYTE_CAP
+    } else {
+        BYTE_CAP
+    }
+}
 
 struct Forward {
     _socks: SocksBridge,
@@ -185,6 +196,21 @@ fn redact(err: &str, password: &str) -> String {
     err.replace(password, "***")
 }
 
+/// tokio-postgres `Display` for database faults is only `"db error"`; the useful
+/// text lives on `source()` (`FATAL: …`). Walk the chain so the UI is not opaque.
+fn format_error(err: &dyn std::error::Error) -> String {
+    let mut message = err.to_string();
+    let mut current = err.source();
+    while let Some(source) = current {
+        let next = source.to_string();
+        if !next.is_empty() && !message.contains(&next) {
+            message = format!("{message}: {next}");
+        }
+        current = source.source();
+    }
+    message
+}
+
 pub(crate) async fn until_watch(watch: Option<&QueryWatch>) -> super::live::Halt {
     match watch {
         Some(watch) => watch.until_halt().await,
@@ -257,7 +283,7 @@ async fn connect_postgres(
         let (client, conn) = config
             .connect_raw(stream, tls)
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|err| format_error(&err))?;
         let task = tokio::spawn(async move {
             let _ = conn.await;
         });
@@ -266,7 +292,7 @@ async fn connect_postgres(
         let (client, conn) = config
             .connect_raw(stream, tokio_postgres::NoTls)
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|err| format_error(&err))?;
         let task = tokio::spawn(async move {
             let _ = conn.await;
         });
@@ -311,7 +337,7 @@ async fn run_postgres(
         client
             .batch_execute("BEGIN READ ONLY")
             .await
-            .map_err(|err| format!("read-only transaction failed: {err}"))?;
+            .map_err(|err| format!("read-only transaction failed: {}", format_error(&err)))?;
         let rows = match fetch_postgres(client, &job.sql, job.row_limit, pattern, &connection.engine).await
         {
             Ok(rows) => rows,
@@ -380,7 +406,7 @@ async fn fetch_postgres(
     engine: &str,
 ) -> Result<SqlRows, String> {
     if streams_as_query(sql, engine) {
-        let statement = client.prepare(sql).await.map_err(|err| err.to_string())?;
+        let statement = client.prepare(sql).await.map_err(|err| format_error(&err))?;
         if let Some(pattern) = pattern {
             let stream = client
                 .query_raw(
@@ -388,7 +414,7 @@ async fn fetch_postgres(
                     std::iter::once(&pattern as &(dyn tokio_postgres::types::ToSql + Sync)),
                 )
                 .await
-                .map_err(|err| err.to_string())?;
+                .map_err(|err| format_error(&err))?;
             return drain_postgres(stream, row_limit).await;
         }
         let stream = client
@@ -397,10 +423,10 @@ async fn fetch_postgres(
                 std::iter::empty::<&(dyn tokio_postgres::types::ToSql + Sync)>(),
             )
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|err| format_error(&err))?;
         return drain_postgres(stream, row_limit).await;
     }
-    let messages = client.simple_query(sql).await.map_err(|err| err.to_string())?;
+    let messages = client.simple_query(sql).await.map_err(|err| format_error(&err))?;
     messages_to_rows(messages, row_limit)
 }
 
@@ -414,7 +440,7 @@ async fn drain_postgres(
     let mut bytes = 0usize;
     let mut truncated = false;
     while let Some(item) = stream.next().await {
-        let row = item.map_err(|err| err.to_string())?;
+        let row = item.map_err(|err| format_error(&err))?;
         if columns.is_empty() {
             columns = row
                 .columns()
@@ -424,7 +450,7 @@ async fn drain_postgres(
         }
         let cells: Vec<Value> = (0..row.len()).map(|index| pg_cell(&row, index)).collect();
         let size = cells.iter().map(|cell| cell.to_string().len()).sum();
-        match consider_row(rows.len() as u32, row_limit, bytes, size, BYTE_CAP) {
+        match consider_row(rows.len() as u32, row_limit, bytes, size, byte_cap_for_limit(row_limit)) {
             RowTake::Keep => {
                 bytes = bytes.saturating_add(size);
                 rows.push(cells);
@@ -575,6 +601,15 @@ fn pg_cell(row: &tokio_postgres::Row, index: usize) -> Value {
     if let Ok(Some(value)) = row.try_get::<_, Option<chrono::NaiveDate>>(index) {
         return Value::String(value.to_string());
     }
+    if let Ok(Some(value)) = row.try_get::<_, Option<chrono::NaiveTime>>(index) {
+        return Value::String(value.format("%H:%M:%S%.6f").to_string());
+    }
+    if let Ok(Some(value)) = row.try_get::<_, Option<uuid::Uuid>>(index) {
+        return Value::String(value.to_string());
+    }
+    if let Ok(Some(value)) = row.try_get::<_, Option<serde_json::Value>>(index) {
+        return value;
+    }
     if let Ok(Some(bytes)) = row.try_get::<_, Option<Vec<u8>>>(index) {
         return json!({ "base64": base64::engine::general_purpose::STANDARD.encode(bytes) });
     }
@@ -612,7 +647,13 @@ fn messages_to_rows(
                     cells.push(cell);
                 }
                 let size = cells.iter().map(|cell| cell.to_string().len()).sum();
-                match consider_row(rows.len() as u32, row_limit, bytes, size, BYTE_CAP) {
+                match consider_row(
+                    rows.len() as u32,
+                    row_limit,
+                    bytes,
+                    size,
+                    byte_cap_for_limit(row_limit),
+                ) {
                     RowTake::Keep => {
                         bytes = bytes.saturating_add(size);
                         rows.push(cells);
@@ -766,7 +807,13 @@ where
                     cells.push(mysql_cell(&row, index));
                 }
                 let size = cells.iter().map(|cell| cell.to_string().len()).sum();
-                match consider_row(rows.len() as u32, row_limit, bytes, size, BYTE_CAP) {
+                match consider_row(
+                    rows.len() as u32,
+                    row_limit,
+                    bytes,
+                    size,
+                    byte_cap_for_limit(row_limit),
+                ) {
                     RowTake::Keep => {
                         bytes = bytes.saturating_add(size);
                         rows.push(cells);
@@ -926,6 +973,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn format_error_includes_source_chain_not_just_db_error_label() {
+        #[derive(Debug)]
+        struct Inner;
+        #[derive(Debug)]
+        struct Outer {
+            inner: Inner,
+        }
+        impl std::fmt::Display for Outer {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("db error")
+            }
+        }
+        impl std::fmt::Display for Inner {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("FATAL: password authentication failed")
+            }
+        }
+        impl std::error::Error for Inner {}
+        impl std::error::Error for Outer {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.inner)
+            }
+        }
+        let message = format_error(&Outer { inner: Inner });
+        assert!(message.contains("db error"));
+        assert!(message.contains("password authentication failed"));
+        assert_ne!(message, "db error");
+    }
+
+    #[test]
     fn database_list_sql_skips_templates_and_system_schemas() {
         let postgres = databases_sql("postgres");
         let mysql = databases_sql("mysql");
@@ -1022,6 +1099,13 @@ mod tests {
             postgres_ssl_mode("disabled"),
             tokio_postgres::config::SslMode::Disable
         );
+    }
+
+    #[test]
+    fn catalog_queries_use_a_larger_byte_budget() {
+        assert_eq!(byte_cap_for_limit(500), BYTE_CAP);
+        assert_eq!(byte_cap_for_limit(50_000), CATALOG_BYTE_CAP);
+        assert!(CATALOG_BYTE_CAP > BYTE_CAP);
     }
 
     #[test]

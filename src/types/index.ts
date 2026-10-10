@@ -111,7 +111,10 @@ export interface UploadFileResult {
 
 export interface SendToRequest {
   fromSessionId: string;
+  /** Primary path (kept for single-path call sites and labels). */
   remotePath: string;
+  /** When set (multi-select send), transfer every path in order. */
+  remotePaths?: string[];
 }
 
 export interface TransferRemoteRequest {

@@ -2254,9 +2254,14 @@ export function AiEngineerPanel({
       if (status === "install_needed" || status === "login_needed" || status === "unknown") {
         void refreshRuntimeProbe(agentRuntime).then((p) => {
           const next = externalRuntimeStatusKind(p, agentRuntime);
+          if (next === "login_needed") {
+            setModelOpen(true);
+            setPickerTab("agent");
+            void startGuidedLogin(agentRuntime);
+            return;
+          }
           if (
             next === "install_needed" ||
-            next === "login_needed" ||
             next === "not_ready" ||
             next === "unknown"
           ) {
@@ -2392,6 +2397,18 @@ export function AiEngineerPanel({
       }
     }
   };
+
+  useEffect(() => {
+    const onNeed = (event: Event) => {
+      const kind = (event as CustomEvent<{ kind?: string }>).detail?.kind;
+      if (kind !== "cursor" && kind !== "codex" && kind !== "claude") return;
+      setModelOpen(true);
+      setPickerTab("agent");
+      void startGuidedLogin(kind);
+    };
+    window.addEventListener("tw-runtime-login-needed", onNeed);
+    return () => window.removeEventListener("tw-runtime-login-needed", onNeed);
+  }, [startGuidedLogin]);
 
   const selectExternalRuntime = (kind: AgentRuntimeKind) => {
     if (kind === "builtin") {

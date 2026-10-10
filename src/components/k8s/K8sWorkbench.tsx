@@ -510,7 +510,6 @@ export function K8sWorkbench() {
   const detail = useK8sStore((s) => s.detail);
   const detailLoading = useK8sStore((s) => s.detailLoading);
   const detailError = useK8sStore((s) => s.detailError);
-  const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const openResources = useK8sStore((s) => s.openResources);
   const closeResourceTab = useK8sStore((s) => s.closeResourceTab);
   const yamlDraft = useK8sStore((s) => s.yamlDraft);
@@ -919,18 +918,8 @@ export function K8sWorkbench() {
   }, [forwardablePorts, resourcePortForwards, selectedResource]);
 
   if (!cluster) {
-    return (
-      <div className="k8s-workbench-empty">
-        <p>{t("selectClusterHint")}</p>
-        <button
-          type="button"
-          className="find-panel-run primary"
-          onClick={() => setAddClusterOpen(true)}
-        >
-          {t("emptyClustersAdd")}
-        </button>
-      </div>
-    );
+    // Add-cluster lives in the sidebar / chrome; no redundant empty CTA.
+    return <div className="k8s-workbench-empty" data-testid="k8s-workbench-empty" />;
   }
 
   const runDelete = async (row: K8sResourceRow): Promise<boolean> => {

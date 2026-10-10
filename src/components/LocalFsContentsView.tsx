@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import {
   pathsIntersectingMarquee,
   rangeSelectPaths,
+  resolveContentsPrimaryClickAction,
   togglePathInSelection,
 } from "../lib/localFsOps";
 import { startLocalFsPointerMove } from "../lib/localFsPointerMove";
@@ -108,7 +109,11 @@ export function LocalFsContentsView({
 
   const selectEntry = (event: ReactMouseEvent, entry: LocalFsEntry) => {
     const meta = event.metaKey || event.ctrlKey;
-    if (event.shiftKey) {
+    const action = resolveContentsPrimaryClickAction(entry.kind, {
+      shift: event.shiftKey,
+      meta,
+    });
+    if (action === "range") {
       const next = rangeSelectPaths(
         orderedPaths,
         selectionAnchor,
@@ -118,15 +123,12 @@ export function LocalFsContentsView({
       setSelectedPaths(next, selectionAnchor ?? entry.path);
       return;
     }
-    if (meta) {
+    if (action === "toggle") {
       const next = togglePathInSelection(selectedPaths, entry.path);
       setSelectedPaths(next, entry.path);
       return;
     }
-    if (entry.kind === "directory") {
-      openDir(entry.path);
-      return;
-    }
+    // Directories and files: select only. Open on double-click.
     setSelectedPath(entry.path);
   };
 

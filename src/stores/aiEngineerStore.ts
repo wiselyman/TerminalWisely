@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import i18n from "../i18n";
 import {
   ensureSidecar,
   getAiSettings,
@@ -817,11 +818,81 @@ export function panelFiberChatScopeKey(
 let chatAbort: AbortController | null = null;
 let activeRunId: string | null = null;
 let dbSqlSink: ((sql: string) => void) | null = null;
-/** Scope that owns the in-flight run; events for other scopes are ignored. */
+/** Scope that owns the in-flight run; events continue even if UI parked on another host. */
 let activeRunScope: string | null = null;
 let activeRunThreadId: string | null = null;
 /** SSH/k8s session id that currently holds the AI SSH lease. */
 let activeLeaseSessionId: string | null = null;
+
+/** Test-only: seed / inspect the in-flight run markers. */
+export function __testSetActiveAiRun(
+  scope: string | null,
+  threadId: string | null,
+  runId: string | null = "test-run",
+): void {
+  activeRunScope = scope;
+  activeRunThreadId = threadId;
+  activeRunId = scope && threadId ? runId : null;
+}
+
+export function __testGetActiveAiRun(): {
+  scope: string | null;
+  threadId: string | null;
+  runId: string | null;
+} {
+  return {
+    scope: activeRunScope,
+    threadId: activeRunThreadId,
+    runId: activeRunId,
+  };
+}
+
+function scopeHasActiveRun(scope: string | null | undefined): boolean {
+  return Boolean(
+    scope &&
+      activeRunId &&
+      activeRunScope === scope &&
+      activeRunThreadId,
+  );
+}
+
+/** Ask/approval while the run's host is soft-hidden — restored on return. */
+let backgroundPendingAsk: PendingAsk | null = null;
+let backgroundPendingApproval: PendingApproval | null = null;
+
+function stashBackgroundPending(prev: {
+  chatScope: string | null;
+  pendingAsk: PendingAsk | null;
+  pendingApproval: PendingApproval | null;
+}) {
+  if (!scopeHasActiveRun(prev.chatScope)) return;
+  if (prev.pendingAsk) backgroundPendingAsk = prev.pendingAsk;
+  if (prev.pendingApproval) backgroundPendingApproval = prev.pendingApproval;
+}
+
+function pendingForScope(
+  scope: string | null,
+  prev: {
+    pendingAsk: PendingAsk | null;
+    pendingApproval: PendingApproval | null;
+  },
+): {
+  pendingAsk: PendingAsk | null;
+  pendingApproval: PendingApproval | null;
+} {
+  if (!scopeHasActiveRun(scope)) {
+    return { pendingAsk: null, pendingApproval: null };
+  }
+  return {
+    pendingAsk: prev.pendingAsk ?? backgroundPendingAsk,
+    pendingApproval: prev.pendingApproval ?? backgroundPendingApproval,
+  };
+}
+
+function clearBackgroundPending() {
+  backgroundPendingAsk = null;
+  backgroundPendingApproval = null;
+}
 let lineSeq = 0;
 const nextId = () => {
   try {
@@ -995,6 +1066,7 @@ function abortActiveRun(
   activeRunId = null;
   activeRunScope = null;
   activeRunThreadId = null;
+  clearBackgroundPending();
   const leaseId = activeLeaseSessionId;
   activeLeaseSessionId = null;
   if (leaseId) {
@@ -1243,23 +1315,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
 
     const persisted = persistCurrentThread(get);
-    const switchingAway =
-      prev.chatScope != null && prev.chatScope !== nextScope;
-
-    if (switchingAway && (prev.busy || prev.pendingAsk || prev.pendingApproval)) {
-      const { sidecar, sessionId: oldSession } = prev;
-      const runId = activeRunId;
-      abortActiveRun(() => prev, "switch");
-      if (sidecar && oldSession && runId) {
-        void cancelAgentRun(sidecar, oldSession, runId).catch(() => undefined);
-      }
-    }
-
+    // Host/cluster switch parks the UI only — never abort a background run.
+    stashBackgroundPending(prev);
     const loaded = loadScopeIntoState(
       persisted.threadsByScope,
       nextScope,
       persisted.inputsByThread,
     );
+    const runHere = scopeHasActiveRun(nextScope);
+    const pending = pendingForScope(nextScope, prev);
 
     set({
       ...persisted,
@@ -1271,11 +1335,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       clusterName: clusterName ?? clusterId,
       clusterTarget: nextTarget ?? null,
       chatScope: nextScope,
-      busy: switchingAway ? false : prev.busy,
-      modelPhase: switchingAway ? "idle" : prev.modelPhase,
-      pendingAsk: switchingAway ? null : prev.pendingAsk,
-      pendingApproval: switchingAway ? null : prev.pendingApproval,
-      activeInvestigation: switchingAway ? null : prev.activeInvestigation,
+      busy: runHere,
+      modelPhase: runHere
+        ? prev.chatScope === nextScope
+          ? prev.modelPhase
+          : "thinking"
+        : "idle",
+      pendingAsk: pending.pendingAsk,
+      pendingApproval: pending.pendingApproval,
+      activeInvestigation: runHere ? prev.activeInvestigation : null,
     });
     applyScopeAfterDiskLoad(get, set, nextScope);
   },
@@ -1303,20 +1371,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       return;
     }
     const persisted = persistCurrentThread(get);
-    const switchingAway = prev.chatScope != null && prev.chatScope !== nextScope;
-    if (switchingAway && (prev.busy || prev.pendingAsk || prev.pendingApproval)) {
-      const { sidecar, sessionId: oldSession } = prev;
-      const runId = activeRunId;
-      abortActiveRun(() => prev, "switch");
-      if (sidecar && oldSession && runId) {
-        void cancelAgentRun(sidecar, oldSession, runId).catch(() => undefined);
-      }
-    }
+    stashBackgroundPending(prev);
     const loaded = loadScopeIntoState(
       persisted.threadsByScope,
       nextScope,
       persisted.inputsByThread,
     );
+    const runHere = scopeHasActiveRun(nextScope);
+    const pending = pendingForScope(nextScope, prev);
     set({
       ...persisted,
       ...loaded,
@@ -1324,11 +1386,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       sessionId,
       serverId: null,
       chatScope: nextScope,
-      busy: switchingAway ? false : prev.busy,
-      modelPhase: switchingAway ? "idle" : prev.modelPhase,
-      pendingAsk: switchingAway ? null : prev.pendingAsk,
-      pendingApproval: switchingAway ? null : prev.pendingApproval,
-      activeInvestigation: switchingAway ? null : prev.activeInvestigation,
+      busy: runHere,
+      modelPhase: runHere
+        ? prev.chatScope === nextScope
+          ? prev.modelPhase
+          : "thinking"
+        : "idle",
+      pendingAsk: pending.pendingAsk,
+      pendingApproval: pending.pendingApproval,
+      activeInvestigation: runHere ? prev.activeInvestigation : null,
     });
   },
 
@@ -1346,27 +1412,32 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       if (needsDiskMessageHydration(prev.messages)) {
         applyScopeAfterDiskLoad(get, set, nextScope);
       }
+      // Soft-hide may have left busy=true; binding back after another host
+      // must re-attach pending + busy from the still-active background run.
+      if (scopeHasActiveRun(nextScope) && !prev.busy) {
+        const pending = pendingForScope(nextScope, prev);
+        set({
+          busy: true,
+          modelPhase:
+            prev.modelPhase === "idle" ? "thinking" : prev.modelPhase,
+          pendingAsk: pending.pendingAsk,
+          pendingApproval: pending.pendingApproval,
+        });
+      }
       return;
     }
 
     const persisted = persistCurrentThread(get);
-    const switchingAway =
-      prev.chatScope != null && prev.chatScope !== nextScope;
-
-    if (switchingAway && (prev.busy || prev.pendingAsk || prev.pendingApproval)) {
-      const { sidecar, sessionId: oldSession } = prev;
-      const runId = activeRunId;
-      abortActiveRun(() => prev, "switch");
-      if (sidecar && oldSession && runId) {
-        void cancelAgentRun(sidecar, oldSession, runId).catch(() => undefined);
-      }
-    }
-
+    // Soft-hide / other-host bind: park UI only. Background run keeps
+    // chatAbort + lease + stream until STOP or natural completion.
+    stashBackgroundPending(prev);
     const loaded = loadScopeIntoState(
       persisted.threadsByScope,
       nextScope,
       persisted.inputsByThread,
     );
+    const runHere = scopeHasActiveRun(nextScope);
+    const pending = pendingForScope(nextScope, prev);
 
     set({
       ...persisted,
@@ -1378,11 +1449,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       clusterName: null,
       clusterTarget: null,
       chatScope: nextScope,
-      busy: switchingAway ? false : prev.busy,
-      modelPhase: switchingAway ? "idle" : prev.modelPhase,
-      pendingAsk: switchingAway ? null : prev.pendingAsk,
-      pendingApproval: switchingAway ? null : prev.pendingApproval,
-      activeInvestigation: switchingAway ? null : prev.activeInvestigation,
+      busy: runHere,
+      modelPhase: runHere
+        ? prev.chatScope === nextScope
+          ? prev.modelPhase
+          : "thinking"
+        : "idle",
+      pendingAsk: pending.pendingAsk,
+      pendingApproval: pending.pendingApproval,
+      activeInvestigation: runHere ? prev.activeInvestigation : null,
     });
     // Threads from history index often exist with empty bodies — that is NOT
     // "has memory". Load scope bodies whenever the visible transcript is empty.
@@ -1911,6 +1986,15 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const runScope = effectiveClusterId
       ? aiChatScopeKey(runSessionId, null, effectiveClusterId)
       : aiChatScopeKey(sessionId, serverId);
+    // Another host still streaming in the background — do not steal/abort it
+    // unless the caller explicitly interrupted (interruptIfBusy above).
+    if (activeRunId && activeRunScope && activeRunScope !== runScope) {
+      useToastStore.getState().pushToast(
+        i18n.t("tools:aiEngineer.backgroundRunOtherHost"),
+        false,
+      );
+      return;
+    }
     let runThreadId = get().activeThreadId;
     if (!runThreadId || get().chatScope !== runScope) {
       if (effectiveClusterId) {
@@ -2004,35 +2088,34 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       runTraceSpans: [],
     });
 
-    const sameRunTarget = () => {
+    /** True while this sendMessage owns the in-flight run (UI may be on another host). */
+    const runStillActive = () =>
+      activeRunScope === runScope && activeRunThreadId === runThreadId;
+
+    /** True when the visible panel is this run's scope/thread. */
+    const uiFocusedOnRun = () => {
       const cur = get();
       return (
-        cur.chatScope === runScope &&
-        cur.activeThreadId === runThreadId &&
-        activeRunScope === runScope &&
-        activeRunThreadId === runThreadId
+        cur.chatScope === runScope && cur.activeThreadId === runThreadId
       );
     };
 
-    const appendIfSameThread = (line: ChatLine) => {
+    /** Legacy name: UI focused AND run still active. */
+    const sameRunTarget = () => runStillActive() && uiFocusedOnRun();
+
+    const readRunMessages = (): ChatLine[] => {
       const cur = get();
-      if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) return;
-      const messages = [...cur.messages, line];
-      const threadsByScope = commitThreadMessages(
-        get,
-        runScope,
-        runThreadId!,
-        messages,
-      );
-      set({ messages, threadsByScope });
+      if (uiFocusedOnRun()) return cur.messages;
+      const bundle = cur.threadsByScope[runScope];
+      const thread = bundle?.threads.find((t) => t.id === runThreadId);
+      return thread?.messages ?? [];
     };
 
-    const replaceMessagesIfSameThread = (
+    const commitRunMessages = (
       messages: ChatLine[],
-      opts?: { persist?: boolean },
+      opts?: { persist?: boolean; modelPhase?: "streaming" | "thinking" | "idle" },
     ) => {
-      const cur = get();
-      if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) return;
+      if (!runStillActive()) return;
       const threadsByScope = commitThreadMessages(
         get,
         runScope,
@@ -2040,23 +2123,40 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         messages,
         { persist: opts?.persist },
       );
-      set({ messages, threadsByScope });
+      if (uiFocusedOnRun()) {
+        set({
+          messages,
+          threadsByScope,
+          ...(opts?.modelPhase ? { modelPhase: opts.modelPhase } : {}),
+        });
+      } else {
+        set({ threadsByScope });
+      }
+    };
+
+    const appendIfSameThread = (line: ChatLine) => {
+      if (!runStillActive()) return;
+      commitRunMessages([...readRunMessages(), line]);
+    };
+
+    const replaceMessagesIfSameThread = (
+      messages: ChatLine[],
+      opts?: { persist?: boolean },
+    ) => {
+      commitRunMessages(messages, opts);
     };
 
     const applyLiveAssistantDelta = (text: string) => {
       if (!text) return;
-      if (!sameRunTarget()) return;
-      replaceMessagesIfSameThread(
-        applyAssistantDeltaToMessages(get().messages, text, {
+      if (!runStillActive()) return;
+      commitRunMessages(
+        applyAssistantDeltaToMessages(readRunMessages(), text, {
           looksTruncated: looksTruncatedAssistant,
           merge: mergeAssistantContinuation,
           newId: nextId,
         }),
-        { persist: false },
+        { persist: false, modelPhase: "streaming" },
       );
-      if (get().modelPhase !== "streaming") {
-        set({ modelPhase: "streaming" });
-      }
     };
 
     const assistantDeltaCoalesce = createStreamDeltaCoalescer(applyLiveAssistantDelta);
@@ -2065,17 +2165,12 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     let toolOutputRaf = 0;
     const flushToolOutputBuf = () => {
       toolOutputRaf = 0;
-      if (!sameRunTarget()) {
+      if (!runStillActive()) {
         toolOutputBuf.clear();
         return;
       }
       if (toolOutputBuf.size === 0) return;
-      const cur = get();
-      if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) {
-        toolOutputBuf.clear();
-        return;
-      }
-      let messages = cur.messages;
+      let messages = readRunMessages();
       let changed = false;
       for (const [callId, chunk] of toolOutputBuf) {
         if (!chunk) continue;
@@ -2095,7 +2190,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       }
       toolOutputBuf.clear();
       if (changed) {
-        replaceMessagesIfSameThread(messages, { persist: false });
+        commitRunMessages(messages, { persist: false });
       }
     };
     const pushToolOutput = (callId: string, chunk: string) => {
@@ -2117,17 +2212,17 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       callId: string,
       patch: Partial<Extract<ChatLine, { kind: "tool" }>>,
     ) => {
-      const cur = get();
-      if (cur.chatScope !== runScope || cur.activeThreadId !== runThreadId) return;
-      const idx = cur.messages.findIndex(
+      if (!runStillActive()) return;
+      const curMessages = readRunMessages();
+      const idx = curMessages.findIndex(
         (line) => line.kind === "tool" && line.callId === callId,
       );
       if (idx < 0) return;
-      const prev = cur.messages[idx];
+      const prev = curMessages[idx];
       if (prev.kind !== "tool") return;
-      const messages = [...cur.messages];
+      const messages = [...curMessages];
       messages[idx] = { ...prev, ...patch };
-      replaceMessagesIfSameThread(messages);
+      commitRunMessages(messages);
     };
 
     const appendToolOutputByCallId = (callId: string, chunk: string) => {
@@ -2374,20 +2469,18 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               ...(output !== existing?.output ? { output } : {}),
             });
             // Gap before next assistant tokens — show existing 思考中 line.
-            if (sameRunTarget()) {
+            if (runStillActive()) {
               lastStreamActivityAt = Date.now();
-              set({ modelPhase: "thinking" });
+              if (uiFocusedOnRun()) {
+                if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
+              }
             }
           },
         },
         onEvent: (event: AgentUiEvent) => {
           lastStreamActivityAt = Date.now();
-          if (
-            get().chatScope !== runScope ||
-            get().activeThreadId !== runThreadId ||
-            activeRunScope !== runScope ||
-            activeRunThreadId !== runThreadId
-          ) {
+          // Keep applying while the run is alive — even if the user switched hosts.
+          if (!runStillActive()) {
             return;
           }
           // Drain pending rAF chunks before any non-delta event so order stays
@@ -2401,14 +2494,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               ok: false,
               finishedAt: Date.now(),
               output: appendToolOutputText(
-                get().messages.find(
+                readRunMessages().find(
                   (l): l is Extract<ChatLine, { kind: "tool" }> =>
                     l.kind === "tool" && l.callId === event.call_id,
                 )?.output,
                 `\n[TOOL_TIMEOUT] ${event.error ?? "wait ended"}; host may still be running`,
               ),
             });
-            set({ modelPhase: "thinking" });
+            if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
             return;
           }
           if (event.type === "run_stalled") {
@@ -2429,7 +2522,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           }
           if (event.type === "tool_result") {
             const ok = event.payload.ok !== false;
-            const existing = get().messages.find(
+            const existing = readRunMessages().find(
               (l): l is Extract<ChatLine, { kind: "tool" }> =>
                 l.kind === "tool" && l.callId === event.call_id,
             );
@@ -2453,7 +2546,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 existing?.output,
               ),
             });
-            set({ modelPhase: "thinking" });
+            if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
             return;
           }
           if (event.type === "external_tool_activity") {
@@ -2467,7 +2560,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               ok: card.ok,
               runtime: card.runtime,
             });
-            set({ modelPhase: "thinking" });
+            if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
             return;
           }
           if (event.type === "status") {
@@ -2476,7 +2569,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               persistThreadLastRunId(event.run_id);
             }
             if (event.phase === "thinking" || event.status === "thinking") {
-              set({ modelPhase: "thinking" });
+              if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
             }
             return;
           }
@@ -2516,7 +2609,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             if (event.type === "audit_nudge") {
               // Defense in depth: always clear ungated prose for this turn.
               replaceMessagesIfSameThread(
-                retractProvisionalAssistant(get().messages),
+                retractProvisionalAssistant(readRunMessages()),
               );
             }
             // Truncated-answer continues must NOT insert a notice between
@@ -2534,7 +2627,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             // Model-only verify nudge — do not leak exit codes / harness jargon
             // into the customer-facing transcript.
             if (event.type === "verify_nudge") {
-              set({ modelPhase: "thinking" });
+              if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
               return;
             }
             appendIfSameThread({
@@ -2554,9 +2647,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           }
           if (event.type === "assistant_retract") {
             replaceMessagesIfSameThread(
-              retractProvisionalAssistant(get().messages),
+              retractProvisionalAssistant(readRunMessages()),
             );
-            set({ modelPhase: "thinking" });
+            if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
             return;
           }
           if (event.type === "trace_span") {
@@ -2574,7 +2667,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           if (event.type === "completed") {
             const content = event.content ?? "";
             if (content.trim()) {
-              const msgs = get().messages;
+              const msgs = readRunMessages();
               const shown = stripTrailingDanglingHeading(content) || content;
               const lastAssistant = findLastAssistantIndexInTurn(msgs);
               if (
@@ -2600,7 +2693,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             // Never append “回复「继续」” footers/notices here — that dodges
             // finishing. Sidecar auto-continues; FE must not train users on
             // manual continue as the happy path.
-            replaceMessagesIfSameThread(withToolEvidenceFlags(get().messages));
+            replaceMessagesIfSameThread(withToolEvidenceFlags(readRunMessages()));
             const { sidecar, sessionId } = get();
             const rid = activeRunId;
             if (sidecar && sessionId && rid) {
@@ -2649,7 +2742,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
           } else if (event.type === "assistant_message") {
             const content = event.content ?? "";
             if (!content.trim()) return;
-            const msgs = get().messages;
+            const msgs = readRunMessages();
             // Sidecar assistant_message is authoritative full text for this turn.
             // Always replace the latest assistant bubble — never merge a longer
             // streamed preview over a shorter cleaned final (drops trailing chars).
@@ -2717,7 +2810,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               event.name.startsWith("k8s_");
             const isWebTool =
               event.name === "web_search" || event.name === "web_fetch";
-            const msgs = get().messages;
+            const msgs = readRunMessages();
             const last = msgs[msgs.length - 1];
             if (last?.kind === "assistant" && last.streaming) {
               replaceMessagesIfSameThread([
@@ -2725,7 +2818,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 { id: last.id, kind: "assistant", content: last.content },
               ]);
             }
-            set({ modelPhase: "thinking" });
+            if (uiFocusedOnRun()) set({ modelPhase: "thinking" });
             const callId = event.call_id || undefined;
             const status = event.denied
               ? "denied"
@@ -2739,7 +2832,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 ? Date.now()
                 : undefined;
             if (callId) {
-              const existing = get().messages.find(
+              const existing = readRunMessages().find(
                 (line): line is Extract<ChatLine, { kind: "tool" }> =>
                   line.kind === "tool" && line.callId === callId,
               );
@@ -2764,7 +2857,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               }
             }
             const linkedApproval = callId
-              ? get().messages.find(
+              ? readRunMessages().find(
                   (line): line is Extract<ChatLine, { kind: "approval" }> =>
                     line.kind === "approval" &&
                     line.callId === callId &&
@@ -2815,17 +2908,25 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             });
           } else if (event.type === "error") {
             replaceMessagesIfSameThread(
-              retractProvisionalAssistant(get().messages),
+              retractProvisionalAssistant(readRunMessages()),
             );
             appendIfSameThread({
               id: nextId(),
               kind: "error",
               content: event.message,
             });
-            replaceMessagesIfSameThread(withToolEvidenceFlags(get().messages));
+            replaceMessagesIfSameThread(withToolEvidenceFlags(readRunMessages()));
+            if (event.code === "login_needed") {
+              const kind = event.runtime || get().agentRuntime;
+              window.dispatchEvent(
+                new CustomEvent("tw-runtime-login-needed", {
+                  detail: { kind },
+                }),
+              );
+            }
           } else if (event.type === "cancelled") {
             replaceMessagesIfSameThread(
-              markRunningToolsStopped(get().messages),
+              markRunningToolsStopped(readRunMessages()),
             );
             appendIfSameThread({
               id: nextId(),
@@ -2881,19 +2982,19 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       if (idleWatchdog != null) clearInterval(idleWatchdog);
       const reconcileRunId = activeRunId;
       if (activeRunScope === runScope && activeRunThreadId === runThreadId) {
+        // Snapshot before clearing markers — readRunMessages/uiFocused need them.
+        const msgs = readRunMessages();
+        const focused = uiFocusedOnRun();
         chatAbort = null;
         activeRunId = null;
         activeRunScope = null;
         activeRunThreadId = null;
+        clearBackgroundPending();
         if (activeLeaseSessionId === runSessionId) {
           activeLeaseSessionId = null;
           void releaseAiSshLease(runSessionId);
         }
-        if (
-          get().chatScope === runScope &&
-          get().activeThreadId === runThreadId
-        ) {
-          const msgs = get().messages;
+        {
           let changed = false;
           const next = msgs.map((line) => {
             if (line.kind === "assistant" && line.streaming) {
@@ -2911,15 +3012,19 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               runThreadId!,
               finalized,
             );
-            set({
-              busy: false,
-              modelPhase: "idle",
-              pendingAsk: null,
-              pendingApproval: null,
-              messages: finalized,
-              threadsByScope,
-            });
-          } else {
+            if (focused) {
+              set({
+                busy: false,
+                modelPhase: "idle",
+                pendingAsk: null,
+                pendingApproval: null,
+                messages: finalized,
+                threadsByScope,
+              });
+            } else {
+              set({ threadsByScope });
+            }
+          } else if (focused) {
             set({
               busy: false,
               modelPhase: "idle",
@@ -2927,6 +3032,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               pendingApproval: null,
             });
           }
+        }
+        if (focused) {
+          // Reconcile transcript only while UI is on this run.
           // Stream can drop the trailing assistant_message; sidecar still has
           // the full answer — pull transcript and patch the last bubble.
           const sid = get().sidecar;
@@ -2942,7 +3050,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
                 }
                 const full = lastAssistantTextFromTranscript(data.messages ?? []);
                 if (!full.trim()) return;
-                const cur = get().messages;
+                const cur = readRunMessages();
                 const idx = findLastAssistantIndexInTurn(cur);
                 const shown = stripTrailingDanglingHeading(full) || full;
                 if (idx < 0) {

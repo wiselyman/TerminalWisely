@@ -98,6 +98,7 @@
   "transfer.methodStream": "Stream relay",
   "transfer.methodSftp": "SFTP relay",
   "transfer.filesCount": "{{count}} files",
+  "aiEngineer.backgroundRunOtherHost": "AI is still running in the background on another host. Switch back to that host, or stop it there before sending.",
   "aiEngineer.railLabel": "AI Engineer",
   "aiEngineer.linuxTitle": "AI Linux Engineer",
   "aiEngineer.k8sTitle": "AI K8S Engineer",

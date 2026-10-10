@@ -63,7 +63,7 @@ export type AgentUiEvent =
     }
   | { type: "completed"; content?: string }
   | { type: "assistant_incomplete"; reason?: string }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; code?: string; runtime?: string }
   | { type: "cancelled" }
   | { type: "status"; status: string; run_id?: string; phase?: string }
   | {
@@ -263,7 +263,12 @@ async function handleProtocolEvent(opts: {
   } else if (ev.type === "cancelled") {
     onEvent({ type: "cancelled" });
   } else if (ev.type === "error") {
-    onEvent({ type: "error", message: String(p.message ?? "error") });
+    onEvent({
+      type: "error",
+      message: String(p.message ?? "error"),
+      code: typeof p.code === "string" ? p.code : undefined,
+      runtime: typeof p.runtime === "string" ? p.runtime : undefined,
+    });
   } else if (ev.type === "approval_needed") {
     const approvalId = String(p.approval_id ?? "");
     if (!approvalId || handled.has(`appr:${approvalId}`)) return "continue";

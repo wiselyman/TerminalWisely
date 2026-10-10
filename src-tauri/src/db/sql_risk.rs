@@ -257,6 +257,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn maintain_statements_are_single_and_need_approval_class() {
+        for (dialect, sql) in [
+            ("postgres", r#"VACUUM "public"."orders""#),
+            ("postgres", r#"ANALYZE "public"."orders""#),
+            ("postgres", r#"REINDEX TABLE "public"."orders""#),
+            ("mysql", "OPTIMIZE TABLE `shop`.`orders`"),
+            ("mysql", "ANALYZE TABLE `shop`.`orders`"),
+            ("sqlite", r#"ANALYZE "main"."orders""#),
+        ] {
+            assert_eq!(statement_count(sql, dialect), Some(1), "{dialect} {sql}");
+            let class = classify_sql(sql, dialect);
+            assert!(
+                matches!(class, "write" | "ddl" | "unparsed"),
+                "{dialect} {sql} -> {class}"
+            );
+        }
+    }
+
+    #[test]
     fn shared_fixture_matches_rust() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/sql-risk.json");
         let text = std::fs::read_to_string(path).expect("fixture");

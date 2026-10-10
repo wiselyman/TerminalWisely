@@ -8,7 +8,7 @@
 
 | 引擎 | 连接 | 对象浏览 | 数据查看 | 写入与拒绝 | 分页 | 取消 | CSV | 限制 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PostgreSQL | 直连，或经已有 SSH 会话转发 | 库 → schema → 表/视图/实体化视图/函数 → 分组 → 列 | 网格，`LIMIT 100` | 写和 DDL 走审批卡；驳回不执行 | 表查看按页改 `OFFSET` | operation id：取消后端查询，迟到结果不进新标签 | 导出本页，或按当前筛选分批导出（最多 500 行，截断会说明）；导入已有表前有预览、列映射、跳过列、错行和分批进度，执行仍走审批 | 无图表、ER、结构比较、Excel、备份 |
+| PostgreSQL | 直连，或经已有 SSH 会话转发 | 库 → schema → 表/视图/实体化视图/函数 → 分组 → 列；对象右键打开/定义/重命名/Empty/Truncate/刷新 | 网格，`LIMIT 100`；单元格可置 NULL | 写和 DDL 走审批卡；驳回不执行；Empty=`DELETE`，Truncate=`TRUNCATE` | 表查看按页改 `OFFSET` | operation id：取消后端查询，迟到结果不进新标签 | 导出本页，或按当前筛选分批导出（最多 500 行，截断会说明）；导入已有表前有预览、列映射、跳过列、错行和分批进度，执行仍走审批 | 无图表、ER、结构比较、Excel、备份、Table Designer |
 | MySQL | 同上 | 库 → 表/视图/函数/事件 → 分组 → 列 | 同上 | 同上；取消用 `KILL QUERY` | 同上 | 同上 | 同上 | 同上 |
 | MariaDB | 同上，引擎 id 保持 `mariadb`，走 MySQL 协议 | 同 MySQL | 同 MySQL | 同 MySQL | 同 MySQL | 同 MySQL | 同 MySQL | 2026-10-01 在 `192.168.100.176:13307` 读通、错误语句返回且不含口令、写入停在审批未执行。CI 仍 ignored |
 | SQLite | 只保存文件路径，不写 host、端口、用户 | `main` 下的表/视图 | 只读查询以只读方式打开文件，写语句不能借这次打开改文件 | 写语句另以读写方式打开，仍走审批 | 同上 | 进度回调看到取消标志后中断 | 同上 | 只读打开不会创建缺失文件。回归：只读 `INSERT` 后行数不变；长读可被取消标志打断 |
@@ -29,6 +29,35 @@ ClickHouse 已退出下拉框，引擎表里没有这项。命名查询存在应
 - data-vault `37ccd07febc9c4a20bd5c1fcd4f677efac553dc9`
 
 DBX 该版本是 85 个连接类型描述、108 个产品入口、运行 manifest 里 33 native / 47 agent / 3 external / 2 file。MindsHub 该版本 data-vault 有 33 个 handler 目录，cowork-server 有 211 份连接表单。这些数字不是同等能力的原生驱动数，也不能写成 TerminalWisely 已支持的数量。
+
+## 引擎能力差异（Navicat Mac）
+
+对照本地手册 `/Users/wangyunfei/Downloads/navicat_mac_en.pdf`（Navicat for Mac English，Chapter 5 Server Objects、Chapter 6 Data Editor）。实现计划：`docs/superpowers/plans/2026-10-08-engine-capability-diff.md`。共用工作台壳，按引擎声明对象树、右键、维护命令与 Redis/Mongo 视图；不跟 Designer / BI / 同步 / Backup Enterprise。
+
+| 引擎 | 对象 / 菜单（本批） | 维护命令（本批） | Redis·Mongo 加深（本批） | 不做 |
+| --- | --- | --- | --- | --- |
+| PostgreSQL | 能力表驱动右键；表 Maintain 入口 | Analyze / Vacuum / Reindex → 审批 | — | Extensions UI、用户角色 |
+| MySQL / MariaDB | 同上 | Analyze / Optimize → 审批 | — | Tablespace / Sequence 设计器 |
+| SQLite | 同上 | Analyze / Reindex → 审批 | — | 库级 Vacuum 可后补 |
+| SQL Server / Oracle | 基本 SQL 右键；维护清单后补 | 本批可不接线 | — | 完整 Maintain、Debugger |
+| Redis | 仅打开/刷新；无 Truncate/Rename | — | 类型徽章、TTL 展示与 EXPIRE/PERSIST 审批 | All Data 大网格、Pub/Sub |
+| MongoDB | 仅打开/刷新 | Compact 等后补 | JSON 校验、非法禁用提交 | Grid/Tree 三视图、Pipeline、GridFS |
+
+## Navicat 18 基本层对照
+
+对照 [Navicat 18 Windows Online Manual](https://www.navicat.com/manual/online_manual/en/navicat_18/win_manual/) 章 4–6、9、15–16；Mac PDF 见上一节。本版只做运维基本客户端缺口；企业章与设计器不在 0.0.5。
+
+| 章 | Navicat 行为 | TW 现状 | 0.0.5 |
+| --- | --- | --- | --- |
+| 4 Connection | 一般项、SSL、SSH 隧道、管理连接 | 直连、TLS 开关、可选 SSH 隧道、编辑/删除保存连接 | 已有 |
+| 4 HTTP Tunneling | HTTP 隧道 | 无 | 不做 |
+| 5 Server Objects | 左树对象、右键打开/维护 | 左树库→schema→对象→分组→列；工具栏删表/截断/定义 | 做：对象右键（打开、定义、重命名、Empty、Truncate、刷新） |
+| 5 Table/View Designer | 字段/索引/外键设计器 | 无；可建简单表与看定义 | 不做 |
+| 6 Data Editor | 网格编辑、筛选排序、单元格编辑器 | 网格、排序、筛选、失焦 UPDATE、插入/删行 | 做：单元格显式置 NULL |
+| 6 Empty vs Truncate | Empty 清数据不重置自增；Truncate 截断 | 仅工具栏一项，文案混用 Truncate SQL | 做：Empty=`DELETE`，Truncate=`TRUNCATE`（SQLite 二者皆 `DELETE`） |
+| 9 Query | 编辑器、选区执行、补全、Explain | 编辑器、选区执行、Explain、命名查询 | 已有选区执行；补回归。不做 Query Builder / 补全 |
+| 15–16 Import/Export | 多格式向导 | CSV 本页/筛选导出与导入预览 | 已有 CSV；非 CSV 不做 |
+| 7–8, 10–14, 17–23 | Profiling、Masking、AI、Model、同步、BI 等 | 无 | 不做 |
 
 ## 已对照的行为
 

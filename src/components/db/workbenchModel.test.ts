@@ -10,21 +10,48 @@ import {
   csvInsertSql,
   definitionSql,
   dropTableSql,
+  emptyTableSql,
   filterGridRows,
+  formatDbFormError,
+  shortDbFormError,
   forgetSavedQueries,
   freshQueryTab,
+  freshObjectTab,
+  findObjectTab,
+  objectTabTitle,
+  nextSqlTabTitle,
+  browseConnection,
+  browseDatabase,
+  browseKind,
+  browseSchema,
   kindSchemas,
+  maintainSql,
+  objectPaneCrumbs,
+  objectPaneRows,
+  objectPaneSummary,
+  cellEditorKind,
+  cellEditorValue,
+  cellEditorInputType,
+  cellUsesDateTimePicker,
+  cellEditorKindFromValue,
+  resolveCellEditorKind,
+  workspaceId,
   mongoDeleteCommand,
   mongoInsertCommand,
   mongoReplaceCommand,
   objectKinds,
+  objectMenuActions,
   objectsIn,
   mongoAuthDatabase,
+  parseMongoJson,
   readSavedQueries,
   redisAuthMode,
   redisDelCommand,
+  redisExpireCommand,
+  redisPersistCommand,
   redisSetCommand,
   rememberQuery,
+  renameObjectSql,
   resultPresentation,
   rowDeleteSql,
   rowInsertSql,
@@ -35,6 +62,8 @@ import {
   tableDefinitionFromColumns,
   tableGroups,
   tableViewSql,
+  filterRulesToWhere,
+  sortRulesToOrder,
   truncateTableSql,
   orderDatabases,
   pageWindow,
@@ -43,7 +72,9 @@ import {
   tableSelectSql,
   tabsAfterConnectionSwitch,
   writeSavedQueries,
+  type FilterRule,
   type QueryStore,
+  type SortRule,
 } from "./workbenchModel";
 
 describe("database workbench model", () => {
@@ -118,6 +149,52 @@ describe("database workbench model", () => {
       "table:orders",
       "materialized_view:daily",
     ]);
+    // Navicat Object Pane: connection → DBs; PG database → schemas; schema → tables only
+    const conn = browseConnection();
+    expect(objectPaneCrumbs("postgres", conn)).toEqual(["postgres"]);
+    expect(objectPaneRows(conn, ["saad2", "app"], withMatview).map((row) => row.name)).toEqual([
+      "saad2",
+      "app",
+    ]);
+    const dbBrowse = browseDatabase("postgres", "saad2");
+    expect(dbBrowse.level).toBe("database");
+    expect(objectPaneCrumbs("postgres", dbBrowse)).toEqual(["postgres", "saad2"]);
+    expect(objectPaneRows(dbBrowse, ["saad2"], withMatview).map((row) => `${row.typeKey}:${row.name}`)).toEqual([
+      "schema:analytics",
+      "schema:public",
+    ]);
+    expect(objectPaneSummary(dbBrowse, ["saad2"], withMatview)).toEqual({ count: 2, typeKey: "schema" });
+    const schemaBrowse = browseSchema("postgres", "saad2", "public");
+    expect(schemaBrowse.kind).toBe("table");
+    expect(objectPaneCrumbs("postgres", schemaBrowse)).toEqual(["postgres", "saad2", "public"]);
+    expect(
+      objectPaneRows(schemaBrowse, ["saad2"], withMatview).map((row) => `${row.typeKey}:${row.name}`),
+    ).toEqual(["table:orders"]);
+    expect(objectPaneSummary(schemaBrowse, ["saad2"], withMatview)).toEqual({ count: 1, typeKey: "table" });
+    expect(cellEditorKind("time(6)")).toBe("time");
+    // Postgres information_schema / pg_catalog often spell it this way
+    expect(cellEditorKind("time without time zone")).toBe("time");
+    expect(cellEditorKind("time with time zone")).toBe("time");
+    expect(cellEditorKind("timestamptz")).toBe("datetime");
+    expect(cellEditorKind("timestamp without time zone")).toBe("datetime");
+    expect(cellEditorKind("date")).toBe("date");
+    expect(cellEditorKind("varchar")).toBe("text");
+    expect(cellEditorKind("bool")).toBe("boolean");
+    expect(cellEditorKind("int4")).toBe("number");
+    expect(cellEditorValue("time", "20:15:00.000000")).toBe("20:15:00");
+    expect(cellEditorInputType("time")).toBe("time");
+    expect(cellUsesDateTimePicker("time")).toBe(true);
+    expect(cellUsesDateTimePicker("text")).toBe(false);
+    expect(cellEditorKindFromValue("20:15:00.000000")).toBe("time");
+    expect(cellEditorKindFromValue("2025-03-06")).toBe("date");
+    expect(cellEditorKindFromValue("2025-03-06 14:58:18.24575")).toBe("datetime");
+    expect(resolveCellEditorKind("", "20:15:00.000000")).toBe("time");
+    expect(resolveCellEditorKind("varchar", "hello")).toBe("text");
+    expect(objectPaneRows(browseKind("saad2", "routine", "public"), ["saad2"], tree).map((r) => r.name)).toEqual([
+      "touch_order",
+    ]);
+    expect(browseDatabase("mysql", "shop").level).toBe("kind");
+    expect(browseDatabase("mysql", "shop").kind).toBe("table");
     expect(tableDataSql("postgres", "materialized_view", "public", "daily")).toBe(
       'SELECT * FROM "public"."daily" LIMIT 1000',
     );
@@ -176,7 +253,7 @@ describe("database workbench model", () => {
     expect(connectionMatchesFilter("PostgreSQL", "postgres", "orders")).toBe(false);
   });
 
-  it("filters the tree and resets tabs when the connection changes", () => {
+  it("filters the tree and clears query tabs when the connection changes", () => {
     const tree = buildObjectTree(
       [["public", "orders", "id", "integer", "BASE TABLE"]],
       "missing",
@@ -190,10 +267,29 @@ describe("database workbench model", () => {
       connection_id: "old",
       revision: 1,
     };
+    expect(current.sql).toBe("");
+    expect(current.kind).toBe("query");
     const next = tabsAfterConnectionSwitch("q2");
-    expect(next).toHaveLength(1);
-    expect(next[0].result).toBeNull();
-    expect(next[0].id).not.toBe(current.id);
+    expect(next).toEqual([]);
+    expect(nextSqlTabTitle([])).toBe("SQL 1");
+    expect(nextSqlTabTitle([{ title: "SQL 1" }, { title: "notes" }])).toBe(
+      "SQL 2",
+    );
+    expect(workspaceId("c1", "saad2")).toBe("c1::saad2");
+    expect(objectTabTitle("public", "firmware")).toBe("firmware");
+    const objectTab = freshObjectTab("o1", "saad2", {
+      kind: "table",
+      schema: "public",
+      name: "firmware",
+    });
+    expect(objectTab.kind).toBe("table");
+    expect(objectTab.title).toBe("firmware");
+    expect(objectTab.database).toBe("saad2");
+    expect(objectTab.objectName).toBe("firmware");
+    expect(objectTab.sql).toBe("");
+    const tabs = [current, objectTab];
+    expect(findObjectTab(tabs, "saad2", "table", "public", "firmware")?.id).toBe("o1");
+    expect(findObjectTab(tabs, "saad2", "view", "public", "firmware")).toBeUndefined();
   });
 
   it("pages and filters the grid and edits a cell through sql", () => {
@@ -226,6 +322,39 @@ describe("database workbench model", () => {
     expect(rowInsertSql("redis", "0", "user:1", ["value"], ["a"])).toBeNull();
   });
 
+  it("builds Navicat-style filter and multi-column sort clauses", () => {
+    const rules: FilterRule[] = [
+      { id: "1", enabled: true, column: "name", op: "contains", value: "ab%", join: "and" },
+      { id: "2", enabled: true, column: "id", op: "eq", value: "1", join: "or" },
+      { id: "3", enabled: false, column: "name", op: "eq", value: "x", join: "and" },
+      { id: "4", enabled: true, column: "gone", op: "is_null", value: "", join: "and" },
+    ];
+    expect(filterRulesToWhere("postgres", ["id", "name"], rules)).toBe(
+      ` WHERE "name" LIKE '%ab\\%%' ESCAPE '\\' OR "id" = 1`,
+    );
+    expect(filterRulesToWhere("postgres", ["id"], [{ id: "a", enabled: true, column: "id", op: "is_not_null", value: "", join: "and" }])).toBe(
+      ` WHERE "id" IS NOT NULL`,
+    );
+    expect(filterRulesToWhere("mysql", ["n"], [{ id: "a", enabled: true, column: "n", op: "begin", value: "x", join: "and" }])).toBe(
+      " WHERE `n` LIKE 'x%' ESCAPE '\\'",
+    );
+    const sorts: SortRule[] = [
+      { id: "s1", column: "name", dir: "asc" },
+      { id: "s2", column: "id", dir: "desc" },
+      { id: "s3", column: "missing", dir: "asc" },
+    ];
+    expect(sortRulesToOrder("postgres", ["id", "name"], sorts)).toBe(` ORDER BY "name" ASC, "id" DESC`);
+    expect(
+      tableViewSql("postgres", "public", "orders", ["id", "name"], null, "asc", "", 1, {
+        filterRules: [{ id: "1", enabled: true, column: "id", op: "gt", value: "0", join: "and" }],
+        sortRules: [
+          { id: "s1", column: "name", dir: "desc" },
+          { id: "s2", column: "id", dir: "asc" },
+        ],
+      }),
+    ).toBe(`SELECT * FROM "public"."orders" WHERE "id" > 0 ORDER BY "name" DESC, "id" ASC LIMIT 100 OFFSET 0`);
+  });
+
   it("builds definition, create, drop, and truncate as one statement", () => {
     expect(definitionSql("mysql", "table", "shop", "orders")).toBe("SHOW CREATE TABLE `shop`.`orders`");
     expect(definitionSql("postgres", "view", "public", "order_view")).toBe(
@@ -244,6 +373,71 @@ describe("database workbench model", () => {
     expect(dropTableSql("postgres", "public", "orders")).toBe('DROP TABLE "public"."orders"');
     expect(truncateTableSql("mysql", "shop", "orders")).toBe("TRUNCATE TABLE `shop`.`orders`");
     expect(truncateTableSql("sqlite", "main", "orders")).toBe('DELETE FROM "main"."orders"');
+  });
+
+  it("filters object menu actions and builds maintain sql per engine", () => {
+    expect(objectMenuActions("redis", "key")).toEqual(["open", "refresh"]);
+    expect(objectMenuActions("mongodb", "collection")).toEqual(["open", "refresh"]);
+    expect(objectMenuActions("postgres", "table")).toContain("maintain-vacuum");
+    expect(objectMenuActions("postgres", "table")).toContain("truncate");
+    expect(objectMenuActions("postgres", "table")).toContain("drop");
+    expect(objectMenuActions("postgres", "view")).not.toContain("drop");
+    expect(objectMenuActions("mysql", "table")).toContain("maintain-optimize");
+    expect(objectMenuActions("mysql", "table")).not.toContain("maintain-vacuum");
+    expect(objectMenuActions("sqlite", "table")).toContain("maintain-reindex");
+    expect(objectMenuActions("postgres", "view")).not.toContain("truncate");
+    expect(maintainSql("postgres", "vacuum", "public", "orders")).toBe('VACUUM "public"."orders"');
+    expect(maintainSql("postgres", "analyze", "public", "orders")).toBe('ANALYZE "public"."orders"');
+    expect(maintainSql("postgres", "reindex", "public", "orders")).toBe('REINDEX TABLE "public"."orders"');
+    expect(maintainSql("mysql", "optimize", "shop", "orders")).toBe("OPTIMIZE TABLE `shop`.`orders`");
+    expect(maintainSql("mysql", "analyze", "shop", "orders")).toBe("ANALYZE TABLE `shop`.`orders`");
+    expect(maintainSql("sqlite", "analyze", "main", "orders")).toBe('ANALYZE "main"."orders"');
+    expect(maintainSql("sqlite", "reindex", "main", "orders")).toBe('REINDEX "main"."orders"');
+    expect(maintainSql("postgres", "optimize", "public", "orders")).toBeNull();
+    expect(maintainSql("redis", "vacuum", "0", "k")).toBeNull();
+  });
+
+  it("builds redis ttl commands and validates mongo json", () => {
+    expect(redisExpireCommand("user:1", 60)).toBe("EXPIRE user:1 60");
+    expect(redisExpireCommand("user:1", 0)).toBeNull();
+    expect(redisExpireCommand("bad key", 10)).toBe('EXPIRE "bad key" 10');
+    expect(redisPersistCommand("user:1")).toBe("PERSIST user:1");
+    expect(parseMongoJson('{"a":1}')).toEqual({ ok: true, json: '{"a":1}' });
+    expect(parseMongoJson("[1]").ok).toBe(false);
+    expect(parseMongoJson("{").ok).toBe(false);
+  });
+
+  it("formats compact connection-form errors from invoke payloads", () => {
+    expect(formatDbFormError("password is missing")).toBe("password is missing");
+    expect(formatDbFormError({ message: "could not write the secret file" })).toBe(
+      "could not write the secret file",
+    );
+    expect(formatDbFormError({})).toBe("Save failed");
+    expect(shortDbFormError("a".repeat(50), 10)).toBe(`${"a".repeat(9)}…`);
+  });
+
+  it("builds empty-table delete and rename statements", () => {
+    expect(emptyTableSql("mysql", "shop", "orders")).toBe("DELETE FROM `shop`.`orders`");
+    expect(emptyTableSql("postgres", "public", "orders")).toBe('DELETE FROM "public"."orders"');
+    expect(renameObjectSql("postgres", "public", "orders", "orderz")).toBe(
+      'ALTER TABLE "public"."orders" RENAME TO "orderz"',
+    );
+    expect(renameObjectSql("mysql", "shop", "orders", "orderz")).toBe(
+      "RENAME TABLE `shop`.`orders` TO `shop`.`orderz`",
+    );
+    expect(renameObjectSql("sqlite", "main", "orders", "orderz")).toBe(
+      'ALTER TABLE "main"."orders" RENAME TO "orderz"',
+    );
+    expect(renameObjectSql("sqlserver", "dbo", "orders", "orderz")).toBe(
+      "EXEC sp_rename N'dbo.orders', N'orderz'",
+    );
+    expect(renameObjectSql("postgres", "public", "orders", "bad-name")).toBeNull();
+    expect(
+      cellUpdateSql("postgres", "public", "orders", ["id", "label"], [1, ""], 1, null),
+    ).toBe(`UPDATE "public"."orders" SET "label" = NULL WHERE "id" = 1 AND "label" = ''`);
+    expect(
+      cellUpdateSql("postgres", "public", "orders", ["id", "label"], [1, null], 1, null),
+    ).toBeNull();
   });
 
   it("exports csv and turns an import into one insert", () => {

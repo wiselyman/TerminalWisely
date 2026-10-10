@@ -173,6 +173,39 @@ export function pathBreadcrumbSegments(
   return segments;
 }
 
+/**
+ * Primary click in the file-manager contents pane (Finder/Explorer style).
+ * Directories are selected like files — open only on double-click.
+ */
+export function resolveContentsPrimaryClickAction(
+  _kind: "file" | "directory" | string,
+  modifiers: { shift?: boolean; meta?: boolean } = {},
+): "range" | "toggle" | "select" {
+  if (modifiers.shift) return "range";
+  if (modifiers.meta) return "toggle";
+  return "select";
+}
+
+/**
+ * Paths to send when the user right-clicks after a multi-select.
+ * Same rule as copy/cut/delete: if the entry is in the selection, send all selected.
+ */
+export function resolveSendToPaths(
+  selectedPaths: string[],
+  entryPath: string,
+): string[] {
+  const entry = normalizeRemotePath(entryPath);
+  if (!entry) return [];
+  if (selectedPaths.map(normalizeRemotePath).includes(entry) && selectedPaths.length > 0) {
+    return [
+      ...new Set(
+        selectedPaths.map(normalizeRemotePath).filter((p) => Boolean(p)),
+      ),
+    ];
+  }
+  return [entry];
+}
+
 /** Paths whose grid/list item rects intersect the marquee box (client coords). */
 export function pathsIntersectingMarquee(
   items: Array<{

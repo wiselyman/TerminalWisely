@@ -25,11 +25,13 @@ import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
 import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
 import { DbWorkbench } from "./components/db/DbWorkbench";
+import { EngineMark } from "./components/db/DbIcons";
 import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
 import { AddK8sClusterModal } from "./components/k8s/AddK8sClusterModal";
 import { K8sClusterIcon } from "./components/k8s/K8sClusterIcon";
 import { useSidebarViewStore } from "./stores/sidebarViewStore";
 import { useK8sStore } from "./stores/k8sStore";
+import { useDbWorkspaceStore } from "./stores/dbWorkspaceStore";
 import { useManagedEntityStore } from "./stores/managedEntityStore";
 import { extractDroppedPaths } from "./lib/terminalLinks";
 import { getTerminalFontFamily, ensureTerminalFontsLoaded } from "./lib/terminalFont";
@@ -332,10 +334,18 @@ function App() {
   const addClusterOpen = useK8sStore((s) => s.addClusterOpen);
   const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
+  const leaveHome = useManagedEntityStore((s) => s.leaveHome);
+  const dbWorkspaces = useDbWorkspaceStore((s) => s.workspaces);
+  const activeDbWorkspaceId = useDbWorkspaceStore((s) => s.activeId);
+  const setActiveDbWorkspace = useDbWorkspaceStore((s) => s.setActive);
+  const closeDbWorkspace = useDbWorkspaceStore((s) => s.closeWorkspace);
   /** K8s workbench only when not on shared Home. */
   const showK8sWorkbench = sidebarView === "k8s" && !homeOpen;
-  const showDbWorkbench = sidebarView === "db" && !homeOpen;
+  // Mount DB workbench whenever the DB sidebar is active so the tree can portal
+  // into the sidebar while Home is still showing.
+  const showDbWorkbench = sidebarView === "db";
   const showHostsSession = sidebarView === "hosts" && !homeOpen;
+  const showChromeNewSession = sidebarView === "hosts";
   const aiPanelSessionId = aiEngineerSessionId;
   const showAiEngineerPanel = shouldShowAiEngineerPanel({
     open: aiEngineerOpen,
@@ -1159,26 +1169,80 @@ function App() {
                   })}
                 </>
               ) : null}
+              {sidebarView === "db" ? (
+                <>
+                  {dbWorkspaces.map((workspace) => {
+                    const active = !homeOpen && activeDbWorkspaceId === workspace.id;
+                    return (
+                      <div
+                        key={workspace.id}
+                        className={`tab${active ? " active" : ""}`}
+                        data-tab-role="db-workspace"
+                        data-testid="db-workspace-tab"
+                        data-workspace-id={workspace.id}
+                        onClick={() => {
+                          if (tabPointerButtonRef.current !== 0) {
+                            tabPointerButtonRef.current = 0;
+                            return;
+                          }
+                          if (Date.now() < suppressTabClickUntilRef.current) return;
+                          leaveHome();
+                          setActiveDbWorkspace(workspace.id);
+                        }}
+                        onMouseDown={(event) => {
+                          tabPointerButtonRef.current = event.button;
+                          if (event.button === 0) {
+                            clearChromeClickSuppress();
+                            suppressTabClickUntilRef.current = 0;
+                            leaveHome();
+                            setActiveDbWorkspace(workspace.id);
+                          }
+                        }}
+                      >
+                        {active ? (
+                          <>
+                            <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                            <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                          </>
+                        ) : null}
+                        <span className="tab-kind db" title={workspace.title}>
+                          <EngineMark engine={workspace.engine} connected />
+                        </span>
+                        <span className="tab-title" title={workspace.title}>
+                          {workspace.title}
+                        </span>
+                        <button
+                          type="button"
+                          className="tab-close"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          aria-label={t("closeTabAria", { title: workspace.title })}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            closeDbWorkspace(workspace.id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : null}
               </div>
-              <button
-                type="button"
-                className="chrome-new-session"
-                aria-label={
-                  sidebarView === "k8s" ? t("k8s:addClusterTitle") : t("newSsh")
-                }
-                title={
-                  sidebarView === "k8s" ? t("k8s:addClusterTitle") : t("newSsh")
-                }
-                onClick={() => {
-                  if (sidebarView === "k8s") {
-                    setAddClusterOpen(true);
-                    return;
-                  }
-                  openNewRemoteRef.current();
-                }}
-              >
-                <ChromePlusIcon />
-              </button>
+              {showChromeNewSession ? (
+                <button
+                  type="button"
+                  className="chrome-new-session"
+                  data-testid="chrome-new-session"
+                  aria-label={t("newSsh")}
+                  title={t("newSsh")}
+                  onClick={() => {
+                    openNewRemoteRef.current();
+                  }}
+                >
+                  <ChromePlusIcon />
+                </button>
+              ) : null}
 
           <div
             className="chrome-titlebar-drag"

@@ -6,7 +6,7 @@ const REDIS_READ: &[&str] = &[
 ];
 const REDIS_WRITE: &[&str] = &[
     "SET", "MSET", "DEL", "UNLINK", "HSET", "LPUSH", "RPUSH", "SADD", "ZADD", "INCR", "EXPIRE",
-    "RENAME", "APPEND",
+    "PERSIST", "RENAME", "APPEND",
 ];
 const REDIS_DDL: &[&str] = &["FLUSHDB", "FLUSHALL"];
 
@@ -75,6 +75,8 @@ mod tests {
     fn redis_and_mongo_stay_off_the_sql_parser() {
         assert_eq!(classify_command("redis", "GET user:1"), Some("read"));
         assert_eq!(classify_command("redis", "SET user:1 a"), Some("write"));
+        assert_eq!(classify_command("redis", "EXPIRE user:1 60"), Some("write"));
+        assert_eq!(classify_command("redis", "PERSIST user:1"), Some("write"));
         assert_eq!(classify_command("redis", "FLUSHALL"), Some("ddl"));
         assert_eq!(classify_command("redis", "EVAL sha 0"), Some("unparsed"));
         assert_eq!(classify_command("mongodb", "db.orders.find({})"), Some("read"));

@@ -48,6 +48,10 @@
 | 主题切换（深色/浅色） | `appTheme` | Playwright `app-shell`（data-theme） | smoke `theme-switcher` | — | ✓ |
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
+| 功能五段（计划闸门） | — | — | smoke `process.feature-flow` | — | 计划缺旧行为、架构或设计时不改产品代码；不走 Codex 联合审查 |
+| Navicat 18 基本层对照（0.0.5） | vitest `workbenchModel` rename/empty + `DateTimeCellPicker`（数字时间、无表盘）+ live icons | — | smoke `db.navicat-basic-matrix` + `ui.type-density-tokens` | Playwright：进 DB 留 Home、无 chrome +、无 NULL 快捷、数字日期时间弹层 | 不做 Designer / BI / 同步；字号/间距用 `--tw-font-dense` / `--tw-font-ui` |
+| 连接表单紧凑状态（测试 ✅ / 保存错误） | vitest `formatDbFormError`；cargo `format_error` 展开 pg `db error` | — | — | Playwright `db-form-status` / `db-test-ok` / `db-form-error` | 真机 PG 保存依赖本机 vault |
+| 引擎能力差异（菜单/维护/Redis·Mongo） | vitest `objectMenuActions` / `maintainSql` / redis TTL / `parseMongoJson` | — | smoke `db.engine-capability-diff` | Playwright maintain 审批、Redis TTL、Mongo JSON | SQL Server/Oracle 维护清单后补；真机未测项见计划 |
 
 ## 2. SSH 终端与会话
 
@@ -100,7 +104,7 @@
 | Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` | — | smoke `ui.host-desktop` | **✓** `host-desktop` | ✓ |
 | Dock → 文件管理器浮窗（含检索） | — | — | smoke | **✓** `local-fs` | ✓ |
 | Dock → 进程管理器浮窗 | — | — | smoke | **✓** `local-fs-actions` | ✓ |
-| Host 左树+右内容（列表/网格） | `localFsTree` + `openDirectory` | — | smoke | — | ✓ |
+| Host 左树+右内容（列表/网格）；内容区文件夹单击选中、双击进入 | `localFsTree` + `openDirectory` + `resolveContentsPrimaryClickAction` | — | smoke | — | ✓ |
 | Host 树新建/拖移/剪贴板/多选 | `localFsOps` + Rust `fs_path_tests` | create/copy/move | smoke menu | — | ✓ |
 | 框选多选 + 路径段跳转 + 面板内传输进度；打开目录不把 cwd 加入选区（防误删整夹） | `localFsOps`（sanitize/marquee/breadcrumb） | — | smoke `hostfs.safe-select-delete` | **✓** `local-fs` breadcrumb | ✓ |
 | 多选删除须确认（禁无确认批量 rm） | — | TerminalFsDialog multi | smoke | — | ✓ |
@@ -109,6 +113,7 @@
 | Find in files（路径栏检索 → 文件列表） | — | — | smoke | **✓** | ✓ |
 | 任务管理器 (进程/kill) | `taskManagerColumns.test` | — | smoke | **✓** | ✓ |
 | 发送到 AI Chat | — | — | smoke | — | ✓ |
+| 发送到其他服务器（多选 + 免密钥会话中继；目录 tar） | `localFsOps.resolveSendToPaths` + Rust `stream_transfer` tar cmds / `format_scp_failure` | — | — | — | ✓ |
 
 ## 6b. Host Browser (SSH SOCKS5)
 
@@ -118,7 +123,7 @@
 | SOCKS5 CONNECT → direct-tcpip | Rust `socks::tests` | curl via bridge | smoke | — | ✓（真机可选） |
 | 回环 URL（`127.0.0.1` / localhost）走本地 TCP tunnel，地址栏仍显示原端口 | Rust `browser::tests` loopback retarget | — | smoke `webview_url_for` | — | ✓ |
 | 多页签（按 host `sessionId` 隔离） | `browserTabs.test` | — | smoke tabs | **✓** tab new | ✓ |
-| 切主机 tab 恢复工作区壳（终端/桌面/AI） | `hostWorkspaceMemory.test` + `panelVisibility` keep-mounted | — | smoke | — | ✓ |
+| 切主机 tab 恢复工作区壳（终端/桌面/AI）；AI 后台继续跑不 abort | `hostWorkspaceMemory.test` + `aiEngineerHostContinue` + `panelVisibility` keep-mounted | — | smoke | ✓ soft-hide busy | ✓ |
 | 切主机不泄漏上一台聊天（activeTab 门闩 + reveal 拒异会话） | `panelVisibility` + `workspacePanelSwitch` reveal | — | smoke | — | ✓ |
 | 双主机 AI 切 tab 不闪（park=visibility + markdown sync seed + batched restore） | `hostWorkspaceMemory` + smoke park CSS | — | smoke `ui.host-ai-fiber-no-flash` | — | ✓ |
 | 连第二台后再回第一台 AI 仍在（addConnectingTab capture + markHostAiShell） | `hostWorkspaceMemory.test` | — | smoke `ui.host-workspace-memory` | — | ✓ |
@@ -180,7 +185,7 @@
 | terminal_exec 桥接 | Rust terminal | pytest gate | — | **✓** | ✓ |
 | K8s 工具 (k8s_*) | — | pytest k8s | — | mock_ollama | ✓ |
 | 单一写者（无 Ask/Plan、无一起回答、无审批第二意见） | vitest `compareVoices` history | pytest `test_compare_voices` one writer | — | chat e2e composer 无模式切换 | ✓ |
-| 数据库工作台（Postgres/MySQL/MariaDB/SQLite/MongoDB/Redis/SQL Server/Oracle；ClickHouse 已退出下拉框） | vitest `workbenchModel`（库顺序、对象列表、标识符引用、表查看排序筛选分页、插入删除、建表删表清空、CSV 预览/列跳过/分批、本机查询、Redis/Mongo 命令、SQL Server/Oracle 端口与 schema）+ db api + sidebar | pytest `test_sql_risk` + `test_db_tools` | cargo `durable::` 与 `db::`（SQLite 只读打开不能改文件、取消标志中断长读、命名查询 `db-queries.json` 往返与删除、MariaDB 独立 id、SQL Server/Oracle 可保存、未知引擎和 ClickHouse 不能保存、库列表和对象搜索各一条 read、命令写入要审批、表查看语句仍单条且写/DDL 要批准、定义读取仍是 read）。真实库 ignored：`TW_DB_*` 的 Postgres/MySQL；`TW_ENGINE_HOST` + `TW_ENGINE_PASSWORD` 的 MariaDB/Redis/Mongo（读、错误语句、写入停在审批）。2026-10-01 对本机可达的 `192.168.100.176` 跑过这两项 ignored 测试并通过。SQL Server `TW_DB_MSSQL_*`、Oracle `TW_DB_ORACLE_*` 保持 ignored，当前未测。CI 默认不跑 | e2e `db-workbench` 覆盖 mock 界面（左树每一级缩进、面包屑 `→`、连接表单两列、不同引擎图标、查询标签、选区、错误态、审批、AI 入口、打开表、排序、筛选、导出本页说明、CSV 导入预览与错行、保存并删除查询） | 权威范围见 `docs/superpowers/specs/2026-09-30-engine-matrix.md`「当前能力」 |
+| 数据库工作台（Postgres/MySQL/MariaDB/SQLite/MongoDB/Redis/SQL Server/Oracle；ClickHouse 已退出下拉框） | vitest `workbenchModel`（库顺序、对象列表、`WorkbenchTab`/`freshObjectTab`/`findObjectTab`、标识符引用、表查看排序筛选分页、`filterRulesToWhere`/`sortRulesToOrder` Navicat 条件筛选、插入删除、建表删表清空、CSV 预览/列跳过/分批、本机查询、Redis/Mongo 命令、SQL Server/Oracle 端口与 schema）+ `dbWorkspaceStore`（库顶栏打开/切换/关闭、每库独立子页签）+ db api + sidebar | pytest `test_sql_risk` + `test_db_tools` | cargo `durable::` 与 `db::`（SQLite 只读打开不能改文件、取消标志中断长读、命名查询 `db-queries.json` 往返与删除、MariaDB 独立 id、SQL Server/Oracle 可保存、未知引擎和 ClickHouse 不能保存、库列表和对象搜索各一条 read、对象/结构搜索用 `CATALOG_ROW_LIMIT`（避免按列展开被 500 截断丢表/schema）、`pg_cell` 支持 time/uuid/json、命令写入要审批、表查看语句仍单条且写/DDL 要批准、定义读取仍是 read）。真实库 ignored：`TW_DB_*` 的 Postgres/MySQL；`TW_ENGINE_HOST` + `TW_ENGINE_PASSWORD` 的 MariaDB/Redis/Mongo（读、错误语句、写入停在审批）。2026-10-01 对本机可达的 `192.168.100.176` 跑过这两项 ignored 测试并通过。SQL Server `TW_DB_MSSQL_*`、Oracle `TW_DB_ORACLE_*` 保持 ignored，当前未测。CI 默认不跑 | e2e `db-workbench` 覆盖 mock 界面（左树每一级缩进、Object Pane：连接=库列表 / PG 库=schema 列表 / schema=默认表、开库后顶栏 `db-workspace-tab` 引擎图标、开表得 `db-object-tab` 与 SQL 平行、无面包屑 `db-context`、结果区无 Summary/Plan 页签、Explain 进结果体、底栏执行/取消/执行计划 + `db-tools-menu` 收纳导出导入建表命名查询会话锁容量、数据网格顶栏筛选/`+`、底栏分页、Filter 面板（无排序区）、行内草稿插行、越页不显示「没有行」、Object Pane/树汇总数量、time 列原生 time 控件、列头菜单升序/降序/清除排序/添加筛选、定义/清空/截断/删表在左树右键、选区、错误态、审批、顶栏 AI 入口、打开表、CSV 导入预览） | 权威范围见 `docs/superpowers/specs/2026-09-30-engine-matrix.md`「当前能力」 |
 | 本地目录（主机、K8s、数据库、AI 配置） | — | — | cargo `durable::tests`、`saved_password_tests`、`api_key_moves_to_secret_store`、`file_vault_round_trip_and_one_legacy_import` | — | 正本在 app data，镜像在 `~/.terminal-wisely/catalog`。密码在 `vault.bin`，启动不再读登录钥匙串 |
 | Investigator 子代理 | — | pytest | — | — | ✓ |
 | Run trace 追踪 | — | pytest trace | — | — | ✓ |
@@ -191,7 +196,7 @@
 | 0.0.2 External Agent Runtime（本地 CLI：Cursor/Codex/Claude + 行内状态图标 + install/login gate；TW MCP 远端闸门；`agent_runtime` 与模型一并持久化） | pytest `test_local_cli_probe` / `test_runtime_*` / `test_cursor_runtime` / `test_codex_runtime` / `test_claude_runtime` + vitest `cursorRuntimeStatus` / `externalAgentActivity` / `agentRuntime` | smoke `ai.runtime-picker` | E2E model menu Cursor/Codex/Claude | — | ✓ |
 | External agent 执行 UX（抑制 `cursor.terminal_exec` 等与 TW 工具卡重复的 activity；ToolExecCard/WebCard 仅挂 Cursor/Codex/Claude 来源徽标） | vitest `externalAgentActivity` / `agentRuntime` / `approvalOptimisticExec` | smoke `ai.runtime-exec-agent-source` | 单卡脚本执行 + 来源标识 | — | ✓ |
 | External agent 远端平面（「这台电脑」= SSH 被控主机；Codex `--disable computer_use` + workspace AGENTS.md；抑制 CUA/桌面冒充远端证据） | pytest `test_remote_plane` / `test_cli_stream_parse` | — | 不问本机显示器当远端事实 | — | ✓ |
-| Local CLI stream 卡片（无空 cursor.tool）+ Cursor `.cursor/mcp.json` + Codex `.codex/config.toml` + Codex `item.completed`/`turn.completed` 解析 + `--approve-for-me` | pytest cli_stream_parse | 有内容的工具卡；远程走 TW MCP | 空 `{}` 卡被过滤；Codex 不再卡在等 stdin | — | ✓ |
+| Local CLI stream 卡片（无空 cursor.tool）+ Cursor `.cursor/mcp.json` 与用户 `~/.cursor/mcp.json` + Claude `tw_mcp.json`（`type=stdio`、`alwaysLoad`）+ Codex `.codex/config.toml` 与 `-c` + Codex `item.completed`/`turn.completed` 解析 + `--approve-for-me` | pytest cli_stream_parse | 有内容的工具卡；远程走 TW MCP | 空 `{}` 卡被过滤；Codex 不再卡在等 stdin；Cursor/Claude 进程能看到 server `terminalwisely` | — | ✓ |
 | External agent 问答连续性（原厂 resume；SessionLog 证据包含 tool；resume 被拒 / thread id 对不上 / 换模型或 Agent 后原厂会话过期 → 证据包重建；Codex 不再 `--ephemeral`） | pytest `test_cli_session_continuity` / `test_cli_prompt_history` | — | 同 Agent 追问 resume；跨模型/Agent 切换仍见完整 SessionLog | — | ✓ |
 | 附件 (vision/office) | — | pytest | — | — | ✓ |
 | 命令展示净化 | `commandDisplay.test` | pytest display | — | — | — |

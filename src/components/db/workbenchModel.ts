@@ -41,6 +41,79 @@ export function objectKinds(engine: string): ObjectKind[] {
   return ["table", "view", "routine"];
 }
 
+/** Context-menu actions for an object. Engine-specific Maintain items are included for SQL tables. */
+export type ObjectMenuAction =
+  | "open"
+  | "definition"
+  | "rename"
+  | "empty"
+  | "truncate"
+  | "drop"
+  | "refresh"
+  | "maintain-analyze"
+  | "maintain-vacuum"
+  | "maintain-reindex"
+  | "maintain-optimize";
+
+export type MaintainAction = "analyze" | "vacuum" | "reindex" | "optimize";
+
+export function objectMenuActions(engine: string, kind: string): ObjectMenuAction[] {
+  const family = engineFamily(engine);
+  const actions: ObjectMenuAction[] = ["open"];
+  if (family === "sql") {
+    if (kind === "table" || kind === "view" || kind === "materialized_view") {
+      actions.push("definition");
+    }
+    if (kind === "table") {
+      actions.push("rename", "empty", "truncate", "drop");
+      if (engine === "postgres") {
+        actions.push("maintain-analyze", "maintain-vacuum", "maintain-reindex");
+      } else if (engine === "mysql" || engine === "mariadb") {
+        actions.push("maintain-analyze", "maintain-optimize");
+      } else if (engine === "sqlite") {
+        actions.push("maintain-analyze", "maintain-reindex");
+      }
+    }
+  }
+  actions.push("refresh");
+  return actions;
+}
+
+export function maintainActionFromMenu(action: ObjectMenuAction): MaintainAction | null {
+  if (action === "maintain-analyze") return "analyze";
+  if (action === "maintain-vacuum") return "vacuum";
+  if (action === "maintain-reindex") return "reindex";
+  if (action === "maintain-optimize") return "optimize";
+  return null;
+}
+
+export function maintainSql(
+  engine: string,
+  action: MaintainAction,
+  schema: string,
+  table: string,
+): string | null {
+  if (engineFamily(engine) !== "sql" || !schema.trim() || !table.trim()) return null;
+  const target = `${quoteIdent(engine, schema)}.${quoteIdent(engine, table)}`;
+  if (engine === "postgres") {
+    if (action === "analyze") return `ANALYZE ${target}`;
+    if (action === "vacuum") return `VACUUM ${target}`;
+    if (action === "reindex") return `REINDEX TABLE ${target}`;
+    return null;
+  }
+  if (engine === "mysql" || engine === "mariadb") {
+    if (action === "analyze") return `ANALYZE TABLE ${target}`;
+    if (action === "optimize") return `OPTIMIZE TABLE ${target}`;
+    return null;
+  }
+  if (engine === "sqlite") {
+    if (action === "analyze") return `ANALYZE ${target}`;
+    if (action === "reindex") return `REINDEX ${target}`;
+    return null;
+  }
+  return null;
+}
+
 export function redisAuthMode(user: string, hasSecret: boolean): RedisAuth {
   if (user.trim() && user.trim() !== "default") return "user";
   return hasSecret ? "password" : "none";
@@ -150,9 +223,12 @@ export function groupRows(node: ObjectNode, group: TableGroup): { name: string; 
   return node.members.filter((member) => member.group === group).map((member) => ({ name: member.name, type: member.detail }));
 }
 
-export type QueryTab = {
+export type WorkbenchTabKind = "query" | ObjectKind;
+
+export type WorkbenchTab = {
   id: string;
   title: string;
+  kind: WorkbenchTabKind;
   sql: string;
   result: null | {
     columns: string[];
@@ -162,7 +238,13 @@ export type QueryTab = {
     revision: number;
   };
   error: string;
+  database: string | null;
+  schema: string | null;
+  objectName: string | null;
 };
+
+/** @deprecated Prefer WorkbenchTab — kept as alias for gradual call-site updates. */
+export type QueryTab = WorkbenchTab;
 
 export function objectKind(raw: unknown): ObjectKind {
   const value = String(raw ?? "").toUpperCase();
@@ -365,6 +447,41 @@ export function sqlLiteral(value: unknown): string {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
+/** Pull a readable message out of Tauri invoke rejections and plain errors. */
+export function formatDbFormError(err: unknown, fallback = "Save failed"): string {
+  if (typeof err === "string" && err.trim()) return err.trim();
+  if (err instanceof Error && err.message.trim()) return err.message.trim();
+  if (err && typeof err === "object") {
+    const record = err as Record<string, unknown>;
+    for (const key of ["message", "error", "msg"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    try {
+      const text = JSON.stringify(err);
+      if (text && text !== "{}" && text !== "null") return text;
+    } catch {
+      /* ignore */
+    }
+  }
+  const raw = String(err ?? "").trim();
+  if (raw && raw !== "[object Object]") return raw;
+  return fallback;
+}
+
+/** One-line hint for the connection form status row. */
+export function shortDbFormError(message: string, max = 42): string {
+  const trimmed = message.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, Math.max(1, max - 1))}…`;
+}
+
+function sameCellValue(left: unknown, right: unknown): boolean {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return String(left) === String(right);
+}
+
 export function cellUpdateSql(
   engine: string,
   schema: string,
@@ -376,7 +493,7 @@ export function cellUpdateSql(
 ): string | null {
   if (engineFamily(engine) !== "sql") return null;
   const column = columns[columnIndex];
-  if (!column || String(original[columnIndex] ?? "") === String(next ?? "")) return null;
+  if (!column || sameCellValue(original[columnIndex], next)) return null;
   const assignments = `${quoteIdent(engine, column)} = ${sqlLiteral(next)}`;
   const where = rowWhere(engine, columns, original);
   if (!where) return null;
@@ -384,6 +501,57 @@ export function cellUpdateSql(
 }
 
 export type SortDir = "asc" | "desc";
+
+/** Navicat Filter & Sort operators (SQL engines, v1). */
+export type FilterOp =
+  | "eq"
+  | "ne"
+  | "lt"
+  | "lte"
+  | "gt"
+  | "gte"
+  | "contains"
+  | "begin"
+  | "end"
+  | "is_null"
+  | "is_not_null";
+
+export type FilterJoin = "and" | "or";
+
+export type FilterRule = {
+  id: string;
+  enabled: boolean;
+  column: string;
+  op: FilterOp;
+  value: string;
+  /** How this rule connects to the previous enabled rule (ignored for the first). */
+  join: FilterJoin;
+};
+
+export type SortRule = {
+  id: string;
+  column: string;
+  dir: SortDir;
+};
+
+export type TableViewSqlOptions = {
+  filterRules?: FilterRule[];
+  sortRules?: SortRule[];
+};
+
+export const FILTER_OPS: FilterOp[] = [
+  "eq",
+  "ne",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  "contains",
+  "begin",
+  "end",
+  "is_null",
+  "is_not_null",
+];
 
 export type NewColumn = {
   name: string;
@@ -407,9 +575,20 @@ function rowWhere(engine: string, columns: string[], values: unknown[]): string 
     .join(" AND ");
 }
 
+function escapeLikeBody(needle: string): string {
+  return needle.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_").replace(/'/g, "''");
+}
+
 function likeLiteral(needle: string): string {
-  const escaped = needle.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_").replace(/'/g, "''");
-  return `'%${escaped}%' ESCAPE '\\'`;
+  return `'%${escapeLikeBody(needle)}%' ESCAPE '\\'`;
+}
+
+function likePrefixLiteral(needle: string): string {
+  return `'${escapeLikeBody(needle)}%' ESCAPE '\\'`;
+}
+
+function likeSuffixLiteral(needle: string): string {
+  return `'%${escapeLikeBody(needle)}' ESCAPE '\\'`;
 }
 
 function filterWhere(engine: string, columns: string[], filter: string): string {
@@ -418,6 +597,64 @@ function filterWhere(engine: string, columns: string[], filter: string): string 
   if (!needle || names.length === 0) return "";
   const pattern = likeLiteral(needle);
   return ` WHERE ${names.map((name) => `${quoteIdent(engine, name)} LIKE ${pattern}`).join(" OR ")}`;
+}
+
+function filterRulePredicate(engine: string, column: string, op: FilterOp, value: string): string | null {
+  const ident = quoteIdent(engine, column);
+  switch (op) {
+    case "eq":
+      return `${ident} = ${sqlLiteral(value)}`;
+    case "ne":
+      return `${ident} <> ${sqlLiteral(value)}`;
+    case "lt":
+      return `${ident} < ${sqlLiteral(value)}`;
+    case "lte":
+      return `${ident} <= ${sqlLiteral(value)}`;
+    case "gt":
+      return `${ident} > ${sqlLiteral(value)}`;
+    case "gte":
+      return `${ident} >= ${sqlLiteral(value)}`;
+    case "contains":
+      return `${ident} LIKE ${likeLiteral(value)}`;
+    case "begin":
+      return `${ident} LIKE ${likePrefixLiteral(value)}`;
+    case "end":
+      return `${ident} LIKE ${likeSuffixLiteral(value)}`;
+    case "is_null":
+      return `${ident} IS NULL`;
+    case "is_not_null":
+      return `${ident} IS NOT NULL`;
+    default:
+      return null;
+  }
+}
+
+/** Build WHERE from Navicat-style filter rules. `join` on a rule links it to the previous enabled rule. */
+export function filterRulesToWhere(engine: string, columns: string[], rules: FilterRule[]): string {
+  const allowed = new Set(columns.filter((name) => name.trim()));
+  const parts: string[] = [];
+  for (const rule of rules) {
+    if (!rule.enabled || !allowed.has(rule.column)) continue;
+    const predicate = filterRulePredicate(engine, rule.column, rule.op, rule.value);
+    if (!predicate) continue;
+    if (parts.length === 0) {
+      parts.push(predicate);
+      continue;
+    }
+    parts.push(`${rule.join === "or" ? "OR" : "AND"} ${predicate}`);
+  }
+  if (parts.length === 0) return "";
+  return ` WHERE ${parts.join(" ")}`;
+}
+
+/** Build ORDER BY from one or more sort rules (unknown columns skipped). */
+export function sortRulesToOrder(engine: string, columns: string[], rules: SortRule[]): string {
+  const allowed = new Set(columns);
+  const pieces = rules
+    .filter((rule) => allowed.has(rule.column))
+    .map((rule) => `${quoteIdent(engine, rule.column)} ${rule.dir === "desc" ? "DESC" : "ASC"}`);
+  if (pieces.length === 0) return "";
+  return ` ORDER BY ${pieces.join(", ")}`;
 }
 
 /** One SELECT for the open table: sort, filter, and page are part of the statement. */
@@ -430,15 +667,22 @@ export function tableViewSql(
   sortDir: SortDir,
   filter: string,
   page: number,
+  options?: TableViewSqlOptions,
 ): string | null {
   const base = tableSelectSql(engine, "table", schema, table);
   if (!base) return null;
+  const where =
+    options?.filterRules !== undefined
+      ? filterRulesToWhere(engine, columns, options.filterRules)
+      : filterWhere(engine, columns, filter);
   const order =
-    sortColumn && columns.includes(sortColumn)
-      ? ` ORDER BY ${quoteIdent(engine, sortColumn)} ${sortDir === "desc" ? "DESC" : "ASC"}`
-      : "";
+    options?.sortRules !== undefined
+      ? sortRulesToOrder(engine, columns, options.sortRules)
+      : sortColumn && columns.includes(sortColumn)
+        ? ` ORDER BY ${quoteIdent(engine, sortColumn)} ${sortDir === "desc" ? "DESC" : "ASC"}`
+        : "";
   const offset = (Math.max(1, page) - 1) * GRID_PAGE_SIZE;
-  return `${base}${filterWhere(engine, columns, filter)}${order} LIMIT ${GRID_PAGE_SIZE} OFFSET ${offset}`;
+  return `${base}${where}${order} LIMIT ${GRID_PAGE_SIZE} OFFSET ${offset}`;
 }
 
 export function rowInsertSql(
@@ -483,6 +727,31 @@ export function truncateTableSql(engine: string, schema: string, table: string):
   if (engineFamily(engine) !== "sql" || !schema.trim() || !table.trim()) return null;
   if (engine === "sqlite") return `DELETE FROM ${quoteIdent(engine, schema)}.${quoteIdent(engine, table)}`;
   return `TRUNCATE TABLE ${quoteIdent(engine, schema)}.${quoteIdent(engine, table)}`;
+}
+
+/** Clear all rows without truncating identity (Navicat Empty Table). */
+export function emptyTableSql(engine: string, schema: string, table: string): string | null {
+  if (engineFamily(engine) !== "sql" || !schema.trim() || !table.trim()) return null;
+  return `DELETE FROM ${quoteIdent(engine, schema)}.${quoteIdent(engine, table)}`;
+}
+
+/** Rename a table. Views are out of scope for this helper. */
+export function renameObjectSql(
+  engine: string,
+  schema: string,
+  from: string,
+  to: string,
+): string | null {
+  if (engineFamily(engine) !== "sql" || !schema.trim() || !from.trim() || !to.trim()) return null;
+  if (from === to) return null;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(to)) return null;
+  if (engine === "mysql" || engine === "mariadb") {
+    return `RENAME TABLE ${quoteIdent(engine, schema)}.${quoteIdent(engine, from)} TO ${quoteIdent(engine, schema)}.${quoteIdent(engine, to)}`;
+  }
+  if (engine === "sqlserver") {
+    return `EXEC sp_rename N'${schema.replace(/'/g, "''")}.${from.replace(/'/g, "''")}', N'${to.replace(/'/g, "''")}'`;
+  }
+  return `ALTER TABLE ${quoteIdent(engine, schema)}.${quoteIdent(engine, from)} RENAME TO ${quoteIdent(engine, to)}`;
 }
 
 /** A single read that asks the server for a view or table definition. Tables without that read are built locally. */
@@ -612,18 +881,37 @@ export function redisDelCommand(key: string): string | null {
   return name ? `DEL ${name}` : null;
 }
 
+export function redisExpireCommand(key: string, seconds: number): string | null {
+  const name = commandName(key);
+  if (!name || !Number.isInteger(seconds) || seconds <= 0) return null;
+  return `EXPIRE ${name} ${seconds}`;
+}
+
+export function redisPersistCommand(key: string): string | null {
+  const name = commandName(key);
+  return name ? `PERSIST ${name}` : null;
+}
+
 function mongoCollectionName(name: string): string | null {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : null;
 }
 
-function mongoDocument(text: string): string | null {
+/** Validate a MongoDB document / filter JSON object for insert/replace/delete. */
+export function parseMongoJson(text: string): { ok: true; json: string } | { ok: false; error: string } {
   try {
     const value = JSON.parse(text) as unknown;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-    return JSON.stringify(value);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return { ok: false, error: "JSON object required" };
+    }
+    return { ok: true, json: JSON.stringify(value) };
   } catch {
-    return null;
+    return { ok: false, error: "Invalid JSON" };
   }
+}
+
+function mongoDocument(text: string): string | null {
+  const parsed = parseMongoJson(text);
+  return parsed.ok ? parsed.json : null;
 }
 
 export function mongoInsertCommand(collection: string, document: string): string | null {
@@ -718,17 +1006,325 @@ export function objectsIn(nodes: ObjectNode[], kind: ObjectKind | null, schema: 
   return nodes.filter((node) => (kind == null || node.kind === kind) && (schema == null || node.schema === schema));
 }
 
+/**
+ * Navicat Object Pane scope. Connection → database list; database (schemas-first) →
+ * schema list; schema / kind folder → one object type (default Tables).
+ */
+export type ObjectPaneLevel = "connection" | "database" | "kind" | "group";
+
+export type ObjectBrowseState = {
+  level: ObjectPaneLevel;
+  database: string | null;
+  kind: ObjectKind | null;
+  schema: string | null;
+  table: string | null;
+  group: TableGroup | null;
+};
+
+export type ObjectPaneListRow = {
+  name: string;
+  schema: string;
+  typeKey: "database" | "schema" | ObjectKind;
+  action: "open-database" | "open-schema" | "open-object";
+};
+
+export function browseConnection(): ObjectBrowseState {
+  return { level: "connection", database: null, kind: null, schema: null, table: null, group: null };
+}
+
+export function browseDatabase(engine: string, database: string): ObjectBrowseState {
+  if (schemasFirst(engine)) {
+    return { level: "database", database, kind: null, schema: null, table: null, group: null };
+  }
+  return {
+    level: "kind",
+    database,
+    kind: objectKinds(engine)[0] ?? "table",
+    schema: null,
+    table: null,
+    group: null,
+  };
+}
+
+export function browseSchema(engine: string, database: string, schema: string): ObjectBrowseState {
+  return {
+    level: "kind",
+    database,
+    kind: objectKinds(engine)[0] ?? "table",
+    schema,
+    table: null,
+    group: null,
+  };
+}
+
+export function browseKind(
+  database: string,
+  kind: ObjectKind,
+  schema: string | null,
+): ObjectBrowseState {
+  return { level: "kind", database, kind, schema, table: null, group: null };
+}
+
+export function browseGroup(
+  database: string,
+  kind: ObjectKind,
+  schema: string,
+  table: string,
+  group: TableGroup,
+): ObjectBrowseState {
+  return { level: "group", database, kind, schema, table, group };
+}
+
+/** Breadcrumb crumbs: engine → database → schema → (table for groups). No stale schema. */
+export function objectPaneCrumbs(engine: string, browse: ObjectBrowseState): string[] {
+  const crumbs = [engine];
+  if (browse.database) crumbs.push(browse.database);
+  if (browse.schema) crumbs.push(browse.schema);
+  if (browse.level === "group" && browse.table) crumbs.push(browse.table);
+  return crumbs;
+}
+
+export function objectPaneRows(
+  browse: ObjectBrowseState,
+  databases: string[],
+  nodes: ObjectNode[],
+): ObjectPaneListRow[] {
+  if (browse.level === "connection") {
+    return databases.map((name) => ({
+      name,
+      schema: "",
+      typeKey: "database",
+      action: "open-database",
+    }));
+  }
+  if (browse.level === "database" && browse.database) {
+    return schemaNames(nodes).map((name) => ({
+      name,
+      schema: "",
+      typeKey: "schema",
+      action: "open-schema",
+    }));
+  }
+  if (browse.level === "kind" && browse.database) {
+    return objectsIn(nodes, browse.kind, browse.schema).map((node) => ({
+      name: node.name,
+      schema: node.schema,
+      typeKey: node.kind,
+      action: "open-object",
+    }));
+  }
+  return [];
+}
+
+/** Count summary for the Object Pane footer (schemas / tables / …). */
+export function objectPaneSummary(
+  browse: ObjectBrowseState,
+  databases: string[],
+  nodes: ObjectNode[],
+): { count: number; typeKey: string } | null {
+  const rows = objectPaneRows(browse, databases, nodes);
+  if (rows.length === 0 && browse.level === "connection") {
+    return { count: 0, typeKey: "database" };
+  }
+  if (browse.level === "connection") return { count: rows.length, typeKey: "database" };
+  if (browse.level === "database") return { count: rows.length, typeKey: "schema" };
+  if (browse.level === "kind") return { count: rows.length, typeKey: browse.kind ?? "table" };
+  return null;
+}
+
+export type CellEditorKind = "text" | "time" | "date" | "datetime" | "boolean" | "number";
+
+/** Map SQL type name to a typed editor control (Navicat-aligned). */
+export function cellEditorKind(sqlType: string | undefined | null): CellEditorKind {
+  const t = (sqlType ?? "").trim().toLowerCase();
+  if (!t) return "text";
+  // Match `time`, `time(6)`, `timetz`, `time with/without time zone` — but not `timestamp…`.
+  if (
+    (t === "time" ||
+      t.startsWith("time(") ||
+      t === "timetz" ||
+      t.startsWith("time ") ||
+      t.startsWith("time with") ||
+      t.startsWith("time without")) &&
+    !t.includes("timestamp")
+  ) {
+    return "time";
+  }
+  if (t === "date") return "date";
+  if (
+    t === "timestamp" ||
+    t.startsWith("timestamp(") ||
+    t.includes("timestamp with") ||
+    t === "timestamptz" ||
+    t === "datetime" ||
+    t.startsWith("datetime")
+  ) {
+    return "datetime";
+  }
+  if (t === "boolean" || t === "bool" || t === "bit") return "boolean";
+  if (
+    t === "int" ||
+    t === "integer" ||
+    t === "int2" ||
+    t === "int4" ||
+    t === "int8" ||
+    t === "smallint" ||
+    t === "bigint" ||
+    t === "serial" ||
+    t === "bigserial" ||
+    t === "float" ||
+    t === "float4" ||
+    t === "float8" ||
+    t === "real" ||
+    t === "double" ||
+    t === "double precision" ||
+    t === "numeric" ||
+    t.startsWith("numeric(") ||
+    t === "decimal" ||
+    t.startsWith("decimal(") ||
+    t === "number" ||
+    t.startsWith("number(")
+  ) {
+    return "number";
+  }
+  return "text";
+}
+
+/** Normalize a cell string for `<input type="time|date|datetime-local">`. */
+export function cellEditorValue(kind: CellEditorKind, raw: unknown): string {
+  if (raw == null) return "";
+  const text = String(raw).trim();
+  if (!text) return "";
+  if (kind === "time") {
+    // 20:15:00.000000 → 20:15:00
+    const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (!match) return text;
+    return `${match[1].padStart(2, "0")}:${match[2]}:${match[3] ?? "00"}`;
+  }
+  if (kind === "date") {
+    const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : text;
+  }
+  if (kind === "datetime") {
+    // 2024-01-02 03:04:05.6 → 2024-01-02T03:04:05
+    const normalized = text.replace(" ", "T");
+    const match = normalized.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?)/);
+    return match ? match[1] : normalized;
+  }
+  return text;
+}
+
+export function cellEditorInputType(kind: CellEditorKind): string {
+  if (kind === "time") return "time";
+  if (kind === "date") return "date";
+  if (kind === "datetime") return "datetime-local";
+  if (kind === "number") return "number";
+  if (kind === "boolean") return "checkbox";
+  return "text";
+}
+
+/** Whether the cell opens the Navicat-style date/time popup instead of a bare input. */
+export function cellUsesDateTimePicker(kind: CellEditorKind): boolean {
+  return kind === "time" || kind === "date" || kind === "datetime";
+}
+
+/**
+ * When catalog column types are missing, infer a picker kind from the displayed value
+ * (real PG grids often show `20:15:00.000000` without a joined type on the node).
+ */
+export function cellEditorKindFromValue(raw: unknown): CellEditorKind | null {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+  if (/^\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(text)) return "time";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return "date";
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{1,2}:\d{2}/.test(text)) return "datetime";
+  return null;
+}
+
+/** Prefer SQL type; fall back to value shape so time/date cells still get a picker. */
+export function resolveCellEditorKind(sqlType: string | undefined | null, raw: unknown): CellEditorKind {
+  const fromType = cellEditorKind(sqlType);
+  if (fromType !== "text") return fromType;
+  return cellEditorKindFromValue(raw) ?? "text";
+}
+
 export function connectionMatchesFilter(name: string, engine: string, filter: string): boolean {
   const needle = filter.trim().toLowerCase();
   if (!needle) return true;
   return name.toLowerCase().includes(needle) || engine.toLowerCase().includes(needle);
 }
 
-export function freshQueryTab(id: string, title: string): QueryTab {
-  return { id, title, sql: "SELECT 1", result: null, error: "" };
+export function workspaceId(connectionId: string, database: string): string {
+  return `${connectionId}::${database}`;
 }
 
-/** Switching connections drops results that belonged to the previous revision. */
-export function tabsAfterConnectionSwitch(id: string): QueryTab[] {
-  return [freshQueryTab(id, "SQL 1")];
+export function objectTabTitle(_schema: string, name: string): string {
+  return name;
+}
+
+export function freshQueryTab(id: string, title: string): WorkbenchTab {
+  return {
+    id,
+    title,
+    kind: "query",
+    sql: "",
+    result: null,
+    error: "",
+    database: null,
+    schema: null,
+    objectName: null,
+  };
+}
+
+export function freshObjectTab(
+  id: string,
+  database: string,
+  node: Pick<ObjectNode, "kind" | "schema" | "name">,
+): WorkbenchTab {
+  return {
+    id,
+    title: objectTabTitle(node.schema, node.name),
+    kind: node.kind,
+    sql: "",
+    result: null,
+    error: "",
+    database,
+    schema: node.schema,
+    objectName: node.name,
+  };
+}
+
+export function findObjectTab(
+  tabs: WorkbenchTab[],
+  database: string,
+  kind: ObjectKind,
+  schema: string,
+  name: string,
+): WorkbenchTab | undefined {
+  return tabs.find(
+    (tab) =>
+      tab.kind === kind &&
+      tab.database === database &&
+      (tab.schema ?? "") === (schema ?? "") &&
+      tab.objectName === name,
+  );
+}
+
+/** Next visible title for a new query tab: SQL 1, SQL 2, … */
+export function nextSqlTabTitle(tabs: Array<{ title: string }>): string {
+  let max = 0;
+  for (const tab of tabs) {
+    const match = /^SQL\s+(\d+)$/i.exec(tab.title.trim());
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `SQL ${max + 1}`;
+}
+
+/**
+ * Switching connections drops query tabs (and their results) that belonged to
+ * the previous revision. Object Pane is the default — no forced SQL 1.
+ */
+export function tabsAfterConnectionSwitch(_id?: string): WorkbenchTab[] {
+  return [];
 }

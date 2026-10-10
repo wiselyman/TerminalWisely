@@ -16,7 +16,7 @@ use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Position, Rect, Size, Url,
     WebviewBuilder, WebviewUrl,
 };
-use tauri::webview::PageLoadEvent;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tokio::sync::Mutex;
 
 use crate::error::{AppError, AppResult};
@@ -34,6 +34,11 @@ const HISTORY_CAP: usize = 500;
 /// Stock WKWebView / WebView2 UAs are often rejected by enterprise portals
 /// ("browser version too low" / Chrome 91+ gates). Spoof a current Chrome
 /// desktop string so HTTP + `navigator.userAgent` checks pass.
+/// `window.open` / target=_blank: only http(s) becomes a browser tab.
+fn popup_url_opens_tab(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https")
+}
+
 fn host_browser_user_agent() -> &'static str {
     #[cfg(target_os = "macos")]
     {
@@ -48,6 +53,10 @@ fn host_browser_user_agent() -> &'static str {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     }
 }
+
+/// Left click on an http(s) anchor stays in this tab.
+/// `target=_blank` / `window.open` would otherwise be cancelled when the OS popup is denied.
+const FOLLOW_LINK_EVAL: &str = r#"(function(){try{if(window.__twFollowLink)return;window.__twFollowLink=1;document.addEventListener("click",function(ev){if(ev.button!==0||ev.metaKey||ev.ctrlKey||ev.shiftKey||ev.altKey)return;var el=ev.target;if(!el||!el.closest)return;var a=el.closest("a[href]");if(!a)return;var href=a.href||"";if(!/^https?:/i.test(href))return;var dest;try{dest=new URL(href);}catch(e){return;}if(dest.origin===location.origin&&dest.pathname===location.pathname&&dest.search===location.search)return;ev.preventDefault();ev.stopPropagation();location.assign(href);},true);}catch(e){}})()"#;
 
 /// Fit wide desktop pages into the docked panel (WebKit CSS zoom).
 /// Keep in sync with `BROWSER_FIT_WIDTH_EVAL` in `src/lib/browserPageChrome.ts`.
@@ -161,6 +170,9 @@ fn emit_page_meta(
     });
 }
 
+/// Re-read document.title after load. The first finish event is often early.
+const LATE_PAGE_META_DELAYS_MS: [u64; 3] = [400, 1200, 2500];
+
 fn schedule_late_page_meta(
     app: AppHandle,
     webview_label: String,
@@ -169,18 +181,20 @@ fn schedule_late_page_meta(
     url: String,
 ) {
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-        let Some(webview) = app.get_webview(&webview_label) else {
-            return;
-        };
-        emit_page_meta(
-            &webview,
-            &app,
-            &webview_label,
-            &profile_key,
-            &tab_id,
-            &url,
-        );
+        for delay in LATE_PAGE_META_DELAYS_MS {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            let Some(webview) = app.get_webview(&webview_label) else {
+                return;
+            };
+            emit_page_meta(
+                &webview,
+                &app,
+                &webview_label,
+                &profile_key,
+                &tab_id,
+                &url,
+            );
+        }
     });
 }
 
@@ -441,6 +455,7 @@ impl BrowserManager {
                 drop(guard);
                 self.create_child_webview(
                     app,
+                    session_id,
                     &label,
                     tab_id,
                     &profile_key,
@@ -490,6 +505,7 @@ impl BrowserManager {
 
         self.create_child_webview(
             app,
+            session_id,
             &label,
             tab_id,
             &profile_key,
@@ -568,6 +584,7 @@ impl BrowserManager {
             drop(guard);
             self.create_child_webview(
                 app,
+                session_id,
                 &label,
                 tab_id,
                 &profile_key,
@@ -651,6 +668,7 @@ impl BrowserManager {
     async fn create_child_webview(
         &self,
         app: &AppHandle,
+        session_id: &str,
         label: &str,
         tab_id: &str,
         profile_key: &str,
@@ -699,6 +717,11 @@ impl BrowserManager {
             .map_err(|e| AppError::msg(format!("proxy url: {e}")))?;
 
         let app_handle = app.clone();
+        let popup_app = app.clone();
+        let title_app = app.clone();
+        let popup_session = session_id.to_string();
+        let popup_tab = tab_id.to_string();
+        let title_tab = tab_id.to_string();
         let emit_label = label.to_string();
         let emit_profile = profile_key.to_string();
         let emit_tab = tab_id.to_string();
@@ -743,6 +766,7 @@ impl BrowserManager {
                     log::warn!(
                         "[host-browser] load-finished +{finished_ms}ms tab={emit_tab} {url}"
                     );
+                    let _ = webview.eval(FOLLOW_LINK_EVAL);
                     let _ = webview.eval(FIT_WIDTH_EVAL);
                     let _ = app_handle.emit(
                         "host-browser-load",
@@ -771,6 +795,33 @@ impl BrowserManager {
                     );
                 }
             }
+        })
+        .on_new_window(move |url, _features| {
+            if popup_url_opens_tab(&url) {
+                let _ = popup_app.emit(
+                    "host-browser-popup",
+                    BrowserPopupEvent {
+                        session_id: popup_session.clone(),
+                        source_tab_id: popup_tab.clone(),
+                        url: url.to_string(),
+                    },
+                );
+            }
+            // Deny the OS popup; the app opens an in-browser tab instead.
+            NewWindowResponse::Deny
+        })
+        .on_document_title_changed(move |_webview, title| {
+            let caption = page_title_or_empty(&title);
+            if caption.is_empty() {
+                return;
+            }
+            let _ = title_app.emit(
+                "host-browser-title",
+                BrowserTitleEvent {
+                    tab_id: title_tab.clone(),
+                    title: caption,
+                },
+            );
         });
 
         #[cfg(target_os = "macos")]
@@ -1270,6 +1321,19 @@ pub struct BrowserPageEvent {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct BrowserTitleEvent {
+    pub tab_id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BrowserPopupEvent {
+    pub session_id: String,
+    pub source_tab_id: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct BrowserLoadEvent {
     pub webview_label: String,
     pub profile_key: String,
@@ -1416,6 +1480,30 @@ mod tests {
         assert!(super::FIT_WIDTH_EVAL.contains("style.zoom"));
         assert!(super::FIT_WIDTH_EVAL.contains("scrollWidth"));
         assert!(super::FIT_WIDTH_EVAL.contains("0.55"));
+    }
+
+    #[test]
+    fn late_page_meta_retries_until_the_document_title_exists() {
+        assert!(super::LATE_PAGE_META_DELAYS_MS.contains(&400));
+        assert!(super::LATE_PAGE_META_DELAYS_MS.contains(&2500));
+    }
+
+    #[test]
+    fn follow_link_script_assigns_http_anchors_in_the_same_tab() {
+        let script = super::FOLLOW_LINK_EVAL;
+        assert!(script.contains("closest('a[href]')") || script.contains("closest(\"a[href]\")"));
+        assert!(script.contains("location.assign"));
+        assert!(script.contains("button"));
+    }
+
+    #[test]
+    fn popup_http_urls_open_a_tab() {
+        let https = Url::parse("https://www.google.com/search?q=1").unwrap();
+        let http = Url::parse("http://example.com/").unwrap();
+        let blank = Url::parse("about:blank").unwrap();
+        assert!(super::popup_url_opens_tab(&https));
+        assert!(super::popup_url_opens_tab(&http));
+        assert!(!super::popup_url_opens_tab(&blank));
     }
 
     #[test]

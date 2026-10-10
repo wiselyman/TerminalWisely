@@ -17,6 +17,40 @@ const STREAM_PIPELINE_DEPTH: usize = 4;
 const CANCEL_POLL_MS: u64 = 200;
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(120);
 
+/// Progress method label: bytes relay through the app (no source→dest SSH auth).
+pub const TRANSFER_METHOD_STREAM: &str = "stream";
+
+/// Split `/a/b/c` → (`/a/b`, `c`); `/name` → (`.`, `name`).
+fn split_remote_parent_name(path: &str) -> AppResult<(String, String)> {
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "/" {
+        return Err(AppError::msg("无效的远程路径"));
+    }
+    match trimmed.rsplit_once('/') {
+        // "/clip" → parent "/"
+        Some(("", name)) if !name.is_empty() => Ok(("/".to_string(), name.to_string())),
+        Some((parent, name)) if !name.is_empty() => Ok((parent.to_string(), name.to_string())),
+        _ => Err(AppError::msg("无效的远程路径")),
+    }
+}
+
+fn tar_pack_command(from_path: &str) -> AppResult<String> {
+    let (parent, name) = split_remote_parent_name(from_path)?;
+    Ok(format!(
+        "tar cf - -C {} {}",
+        shell_quote_remote_path(&parent),
+        shell_quote_remote_path(&name),
+    ))
+}
+
+fn tar_unpack_command(to_path: &str) -> AppResult<String> {
+    let (parent, _name) = split_remote_parent_name(to_path)?;
+    let quoted_parent = shell_quote_remote_path(&parent);
+    Ok(format!(
+        "mkdir -p {quoted_parent} && tar xf - -C {quoted_parent}"
+    ))
+}
+
 async fn open_exec_channel(
     handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
     command: String,
@@ -99,9 +133,101 @@ where
 {
     let quoted_from = shell_quote_remote_path(from_path);
     let quoted_to = shell_quote_remote_path(to_path);
+    let (parent, _) = split_remote_parent_name(to_path)?;
+    let quoted_parent = shell_quote_remote_path(&parent);
 
-    let mut from_channel = open_exec_channel(from_handle, format!("cat {quoted_from}")).await?;
-    let mut to_channel = open_exec_channel(to_handle, format!("cat > {quoted_to}")).await?;
+    relay_exec_channels(
+        from_handle,
+        to_handle,
+        format!("cat {quoted_from}"),
+        format!("mkdir -p {quoted_parent} && cat > {quoted_to}"),
+        total,
+        cancel,
+        on_progress,
+    )
+    .await
+}
+
+/// Directory relay via `tar` over the app (no source→dest SSH keys).
+pub async fn transfer_remote_directory<F>(
+    from_handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    to_handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    from_path: &str,
+    to_path: &str,
+    total: u64,
+    cancel: Option<Arc<AtomicBool>>,
+    on_progress: F,
+) -> AppResult<()>
+where
+    F: FnMut(u64, u64),
+{
+    let from_cmd = tar_pack_command(from_path)?;
+    let to_cmd = tar_unpack_command(to_path)?;
+    relay_exec_channels(
+        from_handle,
+        to_handle,
+        from_cmd,
+        to_cmd,
+        total,
+        cancel,
+        on_progress,
+    )
+    .await
+}
+
+/// Keyless send: file → cat relay; directory → tar relay. Uses existing SSH sessions only.
+pub async fn transfer_remote_path<F>(
+    from_handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    to_handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    from_path: &str,
+    to_path: &str,
+    total: u64,
+    recursive: bool,
+    cancel: Option<Arc<AtomicBool>>,
+    on_progress: F,
+) -> AppResult<()>
+where
+    F: FnMut(u64, u64),
+{
+    if recursive {
+        transfer_remote_directory(
+            from_handle,
+            to_handle,
+            from_path,
+            to_path,
+            total,
+            cancel,
+            on_progress,
+        )
+        .await
+    } else {
+        transfer_remote_file(
+            from_handle,
+            to_handle,
+            from_path,
+            to_path,
+            total,
+            cancel,
+            on_progress,
+        )
+        .await
+    }
+}
+
+async fn relay_exec_channels<F>(
+    from_handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    to_handle: &Arc<Mutex<client::Handle<ClientHandler>>>,
+    from_cmd: String,
+    to_cmd: String,
+    total: u64,
+    cancel: Option<Arc<AtomicBool>>,
+    on_progress: F,
+) -> AppResult<()>
+where
+    F: FnMut(u64, u64),
+{
+    let mut from_channel = open_exec_channel(from_handle, from_cmd).await?;
+    let mut to_channel = open_exec_channel(to_handle, to_cmd).await?;
 
     let (chunk_tx, mut chunk_rx) = mpsc::channel::<Vec<u8>>(STREAM_PIPELINE_DEPTH);
     let read_cancel = cancel.clone();
@@ -163,5 +289,36 @@ where
         Ok(Ok(())) => Ok(()),
         Ok(Err(err)) => Err(err),
         Err(err) => Err(AppError::msg(err.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_remote_parent_name_handles_nested_and_root() {
+        assert_eq!(
+            split_remote_parent_name("/videos/a/b").unwrap(),
+            ("/videos/a".to_string(), "b".to_string())
+        );
+        assert_eq!(
+            split_remote_parent_name("/clip").unwrap(),
+            ("/".to_string(), "clip".to_string())
+        );
+    }
+
+    #[test]
+    fn tar_commands_are_keyless_session_relay() {
+        let pack = tar_pack_command("/data/videos/clip1").unwrap();
+        assert!(pack.contains("tar cf -"), "{pack}");
+        assert!(pack.contains("-C"), "{pack}");
+        assert!(pack.contains("clip1"), "{pack}");
+
+        let unpack = tar_unpack_command("/home/u/clip1").unwrap();
+        assert!(unpack.contains("mkdir -p"), "{unpack}");
+        assert!(unpack.contains("tar xf -"), "{unpack}");
+        assert!(unpack.contains("-C"), "{unpack}");
+        assert!(!unpack.contains("scp"), "{unpack}");
     }
 }

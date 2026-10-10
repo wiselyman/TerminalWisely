@@ -8,7 +8,7 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { isBookmarked } from "../../lib/browserHistory";
-import { browserTabCaption } from "../../lib/browserTabs";
+import { browserTabLabel } from "../../lib/browserTabs";
 import { fallbackFaviconUrl } from "../../lib/browserPageChrome";
 import { useBrowserStore } from "../../stores/browserStore";
 import { browserDesktopIsFront } from "../../lib/desktopWindowFrame";
@@ -296,7 +296,7 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
         data-testid="host-browser-tabs"
       >
         {tabs.map((tab) => {
-          const label = browserTabCaption(tab.title) || t("browser.tabLoading");
+          const label = browserTabLabel(tab.title, tab.url) || t("browser.tabLoading");
           const favicon =
             tab.favicon?.trim() || fallbackFaviconUrl(tab.url) || "";
           return (
@@ -419,35 +419,6 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
             aria-expanded={suggestOpen && suggestions.length > 0}
             data-testid="host-browser-url"
           />
-          {suggestOpen && suggestions.length > 0 ? (
-            <ul
-              className="browser-suggest-list"
-              role="listbox"
-              data-testid="host-browser-suggest"
-            >
-              {suggestions.map((item, index) => (
-                <li key={`${item.profile_key}-${item.url}`}>
-                  <button
-                    type="button"
-                    className={
-                      index === suggestIndex
-                        ? "browser-suggest-item is-active"
-                        : "browser-suggest-item"
-                    }
-                    role="option"
-                    aria-selected={index === suggestIndex}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      commitNavigate(item.url);
-                    }}
-                  >
-                    <span className="browser-suggest-title">{item.title}</span>
-                    <span className="browser-suggest-url">{item.url}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </div>
         <button
           type="button"
@@ -460,6 +431,35 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
         >
           <ChatHistoryIcon />
         </button>
+        {suggestOpen && suggestions.length > 0 ? (
+          <ul
+            className="browser-suggest-list"
+            role="listbox"
+            data-testid="host-browser-suggest"
+          >
+            {suggestions.map((item, index) => (
+              <li key={`${item.profile_key}-${item.url}`}>
+                <button
+                  type="button"
+                  className={
+                    index === suggestIndex
+                      ? "browser-suggest-item is-active"
+                      : "browser-suggest-item"
+                  }
+                  role="option"
+                  aria-selected={index === suggestIndex}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    commitNavigate(item.url);
+                  }}
+                >
+                  <span className="browser-suggest-title">{item.title}</span>
+                  <span className="browser-suggest-url">{item.url}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </form>
       <div
         className={

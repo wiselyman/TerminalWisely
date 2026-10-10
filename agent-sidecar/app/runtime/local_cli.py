@@ -407,12 +407,10 @@ def _parse_auth_output(out: str, returncode: int) -> tuple[bool, str]:
             ok = bool(data.get("loggedIn"))
             return ok, "ready" if ok else "login_needed"
     low = text.lower()
-    if "logged in" in low:
+    if "logged in" in low and returncode == 0:
         return True, "ready"
-    if returncode == 0:
-        # Empty success (stub CLIs / minimal status) counts as ready so probes
-        # stay fast and do not false-gate install/login.
-        return True, "ready"
+    # Exit 0 with no login confirmation (common for a Windows .cmd shim) is not
+    # proof of a session — otherwise the UI skips the browser sign-in.
     return False, "login_needed"
 
 
@@ -429,8 +427,8 @@ def _auth_status(resolved: ResolvedCli) -> tuple[bool, str]:
             check=False,
         )
     except subprocess.TimeoutExpired:
-        # Binary exists; auth check hung — do not block Agent tab forever.
-        return True, "login_unchecked"
+        # Binary exists; auth check hung. Do not treat that as logged in.
+        return False, "login_needed"
     except OSError:
         return False, "login_needed"
     out = f"{r.stdout or ''}{r.stderr or ''}"

@@ -8,6 +8,8 @@ const closeAi = vi.fn();
 const bindManagedEntity = vi.fn();
 const setEngineerMode = vi.fn();
 const focusManaged = vi.fn();
+const leaveHome = vi.fn();
+const openHome = vi.fn();
 
 vi.mock("./localFsStore", () => ({
   useLocalFsStore: {
@@ -42,7 +44,16 @@ vi.mock("./managedEntityStore", () => ({
   useManagedEntityStore: {
     getState: () => ({
       focused: focusManaged,
-      leaveHome: vi.fn(),
+      leaveHome,
+      openHome,
+    }),
+  },
+}));
+
+vi.mock("./k8sStore", () => ({
+  useK8sStore: {
+    getState: () => ({
+      selectedCluster: null,
     }),
   },
 }));
@@ -57,6 +68,8 @@ describe("sidebarViewStore setView", () => {
     setEngineerMode.mockClear();
     focusManaged.mockReset();
     focusManaged.mockReturnValue(null);
+    leaveHome.mockClear();
+    openHome.mockClear();
     localStorage.clear();
     vi.resetModules();
   });
@@ -75,6 +88,7 @@ describe("sidebarViewStore setView", () => {
     expect(closeFind).toHaveBeenCalled();
     expect(closeAi).toHaveBeenCalled();
     expect(setEngineerMode).toHaveBeenCalledWith("k8s");
+    expect(openHome).toHaveBeenCalled();
   });
 
   it("switches to db without binding a host", async () => {
@@ -83,6 +97,8 @@ describe("sidebarViewStore setView", () => {
     expect(closeLocalFs).toHaveBeenCalled();
     expect(setEngineerMode).toHaveBeenCalledWith("db");
     expect(bindManagedEntity).not.toHaveBeenCalled();
+    // Stay on Home until a connection/workspace is opened.
+    expect(leaveHome).not.toHaveBeenCalled();
   });
 
   it("binds focused cluster AI when switching to k8s with focus", async () => {

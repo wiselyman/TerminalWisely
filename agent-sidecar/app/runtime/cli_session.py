@@ -7,6 +7,7 @@ does not reject the id and (for Cursor and Codex) returns that same id.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,39 @@ def supports_read_only_launch(kind: str) -> bool:
     ``-f``. Codex uses ``--sandbox read-only``. Claude uses permission mode plan.
     """
     return kind in {"cursor", "codex", "claude"}
+
+
+def codex_mcp_config_args(mcp_config: Path) -> list[str]:
+    """`-c key=toml` overrides so Codex sees MCP server `terminalwisely`."""
+    if not mcp_config.is_file():
+        return []
+    try:
+        payload = json.loads(mcp_config.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    servers = payload.get("mcpServers") if isinstance(payload, dict) else None
+    server = servers.get("terminalwisely") if isinstance(servers, dict) else None
+    if not isinstance(server, dict):
+        return []
+    command = str(server.get("command") or "")
+    args = server.get("args") if isinstance(server.get("args"), list) else []
+    env = server.get("env") if isinstance(server.get("env"), dict) else {}
+    out = [
+        "-c",
+        f"mcp_servers.terminalwisely.command={json.dumps(command)}",
+        "-c",
+        "mcp_servers.terminalwisely.args=" + json.dumps([str(a) for a in args]),
+        "-c",
+        "mcp_servers.terminalwisely.enabled=true",
+    ]
+    for key, value in env.items():
+        out.extend(
+            [
+                "-c",
+                f"mcp_servers.terminalwisely.env.{key}={json.dumps(str(value))}",
+            ]
+        )
+    return out
 
 
 def build_runtime_argv(
@@ -106,6 +140,9 @@ def build_runtime_argv(
             "computer_use",
         ]
     )
+    # Untrusted temp workspaces (and Windows) ignore project `.codex/config.toml`.
+    # `-c` registers the MCP server on the process that actually runs.
+    argv.extend(codex_mcp_config_args(mcp_config))
     if resume:
         # Parent `exec` options, then the resume subcommand and the thread id.
         argv.extend(["resume", resume])

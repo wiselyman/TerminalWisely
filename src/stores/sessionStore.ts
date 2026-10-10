@@ -732,18 +732,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   transferRemote: async (toSessionId, remoteDir) => {
     const sendTo = get().sendTo;
     if (!sendTo) return;
-    const payload = {
-      fromSessionId: sendTo.fromSessionId,
-      remotePath: sendTo.remotePath,
-    };
+    const paths =
+      sendTo.remotePaths && sendTo.remotePaths.length > 0
+        ? sendTo.remotePaths
+        : [sendTo.remotePath];
+    const fromSessionId = sendTo.fromSessionId;
     set({ sendTo: null });
-    await get().startRemoteTransfer(
-      payload.fromSessionId,
-      payload.remotePath,
-      toSessionId,
-      undefined,
-      remoteDir ?? null,
-    );
+    let firstError: unknown = null;
+    for (const remotePath of paths) {
+      try {
+        await get().startRemoteTransfer(
+          fromSessionId,
+          remotePath,
+          toSessionId,
+          undefined,
+          remoteDir ?? null,
+        );
+      } catch (err) {
+        firstError = firstError ?? err;
+      }
+    }
+    if (firstError) throw firstError;
   },
 
   startRemoteTransfer: async (

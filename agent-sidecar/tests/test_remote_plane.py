@@ -83,12 +83,18 @@ def test_parse_suppresses_codex_js_cua() -> None:
     assert _parse_stream_line("codex", line) == []
 
 
-def test_write_tw_mcp_config_disables_computer_use_feature(tmp_path: Path) -> None:
+def test_write_tw_mcp_config_disables_computer_use_feature(
+    tmp_path: Path, monkeypatch
+) -> None:
     class _Run:
         run_id = "r1"
         session_id = "s1"
         metadata: dict = {}
 
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     write_tw_mcp_config(_Run(), tmp_path)
     toml = (tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert "computer_use = false" in toml

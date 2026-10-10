@@ -81,6 +81,10 @@ def _tw_mcp_server_payload(run: Any) -> dict[str, Any]:
         else f"{sidecar_root}{os.pathsep}{existing_pp}"
     )
     return {
+        # Claude Code's stdio schema. Cursor's parser drops unknown keys.
+        "type": "stdio",
+        # Print mode does not connect the server at turn start without this.
+        "alwaysLoad": True,
         "command": py,
         "args": ["-m", "app.runtime.mcp_stdio"],
         "env": {
@@ -95,18 +99,51 @@ def _tw_mcp_server_payload(run: Any) -> dict[str, Any]:
     }
 
 
+def _merge_cursor_user_mcp(payload: dict[str, Any]) -> None:
+    """Install server `terminalwisely` into the Cursor user MCP file.
+
+    Cursor CLI has no `--mcp-config`. It loads `~/.cursor/mcp.json` plus the
+    workspace file. A temp workspace whose git root is a parent repo skips the
+    workspace file, so the user file is the one the process actually reads.
+    Other servers already in that file stay.
+    """
+    path = Path.home() / ".cursor" / "mcp.json"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data: dict[str, Any] = {"mcpServers": {}}
+        if path.is_file():
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(loaded, dict):
+                return
+            data = loaded
+        servers = data.get("mcpServers")
+        if not isinstance(servers, dict):
+            servers = {}
+            data["mcpServers"] = servers
+        incoming = payload.get("mcpServers")
+        if isinstance(incoming, dict) and "terminalwisely" in incoming:
+            servers["terminalwisely"] = incoming["terminalwisely"]
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except (OSError, json.JSONDecodeError):
+        return
+
+
 def write_tw_mcp_config(run: Any, workspace: Path) -> Path:
     """Write MCP config for Claude / Cursor / Codex project layouts."""
     server = _tw_mcp_server_payload(run)
     payload = {"mcpServers": {"terminalwisely": server}}
     cfg_path = workspace / "tw_mcp.json"
     cfg_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # Claude Code project layout. Headless still uses --mcp-config tw_mcp.json
+    # because --strict-mcp-config ignores this file.
+    (workspace / ".mcp.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     # Cursor Agent reads project MCP from <workspace>/.cursor/mcp.json
     cursor_dir = workspace / ".cursor"
     cursor_dir.mkdir(parents=True, exist_ok=True)
     (cursor_dir / "mcp.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
     )
+    _merge_cursor_user_mcp(payload)
     # Codex loads project MCP from <workspace>/.codex/config.toml
     codex_dir = workspace / ".codex"
     codex_dir.mkdir(parents=True, exist_ok=True)

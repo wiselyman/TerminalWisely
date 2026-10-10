@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canSelectExternalRuntime,
   externalRuntimeStatusKind,
+  shouldAutoStartRuntimeLogin,
 } from "./cursorRuntimeStatus";
 
 describe("externalRuntimeStatusKind", () => {
@@ -54,6 +55,8 @@ describe("externalRuntimeStatusKind", () => {
     expect(canSelectExternalRuntime("ready")).toBe(true);
     expect(canSelectExternalRuntime("ready_fake")).toBe(true);
     expect(canSelectExternalRuntime("login_needed")).toBe(true);
+    expect(shouldAutoStartRuntimeLogin("login_needed")).toBe(true);
+    expect(shouldAutoStartRuntimeLogin("cli_failed")).toBe(false);
     expect(canSelectExternalRuntime("install_needed")).toBe(false);
     expect(canSelectExternalRuntime("unknown")).toBe(false);
     expect(canSelectExternalRuntime("not_ready")).toBe(false);

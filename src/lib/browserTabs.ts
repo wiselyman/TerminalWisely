@@ -26,6 +26,14 @@ export function newBrowserTabId(): string {
   return `btab-${tabSeq}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Bare hosts default to https. An explicit scheme (http, https, about) is kept. */
+export function withBrowserScheme(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 export function createBrowserTab(
   url = "http://127.0.0.1/",
   title = "",
@@ -64,6 +72,71 @@ export function browserTabCaption(title: string): string {
   return trimmed;
 }
 
+/** Document title, or the host while that title has not arrived yet. */
+export function browserTabLabel(title: string, url: string): string {
+  const caption = browserTabCaption(title);
+  if (caption) return caption;
+  try {
+    return new URL(url).host;
+  } catch {
+    return "";
+  }
+}
+
+function popupPageKey(raw: string): string {
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    url.searchParams.delete("newwindow");
+    return url.toString();
+  } catch {
+    return raw.trim();
+  }
+}
+
+/**
+ * One Open Link gesture can report the current page plus the real href.
+ * Keep a single http(s) destination, preferring a different page.
+ */
+export function choosePopupUrl(
+  currentUrl: string,
+  candidates: string[],
+): string | null {
+  const http = candidates
+    .map((item) => item.trim())
+    .filter((item) => /^https?:\/\//i.test(item));
+  if (http.length === 0) return null;
+  const currentKey = popupPageKey(currentUrl);
+  let currentHost = "";
+  try {
+    currentHost = new URL(currentUrl).host;
+  } catch {
+    currentHost = "";
+  }
+  const others = http.filter((item) => popupPageKey(item) !== currentKey);
+  if (others.length === 0) return null;
+  const external = others.filter((item) => {
+    try {
+      return new URL(item).host !== currentHost;
+    } catch {
+      return false;
+    }
+  });
+  const pool = external.length > 0 ? external : others;
+  return pool[pool.length - 1] ?? null;
+}
+
+/** Set a tab caption from the document title. An address does not replace one. */
+export function applyBrowserTitle(
+  tabs: BrowserTab[],
+  tabId: string,
+  title: string,
+): BrowserTab[] {
+  const caption = browserTabCaption(title);
+  if (!caption) return tabs;
+  return tabs.map((tab) => (tab.id === tabId ? { ...tab, title: caption } : tab));
+}
+
 export function pushTabNav(tab: BrowserTab, url: string): BrowserTab {
   const same = tab.navIndex >= 0 && tab.navStack[tab.navIndex] === url;
   const title = same ? browserTabCaption(tab.title) : "";
@@ -100,12 +173,15 @@ export function applyBrowserPageEvent(
     return { tabs, url: undefined, pageTitle: undefined, activeUpdated: false };
   }
   const current = tabs[idx];
-  const title = browserTabCaption(event.title);
+  const incoming = browserTabCaption(event.title);
   const favicon = event.favicon?.trim() || current.favicon;
   const pushed = pushTabNav(current, event.url);
+  // A finished load often reports an empty title after the document title
+  // was already stored. Do not replace that caption with nothing.
+  const title = incoming || browserTabCaption(current.title) || pushed.title;
   const updated = {
     ...pushed,
-    title: title || pushed.title,
+    title,
     favicon,
   };
   const nextTabs = tabs.map((t, i) => (i === idx ? updated : t));

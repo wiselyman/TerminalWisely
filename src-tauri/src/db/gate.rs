@@ -11,7 +11,10 @@ use super::command_risk::{classify_command, command_statement_count};
 use super::lease::{consume_db_lease, register_db_lease, DbLease};
 use super::sql_risk::{classify_sql, statement_count};
 
+/// Default / data-query row cap (grid pages stay smaller via SQL LIMIT).
 pub const MAX_ROW_LIMIT: u32 = 500;
+/// Object/structure search returns one row per column — 500 truncates mid-schema.
+pub const CATALOG_ROW_LIMIT: u32 = 50_000;
 pub const QUERY_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug, Clone)]
@@ -107,8 +110,8 @@ pub fn authorize(
     row_limit: u32,
     lease_id: Option<&str>,
 ) -> Result<Authorized, String> {
-    if !(1..=MAX_ROW_LIMIT).contains(&row_limit) {
-        return Err("row_limit must be 1..=500".into());
+    if !(1..=CATALOG_ROW_LIMIT).contains(&row_limit) {
+        return Err(format!("row_limit must be 1..={CATALOG_ROW_LIMIT}"));
     }
     let dialect = connection.engine.as_str();
     let class = if classify_command(dialect, sql).is_some() {
@@ -462,5 +465,32 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("single") || err.contains("prove"));
         assert!(received_sql(&executor).is_empty());
+    }
+
+    #[test]
+    fn catalog_row_limit_is_accepted_for_object_search() {
+        let executor = RecordingExecutor::default();
+        let outcome = run_statement(
+            &connection(),
+            "safe",
+            "search",
+            r#"SELECT 1"#,
+            CATALOG_ROW_LIMIT,
+            None,
+            &executor,
+        )
+        .unwrap();
+        assert!(matches!(outcome, GateOutcome::Rows(_)));
+        assert_eq!(executor.jobs.lock().unwrap()[0].row_limit, CATALOG_ROW_LIMIT);
+        let rejected = authorize(
+            &connection(),
+            "safe",
+            "search",
+            "SELECT 1",
+            CATALOG_ROW_LIMIT + 1,
+            None,
+        );
+        assert!(rejected.is_err());
+        assert!(rejected.err().unwrap().contains("row_limit"));
     }
 }
