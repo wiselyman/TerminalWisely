@@ -49,7 +49,7 @@
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
 | 功能五段（计划闸门） | — | — | smoke `process.feature-flow` | — | 计划缺旧行为、架构或设计时不改产品代码；不走 Codex 联合审查 |
-| Navicat 18 基本层对照（0.0.5） | vitest `workbenchModel` rename/empty + `DateTimeCellPicker`（数字时间、无表盘）+ live icons | — | smoke `db.navicat-basic-matrix` + `ui.type-density-tokens` | Playwright：进 DB 留 Home、无 chrome +、无 NULL 快捷、数字日期时间弹层 | 不做 Designer / BI / 同步；字号/间距用 `--tw-font-dense` / `--tw-font-ui` |
+| DB 侧栏 / AI SQL / sqlglot（2026-10-10） | vitest `App.homeTab` + `panelVisibility` + `aiEngineerDbBind` + `objectPaneVisibleColumns` + `hostTools` + `dbWorkspaceStore` + `entityListLayout` | — | smoke `sidecar.runtime-sqlglot` | Playwright：Home 不显示 AI 聊天、回到服务页签恢复聊天、数据库连接可分组、Home 保持 DB 侧栏、连接卡片无引擎副标题、表页签同一行标出库和 schema | 计划 `docs/superpowers/plans/2026-10-10-sidebar-groups-consistent.md`；顶层页签是数据库服务，一个服务一份聊天；表页签路径为 `库 / schema` |
 | 连接表单紧凑状态（测试 ✅ / 保存错误） | vitest `formatDbFormError`；cargo `format_error` 展开 pg `db error` | — | — | Playwright `db-form-status` / `db-test-ok` / `db-form-error` | 真机 PG 保存依赖本机 vault |
 | 引擎能力差异（菜单/维护/Redis·Mongo） | vitest `objectMenuActions` / `maintainSql` / redis TTL / `parseMongoJson` | — | smoke `db.engine-capability-diff` | Playwright maintain 审批、Redis TTL、Mongo JSON | SQL Server/Oracle 维护清单后补；真机未测项见计划 |
 

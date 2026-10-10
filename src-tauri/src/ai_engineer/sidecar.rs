@@ -244,6 +244,11 @@ pub fn stop_sidecar() {
     kill_orphan_sidecars(None);
 }
 
+/// Modules that must import after pip install. Keep in sync with
+/// `agent-sidecar/requirements-runtime.txt` (sqlglot is required for db SQL risk).
+const RUNTIME_DEP_PROBE: &str =
+    "import uvicorn, fastapi, pydantic, httpx, yaml, sqlglot";
+
 fn python_has_runtime_deps(python: &str) -> bool {
     python_has_runtime_deps_with_path(python, None)
 }
@@ -254,7 +259,7 @@ fn python_has_runtime_deps_with_path(python: &str, pythonpath: Option<&std::path
         cmd.env("PYTHONPATH", path_for_command(path));
     }
     cmd.arg("-c")
-        .arg("import uvicorn, fastapi, pydantic, httpx, yaml")
+        .arg(RUNTIME_DEP_PROBE)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -1469,5 +1474,18 @@ mod tests {
         super::clear_dir_for_rebuild(&dir, &dir.join("sidecar.log"));
         assert!(marker.is_file(), "catalog root must survive a python rebuild");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn runtime_dep_probe_requires_sqlglot_for_db_sql_risk() {
+        assert!(
+            super::RUNTIME_DEP_PROBE.contains("sqlglot"),
+            "health check must fail closed when sqlglot is missing"
+        );
+        let req = include_str!("../../../agent-sidecar/requirements-runtime.txt");
+        assert!(
+            req.contains("sqlglot"),
+            "requirements-runtime.txt must list sqlglot"
+        );
     }
 }

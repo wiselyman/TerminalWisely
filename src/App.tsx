@@ -353,6 +353,7 @@ function App() {
     sidebarView,
     hasSelectedCluster: selectedCluster != null,
     activeTabId: sidebarView === "hosts" ? activeTabId : null,
+    homeOpen,
   });
   const aiFiberSessions = useAiFiberSessions();
   const aiPanelsToMount = useMemo(() => {
@@ -364,6 +365,7 @@ function App() {
   const keepAiPanelMounted =
     aiPanelsToMount.length > 0 &&
     (showAiEngineerPanel ||
+      (homeOpen && aiEngineerOpen) ||
       shouldKeepAiEngineerPanelMounted({
         sessionId: aiPanelSessionId,
         show: showAiEngineerPanel,
@@ -902,7 +904,6 @@ function App() {
                       return;
                     }
                     if (Date.now() < suppressTabClickUntilRef.current) return;
-                    if (sidebarView === "db") setSidebarView("hosts");
                     activateHome();
                   }}
                   onContextMenu={(event) => event.preventDefault()}
@@ -1262,11 +1263,13 @@ function App() {
                   }
                   onClick={() => {
                     if (sidebarView === "db" && dbConnectionId) {
+                      leaveHome();
                       useAiEngineerStore.setState({ open: true });
                       void useAiEngineerStore.getState().ensureReady();
                       return;
                     }
                     if (sidebarView === "k8s" && selectedCluster) {
+                      leaveHome();
                       switchToAiEngineerPanel(
                         {
                           kind: "cluster",
@@ -1278,6 +1281,7 @@ function App() {
                       return;
                     }
                     if (activeTabId) {
+                      leaveHome();
                       switchToAiEngineerPanel({
                         kind: "server",
                         id: activeTabServerId || activeTabId,

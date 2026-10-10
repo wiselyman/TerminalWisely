@@ -10,6 +10,12 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("chrome-new-session")).toHaveCount(0);
     await expect(page.getByTestId("db-connection-new")).toBeVisible();
     await expect(page.getByTestId("sidebar-view-db").locator("svg")).toBeVisible();
+    await expect(page.getByTestId("db-nav-empty")).toHaveCount(0);
+    await expect(page.getByTestId("entity-group-__ungrouped__")).toBeVisible();
+    await expect(page.getByTestId("entity-add-group-db")).toBeVisible();
+    await expect(page.getByText(/还没有连接|No connections yet/)).toHaveCount(0);
+    await page.getByTestId("entity-add-group-db").click();
+    await expect(page.locator(".entity-group-title").filter({ hasText: /^(Group|分组)$/ })).toBeVisible();
     await page.getByTestId("db-connection-new").click();
     await expect(page.getByTestId("db-workbench")).toBeVisible();
     await expect(page.getByTestId("db-connection-form")).toBeVisible();
@@ -27,7 +33,6 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-test-ok")).toHaveAttribute("title", /Connection succeeded/);
     await expect(page.getByTestId("db-test-ok")).not.toHaveText(/Connection succeeded/);
     await expect(page.getByTestId("db-form-status")).toBeVisible();
-    await expect(page.getByTestId("db-nav-empty")).toBeVisible();
 
     await page.getByTestId("db-connection-name").fill("app");
     await page.getByTestId("db-connection-host").fill("db.internal");
@@ -74,10 +79,13 @@ test.describe("Database workbench", () => {
     await page.getByTestId("db-connection-user").fill("shop");
     await page.getByTestId("db-connection-password").fill("s3cret-value");
     await page.getByTestId("db-connection-save").click();
-    await expect(page.getByTestId("db-connection-list")).toContainText("mysql");
+    // Engine is shown by the brand icon only — do not duplicate "mysql" as text.
+    await expect(page.getByTestId("db-connection-list")).toContainText("shop");
+    await expect(page.getByTestId("db-connection-list")).not.toContainText("mysql");
     const shopRow = page.locator(".db-connection-row").filter({ hasText: "shop" });
+    await expect(shopRow.locator(".db-engine-icon--mysql")).toBeVisible();
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
-    await shopRow.locator(".k8s-tree-group-label").click();
+    await shopRow.locator(".saved-item-main").click();
     const postgresIcon = await page.locator(".db-engine-icon--postgres").first().innerHTML();
     const mysqlIcon = await page.locator(".db-engine-icon--mysql").first().innerHTML();
     expect(postgresIcon).not.toEqual(mysqlIcon);
@@ -89,16 +97,25 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-schema")).toContainText("shop");
     // Connection Object Pane lists databases (Navicat), not a stale schema table dump
     await expect(page.getByTestId("db-object-list")).toContainText("shop");
+    await expect(page.getByTestId("db-new-query")).toHaveClass(/db-object-new-query/);
+    await expect(page.locator(".db-object-table")).toBeVisible();
+    // Homogeneous DB list: no empty Schema column or repeated "database" Kind labels
+    await expect(page.locator(".db-object-table thead")).not.toContainText(/Schema|架构/);
+    await expect(page.locator(".db-object-table tbody")).not.toContainText(/数据库|Database/);
+    // AI binds to the connection as soon as it is selected — no query tab required.
+    await expect(page.getByTestId("ai-engineer-tool")).toBeEnabled();
+    // Connecting the service adds its chrome tab while the pane is still the database list.
+    await expect(page.getByTestId("db-workspace-tab")).toContainText("shop");
+    await expect(
+      page.getByTestId("db-workspace-tab").locator(".db-engine-icon--mysql"),
+    ).toBeVisible();
+    const selectedOutline = await page.locator(".db-connection-row.selected").evaluate((el) => getComputedStyle(el).outlineStyle);
+    expect(selectedOutline).toBe("none");
     // Navicat: path is tree + chrome tab — no redundant breadcrumb bar
     await expect(page.getByTestId("db-context")).toHaveCount(0);
     await expect(page.getByTestId("db-tree-object-orders")).toHaveCount(0);
     await page.getByTestId("db-tree-database-shop").click();
-    // Opening a database adds a chrome tab after Home
-    await expect(page.getByTestId("db-workspace-tab")).toContainText("shop");
-    // Chrome DB tab uses the connection's engine mark (not a generic cylinder)
-    await expect(
-      page.getByTestId("db-workspace-tab").locator(".db-engine-icon--mysql"),
-    ).toBeVisible();
+    // Chrome DB tab stays the service that connected, not a second tab for the catalog database.
     // MySQL: database click → table object list
     await expect(page.getByTestId("db-object-list")).toContainText("orders");
     await expect(page.getByTestId("db-context")).toHaveCount(0);
@@ -199,6 +216,12 @@ test.describe("Database workbench", () => {
     );
     await page.getByTestId("ai-engineer-tool").click();
     await expect(page.getByTestId("ai-engineer-panel")).toBeVisible({ timeout: 20_000 });
+    await page.locator('[data-tab-role="home"]').click();
+    await expect(page.getByTestId("workspace-welcome")).toBeVisible();
+    await expect(page.locator(".ai-engineer-panel:not(.ai-engineer-panel-parked)")).toHaveCount(0);
+    await page.getByTestId("db-workspace-tab").click();
+    await expect(page.getByTestId("workspace-welcome")).toHaveCount(0);
+    await expect(page.locator(".ai-engineer-panel:not(.ai-engineer-panel-parked)")).toBeVisible();
 
     await page.getByTestId("sidebar-view-hosts").click();
     await expect(page.getByTestId("db-workbench")).toHaveCount(0);
@@ -209,6 +232,15 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-connection-list")).toContainText("shop");
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
     await expect(page.getByTestId("db-schema")).toHaveCount(0);
+
+    // Home in the DB view must keep the database sidebar (not flip to hosts).
+    await page.locator('[data-tab-role="home"]').click();
+    await expect(page.getByTestId("workspace-welcome")).toBeVisible();
+    await expect(page.locator(".ai-engineer-panel:not(.ai-engineer-panel-parked)")).toHaveCount(0);
+    await expect(page.getByTestId("sidebar-view-db")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("db-connection-list")).toContainText("shop");
+    await expect(page.getByTestId("db-connection-list")).not.toContainText("postgres");
+    await expect(page.locator(".db-connection-row.saved-item").first()).toBeVisible();
   });
 
   test("opens a table, sorts, filters, and shows export", async ({ page }) => {
@@ -222,7 +254,7 @@ test.describe("Database workbench", () => {
     await page.getByTestId("db-connection-password").fill("s3cret-value");
     await page.getByTestId("db-connection-save").click();
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
-    await page.locator(".db-connection-row").filter({ hasText: "app" }).locator(".k8s-tree-group-label").click();
+    await page.locator(".db-connection-row").filter({ hasText: "app" }).locator(".saved-item-main").click();
     await expect(page.getByTestId("db-tree-database-app")).toBeVisible();
     await expect(page.getByTestId("db-tree-object-orders")).toHaveCount(0);
     await page.getByTestId("db-tree-database-app").click();
@@ -259,6 +291,8 @@ test.describe("Database workbench", () => {
     await page.getByRole("button", { name: "orders" }).dblclick();
     // Opening a table creates an object tab parallel to SQL tabs
     await expect(page.getByTestId("db-object-tab")).toContainText("orders");
+    await expect(page.getByTestId("db-object-tab-database")).toHaveText("app");
+    await expect(page.getByTestId("db-object-tab-schema")).toHaveText("public");
     await expect(page.getByTestId("db-object-tab").locator(".db-kind-icon--table")).toBeVisible();
     await expect(page.getByTestId("db-query-tab")).toHaveCount(0);
     // Object-table Run must keep browse chrome (funnel + insert), not a full-width 筛选 input
@@ -278,6 +312,21 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-filter-toggle")).toBeVisible();
     await expect(page.getByTestId("db-row-insert")).toBeVisible();
     await expect(page.getByTestId("db-grid-filter")).toHaveCount(0);
+    await expect(page.getByTestId("db-restore-table")).toHaveCount(0);
+    const openCell = page.locator(".db-data-grid tbody tr").first().locator("td").nth(1);
+    await expect(openCell).toHaveText("19:30:00.000000");
+    await page.getByTestId("db-sql").fill("SELECT 1");
+    await expect(page.getByTestId("db-restore-table")).toHaveCount(0);
+    await expect(openCell).toHaveText("19:30:00.000000");
+    await expect(page.getByTestId("db-filter-toggle")).toBeVisible();
+    await page.getByTestId("db-run").click();
+    await expect(page.getByTestId("db-restore-table")).toBeVisible();
+    await expect(page.getByTestId("db-restore-table")).toHaveAccessibleName(/Default view|默认视图/);
+    await expect(page.getByTestId("db-restore-table").locator("svg")).toBeVisible();
+    await expect(page.getByTestId("db-restore-table")).not.toHaveText(/Default view|默认视图/);
+    await page.getByTestId("db-restore-table").click();
+    await expect(page.getByTestId("db-sql")).toHaveValue(/LIMIT 100/);
+    await expect(page.getByTestId("db-restore-table")).toHaveCount(0);
     await page.getByTestId("db-new-query").click();
     await expect(page.getByTestId("db-query-tab")).toContainText("SQL 1");
     await expect(page.getByTestId("db-query-tab").locator(".db-kind-icon--query")).toBeVisible();
@@ -385,7 +434,7 @@ test.describe("Database workbench", () => {
     await page.getByTestId("db-connection-password").fill("s3cret-value");
     await page.getByTestId("db-connection-save").click();
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
-    await page.locator(".db-connection-row").filter({ hasText: "pg-maintain" }).locator(".k8s-tree-group-label").click();
+    await page.locator(".db-connection-row").filter({ hasText: "pg-maintain" }).locator(".saved-item-main").click();
     await page.getByTestId("db-tree-database-app").click();
     await page.getByTestId("db-tree-schema-public").click();
     await page.getByTestId("db-tree-kind-table").click();
@@ -405,7 +454,7 @@ test.describe("Database workbench", () => {
     await page.getByTestId("db-connection-password").fill("s3cret-value");
     await page.getByTestId("db-connection-save").click();
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
-    await page.locator(".db-connection-row").filter({ hasText: "redis-ttl" }).locator(".k8s-tree-group-label").click();
+    await page.locator(".db-connection-row").filter({ hasText: "redis-ttl" }).locator(".saved-item-main").click();
     await page.getByTestId("db-tree-database-0").click();
     await page.getByTestId("db-tree-kind-key").click();
     await expect(page.getByTestId("db-tree-object-user:1")).toBeVisible();
@@ -429,7 +478,7 @@ test.describe("Database workbench", () => {
     await page.getByTestId("db-connection-password").fill("s3cret-value");
     await page.getByTestId("db-connection-save").click();
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
-    await page.locator(".db-connection-row").filter({ hasText: "mongo-json" }).locator(".k8s-tree-group-label").click();
+    await page.locator(".db-connection-row").filter({ hasText: "mongo-json" }).locator(".saved-item-main").click();
     await page.getByTestId("db-tree-database-app").click();
     await page.getByTestId("db-tree-kind-collection").click();
     await expect(page.getByTestId("db-tree-object-orders")).toBeVisible();
@@ -454,7 +503,7 @@ test.describe("Database workbench", () => {
     await page.getByTestId("db-connection-password").fill("s3cret-value");
     await page.getByTestId("db-connection-save").click();
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
-    await page.locator(".db-connection-row").filter({ hasText: "navicat" }).locator(".k8s-tree-group-label").click();
+    await page.locator(".db-connection-row").filter({ hasText: "navicat" }).locator(".saved-item-main").click();
     await page.getByTestId("db-tree-database-app").click();
     await page.getByTestId("db-tree-schema-public").click();
     await page.getByTestId("db-tree-kind-table").click();
@@ -520,7 +569,7 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-connection-list")).toContainText("offline");
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
     const offlineRow = page.locator(".db-connection-row").filter({ hasText: "offline" });
-    await offlineRow.locator(".k8s-tree-group-label").click();
+    await offlineRow.locator(".saved-item-main").click();
     await expect(page.getByTestId("db-connect-loading")).toBeVisible();
     await expect(page.getByTestId("db-schema")).toHaveCount(0);
     await expect(page.getByTestId("db-connect-hint")).toHaveText("Connection failed");
@@ -528,5 +577,41 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
     await expect(page.getByTestId("db-error")).toHaveCount(0);
     await expect(offlineRow.locator(".db-engine-icon--muted")).toBeVisible();
+  });
+
+  test("opens a service tab on connect and keeps the other service", async ({ page }) => {
+    await gotoApp(page);
+    await page.getByTestId("sidebar-view-db").click();
+    await page.getByTestId("db-connection-new").click();
+    await page.getByTestId("db-connection-name").fill("PostgreSQL");
+    await page.getByTestId("db-connection-host").fill("db.internal");
+    await page.getByTestId("db-connection-database").fill("twreview");
+    await page.getByTestId("db-connection-user").fill("app");
+    await page.getByTestId("db-connection-password").fill("s3cret-value");
+    await page.getByTestId("db-connection-save").click();
+    await page.locator(".db-connection-row").filter({ hasText: "PostgreSQL" }).locator(".saved-item-main").click();
+    await expect(page.getByTestId("db-object-list")).toContainText("twreview");
+    await expect(page.getByTestId("db-workspace-tab")).toHaveCount(1);
+    await expect(page.getByTestId("db-workspace-tab")).toContainText("PostgreSQL");
+    await page.getByTestId("db-new-query").click();
+    await expect(page.getByTestId("db-query-tab")).toContainText("SQL 1");
+
+    await page.getByTestId("db-connection-new").click();
+    await page.getByTestId("db-connection-engine").click();
+    await page.getByTestId("db-connection-engine-mysql").click();
+    await page.getByTestId("db-connection-name").fill("MySQL");
+    await page.getByTestId("db-connection-host").fill("db.internal");
+    await page.getByTestId("db-connection-database").fill("shop");
+    await page.getByTestId("db-connection-user").fill("shop");
+    await page.getByTestId("db-connection-password").fill("s3cret-value");
+    await page.getByTestId("db-connection-save").click();
+    await page.locator(".db-connection-row").filter({ hasText: "MySQL" }).locator(".saved-item-main").click();
+    await expect(page.getByTestId("db-object-list")).toContainText("shop");
+    await expect(page.getByTestId("db-workspace-tab")).toHaveCount(2);
+    await expect(page.getByTestId("db-workspace-tab").filter({ hasText: "PostgreSQL" })).toBeVisible();
+    await expect(page.getByTestId("db-workspace-tab").filter({ hasText: "MySQL" })).toBeVisible();
+
+    await page.getByTestId("db-workspace-tab").filter({ hasText: "PostgreSQL" }).click();
+    await expect(page.getByTestId("db-query-tab")).toContainText("SQL 1");
   });
 });

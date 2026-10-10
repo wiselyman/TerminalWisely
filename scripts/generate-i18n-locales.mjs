@@ -510,90 +510,57 @@ const catalog = {
     "transfer.filesCount": { zh: "{{count}} 个文件", en: "{{count}} files" },
   },
   welcome: {
-    sectionAria: { zh: "产品介绍", en: "Product introduction" },
-    eyebrow: {
-      zh: "v0.0.4 · 主机桌面",
-      en: "v0.0.4 · Host desktop",
-    },
+    sectionAria: { zh: "欢迎", en: "Welcome" },
+    eyebrow: { zh: "v0.0.5", en: "v0.0.5" },
     productName: { zh: "TerminalWisely", en: "TerminalWisely" },
     tagline: {
-      zh: "编码 Agent 接到真实 SSH 与 Kubernetes 运维",
-      en: "Coding agents meet live SSH & Kubernetes ops",
+      zh: "主机、集群和数据库，在同一个窗口",
+      en: "Hosts, clusters, and databases in one window",
     },
     summary: {
-      zh: "同一窗口管理 SSH 会话与 Kubernetes 集群。可用内置 AI Linux / K8S Engineer——或让 Cursor Agent、Codex、Claude Code 当大脑，由 TW 管会话、MCP 工具、批准与 STOP。",
-      en: "Manage SSH sessions and Kubernetes clusters in one window. Use built-in AI Linux / K8S Engineers — or run Cursor Agent, Codex, or Claude Code as the brain while TW owns the session, MCP tools, approvals, and STOP.",
+      zh: "侧栏分成主机、Kubernetes、数据库。打开哪一块，标题栏的 AI 就跟到哪一块，聊天按对象隔开。Home 是欢迎页。变更要批准，随时可以 STOP。",
+      en: "The sidebar is Hosts, Kubernetes, and Databases. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page. Changes wait for approval, and STOP is always there.",
     },
     quickStart: { zh: "快速开始", en: "Quick start" },
-    "feature.dragUpload.title": { zh: "拖拽上传", en: "Drag & drop upload" },
-    "feature.dragUpload.desc": {
-      zh: "将文件拖入 SSH 终端窗口，或拖到 SSH 标签上，自动通过 SFTP 上传到当前远程目录。",
-      en: "Drop files onto an SSH terminal or tab to upload via SFTP into the current remote directory.",
+    "feature.hosts.title": { zh: "主机", en: "Hosts" },
+    "feature.hosts.desc": {
+      zh: "多标签 SSH。点主机图标打开这台机器的桌面：文件、进程、走主机网络的浏览器、终端。",
+      en: "Multi-tab SSH. The host icon opens that machine’s desktop: files, processes, a browser on the host network, and a terminal.",
     },
-    "feature.clickBrowse.title": {
-      zh: "点击浏览与预览",
-      en: "Click to browse & preview",
+    "feature.kubernetes.title": { zh: "Kubernetes", en: "Kubernetes" },
+    "feature.kubernetes.desc": {
+      zh: "添加集群，或绑定已连接主机上的 kubectl。浏览工作负载、YAML、日志和 Helm。一个集群一份聊天。",
+      en: "Add a cluster, or bind kubectl on a host you already connected. Browse workloads, YAML, logs, and Helm. One cluster, one chat.",
     },
-    "feature.clickBrowse.desc": {
-      zh: "单击 ls 中的目录进入；单击文件在右侧预览面板打开（文本、Markdown、CSV、图片、PDF 等），文本类支持全文搜索。",
-      en: "Click directories from ls to enter them; click files to open in the preview panel (text, Markdown, CSV, images, PDF) with full-text search for text.",
+    "feature.databases.title": { zh: "数据库", en: "Databases" },
+    "feature.databases.desc": {
+      zh: "直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天。表页签标出库和 schema。",
+      en: "Connect directly to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show the database and schema.",
     },
-    "feature.contextTransfer.title": {
-      zh: "右键下载与跨服发送",
-      en: "Download & cross-server send",
+    "feature.ai.title": { zh: "AI", en: "AI" },
+    "feature.ai.desc": {
+      zh: "内置模型，或本机已登录的 Cursor、Codex、Claude Code。用自然语言问已打开的主机、集群或库。Home 上不打开聊天。",
+      en: "Built-in models, or Cursor, Codex, and Claude Code already signed in on this machine. Ask in plain language about the host, cluster, or database that is open. Home does not show a chat.",
     },
-    "feature.contextTransfer.desc": {
-      zh: "SSH 会话中右键 ls 列出的文件或文件夹：下载到本机、发送到其他 SSH 服务器；也可沿用 Ctrl/Cmd+点击或拖拽到目标标签。",
-      en: "Right-click files or folders from ls to download or send to another SSH host; or use Ctrl/Cmd+click / drag onto a target tab.",
+    "feature.safety.title": { zh: "批准与 STOP", en: "Approval and STOP" },
+    "feature.safety.desc": {
+      zh: "只读可以自己跑。变更要你点批准。STOP 停掉这次运行，包括外部 Agent。",
+      en: "Read-only work can run on its own. Changes wait for your approval. STOP ends the run, including external agents.",
     },
-    "feature.tabShortcuts.title": {
-      zh: "页签快捷目录",
-      en: "Tab directory shortcuts",
+    "step.hosts.iconLabel": { zh: "连接主机", en: "Connect a host" },
+    "step.hosts.text": {
+      zh: "在主机侧栏连接 Linux，或打开它的桌面。",
+      en: "Connect a Linux host from the Hosts sidebar, or open its desktop.",
     },
-    "feature.tabShortcuts.desc": {
-      zh: "页签上 ~ 回到用户目录；彩色文件夹一键 cd 到常用路径。右键可编辑路径，删除需确认。",
-      en: "Use ~ on a tab to go home; colored folders cd to favorite paths. Right-click to edit; delete asks for confirmation.",
+    "step.kubernetes.iconLabel": { zh: "Kubernetes", en: "Kubernetes" },
+    "step.kubernetes.text": {
+      zh: "切到 Kubernetes，添加集群。",
+      en: "Switch to Kubernetes and add a cluster.",
     },
-    "feature.bookmarksTransfer.title": {
-      zh: "书签与传输",
-      en: "Bookmarks & transfers",
-    },
-    "feature.bookmarksTransfer.desc": {
-      zh: "保存常用 SSH 连接并显示系统图标；多任务传输面板可查看进度并单独取消。",
-      en: "Save SSH connections with OS icons; the transfer panel shows progress and per-task cancel.",
-    },
-    "feature.hostStats.title": { zh: "服务器资源", en: "Server resources" },
-    "feature.hostStats.desc": {
-      zh: "活动 SSH 页签底部状态栏实时显示 CPU、内存、负载、网络、磁盘与进程数；悬停可看完整详情。",
-      en: "While an SSH tab is active, a bottom status bar shows CPU, memory, load, network, disk, and process count live; hover for full details.",
-    },
-    "feature.find.title": { zh: "Find 文件搜索", en: "Find files" },
-    "feature.find.desc": {
-      zh: "右侧贴边工具栏打开，在当前 SSH 会话上执行 find。点击结果进入目录或预览。",
-      en: "Run find on the active SSH session from the side rail. Click results to enter or preview.",
-    },
-    "feature.taskManager.title": { zh: "任务管理器", en: "Task Manager" },
-    "feature.taskManager.desc": {
-      zh: "右侧贴边工具栏打开，查看当前 SSH 主机的进程、端口、内存与 CPU，支持搜索排序与确认后结束进程。",
-      en: "View processes, ports, memory, and CPU for the active SSH host. Search, sort, and end processes after confirm.",
-    },
-    "feature.commandNav.title": { zh: "命令导航", en: "Command guide" },
-    "feature.commandNav.desc": {
-      zh: "贴边工具栏打开系统运维命令库：按服务、日志、磁盘、网络等分类浏览；点击后填参数，一键插入当前终端（不自动执行）。",
-      en: "Browse ops commands by service, logs, disk, network, and more. Fill parameters and insert into the terminal (does not auto-run).",
-    },
-    "step.ssh.iconLabel": {
-      zh: "Remote 远程 SSH",
-      en: "Remote SSH",
-    },
-    "step.ssh.text": {
-      zh: "连接 Linux 主机；可保存为书签下次一键连。",
-      en: "Connect to a Linux host; save it as a bookmark for next time.",
-    },
-    "step.bookmark.iconLabel": { zh: "书签", en: "Bookmarks" },
-    "step.bookmark.text": {
-      zh: "常用 SSH 保存为书签；在 SSH 终端右键 ls 中的路径可下载、预览或发送到其他服务器。",
-      en: "Save frequent SSH hosts as bookmarks. Right-click ls paths to download, preview, or send elsewhere.",
+    "step.databases.iconLabel": { zh: "数据库", en: "Databases" },
+    "step.databases.text": {
+      zh: "切到数据库，新建连接。执行自己的 SQL 之后，用恢复图标回到表的默认数据。",
+      en: "Switch to Databases and add a connection. After you run your own SQL, the restore icon returns the table’s default data.",
     },
   },
   errors: {

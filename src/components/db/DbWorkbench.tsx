@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, X, Wrench } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, RotateCcw, X, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../Modal";
-import { DatabaseIcon } from "../WorkspaceToolIcons";
+import { EntityListView } from "../management/EntityListView";
 import { ColumnMark, EngineMark, GroupMark, ObjectMark, QueryMark } from "./DbIcons";
 import { EngineSelect } from "./EngineSelect";
 import {
@@ -74,6 +74,7 @@ import {
   objectKinds,
   objectPaneRows,
   objectPaneSummary,
+  objectPaneVisibleColumns,
   objectsIn,
   cellEditorValue,
   cellEditorInputType,
@@ -96,12 +97,14 @@ import {
   rowInsertSql,
   rowsToCsv,
   sampleFieldNames,
+  objectTabOrigin,
   schemaNames,
   schemasFirst,
   tableDefinitionFromColumns,
   tableGroups,
   tableSelectSql,
   tableViewSql,
+  sqlDiffersFromTableBrowse,
   truncateTableSql,
   orderDatabases,
   pageWindow,
@@ -327,29 +330,14 @@ export function DbWorkbench() {
     activeTabIdRef.current =
       useDbWorkspaceStore.getState().activeTabByWorkspace[activeWsId] ?? null;
     if (selectedId !== ws.connectionId) {
+      if (connectingId && connectingId !== ws.connectionId) return;
       setSelectedId(ws.connectionId);
       setConnectRequestId(ws.connectionId);
       setConnectAttempt((attempt) => attempt + 1);
       return;
     }
     rememberDatabase(ws.database);
-    setOpenDbs((current) =>
-      current[ws.database] ? current : { ...current, [ws.database]: true },
-    );
-    if (activeTabIdRef.current) return;
-    const engine = connections.find((item) => item.id === ws.connectionId)?.engine;
-    if (!engine) return;
-    setBrowse((current) => {
-      if (
-        current?.level === "database" &&
-        current.database === ws.database &&
-        current.schema == null
-      ) {
-        return current;
-      }
-      return browseDatabase(engine, ws.database);
-    });
-  }, [activeWsId, selectedId, connections]);
+  }, [activeWsId, selectedId, connections, connectingId]);
 
   function commitTabs(next: WorkbenchTab[], focusId: string | null, workspaceId = activeWsId) {
     if (!workspaceId) return;
@@ -427,7 +415,6 @@ export function DbWorkbench() {
 
   function clearWork() {
     requestSeq.current += 1;
-    if (selectedId) clearConnectionWorkspaces(selectedId);
     tabsRef.current = [];
     activeTabIdRef.current = null;
     setDatabases([]);
@@ -539,6 +526,8 @@ export function DbWorkbench() {
     const connectionId = selected.id;
     const revision = selected.revision;
     const home = selected.engine === "sqlite" ? "main" : selected.database;
+    const connectionName = selected.name;
+    const engine = selected.engine;
     rememberDatabase(home);
     setDatabases([]);
     setObjectCache({});
@@ -581,6 +570,12 @@ export function DbWorkbench() {
         setOpenNodes({});
         setBrowse(browseConnection());
         leaveManagedHome();
+        openWorkspace({
+          connectionId,
+          connectionName,
+          database: home || names[0] || connectionName,
+          engine,
+        });
       })
       .catch((err: unknown) => {
         if (catalogSeq.current !== seq) return;
@@ -591,6 +586,11 @@ export function DbWorkbench() {
         setConnectFailure({ id: connectionId, message: String(err) });
         setOpenIds((current) => ({ ...current, [connectionId]: false }));
         setLiveIds((current) => ({ ...current, [connectionId]: false }));
+        const active = useDbWorkspaceStore.getState().activeId;
+        if (active && active !== connectionId) {
+          setSelectedId(active);
+          setConnectRequestId(null);
+        }
       });
   }, [selected, connectRequestId, connectAttempt]);
 
@@ -609,16 +609,18 @@ export function DbWorkbench() {
   }, [queryFocused]);
 
   useEffect(() => {
-    if (!selected || !active) return;
+    // Bind AI to the connection (not each schema). Schema/database are context
+    // hints for db_query; chat scope stays db:<connectionId>.
+    if (!selected) return;
     bindDbContext({
       id: selected.id,
       name: selected.name,
       engine: selected.engine,
       revision: selected.revision,
       sshSessionId: selected.ssh_session_id || null,
-      database: activeDatabase.current || selected.database,
-      schema: activeSchema,
-      selectedSql: active.sql,
+      database: browse?.database || activeDatabase.current || selected.database,
+      schema: activeSchema || browse?.schema || null,
+      selectedSql: active?.sql ?? null,
     });
   }, [selected, activeSchema, active?.sql, browse, bindDbContext]);
 
@@ -644,6 +646,7 @@ export function DbWorkbench() {
   const paneNodes = browse?.database ? nodesFor(browse.database) : [];
   const listed = browse ? objectPaneRows(browse, databases, paneNodes) : [];
   const listSummary = browse ? objectPaneSummary(browse, databases, paneNodes) : null;
+  const listColumns = objectPaneVisibleColumns(listed);
   const groupNode =
     browse?.level === "group" && browse.group && browse.table && browse.database
       ? paneNodes.find(
@@ -1630,6 +1633,27 @@ export function DbWorkbench() {
     ? approvalStillMatches(pending.sql, submittedSql)
     : false;
   const result = active?.result ?? null;
+  const browseForSql =
+    tableView ?? (active && isObjectDataTab(active) ? tableViewFromObjectTab(active) : null);
+  const browseSql =
+    browseForSql && selected
+      ? tableViewSql(
+          selected.engine,
+          browseForSql.schema,
+          browseForSql.table,
+          columnNames(browseForSql),
+          browseForSql.sortColumn,
+          browseForSql.sortDir,
+          browseForSql.filter,
+          browseForSql.page,
+          tableSqlOptions(browseForSql),
+        )
+      : null;
+  const showRestoreTable = Boolean(
+    active &&
+      isObjectDataTab(active) &&
+      sqlDiffersFromTableBrowse(submittedSql, browseSql),
+  );
 
   const sqlText = active?.sql ?? "";
   const lineCount = Math.max(1, sqlText.split("\n").length);
@@ -1750,37 +1774,36 @@ export function DbWorkbench() {
 
   const nav = (
     <aside className="db-workbench-nav">
-      <div className="entity-list-toolbar">
-        <button
-          type="button"
-          className="entity-list-icon-btn entity-list-icon-btn--add"
-          data-testid="db-connection-new"
-          title={t("dbNewConnection")}
-          aria-label={t("dbNewConnection")}
-          onClick={openCreateForm}
-        >
-          <DatabaseIcon />
-          <span className="entity-add-badge" aria-hidden />
-        </button>
-      </div>
-      {connections.length === 0 ? (
-        <p data-testid="db-nav-empty">{t("dbNavEmpty")}</p>
-      ) : (
-        <div className="k8s-tree db-object-tree" data-testid="db-connection-list">
-          {visibleConnections.map((item) => {
-            const open = openIds[item.id] ?? false;
-            return (
-              <div key={item.id} className="k8s-tree-group">
-                <div className="db-connection-row">
+      <EntityListView
+        scope="db"
+        entityIds={connections.map((item) => item.id)}
+        visibleIds={visibleConnections.map((item) => item.id)}
+        forceExpand={filter.trim().length > 0}
+        addItemTestId="db-connection-new"
+        listTestId="db-connection-list"
+        sectionsClassName="db-object-tree"
+        onAddEntity={openCreateForm}
+        renderItem={(id) => {
+          const item = connections.find((entry) => entry.id === id);
+          if (!item) return null;
+          const open = openIds[item.id] ?? false;
+          return (
+            <div className="db-connection-block">
+                <div
+                  className={`db-connection-row saved-item saved-item-compact entity-row${
+                    item.id === selectedId ? " selected" : ""
+                  }`}
+                >
                 <button
                   type="button"
-                  className={`k8s-tree-group-label${item.id === selectedId ? " active" : ""}`}
+                  className="saved-item-main"
                   data-testid={`db-connection-${item.id}`}
                   aria-pressed={item.id === selectedId}
                   aria-busy={connectingId === item.id}
                   onClick={() => {
                     if (item.id !== selectedId) {
                       clearWork();
+                      setConnectingId(item.id);
                       setSelectedId(item.id);
                       setConnectRequestId(item.id);
                       setConnectAttempt((attempt) => attempt + 1);
@@ -1805,13 +1828,14 @@ export function DbWorkbench() {
                   <span className="k8s-tree-icon">
                     <EngineMark engine={item.engine} connected={!!liveIds[item.id]} />
                   </span>
-                  <span>{item.name}</span>
-                  <span className="db-engine-label">{item.engine}</span>
-                  {connectFailure?.id === item.id ? (
-                    <span className="db-connect-hint" data-testid="db-connect-hint" title={connectFailure.message}>
-                      {t("dbConnectFailed")}
-                    </span>
-                  ) : null}
+                  <span className="saved-item-text saved-item-text-compact">
+                    <strong>{item.name}</strong>
+                    {connectFailure?.id === item.id ? (
+                      <span className="db-connect-hint" data-testid="db-connect-hint" title={connectFailure.message}>
+                        {t("dbConnectFailed")}
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
                 <div className="saved-item-actions">
                   <button
@@ -1964,9 +1988,8 @@ export function DbWorkbench() {
                 ) : null}
               </div>
             );
-          })}
-        </div>
-      )}
+        }}
+      />
       <input
         className="db-object-search"
         data-testid="db-object-search"
@@ -2057,6 +2080,11 @@ export function DbWorkbench() {
                 className={`tab${tab.id === activeTabId ? " active" : ""}`}
                 data-testid={tab.kind === "query" ? "db-query-tab" : "db-object-tab"}
                 data-tab-kind={tab.kind}
+                title={
+                  tab.kind !== "query" && tab.database
+                    ? `${objectTabOrigin(tab.database, tab.schema ?? "")} · ${tab.title}`
+                    : tab.title
+                }
                 aria-pressed={tab.id === activeTabId}
                 onClick={() => {
                   focusInnerTab(tab);
@@ -2065,7 +2093,22 @@ export function DbWorkbench() {
                 <span className="db-inner-tab-icon" aria-hidden="true">
                   {tab.kind === "query" ? <QueryMark /> : <ObjectMark kind={tab.kind} />}
                 </span>
-                <span className="tab-title">{tab.title}</span>
+                <span className="db-inner-tab-text">
+                  <span className="tab-title">{tab.title}</span>
+                  {tab.kind !== "query" && tab.database ? (
+                    <span className="db-inner-tab-origin" data-testid="db-object-tab-origin">
+                      <span data-testid="db-object-tab-database">{tab.database}</span>
+                      {tab.schema ? (
+                        <>
+                          <span className="db-inner-tab-origin-sep" aria-hidden="true">
+                            /
+                          </span>
+                          <span data-testid="db-object-tab-schema">{tab.schema}</span>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </span>
                 <button
                   type="button"
                   className="tab-close"
@@ -2134,7 +2177,7 @@ export function DbWorkbench() {
               <div className="db-object-list-toolbar">
                 <button
                   type="button"
-                  className="db-action-btn"
+                  className="db-object-new-query"
                   data-testid="db-new-query"
                   title={t("dbNewQuery")}
                   aria-label={t("dbNewQuery")}
@@ -2145,21 +2188,29 @@ export function DbWorkbench() {
                 </button>
               </div>
             ) : null}
-            <table className="k8s-table">
+            <table className="db-object-table">
               <thead>
                 <tr>
                   <th>{t("dbName")}</th>
-                  <th>{t("dbSchema")}</th>
-                  <th>{t("dbKind")}</th>
+                  {listColumns.schema ? <th>{t("dbSchema")}</th> : null}
+                  {listColumns.kind ? <th>{t("dbKind")}</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {groupListing && listingGroup ? (
                   groupListing.map((row) => (
                     <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td>{groupNode?.schema}</td>
-                      <td>{row.type || t(GROUP_LABEL[listingGroup])}</td>
+                      <td>
+                        <span className="db-object-name">
+                          <span className="db-object-name-icon" aria-hidden>
+                            <GroupMark group={listingGroup} />
+                          </span>
+                          <span className="db-object-name-text">{row.name}</span>
+                          {row.type ? (
+                            <span className="db-object-kind-inline">{row.type}</span>
+                          ) : null}
+                        </span>
+                      </td>
                     </tr>
                   ))
                 ) : (
@@ -2201,9 +2252,20 @@ export function DbWorkbench() {
                         }
                       }}
                     >
-                      <td>{row.name}</td>
-                      <td>{row.schema}</td>
-                      <td>{typeLabel(row.typeKey)}</td>
+                      <td>
+                        <span className="db-object-name">
+                          <span className="db-object-name-icon" aria-hidden>
+                            <ObjectMark kind={row.typeKey} />
+                          </span>
+                          <span className="db-object-name-text">{row.name}</span>
+                        </span>
+                      </td>
+                      {listColumns.schema ? <td className="db-object-schema">{row.schema}</td> : null}
+                      {listColumns.kind ? (
+                        <td>
+                          <span className="db-object-kind">{typeLabel(row.typeKey)}</span>
+                        </td>
+                      ) : null}
                     </tr>
                   ))
                 )}
@@ -2486,6 +2548,20 @@ export function DbWorkbench() {
                   }}
                 >
                   <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              ) : null}
+              {showRestoreTable ? (
+                <button
+                  type="button"
+                  className="db-restore-table"
+                  data-testid="db-restore-table"
+                  aria-label={t("dbRestoreTable")}
+                  title={t("dbRestoreTable")}
+                  onClick={() => {
+                    if (active) focusInnerTab(active);
+                  }}
+                >
+                  <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               ) : null}
             </div>
@@ -2858,11 +2934,6 @@ export function DbWorkbench() {
             onChange={(event) => {
               const next = event.target.value;
               replaceActive({ sql: next });
-              if (tableViewRef.current) {
-                tableViewRef.current = null;
-                setTableView(null);
-                setDataTarget(null);
-              }
               if (pending && !approvalStillMatches(pending.sql, next)) setPending(null);
             }}
           />

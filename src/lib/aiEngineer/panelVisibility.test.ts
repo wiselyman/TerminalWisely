@@ -51,6 +51,18 @@ describe("shouldShowAiEngineerPanel", () => {
     ).toBe(false);
   });
 
+  it("hides the panel while Home is the active tab", () => {
+    expect(
+      shouldShowAiEngineerPanel({
+        open: true,
+        sessionId: "db:postgres",
+        sidebarView: "db",
+        hasSelectedCluster: false,
+        homeOpen: true,
+      }),
+    ).toBe(false);
+  });
+
   it("hides when closed or missing session", () => {
     expect(
       shouldShowAiEngineerPanel({

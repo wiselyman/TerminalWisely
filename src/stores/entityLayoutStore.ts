@@ -82,7 +82,7 @@ export function selectHostGroups(state: { layouts: EntityLayoutState["layouts"] 
 }
 
 export const useEntityLayoutStore = create<EntityLayoutState>((set, get) => ({
-  layouts: { hosts: null, k8s: null },
+  layouts: { hosts: null, k8s: null, db: null },
 
   ensureScope(scope, entityIds) {
     if (entityIds.length === 0) {

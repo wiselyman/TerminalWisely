@@ -3,6 +3,7 @@ import { enqueueHostExec } from "./hostExecQueue";
 import { isTauriRuntime } from "../isTauri";
 import { sidecarFetch, type SidecarInfo, type TraceSpanRow } from "./api";
 import { postToolResultWithRetry } from "./postToolResult";
+import { hostToolResultStdout, isHostExecutedTool } from "./hostTools";
 import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
 import type { K8sClusterTarget } from "../k8s/types";
 import { parseResumeMissBody, ResumeMissError } from "./resumeMiss";
@@ -466,13 +467,17 @@ async function handleProtocolEvent(opts: {
       awaiting_host: Boolean(p.awaiting_host),
     });
     if (p.denied || handled.has(callId)) return "continue";
-    const isHostTool =
-      name === "terminal_exec" ||
-      name === "ai_exec" ||
-      name.startsWith("k8s_");
-    if (isHostTool) {
+    if (isHostExecutedTool(name)) {
       if (!p.awaiting_host) return "continue";
       handled.add(callId);
+      const policy =
+        p.policy && typeof p.policy === "object"
+          ? {
+              approved: Boolean(
+                (p.policy as { approved?: boolean }).approved,
+              ),
+            }
+          : undefined;
       const command =
         name.startsWith("k8s_")
           ? String(
@@ -484,7 +489,9 @@ async function handleProtocolEvent(opts: {
                 (args.name as string) ||
                 name,
             )
-          : String(args.command ?? "").trim();
+          : name.startsWith("db_")
+            ? String(args.sql ?? args.query ?? args.intent ?? name)
+            : String(args.command ?? "").trim();
       const intent =
         typeof args.intent === "string" && args.intent.trim()
           ? args.intent.trim()
@@ -495,17 +502,23 @@ async function handleProtocolEvent(opts: {
       // Do NOT await host exec on the stream chain — otherwise a hung sudo/
       // systemctl blocks approvals and later messages while the card stays "running".
       void (async () => {
-        const result = await enqueueHostExec(sessionId, () => executeToolCall(
-          sessionId,
-          {
-            call_id: callId,
-            name,
-            arguments: args,
-            requires_lease: Boolean(p.requires_lease),
-            lease: (p.lease as ToolCallEvent["lease"]) || null,
-          },
-          { onOutput: onToolExec?.onOutput },
-        ));
+        let result: Record<string, unknown>;
+        try {
+          result = await enqueueHostExec(sessionId, () => executeToolCall(
+            sessionId,
+            {
+              call_id: callId,
+              name,
+              arguments: args,
+              requires_lease: Boolean(p.requires_lease),
+              policy,
+              lease: (p.lease as ToolCallEvent["lease"]) || null,
+            },
+            { onOutput: onToolExec?.onOutput },
+          ));
+        } catch (err) {
+          result = { ok: false, error: String(err), _untrusted: true };
+        }
         if (settledHostCalls.has(callId)) return;
         settledHostCalls.add(callId);
         onToolExec?.onDone?.({
@@ -513,7 +526,7 @@ async function handleProtocolEvent(opts: {
           ok: result.ok !== false,
           exitCode: typeof result.exit_code === "number" ? result.exit_code : null,
           error: typeof result.error === "string" ? result.error : undefined,
-          stdout: typeof result.stdout === "string" ? result.stdout : undefined,
+          stdout: hostToolResultStdout(result) || undefined,
           stderr: typeof result.stderr === "string" ? result.stderr : undefined,
         });
         try {
@@ -522,7 +535,7 @@ async function handleProtocolEvent(opts: {
             run_id: activeRunId,
             call_id: callId,
             ok: result.ok !== false,
-            stdout: String(result.stdout ?? ""),
+            stdout: hostToolResultStdout(result),
             stderr: String(result.stderr ?? ""),
             exit_code:
               typeof result.exit_code === "number" ? result.exit_code : null,

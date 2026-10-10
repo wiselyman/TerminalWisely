@@ -21,15 +21,15 @@ describe("dbWorkspaceStore", () => {
       database: "saad2",
       engine: "postgres",
     });
-    expect(id).toBe("c1::saad2");
+    expect(id).toBe("c1");
     expect(useDbWorkspaceStore.getState().workspaces).toEqual([
       {
-        id: "c1::saad2",
+        id: "c1",
         connectionId: "c1",
         connectionName: "Saad2",
         database: "saad2",
         engine: "postgres",
-        title: "saad2",
+        title: "Saad2",
       },
     ]);
     expect(useDbWorkspaceStore.getState().activeId).toBe(id);
@@ -63,13 +63,28 @@ describe("dbWorkspaceStore", () => {
       database: "app",
       engine: "postgres",
     });
-    expect(useDbWorkspaceStore.getState().activeId).toBe(other);
-    expect(useDbWorkspaceStore.getState().tabsByWorkspace[other] ?? []).toEqual([]);
+    expect(other).toBe(id);
+    expect(useDbWorkspaceStore.getState().workspaces).toHaveLength(1);
+    expect(useDbWorkspaceStore.getState().workspaces[0].database).toBe("app");
+    expect(useDbWorkspaceStore.getState().workspaces[0].title).toBe("Saad2");
+    expect(useDbWorkspaceStore.getState().tabsByWorkspace[id]).toHaveLength(2);
+
+    const mysql = openWorkspace({
+      connectionId: "c2",
+      connectionName: "Shop",
+      database: "shop",
+      engine: "mysql",
+    });
+    expect(mysql).toBe("c2");
+    expect(useDbWorkspaceStore.getState().workspaces.map((w) => w.title)).toEqual([
+      "Saad2",
+      "Shop",
+    ]);
 
     closeWorkspace(id);
-    expect(useDbWorkspaceStore.getState().workspaces.map((w) => w.id)).toEqual([other]);
+    expect(useDbWorkspaceStore.getState().workspaces.map((w) => w.id)).toEqual([mysql]);
     expect(useDbWorkspaceStore.getState().tabsByWorkspace[id]).toBeUndefined();
-    expect(useDbWorkspaceStore.getState().activeId).toBe(other);
+    expect(useDbWorkspaceStore.getState().activeId).toBe(mysql);
   });
 
   it("disambiguates titles when two connections share a database name", () => {
@@ -87,10 +102,28 @@ describe("dbWorkspaceStore", () => {
       engine: "mysql",
     });
     const titles = useDbWorkspaceStore.getState().workspaces.map((w) => w.title);
-    expect(titles).toEqual(["app · Prod", "app · Staging"]);
+    expect(titles).toEqual(["Prod", "Staging"]);
     expect(useDbWorkspaceStore.getState().workspaces.map((w) => w.engine)).toEqual([
       "postgres",
       "mysql",
+    ]);
+    openWorkspace({
+      connectionId: "p",
+      connectionName: "Saad2",
+      database: "a",
+      engine: "postgres",
+    });
+    openWorkspace({
+      connectionId: "m",
+      connectionName: "Saad2",
+      database: "b",
+      engine: "mysql",
+    });
+    expect(useDbWorkspaceStore.getState().workspaces.map((w) => w.title)).toEqual([
+      "Prod",
+      "Staging",
+      "Saad2 · postgres",
+      "Saad2 · mysql",
     ]);
   });
 });

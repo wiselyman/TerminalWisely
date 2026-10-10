@@ -853,13 +853,7 @@ export function ConnectionPanel({
       <div className="sidebar-shell">
         <aside className="sidebar">
           {sidebarView === "hosts" ? (
-            <EntityCatalog
-              emptyText={
-                savedConnections.length === 0
-                  ? t("shell:emptyBookmarks")
-                  : null
-              }
-            >
+            <EntityCatalog>
               <EntityListView
                 scope="hosts"
                 entityIds={hostEntityIds}
@@ -877,11 +871,6 @@ export function ConnectionPanel({
               className="k8s-cluster-list"
               loadingText={
                 k8sLoading && clusters.length === 0 ? t("k8s:loading") : null
-              }
-              emptyText={
-                !k8sLoading && clusters.length === 0
-                  ? t("k8s:emptyClusters")
-                  : null
               }
             >
               {k8sEntityIds.length > 0 || !k8sLoading ? (

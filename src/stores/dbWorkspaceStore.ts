@@ -25,18 +25,18 @@ function titleFor(
   workspaces: DbWorkspace[],
   connectionId: string,
   connectionName: string,
-  database: string,
+  engine: string,
 ): string {
   const clash = workspaces.some(
-    (item) => item.database === database && item.connectionId !== connectionId,
+    (item) => item.connectionName === connectionName && item.connectionId !== connectionId,
   );
-  return clash ? `${database} · ${connectionName}` : database;
+  return clash ? `${connectionName} · ${engine}` : connectionName;
 }
 
 function retitleAll(workspaces: DbWorkspace[]): DbWorkspace[] {
   return workspaces.map((item) => ({
     ...item,
-    title: titleFor(workspaces, item.connectionId, item.connectionName, item.database),
+    title: titleFor(workspaces, item.connectionId, item.connectionName, item.engine),
   }));
 }
 
@@ -63,20 +63,17 @@ export const useDbWorkspaceStore = create<DbWorkspaceState>((set, get) => ({
   activeTabByWorkspace: {},
 
   openWorkspace: ({ connectionId, connectionName, database, engine }) => {
-    const id = workspaceId(connectionId, database);
+    const id = workspaceId(connectionId);
     const existing = get().workspaces.find((item) => item.id === id);
     if (existing) {
-      // Refresh engine if the connection was re-saved under a different engine id.
-      if (existing.engine !== engine) {
-        set({
-          activeId: id,
-          workspaces: get().workspaces.map((item) =>
-            item.id === id ? { ...item, engine } : item,
-          ),
-        });
-      } else {
-        set({ activeId: id });
-      }
+      const workspaces = retitleAll(
+        get().workspaces.map((item) =>
+          item.id === id
+            ? { ...item, connectionName, database, engine }
+            : item,
+        ),
+      );
+      set({ activeId: id, workspaces });
       return id;
     }
     const next: DbWorkspace = {
@@ -85,7 +82,7 @@ export const useDbWorkspaceStore = create<DbWorkspaceState>((set, get) => ({
       connectionName,
       database,
       engine,
-      title: database,
+      title: connectionName,
     };
     const workspaces = retitleAll([...get().workspaces, next]);
     set({

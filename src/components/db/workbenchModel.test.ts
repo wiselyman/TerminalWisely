@@ -18,6 +18,7 @@ import {
   freshQueryTab,
   freshObjectTab,
   findObjectTab,
+  objectTabOrigin,
   objectTabTitle,
   nextSqlTabTitle,
   browseConnection,
@@ -29,6 +30,7 @@ import {
   objectPaneCrumbs,
   objectPaneRows,
   objectPaneSummary,
+  objectPaneVisibleColumns,
   cellEditorKind,
   cellEditorValue,
   cellEditorInputType,
@@ -62,6 +64,7 @@ import {
   tableDefinitionFromColumns,
   tableGroups,
   tableViewSql,
+  sqlDiffersFromTableBrowse,
   filterRulesToWhere,
   sortRulesToOrder,
   truncateTableSql,
@@ -156,6 +159,10 @@ describe("database workbench model", () => {
       "saad2",
       "app",
     ]);
+    expect(objectPaneVisibleColumns(objectPaneRows(conn, ["saad2", "app"], withMatview))).toEqual({
+      schema: false,
+      kind: false,
+    });
     const dbBrowse = browseDatabase("postgres", "saad2");
     expect(dbBrowse.level).toBe("database");
     expect(objectPaneCrumbs("postgres", dbBrowse)).toEqual(["postgres", "saad2"]);
@@ -163,6 +170,10 @@ describe("database workbench model", () => {
       "schema:analytics",
       "schema:public",
     ]);
+    expect(objectPaneVisibleColumns(objectPaneRows(dbBrowse, ["saad2"], withMatview))).toEqual({
+      schema: false,
+      kind: false,
+    });
     expect(objectPaneSummary(dbBrowse, ["saad2"], withMatview)).toEqual({ count: 2, typeKey: "schema" });
     const schemaBrowse = browseSchema("postgres", "saad2", "public");
     expect(schemaBrowse.kind).toBe("table");
@@ -170,7 +181,27 @@ describe("database workbench model", () => {
     expect(
       objectPaneRows(schemaBrowse, ["saad2"], withMatview).map((row) => `${row.typeKey}:${row.name}`),
     ).toEqual(["table:orders"]);
+    // Single kind under one schema — name column only.
+    expect(objectPaneVisibleColumns(objectPaneRows(schemaBrowse, ["saad2"], withMatview))).toEqual({
+      schema: false,
+      kind: false,
+    });
     expect(objectPaneSummary(schemaBrowse, ["saad2"], withMatview)).toEqual({ count: 1, typeKey: "table" });
+    const mixedRows = [
+      {
+        name: "orders",
+        schema: "public",
+        typeKey: "table" as const,
+        action: "open-object" as const,
+      },
+      {
+        name: "audit",
+        schema: "analytics",
+        typeKey: "view" as const,
+        action: "open-object" as const,
+      },
+    ];
+    expect(objectPaneVisibleColumns(mixedRows)).toEqual({ schema: true, kind: true });
     expect(cellEditorKind("time(6)")).toBe("time");
     // Postgres information_schema / pg_catalog often spell it this way
     expect(cellEditorKind("time without time zone")).toBe("time");
@@ -275,8 +306,10 @@ describe("database workbench model", () => {
     expect(nextSqlTabTitle([{ title: "SQL 1" }, { title: "notes" }])).toBe(
       "SQL 2",
     );
-    expect(workspaceId("c1", "saad2")).toBe("c1::saad2");
+    expect(workspaceId("c1")).toBe("c1");
     expect(objectTabTitle("public", "firmware")).toBe("firmware");
+    expect(objectTabOrigin("saad2", "public")).toBe("saad2 / public");
+    expect(objectTabOrigin("saad2", "")).toBe("saad2");
     const objectTab = freshObjectTab("o1", "saad2", {
       kind: "table",
       schema: "public",
@@ -313,6 +346,11 @@ describe("database workbench model", () => {
       "SELECT * FROM `shop`.`orders` LIMIT 100 OFFSET 0",
     );
     expect(tableViewSql("postgres", "public", "orders", ["id"], "id", "asc", "100%", 1)).toContain("LIKE '%100\\%%'");
+    const browse = tableViewSql("postgres", "public", "orders", ["id"], null, "asc", "", 1);
+    expect(sqlDiffersFromTableBrowse(browse ?? "", browse)).toBe(false);
+    expect(sqlDiffersFromTableBrowse(`  ${browse}  `, browse)).toBe(false);
+    expect(sqlDiffersFromTableBrowse(`SELECT * FROM "public"."orders" where id =1`, browse)).toBe(true);
+    expect(sqlDiffersFromTableBrowse("SELECT 1", null)).toBe(false);
     expect(rowInsertSql("postgres", "public", "orders", ["id", "name"], [1, null])).toBe(
       `INSERT INTO "public"."orders" ("id", "name") VALUES (1, NULL)`,
     );

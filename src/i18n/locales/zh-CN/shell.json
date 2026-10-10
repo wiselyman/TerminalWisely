@@ -109,6 +109,7 @@
   "dbApplyFilterSort": "应用筛选 & 排序",
   "dbApplyFilter": "应用筛选",
   "dbFilterToggle": "筛选",
+  "dbRestoreTable": "默认视图",
   "dbInsertCancel": "取消新增",
   "dbGridPage": "第 {{page}} 页",
   "dbObjectCount_database": "{{count}} 个数据库",

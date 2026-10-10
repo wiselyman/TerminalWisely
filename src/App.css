@@ -29,11 +29,11 @@
   --scrollbar-thumb: var(--tw-border);
   --scrollbar-thumb-hover: var(--tw-border-strong);
   --tw-mono-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --tw-font-dense: 12px;
+  --tw-font-dense: 13px;
   --tw-font-ui: 13px;
   --tw-font-title: 15px;
-  --tw-lh-dense: 1.25;
-  --tw-lh-ui: 1.35;
+  --tw-lh-dense: 1.35;
+  --tw-lh-ui: 1.4;
   --tw-space-1: 4px;
   --tw-space-2: 8px;
   --tw-space-3: 12px;
@@ -1566,13 +1566,14 @@ body.find-panel-resizing .ai-engineer-panel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.81rem;
+  font-size: var(--tw-font-ui);
   font-weight: 600;
+  line-height: var(--tw-lh-ui);
 }
 
 .saved-item-text > span {
   color: var(--tw-fg-muted);
-  font-size: 0.72rem;
+  font-size: var(--tw-font-dense);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1650,7 +1651,7 @@ body.find-panel-resizing .ai-engineer-panel {
 
 .saved-item-compact .saved-item-text-compact strong {
   flex-shrink: 0;
-  font-size: 0.8rem;
+  font-size: var(--tw-font-ui);
 }
 
 .saved-item-compact .saved-item-sep {
@@ -1665,7 +1666,7 @@ body.find-panel-resizing .ai-engineer-panel {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--tw-fg-muted);
-  font-size: 0.72rem;
+  font-size: var(--tw-font-dense);
   font-weight: 400;
 }
 
@@ -14679,21 +14680,51 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   font-size: var(--tw-font-dense);
   line-height: var(--tw-lh-dense);
 }
-.db-connection-row {
+.db-workbench-nav > .entity-list-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.entity-list-item-wrap:has(.db-connection-block) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+.db-connection-block {
+  display: contents;
+}
+.db-connection-block > .k8s-tree-children {
+  grid-column: 1 / -1;
+}
+.db-connection-row.saved-item {
   position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
   width: 100%;
+  margin: 0 0 var(--tw-space-1);
+  font-size: var(--tw-font-ui);
+  line-height: var(--tw-lh-ui);
 }
-.db-connection-row > .k8s-tree-group-label {
+.db-connection-row.saved-item.selected {
+  border-color: var(--tw-accent-emphasis);
+  outline: none;
+}
+.db-connection-row > .saved-item-main:focus,
+.db-connection-row > .saved-item-main:focus-visible {
+  outline: none;
+}
+.db-connection-row > .saved-item-main {
   flex: 1 1 auto;
   min-width: 0;
   width: 100%;
   max-width: 100%;
+  gap: var(--tw-space-2);
+  padding: 7px 10px;
+  font-size: var(--tw-font-ui);
 }
-.db-connection-row:hover > .k8s-tree-group-label,
-.db-connection-row:focus-within > .k8s-tree-group-label {
+.db-connection-row:hover > .saved-item-main,
+.db-connection-row:focus-within > .saved-item-main {
   padding-right: 56px;
 }
 .db-connection-row:hover .saved-item-actions,
@@ -14708,6 +14739,14 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   border: 1px solid var(--tw-border);
   border-radius: 5px;
   background: var(--tw-surface);
+}
+.db-connection-row .saved-item-text-compact strong {
+  font-size: var(--tw-font-ui);
+  font-weight: 600;
+}
+.db-object-tree > .k8s-tree-group {
+  gap: var(--tw-space-1);
+  margin-bottom: var(--tw-space-1);
 }
 .db-object-list {
   flex: 1;
@@ -14800,6 +14839,23 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   min-width: 0;
   height: 24px;
   font-size: 12px;
+}
+.db-restore-table {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tw-fg-muted);
+  cursor: pointer;
+}
+.db-restore-table:hover {
+  border-color: var(--tw-border);
+  color: var(--tw-fg);
 }
 .db-grid-toolbar-bottom {
   display: flex;
@@ -15102,8 +15158,32 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   border-radius: 6px 6px 0 0;
   background: var(--tw-bg);
   color: var(--tw-fg-muted);
-  font-size: 12px;
+  font-size: var(--tw-font-dense);
+  gap: 6px;
+  align-items: center;
+}
+.db-query-tabs .tab .db-inner-tab-text {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.db-query-tabs .tab .db-inner-tab-origin {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--tw-surface-2);
+  color: var(--tw-fg);
+  font-size: var(--tw-font-dense);
+  line-height: 1;
+  white-space: nowrap;
+}
+.db-query-tabs .tab .db-inner-tab-origin-sep {
+  color: var(--tw-fg-muted);
 }
 .db-query-tabs .tab .db-inner-tab-icon {
   display: inline-flex;
@@ -15114,7 +15194,9 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   height: 14px;
 }
 .db-query-tabs .tab .tab-title {
-  font-size: 12px;
+  font-size: var(--tw-font-ui);
+  font-weight: 600;
+  line-height: 1;
 }
 .db-query-tabs .tab.active {
   background: var(--tw-canvas);
@@ -15189,11 +15271,10 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   cursor: row-resize;
   background: var(--tw-surface-2);
 }
-.db-engine-label,
 .db-column-type {
-  margin-left: 8px;
+  margin-left: var(--tw-space-2);
   color: var(--tw-fg-faint);
-  font-size: 11px;
+  font-size: var(--tw-font-dense);
 }
 .db-connect-spinner {
   width: 12px;
@@ -15248,16 +15329,124 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   display: flex;
   align-items: center;
   gap: var(--tw-space-2);
-  padding: 6px var(--tw-space-2);
+  padding: var(--tw-space-2) var(--tw-space-3);
   border-bottom: 1px solid var(--tw-border);
+  background: var(--tw-surface);
   font-size: var(--tw-font-ui);
   line-height: var(--tw-lh-ui);
 }
-.db-object-list-toolbar .db-action-btn {
+.db-object-new-query {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--tw-border);
+  border-radius: 7px;
+  background: var(--tw-canvas);
+  color: var(--tw-fg);
   font-size: var(--tw-font-ui);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--tw-fg) 6%, transparent);
+}
+.db-object-new-query:hover {
+  border-color: var(--tw-border-strong);
+  background: var(--tw-hover);
+  color: var(--tw-fg);
+}
+.db-object-new-query:active {
+  background: var(--tw-hover-strong);
+}
+.db-object-new-query svg {
+  color: var(--tw-accent);
+}
+.db-object-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--tw-font-ui);
+  line-height: var(--tw-lh-ui);
+  color: var(--tw-fg);
+  background: var(--tw-bg);
+}
+.db-object-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tw-fg-muted);
+  background: var(--tw-surface);
+  border-bottom: 1px solid var(--tw-border);
+}
+.db-object-table tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tw-border) 55%, transparent);
+  vertical-align: middle;
+  font-size: var(--tw-font-ui);
+  color: var(--tw-fg-default);
+}
+.db-object-table tbody tr {
+  cursor: pointer;
+  background: var(--tw-bg);
+}
+.db-object-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--tw-surface-2) 35%, var(--tw-bg));
+}
+.db-object-table tbody tr:hover td {
+  background: var(--tw-accent-muted);
+}
+.db-object-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.db-object-name-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--tw-accent);
+}
+.db-object-name-icon .db-kind-icon {
+  width: 15px;
+  height: 15px;
+}
+.db-object-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-feature-settings: "tnum" 0;
+  color: var(--tw-fg);
+}
+.db-object-schema,
+.db-object-kind,
+.db-object-kind-inline {
+  color: var(--tw-fg-muted);
+  font-size: var(--tw-font-dense);
+  font-weight: 500;
+}
+.db-object-kind-inline {
+  margin-left: 4px;
+}
+.db-object-kind-inline::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--tw-fg-faint);
+}
+.db-object-list {
+  background: var(--tw-bg);
+}
+.db-object-summary {
+  background: var(--tw-surface);
 }
 .db-data-grid th,
 .db-data-grid td {

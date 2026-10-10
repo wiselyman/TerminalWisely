@@ -1,15 +1,15 @@
-# TerminalWisely v0.0.4
+# TerminalWisely v0.0.5
 
 ## English
 
-A connected Linux host is now a desktop. Click the host icon and the workspace beside the sidebar becomes that machine.
+Hosts, clusters, and databases in one window. The sidebar is three surfaces. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page and does not show a chat.
 
 ### Highlights
 
-- **Host desktop** — wallpaper, icons, and a dock. Sidebar, title bar, and status bar stay. Click the host icon again to return to the terminal
-- **Five apps** — Files, Processes, Browser, Terminal, and AI Linux. Terminal and AI Linux are the session you already have, laid out inside a window
-- **Browser uses the host network** — pages, including `127.0.0.1`, go through the existing SSH session
-- **Windows** — drag, resize, and stack. Leave the desktop and come back: the open windows and their positions are still there
+- **Databases** — direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat
+- **Table tabs** show the database and schema on one line. After you run your own SQL, a restore icon returns the table’s default data. Editing the statement does not change the grid until you run
+- **Groups** — database connections start under Ungrouped. Host groups are not copied onto the database list
+- **AI** follows the open host, cluster, or database service. Read-only work can run; changes wait for approval. STOP ends the run
 
 Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where available).
 
@@ -25,14 +25,14 @@ xattr -cr /Applications/TerminalWisely.app
 
 ## 中文
 
-已连接的 Linux 主机现在可以是一台桌面。点主机图标，侧栏右边的工作区就变成这台机器。
+主机、集群和数据库，在同一个窗口。侧栏分成三块。标题栏的 AI 跟到打开的那一块，每个对象有自己的聊天。Home 是欢迎页，不显示聊天。
 
 ### 要点
 
-- **主机桌面** — 壁纸、图标、Dock。侧栏、标题栏、状态栏留在原地。再点主机图标回到终端
-- **五个应用** — 文件、进程、浏览器、终端、AI Linux。终端和 AI Linux 就是你已经连上的那条会话，放进窗口里
-- **浏览器走主机网络** — 网页（含 `127.0.0.1`）经现有 SSH 会话出去
-- **窗口** — 可拖动、缩放、叠放。离开桌面再回来，打开的窗口和位置还在
+- **数据库** — 直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天
+- **表页签** 同一行标出库和 schema。执行自己的 SQL 之后，恢复图标回到这张表的默认数据。只改语句、不点执行，表格不动
+- **分组** — 数据库连接先放在未分组。主机的分组不会抄到数据库列表
+- **AI** 跟到已打开的主机、集群或数据库服务。只读可以自己跑；变更要批准。STOP 停掉这次运行
 
 安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
 

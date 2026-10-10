@@ -1,4 +1,4 @@
-/** Sidebar entity list layout: per-view groups + order (Hosts, K8s). */
+/** Sidebar entity list layout: per-view groups + order (Hosts, K8s, databases). */
 
 export const UNGROUPED_SECTION = "__ungrouped__";
 export const LAYOUT_VERSION = 4 as const;
@@ -6,6 +6,7 @@ export const LAYOUT_VERSION = 4 as const;
 export const ENTITY_LAYOUT_KEYS = {
   hosts: "tw.entityLayout.hosts",
   k8s: "tw.entityLayout.k8s",
+  db: "tw.entityLayout.db",
 } as const;
 
 /** v2 shared sidebar blob — migrated into per-scope v3 keys on load. */
@@ -224,12 +225,78 @@ export function layoutHasGroupedMembership(layout: EntityListLayout): boolean {
   return false;
 }
 
+function groupIdsInStoredJson(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as { groups?: { id?: string }[] };
+    if (!Array.isArray(parsed.groups)) return [];
+    return parsed.groups.flatMap((group) =>
+      typeof group?.id === "string" && group.id ? [group.id] : [],
+    );
+  } catch {
+    return [];
+  }
+}
+
+function hostGroupIds(): Set<string> {
+  return new Set([
+    ...groupIdsInStoredJson(localStorage.getItem(ENTITY_LAYOUT_KEYS.hosts)),
+    ...groupIdsInStoredJson(localStorage.getItem(SIDEBAR_LAYOUT_KEY)),
+  ]);
+}
+
+/** Drop groups whose ids belong to the hosts layout. Members return to 未分组. */
+export function stripGroupsCopiedFromHosts(
+  layout: EntityListLayout,
+  foreignGroupIds: ReadonlySet<string>,
+): EntityListLayout {
+  const drop = new Set(
+    layout.groups
+      .filter((group) => foreignGroupIds.has(group.id))
+      .map((group) => group.id),
+  );
+  if (drop.size === 0) return layout;
+  const groups = layout.groups.filter((group) => !drop.has(group.id));
+  const assignments: Record<string, string | null> = {};
+  for (const [id, groupId] of Object.entries(layout.assignments)) {
+    assignments[id] = groupId && drop.has(groupId) ? null : groupId ?? null;
+  }
+  const order: Record<string, string[]> = {};
+  const rescued: string[] = [];
+  for (const [key, ids] of Object.entries(layout.order)) {
+    if (drop.has(key)) {
+      rescued.push(...ids);
+      continue;
+    }
+    order[key] = [...ids];
+  }
+  const parked = new Set(Object.values(order).flat());
+  order[UNGROUPED_SECTION] = [
+    ...(order[UNGROUPED_SECTION] ?? []),
+    ...rescued.filter((id) => !parked.has(id)),
+  ];
+  return {
+    ...layout,
+    groups,
+    assignments,
+    order,
+    groupOrder: normalizeGroupOrder({
+      ...layout,
+      groups,
+      groupOrder: layout.groupOrder.filter((id) => !drop.has(id)),
+    }),
+    defaultGroupCollapsed: false,
+  };
+}
+
 function readSidebarV2Layout(scope: EntityLayoutScope): EntityListLayout | null {
   try {
     const sidebarRaw = localStorage.getItem(SIDEBAR_LAYOUT_KEY);
     if (!sidebarRaw) return null;
     const parsed = JSON.parse(sidebarRaw) as Record<string, unknown>;
     if (parsed.version !== 2 || !parsed.scopes || !parsed.groups) return null;
+    const scopes = parsed.scopes as Record<string, unknown>;
+    if (!Object.prototype.hasOwnProperty.call(scopes, scope)) return null;
     return migrateV2SidebarScope(parsed, scope);
   } catch {
     return null;
@@ -307,12 +374,16 @@ export function loadEntityListLayout(
       : null;
     const stored = readStoredEntityLayout(scope, entityIds);
     if (stored) {
-      const finalized = finalizeLayoutForEntities(stored, entityIds);
+      const repaired =
+        scope === "db"
+          ? stripGroupsCopiedFromHosts(stored, hostGroupIds())
+          : stored;
+      const finalized = finalizeLayoutForEntities(repaired, entityIds);
       const recoveredFromSidebar =
         Boolean(scopePrimary) &&
         layoutLooksStripped(scopePrimary!, entityIds.length ? entityIds : Object.keys(scopePrimary!.assignments)) &&
         layoutHasGroupedMembership(finalized);
-      if (!hadScopeKey || recoveredFromSidebar) {
+      if (!hadScopeKey || recoveredFromSidebar || repaired !== stored) {
         saveEntityListLayout(scope, finalized);
       }
       return finalized;

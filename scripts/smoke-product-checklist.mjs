@@ -1635,6 +1635,17 @@ function exists(rel) {
   }
 }
 
+// --- Sidecar runtime must ship sqlglot (DB SQL risk) ---
+{
+  const req = read("agent-sidecar/requirements-runtime.txt");
+  const sidecar = read("src-tauri/src/ai_engineer/sidecar.rs");
+  if (req.includes("sqlglot") && sidecar.includes("sqlglot")) {
+    pass("sidecar.runtime-sqlglot", "requirements-runtime + Python probe include sqlglot");
+  } else {
+    fail("sidecar.runtime-sqlglot", "sqlglot missing from runtime deps or sidecar probe");
+  }
+}
+
 // --- Navicat basic-layer matrix (0.0.5) ---
 {
   const matrix = read("docs/superpowers/specs/2026-09-30-engine-matrix.md");

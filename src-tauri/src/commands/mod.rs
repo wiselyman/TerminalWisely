@@ -495,7 +495,7 @@ pub fn save_entity_layout(
     layout: serde_json::Value,
     allow_empty: bool,
 ) -> Result<(), String> {
-    if scope != "hosts" && scope != "k8s" {
+    if !crate::durable::is_entity_layout_scope(&scope) {
         return Err("unknown layout scope".into());
     }
     let roots = crate::durable::app_roots(&app);

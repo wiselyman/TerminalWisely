@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { K8sClusterIcon } from "../k8s/K8sClusterIcon";
-import { TerminalIcon } from "../WorkspaceToolIcons";
+import { DatabaseIcon, TerminalIcon } from "../WorkspaceToolIcons";
 import { isDefaultGroupId, type EntityLayoutScope } from "../../lib/entityListLayout";
 import {
   startEntityPointerReorder,
@@ -27,6 +27,12 @@ type Props = {
   onAddEntity?: () => void;
   onOrderChange?: (orderedIds: string[]) => void;
   className?: string;
+  addItemTestId?: string;
+  listTestId?: string;
+  sectionsClassName?: string;
+  /** When set, only these ids are drawn. Layout sync still uses `entityIds`. */
+  visibleIds?: string[];
+  forceExpand?: boolean;
 };
 
 export function EntityListView({
@@ -36,6 +42,11 @@ export function EntityListView({
   onAddEntity,
   onOrderChange,
   className,
+  addItemTestId,
+  listTestId,
+  sectionsClassName,
+  visibleIds,
+  forceExpand = false,
 }: Props) {
   const { t } = useTranslation(["shell", "k8s"]);
   const listRef = useRef<HTMLDivElement>(null);
@@ -50,7 +61,11 @@ export function EntityListView({
 
   const defaultGroupName = t("shell:entityUngrouped");
   const addEntityLabel =
-    scope === "k8s" ? t("k8s:addClusterTitle") : t("shell:newSsh");
+    scope === "k8s"
+      ? t("k8s:addClusterTitle")
+      : scope === "db"
+        ? t("shell:dbNewConnection")
+        : t("shell:newSsh");
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
 
@@ -144,13 +159,15 @@ export function EntityListView({
           <button
             type="button"
             className="entity-list-icon-btn entity-list-icon-btn--add"
-            data-testid={`entity-add-item-${scope}`}
+            data-testid={addItemTestId ?? `entity-add-item-${scope}`}
             onClick={onAddEntity}
             title={addEntityLabel}
             aria-label={addEntityLabel}
           >
             {scope === "k8s" ? (
               <K8sClusterIcon size={16} />
+            ) : scope === "db" ? (
+              <DatabaseIcon />
             ) : (
               <TerminalIcon />
             )}
@@ -168,10 +185,18 @@ export function EntityListView({
           <FolderPlus size={16} aria-hidden />
         </button>
       </div>
-      <div className="entity-list-sections" ref={listRef}>
+      <div
+        className={`entity-list-sections${sectionsClassName ? ` ${sectionsClassName}` : ""}`}
+        ref={listRef}
+        data-testid={listTestId}
+      >
         {sections.map((section) => {
           const group = section.group;
           const isDefault = section.defaultGroup || isDefaultGroupId(group.id);
+          const collapsed = forceExpand ? false : Boolean(group.collapsed);
+          const shownIds = visibleIds
+            ? section.itemIds.filter((id) => visibleIds.includes(id))
+            : section.itemIds;
           return (
             <div key={section.key} className="entity-list-section" data-entity-section-id={group.id}>
               <div
@@ -182,12 +207,12 @@ export function EntityListView({
                 <button
                   type="button"
                   className="entity-group-collapse"
-                  aria-expanded={!group.collapsed}
+                  aria-expanded={!collapsed}
                   onClick={() =>
                     toggleGroupCollapsed(scope, entityIds, group.id)
                   }
                 >
-                  {group.collapsed ? (
+                  {collapsed ? (
                     <ChevronRight size={14} aria-hidden />
                   ) : (
                     <ChevronDown size={14} aria-hidden />
@@ -246,9 +271,9 @@ export function EntityListView({
                   </button>
                 ) : null}
               </div>
-              {!group.collapsed ? (
+              {!collapsed ? (
                 <div className="entity-list-items">
-                  {section.itemIds.map((id) => (
+                  {shownIds.map((id) => (
                     <div
                       key={id}
                       className="entity-list-item-wrap"

@@ -685,6 +685,12 @@ export function tableViewSql(
   return `${base}${where}${order} LIMIT ${GRID_PAGE_SIZE} OFFSET ${offset}`;
 }
 
+/** True when the editor statement is not this table's current browse statement. */
+export function sqlDiffersFromTableBrowse(current: string, browseSql: string | null): boolean {
+  if (!browseSql) return false;
+  return current.trim() !== browseSql.trim();
+}
+
 export function rowInsertSql(
   engine: string,
   schema: string,
@@ -1132,6 +1138,20 @@ export function objectPaneSummary(
   return null;
 }
 
+/**
+ * Hide Schema when blank or identical across rows; hide Kind when every row
+ * shares one type (connection → databases, schema → tables).
+ */
+export function objectPaneVisibleColumns(rows: ObjectPaneListRow[]): {
+  schema: boolean;
+  kind: boolean;
+} {
+  if (rows.length === 0) return { schema: false, kind: false };
+  const schemas = new Set(rows.map((row) => row.schema.trim()).filter(Boolean));
+  const kinds = new Set(rows.map((row) => row.typeKey));
+  return { schema: schemas.size > 1, kind: kinds.size > 1 };
+}
+
 export type CellEditorKind = "text" | "time" | "date" | "datetime" | "boolean" | "number";
 
 /** Map SQL type name to a typed editor control (Navicat-aligned). */
@@ -1255,12 +1275,20 @@ export function connectionMatchesFilter(name: string, engine: string, filter: st
   return name.toLowerCase().includes(needle) || engine.toLowerCase().includes(needle);
 }
 
-export function workspaceId(connectionId: string, database: string): string {
-  return `${connectionId}::${database}`;
+/** One chrome tab per database service. The catalog database is not part of the id. */
+export function workspaceId(connectionId: string): string {
+  return connectionId;
 }
 
 export function objectTabTitle(_schema: string, name: string): string {
   return name;
+}
+
+/** Hover path for a table tab: database, then schema when the engine has one. */
+export function objectTabOrigin(database: string, schema: string): string {
+  const db = database.trim();
+  const sc = schema.trim();
+  return sc ? `${db} / ${sc}` : db;
 }
 
 export function freshQueryTab(id: string, title: string): WorkbenchTab {

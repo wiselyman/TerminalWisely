@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.5] - 2026-10-10
+
+Hosts, Kubernetes, and databases are three sidebars. AI follows the open object.
+
+- Database workbench: one service, one tab, one chat. Table tabs show database and schema
+- A restore icon appears after you run SQL that is not the table’s default browse. Editing the statement does not change the grid
+- Database connections start under Ungrouped. Host groups are not copied there
+- Home is the welcome page and does not show a chat
+
+主机、Kubernetes、数据库是三个侧栏。AI 跟到打开的对象。
+
+- 数据库工作台：一个服务一个页签、一份聊天。表页签标出库和 schema
+- 执行的不是表的默认浏览时，出现恢复图标。只改语句、不点执行，表格不动
+- 数据库连接先放在未分组。主机的分组不会抄过来
+- Home 是欢迎页，不显示聊天
+
 ## [0.0.4] - 2026-09-30
 
 A connected Linux host becomes a desktop.

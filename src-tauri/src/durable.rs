@@ -24,6 +24,12 @@ pub const CATALOGS: &[&str] = &[
     "db-queries.json",
 ];
 
+pub const ENTITY_LAYOUT_SCOPES: &[&str] = &["hosts", "k8s", "db"];
+
+pub fn is_entity_layout_scope(scope: &str) -> bool {
+    ENTITY_LAYOUT_SCOPES.contains(&scope)
+}
+
 static PRIMARY_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,9 +143,9 @@ pub fn record_count(value: &Value) -> usize {
     {
         count += items.len();
     }
-    for scope in ["hosts", "k8s"] {
+    for scope in ENTITY_LAYOUT_SCOPES {
         if let Some(items) = obj
-            .get(scope)
+            .get(*scope)
             .and_then(|item| item.get("groups"))
             .and_then(|item| item.as_array())
         {
@@ -425,6 +431,12 @@ mod tests {
             primary: root.join("primary"),
             mirror: root.join("mirror"),
         }
+    }
+
+    #[test]
+    fn db_is_an_entity_layout_scope() {
+        assert!(is_entity_layout_scope("db"));
+        assert!(!is_entity_layout_scope("mysql"));
     }
 
     #[test]

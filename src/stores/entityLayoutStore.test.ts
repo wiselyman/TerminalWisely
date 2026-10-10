@@ -3,7 +3,7 @@ import { selectHostGroups } from "./entityLayoutStore";
 
 describe("selectHostGroups", () => {
   it("returns the same empty list when the hosts layout is not loaded", () => {
-    const state = { layouts: { hosts: null, k8s: null } };
+    const state = { layouts: { hosts: null, k8s: null, db: null } };
     expect(selectHostGroups(state)).toBe(selectHostGroups(state));
   });
 });

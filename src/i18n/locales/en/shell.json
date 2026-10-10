@@ -109,6 +109,7 @@
   "dbApplyFilterSort": "Apply Filter & Sort",
   "dbApplyFilter": "Apply Filter",
   "dbFilterToggle": "Filter",
+  "dbRestoreTable": "Default view",
   "dbInsertCancel": "Cancel insert",
   "dbGridPage": "Page {{page}}",
   "dbObjectCount_database": "{{count}} databases",

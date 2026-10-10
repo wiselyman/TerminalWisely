@@ -8,8 +8,11 @@ export function shouldShowAiEngineerPanel(opts: {
   hasSelectedCluster: boolean;
   /** Hosts tab: must match the AI-bound session or the panel stays hidden. */
   activeTabId?: string | null;
+  /** Welcome page. Chat belongs to a service tab, not Home. */
+  homeOpen?: boolean;
 }): boolean {
   if (!opts.open || !opts.sessionId) return false;
+  if (opts.homeOpen) return false;
   if (opts.sidebarView === "k8s" && !opts.hasSelectedCluster) return false;
   if (
     opts.sidebarView === "hosts" &&

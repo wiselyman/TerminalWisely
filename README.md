@@ -6,9 +6,9 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.0.4](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.4)**
+**Current version: [v0.0.5](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.5)**
 
-**Turn a connected Linux host into a desktop.** Click the host icon and the workspace beside the sidebar becomes that machine’s desktop: Files, Processes, a Browser that uses the host’s network, Terminal, and AI Linux. TerminalWisely stays the ops cockpit — multi-tab SSH, Kubernetes, and the coding agents you already use (Cursor, Codex, Claude Code) on the live session, with approvals and STOP.
+**Hosts, clusters, and databases in one window.** The sidebar is three surfaces: Hosts, Kubernetes, and Databases. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page. Changes wait for approval, and STOP is always there.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
@@ -23,13 +23,14 @@
 
 | Area | Highlights |
 |------|------------|
-| **Agent runtimes** | Cursor Agent, Codex, Claude Code on live SSH / K8s via TW MCP; dual-plane UX (local CLI stream + remote exec cards) |
+| **Databases** | Direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show database and schema. Connections can be grouped |
+| **Agent runtimes** | Cursor Agent, Codex, Claude Code on the open host, cluster, or database; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
 | **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
 | **Kubernetes** | Sidebar Hosts ↔ K8s; add cluster via + (file or paste kubeconfig) or SSH kubectl; resource tree, YAML, logs, Pod shell. One-click install of kubectl/Helm into the app data dir (or use PATH / SSH). Practical Lens-inspired subset — not a full Lens IDE |
 | **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; Markdown Typora-like WYSIWYG; download, compress, cross-server send |
-| **AI Engineer** | Linux mode on SSH hosts; K8S mode on selected clusters; long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
+| **AI Engineer** | Follows the open sidebar: Linux on a host, K8S on a cluster, SQL on a database service. Home does not show a chat. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
 | **Insight** | Host CPU, memory, disk I/O, and network on the status bar |
@@ -67,6 +68,7 @@ Mode follows the sidebar:
 
 - **Hosts** → **AI Linux Engineer** on the connected SSH session (`terminal_exec`)
 - **K8s** → **AI K8S Engineer** on the selected cluster (`k8s_list` / `k8s_get` / `k8s_logs` / …)
+- **Databases** → SQL on that service (`db_search_objects` / `db_query` / `db_explain`). Home shows no chat
 
 - **Same session / cluster** — no hidden second SSH login; kubectl jumps use the bound session.
 - **Evidence first** — the agent reads output before concluding.
@@ -83,6 +85,7 @@ Mode follows the sidebar:
 | “Scale api to 3” | `k8s_scale` after approval |
 | “nginx 502” | Status, logs, upstream checks |
 | “How much GPU memory?” | Read-only checks such as `nvidia-smi` |
+| “Which tables mention orders?” | Search objects on the open database, then query |
 
 ---
 
@@ -153,7 +156,7 @@ Click the host icon. Sidebar, title bar, and status bar stay. Everything to the 
 
 ## Kubernetes workbench
 
-Sidebar **Hosts ↔ K8s**: overview, workloads, network, storage, and security resources — plus AI on the selected cluster.
+Switch the sidebar to **Kubernetes**: overview, workloads, network, storage, and security resources — plus AI on the selected cluster.
 
 <p align="center">
   <img src="./docs/images/v002-11-k8s-ops.png" alt="Figure 14 — Kubernetes ops" width="920" />
@@ -162,13 +165,30 @@ Sidebar **Hosts ↔ K8s**: overview, workloads, network, storage, and security r
 
 ---
 
+## Databases
+
+Switch the sidebar to **Databases** and add a connection. The workbench opens a service tab as soon as the connection lists its databases. A second connection keeps the first service, its inner tabs, and its chat.
+
+<p align="center">
+  <img src="./docs/images/v005-01-database.jpg" alt="Figure 15 — Database workbench" width="920" />
+</p>
+<p align="center"><em>Figure 15 — Database workbench: the PostgreSQL service, the orders table labeled <code>twreview / public</code>, and that service’s own AI chat.</em></p>
+
+- **One service, one chat** — PostgreSQL and MySQL do not share a conversation.
+- **Table tabs** show the database and schema on one line, for example `shop / public`.
+- **Groups** — connections start under 未分组 / Ungrouped. Add your own groups; host groups are not copied here.
+- **SQL** — run a statement on the table tab. A restore icon appears after you run something other than the default browse, and puts the table’s data back. Typing in the editor does not change the grid until you run.
+- **AI** follows this service. Read-only SQL can run; changes wait for approval.
+
+---
+
 ## Quick start
 
-1. Add an SSH host in the sidebar and connect — or switch the activity bar to **K8s** and click **+** to add a cluster (kubeconfig file or paste).  
-2. Optional: click the host icon to open that machine’s desktop — Files, Processes, Browser, Terminal, and AI Linux.  
-3. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed).  
-4. For Built-in: Settings → add a model profile (Base URL + model id; Ollama often needs no key).  
-5. Use the terminal or K8s workbench as usual; ask the AI when you want help.  
+1. **Hosts** — add an SSH host and connect, or click the host icon to open that machine’s desktop.
+2. **Kubernetes** — switch the sidebar and click **+** to add a cluster (kubeconfig file or paste).
+3. **Databases** — switch the sidebar and add a connection.
+4. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed). Home does not show the chat.
+5. For Built-in: Settings → add a model profile (Base URL + model id; Ollama often needs no key).
 6. Approve or reject any command the agent marks as a system change.
 
 Kubernetes notes: local cluster ops prefer kubectl/Helm installed into the app data directory (one-click from the UI), with PATH as fallback; SSH jump hosts still use the remote PATH. The K8s UI is a practical Lens-inspired subset — not a full Lens IDE.

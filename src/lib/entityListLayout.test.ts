@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ENTITY_LAYOUT_KEYS,
   UNGROUPED_SECTION,
   addEntityGroup,
   buildEntityListSections,
@@ -19,6 +20,12 @@ import {
 } from "./entityListLayout";
 
 describe("entityListLayout", () => {
+  it("stores database groups separately from hosts and kubernetes", () => {
+    expect(ENTITY_LAYOUT_KEYS.db).toBe("tw.entityLayout.db");
+    expect(ENTITY_LAYOUT_KEYS.db).not.toBe(ENTITY_LAYOUT_KEYS.hosts);
+    expect(ENTITY_LAYOUT_KEYS.db).not.toBe(ENTITY_LAYOUT_KEYS.k8s);
+  });
+
   const ids = ["a", "b", "c"];
   const defaultName = "Ungrouped";
 
@@ -254,5 +261,81 @@ describe("entityListLayout", () => {
       localStorage.getItem("tw.entityLayout.hosts") || "{}",
     );
     expect(rewritten.assignments.a).toBe(groupId);
+  });
+
+  it("does not copy host groups onto a new database layout", () => {
+    localStorage.removeItem("tw.entityLayout.db");
+    localStorage.setItem(
+      "tw.entityLayout.sidebar",
+      JSON.stringify({
+        version: 2,
+        groups: [
+          { id: "grp-home", name: "家", collapsed: true },
+          { id: "grp-co", name: "公司", collapsed: false },
+        ],
+        groupOrder: ["grp-home", "grp-co", UNGROUPED_SECTION],
+        scopes: {
+          hosts: {
+            assignments: { h1: "grp-home" },
+            order: { "grp-home": ["h1"], [UNGROUPED_SECTION]: [] },
+          },
+          k8s: { assignments: {}, order: { [UNGROUPED_SECTION]: [] } },
+        },
+      }),
+    );
+    const loaded = loadEntityListLayout("db", ["conn-1", "conn-2"]);
+    expect(loaded.groups).toEqual([]);
+    expect(loaded.order[UNGROUPED_SECTION]).toEqual(["conn-1", "conn-2"]);
+    expect(loaded.defaultGroupCollapsed).toBe(false);
+  });
+
+  it("repairs a database layout that already copied host group ids", () => {
+    localStorage.setItem(
+      "tw.entityLayout.hosts",
+      JSON.stringify({
+        version: 4,
+        groupOrder: ["grp-home", "grp-co", "grp-remote", UNGROUPED_SECTION],
+        groups: [
+          { id: "grp-home", name: "家", collapsed: true },
+          { id: "grp-co", name: "公司", collapsed: false },
+          { id: "grp-remote", name: "远程", collapsed: true },
+        ],
+        defaultGroupCollapsed: true,
+        assignments: { h1: "grp-home" },
+        order: {
+          "grp-home": ["h1"],
+          "grp-co": [],
+          "grp-remote": [],
+          [UNGROUPED_SECTION]: [],
+        },
+      }),
+    );
+    localStorage.setItem(
+      "tw.entityLayout.db",
+      JSON.stringify({
+        version: 4,
+        groupOrder: ["grp-home", "grp-co", "grp-remote", "grp-db", UNGROUPED_SECTION],
+        groups: [
+          { id: "grp-home", name: "家", collapsed: true },
+          { id: "grp-co", name: "公司", collapsed: false },
+          { id: "grp-remote", name: "远程", collapsed: true },
+          { id: "grp-db", name: "生产", collapsed: true },
+        ],
+        defaultGroupCollapsed: true,
+        assignments: { "conn-1": null, "conn-2": "grp-db" },
+        order: {
+          "grp-home": [],
+          "grp-co": [],
+          "grp-remote": [],
+          "grp-db": ["conn-2"],
+          [UNGROUPED_SECTION]: ["conn-1"],
+        },
+      }),
+    );
+    const loaded = loadEntityListLayout("db", ["conn-1", "conn-2"]);
+    expect(loaded.groups.map((group) => group.name)).toEqual(["生产"]);
+    expect(loaded.order["grp-db"]).toEqual(["conn-2"]);
+    expect(loaded.order[UNGROUPED_SECTION]).toEqual(["conn-1"]);
+    expect(loaded.defaultGroupCollapsed).toBe(false);
   });
 });

@@ -34,4 +34,27 @@ describe("DateTimeCellPicker", () => {
     // Orphan "+" tab strip only when real tabs exist
     expect(workbench).toMatch(/tabs\.length\s*>\s*0/);
   });
+
+  it("lists connections as host-style cards without a redundant engine label", () => {
+    expect(workbench).toContain("db-connection-row saved-item saved-item-compact");
+    expect(workbench).toContain('className="saved-item-main"');
+    expect(workbench).not.toContain("db-engine-label");
+  });
+
+  it("styles the object pane with its own table and New Query control", () => {
+    expect(workbench).toContain('className="db-object-table"');
+    expect(workbench).toContain("db-object-new-query");
+    expect(workbench).toContain("objectPaneVisibleColumns");
+    expect(workbench).not.toMatch(/db-object-list[\s\S]{0,200}className="k8s-table"/);
+  });
+
+  it("binds AI to the selected connection even without an open query tab", () => {
+    // Chat scope is per connection; schema/database are context fields only.
+    const idx = workbench.indexOf("bindDbContext({");
+    expect(idx).toBeGreaterThan(0);
+    const slice = workbench.slice(Math.max(0, idx - 220), idx + 420);
+    expect(slice).toContain("if (!selected) return");
+    expect(slice).not.toMatch(/!selected\s*\|\|\s*!active/);
+    expect(slice).toContain("browse?.database");
+  });
 });

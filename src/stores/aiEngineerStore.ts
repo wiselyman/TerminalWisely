@@ -31,6 +31,7 @@ import {
 } from "../lib/aiEngineer/harnessNotices";
 import { markRunningToolsStopped } from "../lib/aiEngineer/toolRunLifecycle";
 import { formatToolResultForDisplay } from "../lib/aiEngineer/formatToolResultDisplay";
+import { isHostExecutedTool } from "../lib/aiEngineer/hostTools";
 import {
   chatHasRunningTool,
   shouldAbortThinkingIdle,
@@ -813,6 +814,35 @@ export function panelFiberChatScopeKey(
   const clusterId = clusterIdFromK8sSyntheticSessionId(sessionId);
   if (clusterId) return aiChatScopeKey(sessionId, null, clusterId);
   return aiChatScopeKey(sessionId, serverId);
+}
+
+/**
+ * Which bind to run before a chat send. Must not force linux when already in
+ * database mode — that swapped db_query for terminal_exec and used db:* as SSH.
+ */
+export function bindKindForOutgoingSend(state: {
+  engineerMode: EngineerMode;
+  dbConnectionId: string | null;
+  clusterId: string | null;
+}, opts: {
+  sessionId: string;
+  serverId?: string | null;
+  clusterId?: string | null;
+}):
+  | { kind: "k8s"; clusterId: string }
+  | { kind: "db" }
+  | { kind: "linux"; sessionId: string; serverId?: string | null } {
+  const clusterId =
+    opts.clusterId ?? (state.engineerMode === "k8s" ? state.clusterId : null);
+  if (clusterId) return { kind: "k8s", clusterId };
+  if (state.engineerMode === "db" && state.dbConnectionId) {
+    return { kind: "db" };
+  }
+  return {
+    kind: "linux",
+    sessionId: opts.sessionId,
+    serverId: opts.serverId,
+  };
 }
 
 let chatAbort: AbortController | null = null;
@@ -1938,26 +1968,42 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   },
 
   sendMessage: async ({ sessionId, serverId, clusterId, interruptIfBusy }) => {
-    const mode = get().engineerMode;
+    const bindKind = bindKindForOutgoingSend(get(), {
+      sessionId,
+      serverId,
+      clusterId,
+    });
     const effectiveClusterId =
-      clusterId ?? (mode === "k8s" ? get().clusterId : null);
-    if (effectiveClusterId) {
+      bindKind.kind === "k8s" ? bindKind.clusterId : null;
+    if (bindKind.kind === "k8s") {
       // Refresh cluster_target from workbench without a static import cycle.
       const { useK8sStore } = await import("./k8sStore");
       const ks = useK8sStore.getState();
       const target =
-        ks.clusters.find((c) => c.id === effectiveClusterId) ??
-        (ks.selectedCluster?.id === effectiveClusterId
+        ks.clusters.find((c) => c.id === bindKind.clusterId) ??
+        (ks.selectedCluster?.id === bindKind.clusterId
           ? ks.selectedCluster
           : null) ??
         get().clusterTarget;
       get().bindK8sContext(
-        effectiveClusterId,
-        target?.display_name ?? get().clusterName ?? effectiveClusterId,
+        bindKind.clusterId,
+        target?.display_name ?? get().clusterName ?? bindKind.clusterId,
         target,
       );
+    } else if (bindKind.kind === "db") {
+      const s = get();
+      get().bindDbContext({
+        id: s.dbConnectionId!,
+        name: s.dbConnectionName || "",
+        engine: s.dbEngine || "postgres",
+        revision: s.dbRevision,
+        sshSessionId: s.dbSshSessionId,
+        database: s.dbDatabase,
+        schema: s.dbSchema,
+        selectedSql: s.dbSelectedSql,
+      });
     } else {
-      get().bindContext(sessionId, serverId);
+      get().bindContext(bindKind.sessionId, bindKind.serverId ?? undefined);
     }
     const text = get().input.trim();
     const pendingAtts = [...get().pendingAttachments];
@@ -1997,13 +2043,25 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
     let runThreadId = get().activeThreadId;
     if (!runThreadId || get().chatScope !== runScope) {
-      if (effectiveClusterId) {
+      if (bindKind.kind === "k8s") {
         get().bindK8sContext(
-          effectiveClusterId,
-          get().clusterName ?? effectiveClusterId,
+          bindKind.clusterId,
+          get().clusterName ?? bindKind.clusterId,
         );
+      } else if (bindKind.kind === "db") {
+        const s = get();
+        get().bindDbContext({
+          id: s.dbConnectionId!,
+          name: s.dbConnectionName || "",
+          engine: s.dbEngine || "postgres",
+          revision: s.dbRevision,
+          sshSessionId: s.dbSshSessionId,
+          database: s.dbDatabase,
+          schema: s.dbSchema,
+          selectedSql: s.dbSelectedSql,
+        });
       } else {
-        get().bindContext(sessionId, serverId);
+        get().bindContext(bindKind.sessionId, bindKind.serverId ?? undefined);
       }
       runThreadId = get().activeThreadId;
     }
@@ -2804,10 +2862,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
               typeof event.arguments.intent === "string" && event.arguments.intent.trim()
                 ? event.arguments.intent.trim()
                 : undefined;
-            const isExec =
-              event.name === "terminal_exec" ||
-              event.name === "ai_exec" ||
-              event.name.startsWith("k8s_");
+            const isExec = isHostExecutedTool(event.name);
             const isWebTool =
               event.name === "web_search" || event.name === "web_fetch";
             const msgs = readRunMessages();

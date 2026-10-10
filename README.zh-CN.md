@@ -6,9 +6,9 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.4](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.4)**
+**当前版本：[v0.0.5](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.5)**
 
-**把已连接的 Linux 主机变成桌面。** 点主机图标，侧栏右边的工作区就是这台机器的桌面：文件、进程、走主机网络的浏览器、终端、AI Linux。TerminalWisely 仍是运维驾驶舱：多标签 SSH、Kubernetes，以及你已经在用的编码 Agent（Cursor、Codex、Claude Code）跑在现有会话上，批准和 STOP 仍在这里。
+**主机、集群和数据库，在同一个窗口。** 侧栏分成主机、Kubernetes、数据库。打开哪一块，标题栏的 AI 就跟到哪一块，聊天按对象隔开。Home 是欢迎页。变更要批准，随时可以 STOP。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
@@ -23,13 +23,14 @@
 
 | 模块 | 能力 |
 |------|------|
-| **Agent 运行时** | Cursor Agent / Codex / Claude Code 经 TW MCP 操作已连接 SSH / K8s；双平面 UX（本机 CLI 流 + 远端执行卡片） |
+| **数据库** | 直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天。表页签标出库和 schema。连接可以分组 |
+| **Agent 运行时** | Cursor Agent / Codex / Claude Code 跟到已打开的主机、集群或数据库；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
 | **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **Kubernetes** | 侧栏 Hosts ↔ K8s；+ 添加集群（文件或粘贴 kubeconfig）或 SSH kubectl；资源树、YAML、日志、Pod Shell。可一键把最新 kubectl/Helm 装到应用数据目录（也可用 PATH / SSH）。受 Lens 启发的实用子集，非完整 Lens IDE |
 | **文件** | 拖拽上传、`ls` 点击进目录或预览；Markdown 类 Typora 所见即所得；下载、压缩、跨服务器发送 |
-| **AI 工程师** | Hosts 为 Linux 模式；K8s 为 K8S 模式；长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
+| **AI 工程师** | 跟随打开的侧栏：主机上是 Linux，集群上是 K8S，数据库服务上是 SQL。Home 不显示聊天。长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
 | **可观测** | 状态栏显示 CPU、内存、磁盘读写、网络 |
@@ -67,6 +68,7 @@
 
 - **Hosts** → **AI Linux Engineer**（已连接 SSH，`terminal_exec`）
 - **K8s** → **AI K8S Engineer**（当前集群，`k8s_*` 工具）
+- **数据库** → 当前服务上的 SQL（`db_search_objects` / `db_query` / `db_explain`）。Home 不打开聊天
 
 - **同一会话 / 集群** — 不另开静默登录；SSH kubectl 走已绑定会话。  
 - **先看证据** — 在真机/集群上读输出再下结论。  
@@ -83,6 +85,7 @@
 | 「把 api 扩到 3 副本」 | 批准后 `k8s_scale` |
 | 「nginx 502」 | 状态、日志、上游检查 |
 | 「现在显存多少」 | `nvidia-smi` 等只读命令 |
+| 「哪些表和订单有关」 | 在已打开的库里搜对象，再查询 |
 
 ---
 
@@ -153,7 +156,7 @@
 
 ## Kubernetes 工作台
 
-侧栏 **Hosts ↔ K8s**：总览、工作负载、网络、存储与安全资源，并在所选集群上使用 AI。
+侧栏切到 **Kubernetes**：总览、工作负载、网络、存储与安全资源，并在所选集群上使用 AI。
 
 <p align="center">
   <img src="./docs/images/v002-11-k8s-ops.png" alt="图 14 — Kubernetes 运维" width="920" />
@@ -162,13 +165,30 @@
 
 ---
 
+## 数据库
+
+侧栏切到 **数据库**，新建连接。列出库成功后就会打开这个服务的页签。再连另一个库时，前一个服务、里面的页签和聊天都还在。
+
+<p align="center">
+  <img src="./docs/images/v005-01-database.jpg" alt="图 15 — 数据库工作台" width="920" />
+</p>
+<p align="center"><em>图 15 — 数据库工作台：PostgreSQL 服务、标出 <code>twreview / public</code> 的 orders 表，以及这份服务自己的 AI 聊天。</em></p>
+
+- **一个服务一份聊天** — PostgreSQL 和 MySQL 不共用一段对话。
+- **表页签** 同一行标出库和 schema，例如 `shop / public`。
+- **分组** — 连接先放在未分组。可以自己加分组；主机的分组不会抄过来。
+- **SQL** — 在表页签里执行语句。执行的不是默认浏览时，会出现恢复图标，点一下回到这张表的默认数据。只改编辑器、不点执行，表格不动。
+- **AI** 跟到这个服务。只读 SQL 可以自己跑；变更要批准。
+
+---
+
 ## 快速开始
 
-1. 侧栏添加 SSH 主机并连接——或切到 **K8s** 点 **+** 添加集群（kubeconfig 文件或粘贴）。  
-2. 可选：点主机图标，打开这台机器的桌面——文件、进程、浏览器、终端、AI Linux。  
-3. 可选：打开 **AI 工程师** → 选择运行时（内置模型，或已安装的 Cursor / Codex / Claude Code）。  
-4. 内置模式：设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。  
-5. 照常使用终端或 K8s 工作台；需要排障时用自然语言提问。  
+1. **主机** — 添加 SSH 并连接，或点主机图标打开这台机器的桌面。
+2. **Kubernetes** — 切到这一侧，点 **+** 添加集群（kubeconfig 文件或粘贴）。
+3. **数据库** — 切到这一侧，新建连接。
+4. 可选：打开 **AI 工程师** → 选择运行时（内置模型，或已安装的 Cursor / Codex / Claude Code）。Home 不显示聊天。
+5. 内置模式：设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。
 6. 对标记为「系统变更」的命令选择批准或拒绝。
 
 Kubernetes 说明：本机操作优先用应用目录中一键安装的 kubectl/Helm（也可回退 PATH）；SSH 跳板机仍用远端 PATH。K8s 界面是受 Lens 启发的实用子集，不是完整 Lens IDE。
