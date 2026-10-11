@@ -26,7 +26,20 @@ test.describe("Settings and locale", () => {
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
     await page.getByTestId("locale-option-zh-CN").click();
-    await expect(page.getByTestId("workspace-welcome")).toBeVisible();
+    await expect(page.getByTestId("home-local-chat")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  });
+
+  test("MCP catalog install sends instructions to Home chat", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openSettings();
+    await expect(page.getByTestId("settings-mcp-section")).toBeVisible();
+    await expect(page.getByTestId("settings-mcp-catalog")).toBeVisible();
+    await expect(page.getByTestId("settings-mcp-playwright")).toBeVisible();
+    await page.getByTestId("settings-mcp-install-playwright").click();
+    await expect(page.getByTestId("home-local-chat")).toBeVisible();
+    await expect(page.getByTestId("home-local-chat")).toContainText(
+      /Playwright MCP|user_mcp\.json/,
+    );
   });
 });
