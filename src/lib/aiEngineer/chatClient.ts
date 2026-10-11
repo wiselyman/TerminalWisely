@@ -5,6 +5,7 @@ import { sidecarFetch, type SidecarInfo, type TraceSpanRow } from "./api";
 import { postToolResultWithRetry } from "./postToolResult";
 import { hostToolResultStdout, isHostExecutedTool } from "./hostTools";
 import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
+import { LOCAL_CHAT_SESSION } from "./localTarget";
 import type { K8sClusterTarget } from "../k8s/types";
 import { parseResumeMissBody, ResumeMissError } from "./resumeMiss";
 
@@ -513,6 +514,7 @@ async function handleProtocolEvent(opts: {
               requires_lease: Boolean(p.requires_lease),
               policy,
               lease: (p.lease as ToolCallEvent["lease"]) || null,
+              target: typeof p.target === "string" ? p.target : null,
             },
             { onOutput: onToolExec?.onOutput },
           ));
@@ -800,6 +802,7 @@ export async function runAgentChat(opts: {
   profileId?: string | null;
   /** Shared id for parallel read-only voices on one SSH session. */
   compareGroup?: string | null;
+  target?: "local" | "ssh" | null;
   attachments?: Array<Record<string, unknown>>;
   onEvent: (event: AgentUiEvent) => void;
   onAskUser: AskUserHandler;
@@ -836,6 +839,7 @@ export async function runAgentChat(opts: {
     runtime,
     profileId,
     compareGroup,
+    target,
     attachments,
     onEvent,
     onAskUser,
@@ -847,6 +851,7 @@ export async function runAgentChat(opts: {
   const metadata: Record<string, unknown> = {
     engineer_mode: engineerMode ?? "linux",
   };
+  if (target === "local" || sessionId === LOCAL_CHAT_SESSION) metadata.target = "local";
   if (clusterId) metadata.cluster_id = clusterId;
   if (clusterName) metadata.cluster_name = clusterName;
   if (clusterTarget) metadata.cluster_target = clusterTarget;

@@ -487,7 +487,31 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       security_mode: u.security_mode ?? cur?.security_mode ?? "safe",
     };
   },
+  get_ai_user_mcp: () => ({
+    path: "/tmp/e2e-user_mcp.json",
+    text: '{\n  "mcpServers": {}\n}\n',
+    servers: [],
+  }),
+  save_ai_user_mcp: (args) => {
+    const text = String((args as { text?: string }).text ?? "");
+    return {
+      path: "/tmp/e2e-user_mcp.json",
+      text,
+      servers: [],
+    };
+  },
   ai_list_models: () => ({ models: ["qwen-test"], error: null }),
+  ai_local_exec: (args) => {
+    const request = (args as { request?: Record<string, unknown> }).request ?? {};
+    return {
+      command: String(request.command ?? "echo e2e"),
+      stdout: "e2e local\n",
+      stderr: "",
+      exit_code: 0,
+      timed_out: false,
+      session_id: "local",
+    };
+  },
   ai_terminal_exec: (args) => {
     lastAiTerminalExec = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
     return {

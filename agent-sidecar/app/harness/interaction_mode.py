@@ -24,8 +24,13 @@ def tools_for_interaction_mode(
     *,
     engineer_mode: str | None = None,
     ssh_session_id: str | None = None,
+    target: str | None = None,
 ) -> list[dict[str, Any]]:
     del mode
+    if (target or "").strip().lower() == "local":
+        from app.tools.schema import local_openai_tools
+
+        return local_openai_tools()
     return openai_tools(engineer_mode=engineer_mode, ssh_session_id=ssh_session_id)
 
 

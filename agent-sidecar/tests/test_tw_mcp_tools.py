@@ -44,6 +44,72 @@ class FakeResearch(ResearchProvider):
         ]
 
 
+def test_local_target_lists_only_home_mcp_tools() -> None:
+    names = tw_mcp_tool_names(target="local")
+    assert names == ["terminal_exec", "web_search", "web_fetch", "ask_user"]
+    assert "k8s_list" not in names
+    assert "db_query" not in names
+
+
+def test_local_openai_tools_match_mcp_names() -> None:
+    from app.harness.interaction_mode import tools_for_interaction_mode
+
+    tools = tools_for_interaction_mode("agent", target="local")
+    names = [(item.get("function") or {}).get("name") for item in tools]
+    assert names == ["terminal_exec", "web_search", "web_fetch", "ask_user"]
+
+
+def test_local_prompt_targets_this_computer() -> None:
+    from app.agent.prompts import build_system_prompt
+
+    text = build_system_prompt(target="local", machine_os="TestOS")
+    assert "CONNECTED Terminal" not in text
+    assert "TestOS" in text
+    assert "MCP" in text
+
+
+def test_local_mutation_is_not_preapproved() -> None:
+    from app.broker import CommandBroker
+    from app.models.terminal import PolicyAction
+
+    decision = CommandBroker().authorize("rm -rf /", security_mode="safe")
+    assert decision.action == PolicyAction.DENY
+
+
+@pytest.mark.asyncio
+async def test_local_terminal_exec_marks_target() -> None:
+    run = AgentRun(
+        session_id="local",
+        run_id="r-local",
+        metadata={"engineer_mode": "linux", "target": "local"},
+    )
+    loop = AgentLoop(run, model=SilentModel(), research=FakeResearch())
+
+    async def deliver() -> None:
+        import asyncio
+
+        for _ in range(50):
+            if run.pending_tool is not None:
+                break
+            await asyncio.sleep(0.01)
+        assert run.pending_tool is not None
+        run.pending_tool.future.set_result(
+            {"ok": True, "stdout": "ok\n", "stderr": "", "exit_code": 0}
+        )
+
+    import asyncio
+
+    deliver_task = asyncio.create_task(deliver())
+    await loop._terminal_exec("c-local", {"command": "uname", "intent": "name"})
+    await deliver_task
+    marked = [
+        event
+        for event in run.events
+        if event.type == "tool_call" and event.payload.get("target") == "local"
+    ]
+    assert marked, run.events
+
+
 def test_tw_mcp_lists_linux_and_k8s_tools() -> None:
     linux = tw_mcp_tool_names(engineer_mode="linux")
     assert TOOL_TERMINAL_EXEC in linux

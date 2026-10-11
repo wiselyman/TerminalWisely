@@ -338,6 +338,30 @@ def openai_tools(
     return openai_tools_linux()
 
 
+def local_openai_tools() -> list[dict[str, Any]]:
+    """Home MCP catalog: this computer, public web, and ask_user."""
+    allowed = {
+        TOOL_TERMINAL_EXEC,
+        TOOL_WEB_SEARCH,
+        TOOL_WEB_FETCH,
+        TOOL_ASK_USER,
+    }
+    tools: list[dict[str, Any]] = []
+    for tool in openai_tools_linux():
+        fn = dict(tool.get("function") or {})
+        name = fn.get("name")
+        if name not in allowed:
+            continue
+        if name == TOOL_TERMINAL_EXEC:
+            fn["description"] = (
+                "Run a shell command on the computer running this application. "
+                "Read-only commands may run immediately. Mutations wait for approval. "
+                "Do not open an SSH connection."
+            )
+        tools.append({**tool, "function": fn})
+    return tools
+
+
 def openai_tools_linux() -> list[dict[str, Any]]:
     return [
         {

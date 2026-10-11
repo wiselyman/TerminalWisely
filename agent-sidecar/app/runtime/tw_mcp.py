@@ -108,7 +108,15 @@ def tw_mcp_tool_names(
     engineer_mode: str | None = None,
     interaction_mode: str | None = None,
     ssh_session_id: str | None = None,
+    target: str | None = None,
 ) -> list[str]:
+    if (target or "").strip().lower() == "local":
+        return [
+            TOOL_TERMINAL_EXEC,
+            TOOL_WEB_SEARCH,
+            TOOL_WEB_FETCH,
+            TOOL_ASK_USER,
+        ]
     mode = (engineer_mode or "linux").strip().lower()
     if mode == "db":
         names = list(_DB_TOOLS)

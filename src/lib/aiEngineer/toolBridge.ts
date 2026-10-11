@@ -15,7 +15,8 @@ import type { K8sClusterTarget, K8sResourceCategory } from "../k8s/types";
 import { useK8sStore } from "../../stores/k8sStore";
 import { useAiEngineerStore } from "../../stores/aiEngineerStore";
 import { dbExplain, dbQuery, dbRegisterLease, dbSearchObjects } from "../db/api";
-import { aiRegisterPrivilegeLease, aiTerminalExec } from "./api";
+import { aiLocalExec, aiRegisterPrivilegeLease, aiTerminalExec } from "./api";
+import { LOCAL_CHAT_SESSION, terminalExecCommand } from "./localTarget";
 import {
   interactivePasswordError,
   looksLikeInteractivePasswordPrompt,
@@ -36,6 +37,7 @@ export type ToolCallEvent = {
     expires_at_epoch_s: number;
     max_executions?: number;
   } | null;
+  target?: string | null;
 };
 
 export type ToolExecCallbacks = {
@@ -348,10 +350,14 @@ export async function executeToolCall(
     try {
       let leaseId: string | undefined;
       const requiresLease = Boolean(call.requires_lease || call.lease);
+      const local = terminalExecCommand(hostSessionId, call.target) === "ai_local_exec";
+      const leaseSessionId = local
+        ? LOCAL_CHAT_SESSION
+        : call.lease?.session_id || hostSessionId;
       if (call.lease?.lease_id) {
         await aiRegisterPrivilegeLease({
           leaseId: call.lease.lease_id,
-          sessionId: call.lease.session_id || sessionId,
+          sessionId: leaseSessionId,
           command: call.lease.command || command,
           expiresAtEpochS: Number(call.lease.expires_at_epoch_s),
           maxExecutions: call.lease.max_executions ?? 1,
@@ -364,10 +370,16 @@ export async function executeToolCall(
           _untrusted: true,
         };
       }
-
       const result = await invokeWithSudoRetry(
         (sudoPassword) =>
-          aiTerminalExec({
+          (local
+            ? aiLocalExec({
+                command,
+                callId: call.call_id,
+                leaseId,
+                requiresLease,
+              })
+            : aiTerminalExec({
             sessionId: hostSessionId,
             command,
             callId: call.call_id,
@@ -375,7 +387,7 @@ export async function executeToolCall(
             requiresLease,
             sudo: commandLooksLikeSudo(command) || Boolean(sudoPassword),
             sudoPassword,
-          }).then((res) => {
+          })).then((res) => {
             // Pipeline exit 0 can still print "sudo: 需要密码" when sudo was
             // not peeled; treat as auth failure so the password modal opens.
             const combined = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
