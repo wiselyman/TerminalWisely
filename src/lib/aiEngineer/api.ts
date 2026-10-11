@@ -103,6 +103,57 @@ export async function getAiSettings(): Promise<AiSettingsView> {
   return invoke<AiSettingsView>("get_ai_settings");
 }
 
+export type AiUserMcpServerRow = {
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+};
+
+export type AiUserMcpView = {
+  path: string;
+  text: string;
+  servers: AiUserMcpServerRow[];
+};
+
+let e2eUserMcp: AiUserMcpView = {
+  path: "/tmp/e2e-user_mcp.json",
+  text: '{\n  "mcpServers": {}\n}\n',
+  servers: [],
+};
+
+export async function getAiUserMcp(): Promise<AiUserMcpView> {
+  if (isE2eBrowserMode()) return { ...e2eUserMcp, servers: [...e2eUserMcp.servers] };
+  return invoke<AiUserMcpView>("get_ai_user_mcp");
+}
+
+export async function saveAiUserMcp(text: string): Promise<AiUserMcpView> {
+  if (isE2eBrowserMode()) {
+    e2eUserMcp = {
+      ...e2eUserMcp,
+      text,
+      servers: [],
+    };
+    try {
+      const parsed = JSON.parse(text || "{}") as {
+        mcpServers?: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+      };
+      e2eUserMcp.servers = Object.entries(parsed.mcpServers || {})
+        .filter(([, spec]) => String(spec?.command || "").trim())
+        .map(([name, spec]) => ({
+          name,
+          command: String(spec.command),
+          args: Array.isArray(spec.args) ? spec.args.map(String) : [],
+          env: spec.env && typeof spec.env === "object" ? spec.env : {},
+        }));
+    } catch {
+      /* keep empty servers */
+    }
+    return getAiUserMcp();
+  }
+  return invoke<AiUserMcpView>("save_ai_user_mcp", { text });
+}
+
 export async function saveAiSettings(
   update: AiSettingsUpdate,
 ): Promise<AiSettingsView> {
@@ -266,6 +317,31 @@ export async function sidecarFetch(
     });
   }
   throw new Error("AI sidecar requires Tauri runtime");
+}
+
+export async function aiLocalExec(opts: {
+  command: string;
+  callId?: string;
+  leaseId?: string;
+  requiresLease?: boolean;
+  timeoutSeconds?: number;
+}): Promise<{
+  command: string;
+  stdout: string;
+  stderr: string;
+  exit_code: number;
+  timed_out: boolean;
+  session_id: string;
+}> {
+  return invoke("ai_local_exec", {
+    request: {
+      command: opts.command,
+      call_id: opts.callId ?? null,
+      lease_id: opts.leaseId ?? null,
+      requires_lease: opts.requiresLease ?? false,
+      timeout_seconds: opts.timeoutSeconds ?? null,
+    },
+  });
 }
 
 export async function aiTerminalExec(opts: {

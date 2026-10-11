@@ -1246,6 +1246,15 @@ pub fn save_ai_settings(
     crate::ai_engineer::save_ai_settings(&app, update).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn get_ai_user_mcp(app: AppHandle) -> Result<crate::ai_engineer::UserMcpView, String> {
+    crate::ai_engineer::get_user_mcp(&app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_ai_user_mcp(app: AppHandle, text: String) -> Result<crate::ai_engineer::UserMcpView, String> {
+    crate::ai_engineer::save_user_mcp(&app, &text).map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub async fn ai_list_models(
