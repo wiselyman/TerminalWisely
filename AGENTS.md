@@ -110,6 +110,8 @@ node scripts/check-no-agent-hardcoding.mjs
 
 用户的点击路径。加载、成功、失败各自出现在界面的哪一块、用哪句文案。
 
+新界面沿用现有桌面壳，不另做一套网页风。对话框用 `Modal` + `connection-form`，动作在右下角。选中、空状态、页签、图标按钮、搜索沿用 `App.css` 里已有的 `--tw-*` 和高度。计划里写明复用哪一块壳。改样式时先补 `src/lib/chromeContract.test.ts` 或 `src/lib/modalChrome.test.ts` 的断言。
+
 ### 编码
 
 计划里的每一项：先写会失败的测试，看到失败，再写刚好让它通过的代码，再跑这一层测试。一项任务一个提交。改完跑硬编码禁检。计划没写的行为不加。
