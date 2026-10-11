@@ -26,6 +26,7 @@ mod k8s;
 mod db;
 mod webkit_localstorage;
 mod durable;
+pub(crate) mod local_exec;
 
 use session::SessionManager;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -330,6 +331,7 @@ pub fn run() {
             commands::get_ai_settings,
             commands::save_ai_settings,
             commands::ai_list_models,
+            commands::ai_local_exec,
             commands::ai_terminal_exec,
             commands::ai_register_privilege_lease,
             commands::ai_chat_cache_remote_media,

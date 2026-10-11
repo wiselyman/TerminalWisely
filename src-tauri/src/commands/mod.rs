@@ -1246,6 +1246,7 @@ pub fn save_ai_settings(
     crate::ai_engineer::save_ai_settings(&app, update).map_err(|e| e.to_string())
 }
 
+
 #[tauri::command]
 pub async fn ai_list_models(
     app: AppHandle,
@@ -1256,6 +1257,16 @@ pub async fn ai_list_models(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn ai_local_exec(
+    request: crate::local_exec::AiLocalExecRequest,
+) -> Result<crate::local_exec::AiLocalExecResult, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::local_exec::run_local_exec(request))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

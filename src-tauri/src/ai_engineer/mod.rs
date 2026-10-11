@@ -18,7 +18,10 @@ pub use chat_history::{
 pub use media_cache::{
     cache_remote_media, resolve_media_id, store_image_bytes, CachedRemoteMedia,
 };
-pub use leases::{register_privilege_lease, RegisterLeaseRequest, RegisterLeaseResponse};
+pub use leases::{
+    assert_lease_ready, consume_lease, register_privilege_lease, RegisterLeaseRequest,
+    RegisterLeaseResponse,
+};
 pub use secrets::{
     current_security_mode, get_ai_settings, list_ai_models, save_ai_settings, AiListModelsRequest,
     AiListModelsResponse, AiSettingsUpdate, AiSettingsView,
