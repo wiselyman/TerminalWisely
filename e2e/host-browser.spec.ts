@@ -11,7 +11,7 @@ test.describe("Host browser (SOCKS panel)", () => {
     if (await tool.count()) {
       await expect(tool).toBeDisabled();
     } else {
-      await expect(page.getByTestId("workspace-welcome")).toBeVisible();
+      await expect(page.getByTestId("home-local-chat")).toBeVisible();
     }
   });
 

@@ -120,6 +120,7 @@
   "aiEngineer.configureModelAction": "Open model settings",
   "aiEngineer.retrySidecar": "Retry",
   "aiEngineer.hint": "Describe a Linux problem. AI uses the current connected session.",
+  "aiEngineer.hintLocal": "This chat is the computer you are using. Maintenance, files, and web lookup go through MCP tools.",
   "aiEngineer.hintK8s": "Describe a Kubernetes problem. AI uses k8s_* tools on the selected cluster.",
   "aiEngineer.inputPlaceholder": "Describe the problem or what to do on this host… (Enter to send, Shift+Enter for newline)",
   "aiEngineer.inputPlaceholderK8s": "Describe the cluster issue or change… (Enter to send, Shift+Enter for newline)",

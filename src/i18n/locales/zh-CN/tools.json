@@ -120,6 +120,7 @@
   "aiEngineer.configureModelAction": "打开模型设置",
   "aiEngineer.retrySidecar": "重试启动",
   "aiEngineer.hint": "描述 Linux 问题。AI 使用当前已连接的会话。",
+  "aiEngineer.hintLocal": "这条聊天对着当前这台电脑。维护、文件和网页查询都通过 MCP 工具。",
   "aiEngineer.hintK8s": "描述 Kubernetes 问题。AI 在所选集群上使用 k8s_* 工具。",
   "aiEngineer.inputPlaceholder": "描述问题，或说明要在这台机器上做什么…（Enter 发送，Shift+Enter 换行）",
   "aiEngineer.inputPlaceholderK8s": "描述集群问题或要做的变更…（Enter 发送，Shift+Enter 换行）",

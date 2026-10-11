@@ -179,6 +179,10 @@ type Props = {
   serverId?: string;
   /** False = keep fiber mounted but invisible (another host owns the AI surface). */
   surfaceActive?: boolean;
+  /** Home fills the workspace. Dock is the side panel. */
+  placement?: "dock" | "home";
+  /** While Home is open, docked fibers must not rebind the chat. */
+  homeOpen?: boolean;
 };
 
 const EMPTY_CHAT_MESSAGES: import("../../stores/aiEngineerStore").ChatLine[] =
@@ -1004,12 +1008,17 @@ export function AiEngineerPanel({
   sessionId,
   serverId,
   surfaceActive = true,
+  placement = "dock",
+  homeOpen = false,
 }: Props) {
   const { t } = useTranslation("tools");
   const storeOpen = useAiEngineerStore((s) => s.open);
   const liveSessionId = useAiEngineerStore((s) => s.sessionId);
   // Per-host fiber: only the active host's panel is interactive/visible.
-  const open = surfaceActive && storeOpen && liveSessionId === sessionId;
+  const homePlacement = placement === "home";
+  const open = homePlacement
+    ? surfaceActive
+    : surfaceActive && storeOpen && liveSessionId === sessionId;
   const desktopOpen = useDesktopStore((s) => s.open);
   const desktopSessionId = useDesktopStore((s) => s.sessionId);
   const desktopAi = useDesktopStore((s) => s.apps.aiLinux);
@@ -1024,8 +1033,8 @@ export function AiEngineerPanel({
     desktopAi.open &&
     !desktopAi.minimized;
   const embedHere = wantDesktopEmbed && aiHost != null;
-  const sideOpen = open && !desktopOpen;
-  const shown = sideOpen || embedHere;
+  const sideOpen = open && !desktopOpen && !homePlacement;
+  const shown = homePlacement ? surfaceActive : sideOpen || embedHere;
   const panelScope = panelFiberChatScopeKey(sessionId, serverId);
   const width = useAiEngineerStore((s) => s.width);
   const setWidth = useAiEngineerStore((s) => s.setWidth);
@@ -1061,6 +1070,7 @@ export function AiEngineerPanel({
   const ensureReady = useAiEngineerStore((s) => s.ensureReady);
   const bindContext = useAiEngineerStore((s) => s.bindContext);
   const bindK8sContext = useAiEngineerStore((s) => s.bindK8sContext);
+  const bindLocalContext = useAiEngineerStore((s) => s.bindLocalContext);
   const engineerMode = useAiEngineerStore((s) => s.engineerMode);
   const clusterId = useAiEngineerStore((s) => s.clusterId);
   const clusterName = useAiEngineerStore((s) => s.clusterName);
@@ -1439,6 +1449,11 @@ export function AiEngineerPanel({
   }, [storeOpen, liveSessionId, sessionId]);
 
   useEffect(() => {
+    if (homePlacement) {
+      bindLocalContext();
+      return;
+    }
+    if (homeOpen) return;
     if (!open) return;
     if (engineerMode === "db") return;
     if (engineerMode === "k8s" && clusterId) {
@@ -1478,6 +1493,9 @@ export function AiEngineerPanel({
     clusterTarget,
     bindContext,
     bindK8sContext,
+    homePlacement,
+    homeOpen,
+    bindLocalContext,
   ]);
 
   useEffect(() => {
@@ -1732,7 +1750,10 @@ export function AiEngineerPanel({
     stickToBottomRef.current = true;
     openFollowUntilRef.current = Date.now() + OPEN_CHAT_FOLLOW_MS;
     const handle = scheduleOpenChatPin({
-      pin: pinChatToBottom,
+      pin: () => {
+        if (!stickToBottomRef.current || userReleasedFollowRef.current) return;
+        pinChatToBottom();
+      },
       isNearBottom: () => {
         const scroller = messagesRef.current;
         return scroller ? isChatNearBottom(scroller) : false;
@@ -2485,8 +2506,11 @@ export function AiEngineerPanel({
     engineerMode === "k8s"
       ? t("aiEngineer.k8sTitle")
       : t("aiEngineer.linuxTitle");
-  const emptyHint =
-    engineerMode === "k8s" ? t("aiEngineer.hintK8s") : t("aiEngineer.hint");
+  const emptyHint = homePlacement
+    ? t("aiEngineer.hintLocal")
+    : engineerMode === "k8s"
+      ? t("aiEngineer.hintK8s")
+      : t("aiEngineer.hint");
   const inputPlaceholder =
     engineerMode === "k8s"
       ? t("aiEngineer.inputPlaceholderK8s")
@@ -2504,8 +2528,8 @@ export function AiEngineerPanel({
       ) : null}
       <aside
         ref={panelRef}
-        className={`ai-engineer-panel find-panel${shown ? "" : " ai-engineer-panel-parked"}${embedHere ? " is-desktop-embed" : ""}`}
-        style={embedHere ? undefined : { width }}
+        className={`ai-engineer-panel find-panel${shown ? "" : " ai-engineer-panel-parked"}${embedHere ? " is-desktop-embed" : ""}${homePlacement ? " is-home-workspace" : ""}`}
+        style={embedHere || homePlacement ? undefined : { width }}
         data-testid="ai-engineer-panel"
         aria-label={panelTitle}
         aria-hidden={!shown}
@@ -3140,9 +3164,12 @@ export function AiEngineerPanel({
                     </button>
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="ai-engineer-empty">
+                  <div
+                    className={homePlacement ? "empty-state" : "ai-engineer-empty"}
+                    data-testid={homePlacement ? "home-local-empty" : undefined}
+                  >
                     <p className="find-panel-empty">{emptyHint}</p>
-                    <div className="ai-engineer-workflow-chips" role="group">
+                    {homePlacement ? null : <div className="ai-engineer-workflow-chips" role="group">
                       {(engineerMode === "db"
                         ? DB_WORKFLOW_CHIP_IDS
                         : engineerMode === "k8s"
@@ -3159,7 +3186,7 @@ export function AiEngineerPanel({
                           {t(`aiEngineer.workflow.${id}`)}
                         </button>
                       ))}
-                    </div>
+                    </div>}
                   </div>
                 ) : null}
                 {messages.map((line, index) => {

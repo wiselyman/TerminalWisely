@@ -1,3 +1,5 @@
+import { LOCAL_CHAT_SESSION } from "./localTarget";
+
 export type AiPanelSidebarView = "hosts" | "k8s" | "db";
 
 /** AI Engineer panel is hidden in K8s view until a cluster is selected. */
@@ -13,6 +15,7 @@ export function shouldShowAiEngineerPanel(opts: {
 }): boolean {
   if (!opts.open || !opts.sessionId) return false;
   if (opts.homeOpen) return false;
+  if (opts.sessionId === LOCAL_CHAT_SESSION) return false;
   if (opts.sidebarView === "k8s" && !opts.hasSelectedCluster) return false;
   if (
     opts.sidebarView === "hosts" &&

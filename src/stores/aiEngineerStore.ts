@@ -82,6 +82,7 @@ import {
   type DiskScopeBundle,
 } from "../lib/aiEngineer/chatHistoryDisk";
 import { needsDiskMessageHydration } from "../lib/aiEngineer/chatScopeHydrate";
+import { LOCAL_CHAT_SESSION } from "../lib/aiEngineer/localTarget";
 import type { K8sClusterTarget } from "../lib/k8s/types";
 import type { ManagedEntityRef } from "../lib/management/types";
 import { revealAiEngineerPanel } from "./workspacePanelSwitch";
@@ -780,6 +781,7 @@ export function aiChatScopeKey(
   const cid = (clusterId ?? "").trim();
   if (cid) return `cluster:${cid}`;
   const sid = (serverId ?? "").trim();
+  if (!sid && sessionId === LOCAL_CHAT_SESSION) return LOCAL_CHAT_SESSION;
   return sid ? `server:${sid}` : `session:${sessionId}`;
 }
 
@@ -845,6 +847,25 @@ export function bindKindForOutgoingSend(state: {
   };
 }
 
+type HomeChatSnapshot = {
+  open: boolean;
+  sessionId: string | null;
+  serverId: string | null;
+  engineerMode: EngineerMode;
+  clusterId: string | null;
+  clusterName: string | null;
+  clusterTarget: K8sClusterTarget | null;
+  dbConnectionId: string | null;
+  dbConnectionName: string | null;
+  dbEngine: string | null;
+  dbRevision: number;
+  dbSshSessionId: string | null;
+  dbDatabase: string | null;
+  dbSchema: string | null;
+  dbSelectedSql: string | null;
+};
+
+let chatBeforeHome: HomeChatSnapshot | null = null;
 let chatAbort: AbortController | null = null;
 let activeRunId: string | null = null;
 let dbSqlSink: ((sql: string) => void) | null = null;
@@ -960,6 +981,7 @@ type AiEngineerState = {
   sessionId: string | null;
   serverId: string | null;
   engineerMode: EngineerMode;
+  execTarget: "local" | "ssh";
   clusterId: string | null;
   clusterName: string | null;
   clusterTarget: K8sClusterTarget | null;
@@ -1022,6 +1044,10 @@ type AiEngineerState = {
   requestComposerFocus: () => void;
   /** Re-bind chat when the active terminal/server changes while panel stays open. */
   bindContext: (sessionId: string, serverId?: string) => void;
+  bindLocalContext: () => void;
+  restoreChatAfterHome: () => void;
+  /** Open Home local chat and send a prepared install / setup prompt. */
+  sendLocalInstallPrompt: (text: string) => Promise<void>;
   bindK8sContext: (
     clusterId: string,
     clusterName?: string,
@@ -1219,6 +1245,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   sessionId: null,
   serverId: null,
   engineerMode: "linux",
+  execTarget: "ssh",
   clusterId: null,
   clusterName: null,
   clusterTarget: null,
@@ -1359,6 +1386,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       ...persisted,
       ...loaded,
       engineerMode: "k8s",
+      execTarget: "ssh",
       sessionId,
       serverId: null,
       clusterId,
@@ -1384,6 +1412,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     const prev = get();
     const dbFields = {
       engineerMode: "db" as const,
+      execTarget: "ssh" as const,
       dbConnectionId: connection.id,
       dbConnectionName: connection.name,
       dbEngine: connection.engine,
@@ -1428,7 +1457,119 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
   },
 
+  bindLocalContext: () => {
+    const prev = get();
+    if (prev.execTarget === "local" && prev.sessionId === LOCAL_CHAT_SESSION) {
+      // Home is its own surface. The docked panel flag stays closed.
+      if (prev.open) set({ open: false });
+      return;
+    }
+    chatBeforeHome = {
+      open: prev.open,
+      sessionId: prev.sessionId,
+      serverId: prev.serverId,
+      engineerMode: prev.engineerMode,
+      clusterId: prev.clusterId,
+      clusterName: prev.clusterName,
+      clusterTarget: prev.clusterTarget,
+      dbConnectionId: prev.dbConnectionId,
+      dbConnectionName: prev.dbConnectionName,
+      dbEngine: prev.dbEngine,
+      dbRevision: prev.dbRevision,
+      dbSshSessionId: prev.dbSshSessionId,
+      dbDatabase: prev.dbDatabase,
+      dbSchema: prev.dbSchema,
+      dbSelectedSql: prev.dbSelectedSql,
+    };
+    const sessionId = LOCAL_CHAT_SESSION;
+    const nextScope = aiChatScopeKey(sessionId);
+    const persisted = persistCurrentThread(get);
+    stashBackgroundPending(prev);
+    const loaded = loadScopeIntoState(
+      persisted.threadsByScope,
+      nextScope,
+      persisted.inputsByThread,
+    );
+    const runHere = scopeHasActiveRun(nextScope);
+    const pending = pendingForScope(nextScope, prev);
+    set({
+      ...persisted,
+      ...loaded,
+      open: false,
+      execTarget: "local",
+      engineerMode: "linux",
+      sessionId,
+      serverId: null,
+      clusterId: null,
+      clusterName: null,
+      clusterTarget: null,
+      chatScope: nextScope,
+      busy: runHere,
+      modelPhase: runHere ? "thinking" : "idle",
+      pendingAsk: pending.pendingAsk,
+      pendingApproval: pending.pendingApproval,
+      activeInvestigation: runHere ? prev.activeInvestigation : null,
+    });
+    if (needsDiskMessageHydration(loaded.messages)) {
+      applyScopeAfterDiskLoad(get, set, nextScope);
+    }
+    void get().ensureReady();
+  },
+
+  sendLocalInstallPrompt: async (text) => {
+    const body = text.trim();
+    if (!body) return;
+    const { openManagedHome } = await import("./managedEntityStore");
+    openManagedHome();
+    get().bindLocalContext();
+    get().setInput(body);
+    await get().sendMessage({ sessionId: LOCAL_CHAT_SESSION, interruptIfBusy: true });
+  },
+
+  restoreChatAfterHome: () => {
+    const snap = chatBeforeHome;
+    chatBeforeHome = null;
+    if (!snap?.sessionId) {
+      const cur = get();
+      const openedWhileLeaving = cur.open && snap != null && !snap.open;
+      if (cur.execTarget === "local" || cur.sessionId === LOCAL_CHAT_SESSION) {
+        set({
+          execTarget: "ssh",
+          ...(cur.sessionId === LOCAL_CHAT_SESSION && !openedWhileLeaving
+            ? { sessionId: null, open: false }
+            : {}),
+        });
+      }
+      return;
+    }
+    if (snap.engineerMode === "k8s" && snap.clusterId) {
+      get().bindK8sContext(
+        snap.clusterId,
+        snap.clusterName ?? undefined,
+        snap.clusterTarget,
+      );
+    } else if (snap.engineerMode === "db" && snap.dbConnectionId) {
+      get().bindDbContext({
+        id: snap.dbConnectionId,
+        name: snap.dbConnectionName || "",
+        engine: snap.dbEngine || "postgres",
+        revision: snap.dbRevision,
+        sshSessionId: snap.dbSshSessionId,
+        database: snap.dbDatabase,
+        schema: snap.dbSchema,
+        selectedSql: snap.dbSelectedSql,
+      });
+    } else {
+      get().bindContext(snap.sessionId, snap.serverId ?? undefined);
+    }
+    if (snap.open) set({ open: true });
+  },
+
   bindContext: (sessionId, serverId) => {
+    if (sessionId === LOCAL_CHAT_SESSION) {
+      get().bindLocalContext();
+      return;
+    }
     const nextScope = aiChatScopeKey(sessionId, serverId);
     const prev = get();
     if (
@@ -1473,6 +1614,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       ...persisted,
       ...loaded,
       engineerMode: "linux",
+      execTarget: "ssh",
       sessionId,
       serverId: serverId ?? null,
       clusterId: null,
@@ -2335,10 +2477,14 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       activeRunThreadId = runThreadId;
       activeLeaseSessionId = runSessionId;
       const dbSshSessionId = get().dbSshSessionId;
-      if (get().engineerMode === "db") {
-        if (dbSshSessionId) void acquireAiSshLease(dbSshSessionId);
-      } else {
-        void acquireAiSshLease(runSessionId);
+      const localChat =
+        get().execTarget === "local" || runSessionId === LOCAL_CHAT_SESSION;
+      if (!localChat) {
+        if (get().engineerMode === "db") {
+          if (dbSshSessionId) void acquireAiSshLease(dbSshSessionId);
+        } else {
+          void acquireAiSshLease(runSessionId);
+        }
       }
 
       /** Last SSE / tool activity — used to unstick 「模型思考中」 if the stream dies. */
@@ -2411,6 +2557,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
             : undefined,
         clusterName: get().clusterName ?? undefined,
         clusterTarget: get().clusterTarget ?? undefined,
+        target: localChat ? "local" : "ssh",
         securityMode: normalizeSecurityMode(
           get()
             .threadsByScope[runScope]?.threads.find((t) => t.id === runThreadId)

@@ -4574,6 +4574,35 @@ body.preview-float-resizing {
   display: none;
 }
 
+.home-local-chat {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  z-index: 2;
+}
+
+.ai-engineer-panel.is-home-workspace {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 1 !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.ai-engineer-panel.is-home-workspace .find-panel-resizer {
+  display: none;
+}
+
 .host-desktop-panel.find-panel,
 .host-desktop-panel.local-fs-panel {
   display: flex;
@@ -6945,6 +6974,80 @@ body.find-panel-resizing {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.app-settings-mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--tw-border);
+  border-radius: 6px;
+  padding: 4px;
+  background: var(--tw-surface);
+}
+
+.app-settings-mcp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+}
+
+.app-settings-mcp-row:hover {
+  background: var(--tw-hover);
+}
+
+.app-settings-mcp-row.is-disabled {
+  opacity: 0.55;
+}
+
+.app-settings-mcp-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-settings-mcp-title {
+  margin: 0;
+  font-size: var(--tw-font-dense, 0.82rem);
+  font-weight: 600;
+  color: var(--tw-fg);
+}
+
+.app-settings-mcp-summary {
+  margin: 2px 0 0;
+  font-size: var(--tw-font-dense, 0.78rem);
+  color: var(--tw-fg-muted);
+  line-height: 1.35;
+}
+
+.app-settings-mcp-secrets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.app-settings-mcp-secrets input,
+.app-settings-mcp-custom input,
+.app-settings-mcp-custom textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--tw-font-dense, 0.82rem);
+  color: var(--tw-fg);
+  background: var(--tw-bg);
+  border: 1px solid var(--tw-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.app-settings-mcp-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .update-notes {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -23,7 +23,7 @@ import { DesktopTerminalWindow } from "./components/desktop/DesktopTerminalWindo
 import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
 import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
-import { WorkspaceWelcome } from "./components/WorkspaceWelcome";
+import { LOCAL_CHAT_SESSION } from "./lib/aiEngineer/localTarget";
 import { DbWorkbench } from "./components/db/DbWorkbench";
 import { EngineMark } from "./components/db/DbIcons";
 import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
@@ -339,6 +339,15 @@ function App() {
   const addClusterOpen = useK8sStore((s) => s.addClusterOpen);
   const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
+  const homeWasOpen = useRef(false);
+  useLayoutEffect(() => {
+    if (homeOpen) {
+      useAiEngineerStore.getState().bindLocalContext();
+    } else if (homeWasOpen.current) {
+      useAiEngineerStore.getState().restoreChatAfterHome();
+    }
+    homeWasOpen.current = homeOpen;
+  }, [homeOpen]);
   const leaveHome = useManagedEntityStore((s) => s.leaveHome);
   const dbWorkspaces = useDbWorkspaceStore((s) => s.workspaces);
   const activeDbWorkspaceId = useDbWorkspaceStore((s) => s.activeId);
@@ -362,8 +371,12 @@ function App() {
   });
   const aiFiberSessions = useAiFiberSessions();
   const aiPanelsToMount = useMemo(() => {
-    const ids = new Set<string>(aiFiberSessions);
-    if (aiPanelSessionId) ids.add(aiPanelSessionId);
+    const ids = new Set<string>(
+      aiFiberSessions.filter((id) => id !== LOCAL_CHAT_SESSION),
+    );
+    if (aiPanelSessionId && aiPanelSessionId !== LOCAL_CHAT_SESSION) {
+      ids.add(aiPanelSessionId);
+    }
     return [...ids];
   }, [aiFiberSessions, aiPanelSessionId]);
   // Soft-hide on host switch keeps the fiber tree warm (see AiEngineerPanel).
@@ -1365,7 +1378,15 @@ function App() {
           <main className="workspace">
             <div className="workspace-split">
               <div className="terminal-stack">
-                {homeOpen ? <WorkspaceWelcome /> : null}
+                {homeOpen ? (
+                  <div className="home-local-chat" data-testid="home-local-chat">
+                    <AiEngineerPanel
+                      sessionId={LOCAL_CHAT_SESSION}
+                      placement="home"
+                      surfaceActive
+                    />
+                  </div>
+                ) : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}
                 {showDbWorkbench ? (
                   <DbWorkbench onRegisterNewConnection={registerNewDb} />
@@ -1415,6 +1436,7 @@ function App() {
               <AiEngineerPanel
                 key={fiberSessionId}
                 sessionId={fiberSessionId}
+                homeOpen={homeOpen}
                 serverId={
                   engineerMode === "k8s" && fiberSessionId === aiPanelSessionId
                     ? undefined

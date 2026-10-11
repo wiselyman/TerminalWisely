@@ -63,6 +63,18 @@ describe("shouldShowAiEngineerPanel", () => {
     ).toBe(false);
   });
 
+  it("does not dock the local Home session", () => {
+    expect(
+      shouldShowAiEngineerPanel({
+        open: true,
+        sessionId: "local",
+        sidebarView: "db",
+        hasSelectedCluster: false,
+        homeOpen: false,
+      }),
+    ).toBe(false);
+  });
+
   it("hides when closed or missing session", () => {
     expect(
       shouldShowAiEngineerPanel({

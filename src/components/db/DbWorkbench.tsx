@@ -615,6 +615,7 @@ export function DbWorkbench({
   useEffect(() => {
     // Bind AI to the connection (not each schema). Schema/database are context
     // hints for db_query; chat scope stays db:<connectionId>.
+    if (homeOpen) return;
     if (!selected) return;
     bindDbContext({
       id: selected.id,
@@ -626,7 +627,7 @@ export function DbWorkbench({
       schema: activeSchema || browse?.schema || null,
       selectedSql: active?.sql ?? null,
     });
-  }, [selected, activeSchema, active?.sql, browse, bindDbContext]);
+  }, [homeOpen, selected, activeSchema, active?.sql, browse, bindDbContext]);
 
   function nodesFor(database: string) {
     const rows = objectCache[database]?.rows ?? [];

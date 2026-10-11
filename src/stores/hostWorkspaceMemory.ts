@@ -6,6 +6,7 @@ import {
   type DesktopAppId,
   type DesktopAppWindow,
 } from "./desktopStore";
+import { LOCAL_CHAT_SESSION } from "../lib/aiEngineer/localTarget";
 import { useAiEngineerStore } from "./aiEngineerStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
@@ -40,7 +41,8 @@ function bumpAiFibers() {
 }
 
 export function rememberAiFiber(sessionId: string): void {
-  if (!sessionId || aiFiberSessions.has(sessionId)) return;
+  // Home chat is the workspace surface, not a docked host fiber.
+  if (!sessionId || sessionId === LOCAL_CHAT_SESSION || aiFiberSessions.has(sessionId)) return;
   aiFiberSessions.add(sessionId);
   bumpAiFibers();
 }
