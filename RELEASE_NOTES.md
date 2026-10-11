@@ -1,15 +1,19 @@
-# TerminalWisely v0.0.5
+# TerminalWisely v0.0.6
 
 ## English
 
-Hosts, clusters, and databases in one window. The sidebar is three surfaces. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page and does not show a chat.
+Hosts, Kubernetes, and Databases now share one set of chrome. This release adds no features.
 
 ### Highlights
 
-- **Databases** — direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat
-- **Table tabs** show the database and schema on one line. After you run your own SQL, a restore icon returns the table’s default data. Editing the statement does not change the grid until you run
-- **Groups** — database connections start under Ungrouped. Host groups are not copied onto the database list
-- **AI** follows the open host, cluster, or database service. Read-only work can run; changes wait for approval. STOP ends the run
+- **One selection** — a selected connection is a single accent border. A selected tree row keeps the normal text color
+- **One set of sizes** — list inset, row padding, group labels, icon buttons, search fields, and the tabs inside a workspace match across the three sidebars
+- **Empty states** — with no cluster selected, the workspace shows the existing hint. An empty database result uses the same empty style
+- **Checks** — tab menus (close others, close to the left), the version in Settings, language and theme across the three sidebars, and sidebar width after a reload
+- **Title-bar plus** — on Hosts it adds a server, on Kubernetes a cluster, on Databases a connection
+- **Typing** — the first letter in an empty field stays as you typed it
+- **Dialogs** — Add cluster uses the same compact footer as the other dialogs
+- **Windows agents** — Cursor, Codex, and Claude Code sign-in opens the system browser. A slow probe no longer marks an installed CLI as missing
 
 Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where available).
 
@@ -25,14 +29,18 @@ xattr -cr /Applications/TerminalWisely.app
 
 ## 中文
 
-主机、集群和数据库，在同一个窗口。侧栏分成三块。标题栏的 AI 跟到打开的那一块，每个对象有自己的聊天。Home 是欢迎页，不显示聊天。
+主机、Kubernetes、数据库现在共用一套界面。这一版没有新功能。
 
 ### 要点
 
-- **数据库** — 直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天
-- **表页签** 同一行标出库和 schema。执行自己的 SQL 之后，恢复图标回到这张表的默认数据。只改语句、不点执行，表格不动
-- **分组** — 数据库连接先放在未分组。主机的分组不会抄到数据库列表
-- **AI** 跟到已打开的主机、集群或数据库服务。只读可以自己跑；变更要批准。STOP 停掉这次运行
+- **同一种选中** — 选中的连接是一条强调色边。树里选中的一行仍用普通文字颜色
+- **同一套尺寸** — 列表留白、行内边距、分组标题、图标按钮、搜索框，以及工作区里的页签，三条侧栏对齐
+- **空状态** — 还没选集群时，工作区显示已有的提示。数据库查不到行时用同一套空状态
+- **检查** — 页签菜单（关闭其他、关闭左侧）、设置里的版本号、三条侧栏上的语言和主题，以及刷新后侧栏宽度还在
+- **标题栏加号** — 主机上添加服务器，Kubernetes 上添加集群，数据库上新建连接
+- **输入** — 空输入框的第一个字母保持你按下的样子
+- **弹框** — 添加集群和其它对话框一样，动作在右下角
+- **Windows 上的 Agent** — Cursor、Codex、Claude Code 登录会打开系统浏览器。探测变慢时，已安装的 CLI 不再显示成未安装
 
 安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
 

@@ -511,7 +511,7 @@ const catalog = {
   },
   welcome: {
     sectionAria: { zh: "欢迎", en: "Welcome" },
-    eyebrow: { zh: "v0.0.5", en: "v0.0.5" },
+    eyebrow: { zh: "v0.0.6", en: "v0.0.6" },
     productName: { zh: "TerminalWisely", en: "TerminalWisely" },
     tagline: {
       zh: "主机、集群和数据库，在同一个窗口",

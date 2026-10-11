@@ -15,6 +15,10 @@ export function externalRuntimeStatusKind(
 ): ExternalRuntimeStatusKind {
   if (!probe) return "unknown";
   if (expectedKind && probe.kind !== expectedKind) return "unknown";
+  if (probe.code === "probe_failed") return "unknown";
+  if (probe.code === "probe_inconclusive") {
+    return probe.installed ? "login_needed" : "unknown";
+  }
   if (probe.code === "install_needed" || (!probe.installed && !probe.fake)) {
     return "install_needed";
   }
@@ -28,6 +32,20 @@ export function externalRuntimeStatusKind(
     return probe.fake ? "ready_fake" : "ready";
   }
   return "not_ready";
+}
+
+/** A timed-out or failed probe must not replace a conclusive one. */
+export function mergeRuntimeProbe(
+  prev: RuntimeProbeResult | null | undefined,
+  next: RuntimeProbeResult,
+): RuntimeProbeResult {
+  if (!prev) return next;
+  const nextSoft =
+    next.code === "probe_failed" || next.code === "probe_inconclusive";
+  const prevSoft =
+    prev.code === "probe_failed" || prev.code === "probe_inconclusive";
+  if (nextSoft && !prevSoft) return prev;
+  return next;
 }
 
 /** Run failed because the local CLI has no login — open the guided browser sign-in. */

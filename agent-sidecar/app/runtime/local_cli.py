@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -26,7 +27,11 @@ LOGIN_HINTS: dict[str, str] = {
 }
 
 # Keep auth probes short — bare `claude status` / `whoami` can hang for minutes.
+# Windows cold starts (Defender scanning a Node shim) need longer than 3s.
 _AUTH_TIMEOUT_SEC = 3.0
+_AUTH_TIMEOUT_SEC_WINDOWS = 8.0
+_PROBE_BUDGET_SEC = 6.0
+_PROBE_BUDGET_SEC_WINDOWS = 12.0
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,7 @@ def _is_windows() -> bool:
 
 
 _SHELL_PATH_CACHE: list[Path] | None = None
+_WIN_PATH_CACHE: list[Path] | None = None
 _PATH_MARKER = "__TWPATH__"
 
 
@@ -73,6 +79,11 @@ def _static_user_bin_dirs() -> list[Path]:
     home = Path.home()
     dirs: list[Path] = []
     if _is_windows():
+        # Installers drop shims here. A GUI process often never inherited them.
+        dirs.append(home / ".local" / "bin")
+        appdata = (os.environ.get("APPDATA") or "").strip()
+        if appdata:
+            dirs.append(Path(appdata) / "npm")
         localappdata = (os.environ.get("LOCALAPPDATA") or "").strip()
         if localappdata:
             dirs.append(Path(localappdata) / "Programs" / "OpenAI" / "Codex" / "bin")
@@ -145,9 +156,76 @@ def _login_shell_path_dirs() -> list[Path]:
     return list(dirs)
 
 
+def _path_entry_searchable(raw: str) -> bool:
+    """Skip entries whose stat can block the probe for a long time."""
+    text = (raw or "").strip().strip('"')
+    if not text:
+        return False
+    # Disconnected network shares stall os.stat for tens of seconds.
+    if text.startswith("\\\\") or text.startswith("//"):
+        return False
+    return True
+
+
+def _sanitized_search_path() -> str:
+    kept: list[str] = []
+    for raw in (os.environ.get("PATH") or "").split(os.pathsep):
+        if _path_entry_searchable(raw):
+            kept.append(raw.strip().strip('"'))
+    return os.pathsep.join(kept)
+
+
+def _read_windows_registry_path() -> str:
+    """User + machine PATH as stored in the registry (not the process block)."""
+    if not _is_windows():
+        return ""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    chunks: list[str] = []
+    locations = (
+        (winreg.HKEY_CURRENT_USER, r"Environment", "Path"),
+        (
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+            "Path",
+        ),
+    )
+    for hive, subkey, name in locations:
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                value, _typ = winreg.QueryValueEx(key, name)
+        except OSError:
+            continue
+        if isinstance(value, str) and value.strip():
+            chunks.append(value)
+    return os.pathsep.join(chunks)
+
+
+def _windows_registry_path_dirs() -> list[Path]:
+    global _WIN_PATH_CACHE
+    if not _is_windows():
+        return []
+    if _WIN_PATH_CACHE is not None:
+        return list(_WIN_PATH_CACHE)
+    raw = os.path.expandvars(_read_windows_registry_path())
+    dirs: list[Path] = []
+    for part in raw.split(os.pathsep):
+        text = part.strip().strip('"')
+        if _path_entry_searchable(text):
+            dirs.append(Path(text))
+    _WIN_PATH_CACHE = dirs
+    return list(dirs)
+
+
 def _extra_user_bin_dirs() -> list[Path]:
     """Dirs often missing from GUI-launched process PATH (Finder / Explorer / dock)."""
-    return _dedupe_paths(_static_user_bin_dirs() + _login_shell_path_dirs())
+    return _dedupe_paths(
+        _static_user_bin_dirs()
+        + _login_shell_path_dirs()
+        + _windows_registry_path_dirs()
+    )
 
 
 def _candidate_names(name: str) -> list[str]:
@@ -161,7 +239,8 @@ def _candidate_names(name: str) -> list[str]:
 def _which_all(name: str) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
-    first = shutil.which(name)
+    search = _sanitized_search_path()
+    first = shutil.which(name, path=search) if search else None
     if first:
         found.append(first)
         seen.add(first)
@@ -203,9 +282,10 @@ def _cursor_versioned_agent() -> str | None:
     except OSError:
         return None
     for directory in sorted(entries, key=lambda p: p.name, reverse=True):
-        binary = directory / "cursor-agent"
-        if _is_executable(binary):
-            return str(binary)
+        for name in _candidate_names("cursor-agent"):
+            binary = directory / name
+            if _is_executable(binary):
+                return str(binary)
     return None
 
 
@@ -414,6 +494,14 @@ def _parse_auth_output(out: str, returncode: int) -> tuple[bool, str]:
     return False, "login_needed"
 
 
+def _auth_timeout_sec() -> float:
+    return _AUTH_TIMEOUT_SEC_WINDOWS if _is_windows() else _AUTH_TIMEOUT_SEC
+
+
+def _probe_budget_sec() -> float:
+    return _PROBE_BUDGET_SEC_WINDOWS if _is_windows() else _PROBE_BUDGET_SEC
+
+
 def _auth_status(resolved: ResolvedCli) -> tuple[bool, str]:
     """Best-effort login check. Returns (ok, detail)."""
     argv = prepare_cli_argv(auth_check_argv(resolved))
@@ -422,20 +510,33 @@ def _auth_status(resolved: ResolvedCli) -> tuple[bool, str]:
             argv,
             capture_output=True,
             text=True,
-            timeout=_AUTH_TIMEOUT_SEC,
+            timeout=_auth_timeout_sec(),
             env=cli_spawn_env(),
             check=False,
         )
     except subprocess.TimeoutExpired:
-        # Binary exists; auth check hung. Do not treat that as logged in.
-        return False, "login_needed"
+        # Binary exists; the auth command did not answer. Not "missing".
+        return False, "probe_inconclusive"
     except OSError:
-        return False, "login_needed"
+        return False, "probe_inconclusive"
     out = f"{r.stdout or ''}{r.stderr or ''}"
     return _parse_auth_output(out, r.returncode)
 
 
-def probe_local_cli(kind: LocalCliKind) -> dict[str, Any]:
+def _inconclusive_probe(kind: LocalCliKind) -> dict[str, Any]:
+    return {
+        "installed": False,
+        "authenticated": False,
+        "detail": "probe_inconclusive",
+        "fake": False,
+        "binary": "",
+        "install_url": INSTALL_URLS.get(kind, ""),
+        "login_hint": LOGIN_HINTS.get(kind, ""),
+        "code": "probe_inconclusive",
+    }
+
+
+def _probe_local_cli_body(kind: LocalCliKind) -> dict[str, Any]:
     """
     Product probe:
     - installed = binary on PATH (or known desktop/standalone locations for Codex)
@@ -469,6 +570,18 @@ def probe_local_cli(kind: LocalCliKind) -> dict[str, Any]:
             "code": "install_needed",
         }
     ok, detail = _auth_status(resolved)
+    if detail == "probe_inconclusive":
+        return {
+            "installed": True,
+            "authenticated": False,
+            "detail": detail,
+            "fake": False,
+            "binary": resolved.binary,
+            "install_url": install_url,
+            "login_hint": login_hint,
+            "code": "probe_inconclusive",
+            "argv_prefix": list(resolved.argv_prefix),
+        }
     if not ok:
         return {
             "installed": True,
@@ -492,3 +605,24 @@ def probe_local_cli(kind: LocalCliKind) -> dict[str, Any]:
         "code": "ready" if detail == "ready" else detail,
         "argv_prefix": list(resolved.argv_prefix),
     }
+
+
+def probe_local_cli(kind: LocalCliKind) -> dict[str, Any]:
+    """Run the probe off a daemon thread so a stuck stat cannot pin the caller."""
+    box: dict[str, Any] = {}
+    error: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            box["value"] = _probe_local_cli_body(kind)
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the caller thread
+            error.append(exc)
+
+    worker = threading.Thread(target=_run, daemon=True)
+    worker.start()
+    worker.join(_probe_budget_sec())
+    if worker.is_alive():
+        return _inconclusive_probe(kind)
+    if error:
+        raise error[0]
+    return box["value"]

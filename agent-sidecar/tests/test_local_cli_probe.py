@@ -223,6 +223,86 @@ def test_codex_install_page_is_chatgpt_download(monkeypatch, tmp_path: Path) -> 
     assert probed["install_url"] == "https://chatgpt.com/download/"
 
 
+def test_windows_user_bins_and_registry_path_are_searched(monkeypatch, tmp_path: Path) -> None:
+    """Explorer PATH often misses the installer dir. Registry PATH must count."""
+    import app.runtime.local_cli as local_cli
+
+    home = tmp_path / "home"
+    bin_dir = home / ".local" / "bin"
+    bin_dir.mkdir(parents=True)
+    shim = bin_dir / "cursor-agent.cmd"
+    shim.write_text("@echo off\r\nexit /b 0\r\n", encoding="utf-8", newline="\r\n")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(local_cli, "_is_windows", lambda: True)
+    monkeypatch.setattr(local_cli.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(local_cli, "_login_shell_path_dirs", lambda: [])
+    monkeypatch.setattr(local_cli, "_WIN_PATH_CACHE", None, raising=False)
+    monkeypatch.setattr(
+        local_cli,
+        "_read_windows_registry_path",
+        lambda: str(tmp_path / "FromRegistry"),
+    )
+    local_cli._WIN_PATH_CACHE = None
+    dirs = [str(p) for p in local_cli._extra_user_bin_dirs()]
+    assert str(bin_dir) in dirs
+    assert str(tmp_path / "Roaming" / "npm") in dirs
+    assert str(tmp_path / "FromRegistry") in dirs
+    found = local_cli._which("cursor-agent")
+    assert found is not None
+    assert found.lower().endswith(".cmd")
+
+
+def test_search_path_skips_unc_entries(monkeypatch) -> None:
+    import os
+
+    import app.runtime.local_cli as local_cli
+
+    monkeypatch.setenv(
+        "PATH", "//server/share" + os.pathsep + "/usr/local/bin"
+    )
+    text = local_cli._sanitized_search_path()
+    assert "server" not in text
+    assert "/usr/local/bin" in text
+
+
+def test_cursor_versioned_binary_accepts_windows_suffix(monkeypatch, tmp_path: Path) -> None:
+    import app.runtime.local_cli as local_cli
+
+    version = tmp_path / ".local" / "share" / "cursor-agent" / "versions" / "2026.10.10"
+    version.mkdir(parents=True)
+    (version / "cursor-agent.exe").write_text("", encoding="utf-8")
+    monkeypatch.setattr(local_cli, "_is_windows", lambda: True)
+    monkeypatch.setattr(local_cli.Path, "home", classmethod(lambda cls: tmp_path))
+    found = local_cli._cursor_versioned_agent()
+    assert found is not None
+    assert found.lower().endswith(".exe")
+
+
+def test_auth_timeout_stays_installed(monkeypatch, tmp_path: Path) -> None:
+    import subprocess
+
+    import app.runtime.local_cli as local_cli
+
+    stub_exit0(tmp_path, "cursor-agent")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.delenv("TW_AI_CURSOR_FAKE", raising=False)
+    monkeypatch.setattr(local_cli, "_extra_user_bin_dirs", lambda: [])
+    monkeypatch.setattr(local_cli, "_cursor_versioned_agent", lambda: None)
+
+    def _hang(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd="status", timeout=3)
+
+    monkeypatch.setattr(local_cli.subprocess, "run", _hang)
+    probed = probe_local_cli("cursor")
+    assert probed["installed"] is True
+    assert probed["code"] == "probe_inconclusive"
+    assert probed["authenticated"] is False
+
+
 def test_static_user_bin_dirs_include_homebrew_and_usr_local(monkeypatch) -> None:
     """Dock launches omit Homebrew and /usr/local/bin from PATH."""
     import app.runtime.local_cli as local_cli

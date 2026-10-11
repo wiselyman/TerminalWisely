@@ -19,6 +19,36 @@ export type GuidedLoginProgress = {
   detail: string;
 };
 
+const LOGIN_FAILURE_CODE = /^login_[a-z0-9_]+$/i;
+
+/** Hide raw sidecar codes. A thrown string is a transport failure. */
+export function guidedLoginErrorDetail(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback;
+  const msg = err.message.trim();
+  if (
+    !msg ||
+    LOGIN_FAILURE_CODE.test(msg) ||
+    msg.startsWith("{") ||
+    msg.includes("Runtime login")
+  ) {
+    return fallback;
+  }
+  if (msg.length > 180) return fallback;
+  return msg;
+}
+
+async function openLoginUrlIfNeeded(result: {
+  url?: string;
+  open_browser?: boolean;
+}): Promise<void> {
+  if (!result.url || result.open_browser === false) return;
+  try {
+    await openExternalUrl(result.url);
+  } catch {
+    // User can still copy/open from status; keep waiting.
+  }
+}
+
 export async function runGuidedRuntimeLogin(
   kind: AgentRuntimeKind,
   opts?: {
@@ -40,11 +70,7 @@ export async function runGuidedRuntimeLogin(
   });
 
   if (started.url) {
-    try {
-      await openExternalUrl(started.url);
-    } catch {
-      // User can still copy/open from status; keep waiting.
-    }
+    await openLoginUrlIfNeeded(started);
   }
 
   if (started.phase === "succeeded") {
@@ -71,11 +97,7 @@ export async function runGuidedRuntimeLogin(
         detail: login.detail,
       });
       if (login.url && login.url !== started.url) {
-        try {
-          await openExternalUrl(login.url);
-        } catch {
-          /* ignore */
-        }
+        await openLoginUrlIfNeeded(login);
       }
       if (login.phase === "succeeded") {
         return probeRuntime(info, kind);

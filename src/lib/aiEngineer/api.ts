@@ -150,6 +150,8 @@ export interface RuntimeLoginResult {
   url: string;
   detail: string;
   exit_code?: number | null;
+  /** False when the sidecar already opened the system browser. */
+  open_browser?: boolean;
 }
 
 export async function startRuntimeLogin(
@@ -252,9 +254,9 @@ export async function sidecarFetch(
         path,
         body,
         timeout_ms: path.includes("/v1/runtime/probe")
-          ? 8_000
+          ? 15_000
           : path.includes("/v1/runtime/login")
-            ? 15_000
+            ? 25_000
             : 60_000,
       },
     });

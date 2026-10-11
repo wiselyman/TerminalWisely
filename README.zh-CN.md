@@ -6,7 +6,7 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.5](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.5)**
+**当前版本：[v0.0.6](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.6)**
 
 **主机、集群和数据库，在同一个窗口。** 侧栏分成主机、Kubernetes、数据库。打开哪一块，标题栏的 AI 就跟到哪一块，聊天按对象隔开。Home 是欢迎页。变更要批准，随时可以 STOP。
 

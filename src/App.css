@@ -1477,13 +1477,14 @@ body.find-panel-resizing .ai-engineer-panel {
 .modal-body .form-row {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   margin: 0;
 }
 
 .modal-body .form-row button {
-  flex: 1 1 calc(50% - 4px);
-  min-width: 110px;
+  flex: 0 0 auto;
+  min-width: 88px;
   border: 1px solid var(--tw-border);
   background: var(--tw-surface);
   color: var(--tw-fg);
@@ -7014,12 +7015,12 @@ body.find-panel-resizing {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--tw-border);
-  border-radius: 8px;
-  background: var(--tw-surface);
+  border-radius: 6px;
+  background: var(--tw-surface-2);
   color: var(--tw-fg);
   cursor: pointer;
 }
@@ -12364,7 +12365,8 @@ body.k8s-detail-resizing {
   padding: 2px 8px;
 }
 .saved-item.selected {
-  outline: 1px solid var(--tw-accent-emphasis);
+  border-color: var(--tw-accent-emphasis);
+  outline: none;
   background: rgba(56, 139, 253, 0.12);
 }
 .k8s-workbench {
@@ -12671,7 +12673,7 @@ body.k8s-detail-resizing {
 }
 .k8s-tree-home.active {
   background: rgba(56, 139, 253, 0.18);
-  color: #fff;
+  color: var(--tw-fg);
 }
 .k8s-tree-home span {
   white-space: nowrap;
@@ -12707,7 +12709,7 @@ body.k8s-detail-resizing {
 }
 .k8s-tree-item.active {
   background: rgba(56, 139, 253, 0.18);
-  color: #fff;
+  color: var(--tw-fg);
 }
 .k8s-tree-crd {
   display: flex;
@@ -14157,7 +14159,7 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   border-radius: 6px;
   background: var(--tw-canvas);
   color: var(--tw-fg);
-  font-size: 12px;
+  font-size: var(--tw-font-dense);
 }
 .k8s-col-actions {
   width: 36px;
@@ -14223,13 +14225,15 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--tw-fg-subtle);
-  padding: 4px 10px;
+  height: 28px;
+  border: 1px solid var(--tw-border);
+  border-bottom: none;
+  background: var(--tw-bg);
+  color: var(--tw-fg-muted);
+  padding: 0 10px;
   border-radius: 6px 6px 0 0;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--tw-font-dense);
 }
 .k8s-detail-tabs button.active {
   color: var(--tw-fg);
@@ -14423,14 +14427,9 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   position: relative;
 }
 
-.modal:has(.k8s-add-cluster) {
-  width: min(100%, 720px);
-  max-height: min(92vh, 860px);
-}
 .k8s-add-cluster {
   display: grid;
   gap: 12px;
-  min-width: min(640px, 88vw);
 }
 .k8s-add-name {
   display: grid;
@@ -14465,8 +14464,8 @@ body.k8s-dock-resizing .k8s-dock-resizer {
 }
 .k8s-add-tabs button.active {
   color: var(--tw-fg);
-  background: rgba(56, 139, 253, 0.16);
-  border-color: var(--tw-accent-emphasis);
+  background: var(--tw-surface-2);
+  border-color: var(--tw-border);
 }
 .k8s-add-file {
   display: grid;
@@ -14475,7 +14474,7 @@ body.k8s-dock-resizing .k8s-dock-resizer {
 }
 .k8s-add-yaml {
   width: 100%;
-  min-height: min(60vh, 420px);
+  min-height: 220px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   line-height: 1.4;
@@ -14500,9 +14499,9 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   width: max-content;
   min-width: 100%;
   box-sizing: border-box;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--tw-fg-subtle);
   padding: 5px 6px;
   border: none;
@@ -14649,7 +14648,7 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   gap: var(--tw-space-2);
 }
 .db-workbench-nav {
-  padding: var(--tw-space-2);
+  padding: 8px 10px 10px;
   gap: var(--tw-space-2);
   height: 100%;
   overflow: hidden;
@@ -14720,7 +14719,7 @@ body.k8s-dock-resizing .k8s-dock-resizer {
   width: 100%;
   max-width: 100%;
   gap: var(--tw-space-2);
-  padding: 7px 10px;
+  padding: 6px 10px;
   font-size: var(--tw-font-ui);
 }
 .db-connection-row:hover > .saved-item-main,
@@ -15887,7 +15886,6 @@ body.k8s-dock-resizing .k8s-dock-resizer {
 .db-readonly-hint,
 .db-error,
 .db-summary,
-.db-workbench [data-testid="db-empty"],
 .db-workbench [data-testid="db-plan"] {
   margin: 0;
   padding: 8px 12px;

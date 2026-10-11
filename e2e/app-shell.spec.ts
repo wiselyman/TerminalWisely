@@ -57,4 +57,33 @@ test.describe("App shell & welcome", () => {
       "true",
     );
   });
+
+  test("locale and theme stay across the three sidebars", async ({ page }) => {
+    await page.getByTestId("locale-switcher-trigger").click();
+    await page.getByTestId("locale-option-zh-CN").click();
+    await page.getByTestId("theme-switcher-trigger").click();
+    await page.getByTestId("theme-option-light").click();
+
+    for (const id of ["sidebar-view-hosts", "sidebar-view-k8s", "sidebar-view-db"]) {
+      await page.getByTestId(id).click();
+      await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    }
+    await expect(page.getByTestId("sidebar-view-hosts")).toHaveAttribute("aria-label", "主机");
+    await expect(page.getByTestId("sidebar-view-db")).toHaveAttribute("aria-label", "数据库");
+  });
+
+  test("sidebar width survives reload", async ({ page }) => {
+    await page.evaluate(() => {
+      localStorage.setItem("terminal-wisely.sidebar-width", "320");
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.__TW_E2E__ != null, undefined, {
+      timeout: 30_000,
+    });
+    await expect(page.locator(".app-shell")).toHaveAttribute(
+      "style",
+      /--sidebar-width:\s*320px/,
+    );
+  });
 });

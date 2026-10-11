@@ -196,7 +196,11 @@ type TableView = {
 };
 type RunStatus = "rows" | "approval" | "error" | "idle";
 
-export function DbWorkbench() {
+export function DbWorkbench({
+  onRegisterNewConnection,
+}: {
+  onRegisterNewConnection?: (open: () => void) => void;
+}) {
   const { t } = useTranslation(["shell", "common"]);
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
   const bindDbContext = useAiEngineerStore((s) => s.bindDbContext);
@@ -709,6 +713,10 @@ export function DbWorkbench() {
     setTestOk(false);
     setFormOpen(true);
   }
+
+  useEffect(() => {
+    onRegisterNewConnection?.(openCreateForm);
+  });
 
   function connectionRequest() {
     const redis = form.engine === "redis";
@@ -1685,7 +1693,7 @@ export function DbWorkbench() {
             });
           }}
         >
-          {nodeOpen ? <ChevronDown size={12} className="k8s-tree-chevron" /> : <ChevronRight size={12} className="k8s-tree-chevron" />}
+          {nodeOpen ? <ChevronDown size={14} className="k8s-tree-chevron" /> : <ChevronRight size={14} className="k8s-tree-chevron" />}
           <span className="k8s-tree-icon">
             <ObjectMark kind={node.kind} />
           </span>
@@ -1706,7 +1714,7 @@ export function DbWorkbench() {
                       showGroup(databaseName, node, group);
                     }}
                   >
-                    {groupOpen ? <ChevronDown size={12} className="k8s-tree-chevron" /> : <ChevronRight size={12} className="k8s-tree-chevron" />}
+                    {groupOpen ? <ChevronDown size={14} className="k8s-tree-chevron" /> : <ChevronRight size={14} className="k8s-tree-chevron" />}
                     <span className="k8s-tree-icon">
                       <GroupMark group={group} />
                     </span>
@@ -1746,7 +1754,7 @@ export function DbWorkbench() {
             showKindPane(databaseName, kind, schemaName);
           }}
         >
-          {kindOpen ? <ChevronDown size={12} className="k8s-tree-chevron" /> : <ChevronRight size={12} className="k8s-tree-chevron" />}
+          {kindOpen ? <ChevronDown size={14} className="k8s-tree-chevron" /> : <ChevronRight size={14} className="k8s-tree-chevron" />}
           <span className="k8s-tree-icon">
             <ObjectMark kind={kind} />
           </span>
@@ -1821,9 +1829,9 @@ export function DbWorkbench() {
                   {connectingId === item.id ? (
                     <span className="db-connect-spinner" data-testid="db-connect-loading" aria-hidden />
                   ) : open ? (
-                    <ChevronDown size={12} className="k8s-tree-chevron" />
+                    <ChevronDown size={14} className="k8s-tree-chevron" />
                   ) : (
-                    <ChevronRight size={12} className="k8s-tree-chevron" />
+                    <ChevronRight size={14} className="k8s-tree-chevron" />
                   )}
                   <span className="k8s-tree-icon">
                     <EngineMark engine={item.engine} connected={!!liveIds[item.id]} />
@@ -1894,9 +1902,9 @@ export function DbWorkbench() {
                             }}
                           >
                             {dbOpen ? (
-                              <ChevronDown size={12} className="k8s-tree-chevron" />
+                              <ChevronDown size={14} className="k8s-tree-chevron" />
                             ) : (
-                              <ChevronRight size={12} className="k8s-tree-chevron" />
+                              <ChevronRight size={14} className="k8s-tree-chevron" />
                             )}
                             <span className="k8s-tree-icon">
                               <ObjectMark
@@ -1956,9 +1964,9 @@ export function DbWorkbench() {
                                           }}
                                         >
                                           {schemaOpen ? (
-                                            <ChevronDown size={12} className="k8s-tree-chevron" />
+                                            <ChevronDown size={14} className="k8s-tree-chevron" />
                                           ) : (
-                                            <ChevronRight size={12} className="k8s-tree-chevron" />
+                                            <ChevronRight size={14} className="k8s-tree-chevron" />
                                           )}
                                           <span className="k8s-tree-icon">
                                             <ObjectMark
@@ -2386,7 +2394,7 @@ export function DbWorkbench() {
           </div>
         ) : null}
         {pane === "grid" && !keyView && result && result.rows.length === 0 && !tableView && !active?.error ? (
-          <p data-testid="db-empty">{t("dbEmpty")}</p>
+          <p className="empty-state" data-testid="db-empty">{t("dbEmpty")}</p>
         ) : null}
         {pane === "grid" && !keyView && result && result.rows.length > 0 && selected && resultPresentation(selected.engine) === "documents" ? (
           <div data-testid="db-results" className="db-json-view">
@@ -2485,7 +2493,7 @@ export function DbWorkbench() {
           <div data-testid="db-results" className="db-grid-chrome">
             {result.truncated ? <p data-testid="db-truncated">{t("dbTruncated")}</p> : null}
             {/* Table browse: empty page stays quiet (Navicat). Ad-hoc SQL still shows db-empty. */}
-            {result.rows.length === 0 && !tableView ? <p data-testid="db-empty">{t("dbEmpty")}</p> : null}
+            {result.rows.length === 0 && !tableView ? <p className="empty-state" data-testid="db-empty">{t("dbEmpty")}</p> : null}
             <div className="db-grid-toolbar-top">
               {tableView || isObjectDataTab(active) ? (
                 <button

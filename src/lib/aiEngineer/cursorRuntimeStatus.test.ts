@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canSelectExternalRuntime,
   externalRuntimeStatusKind,
+  mergeRuntimeProbe,
   shouldAutoStartRuntimeLogin,
 } from "./cursorRuntimeStatus";
+import type { RuntimeProbeResult } from "./api";
 
 describe("externalRuntimeStatusKind", () => {
   it("returns unknown without probe", () => {
@@ -60,6 +62,36 @@ describe("externalRuntimeStatusKind", () => {
     expect(canSelectExternalRuntime("install_needed")).toBe(false);
     expect(canSelectExternalRuntime("unknown")).toBe(false);
     expect(canSelectExternalRuntime("not_ready")).toBe(false);
+  });
+
+  it("does not draw a transport failure as not installed", () => {
+    const failed: RuntimeProbeResult = {
+      kind: "cursor",
+      installed: false,
+      authenticated: false,
+      detail: "probe_failed",
+      fake: false,
+      code: "probe_failed",
+    };
+    expect(externalRuntimeStatusKind(failed, "cursor")).toBe("unknown");
+    const ready: RuntimeProbeResult = {
+      kind: "codex",
+      installed: true,
+      authenticated: true,
+      detail: "ready",
+      fake: false,
+      code: "ready",
+    };
+    const inconclusive: RuntimeProbeResult = {
+      kind: "codex",
+      installed: true,
+      authenticated: false,
+      detail: "probe_inconclusive",
+      fake: false,
+      code: "probe_inconclusive",
+    };
+    expect(mergeRuntimeProbe(ready, inconclusive).code).toBe("ready");
+    expect(mergeRuntimeProbe(undefined, failed).code).toBe("probe_failed");
   });
 
   it("marks login_needed", () => {

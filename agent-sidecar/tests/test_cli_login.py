@@ -38,6 +38,38 @@ def test_extract_url_empty() -> None:
     assert _extract_url("no urls here") == ""
 
 
+def test_absorb_login_output_reads_utf16_without_newline() -> None:
+    from app.runtime.cli_login import _absorb_login_output
+
+    raw = "https://cursor.com/loginDeepControl?challenge=abc".encode("utf-16-le")
+    _buf, found = _absorb_login_output(b"", raw)
+    assert "loginDeepControl" in found
+
+
+def test_windows_login_url_opens_with_startfile(monkeypatch) -> None:
+    import app.runtime.cli_login as cli_login
+
+    opened: list[str] = []
+    monkeypatch.setattr(cli_login.sys, "platform", "win32")
+
+    def _startfile(url: str) -> None:
+        opened.append(url)
+
+    monkeypatch.setattr(cli_login.os, "startfile", _startfile, raising=False)
+    assert cli_login._open_url_on_windows(
+        "https://cursor.com/loginDeepControl?challenge=abc"
+    )
+    assert opened and "loginDeepControl" in opened[0]
+
+
+def test_windows_login_env_still_prints_url(monkeypatch) -> None:
+    import app.runtime.cli_login as cli_login
+
+    monkeypatch.setattr(cli_login.sys, "platform", "win32")
+    env = cli_login.login_child_env()
+    assert env.get("NO_OPEN_BROWSER") == "1"
+
+
 @pytest.mark.asyncio
 async def test_start_login_install_needed(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PATH", str(tmp_path))

@@ -918,8 +918,11 @@ export function K8sWorkbench() {
   }, [forwardablePorts, resourcePortForwards, selectedResource]);
 
   if (!cluster) {
-    // Add-cluster lives in the sidebar / chrome; no redundant empty CTA.
-    return <div className="k8s-workbench-empty" data-testid="k8s-workbench-empty" />;
+    return (
+      <div className="k8s-workbench-empty" data-testid="k8s-workbench-empty">
+        <p className="empty-state">{t("selectClusterHint")}</p>
+      </div>
+    );
   }
 
   const runDelete = async (row: K8sResourceRow): Promise<boolean> => {
@@ -1887,9 +1890,9 @@ export function K8sWorkbench() {
                   onClick={() => toggleGroup(group.id)}
                 >
                   {open ? (
-                    <ChevronDown size={12} strokeWidth={2} className="k8s-tree-chevron" />
+                    <ChevronDown size={14} strokeWidth={2} className="k8s-tree-chevron" />
                   ) : (
-                    <ChevronRight size={12} strokeWidth={2} className="k8s-tree-chevron" />
+                    <ChevronRight size={14} strokeWidth={2} className="k8s-tree-chevron" />
                   )}
                   <K8sNavGroupIcon groupId={group.id} />
                   <span>{t(`navGroup.${group.id}`)}</span>

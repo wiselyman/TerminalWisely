@@ -204,6 +204,7 @@ class RuntimeLoginResponse(BaseModel):
     url: str = ""
     detail: str = ""
     exit_code: int | None = None
+    open_browser: bool = True
 
 
 class McpCallRequest(BaseModel):

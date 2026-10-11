@@ -738,7 +738,7 @@ export function ConnectionPanel({
       <EntityRow
         embedded
         selected={selectedClusterId === cluster.id}
-        icon={<K8sClusterIcon />}
+        icon={<K8sClusterIcon size={16} />}
         primary={cluster.display_name}
         onActivate={() => selectCluster(cluster.id)}
         actions={

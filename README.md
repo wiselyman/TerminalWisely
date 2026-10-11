@@ -6,7 +6,7 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.0.5](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.5)**
+**Current version: [v0.0.6](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.6)**
 
 **Hosts, clusters, and databases in one window.** The sidebar is three surfaces: Hosts, Kubernetes, and Databases. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page. Changes wait for approval, and STOP is always there.
 

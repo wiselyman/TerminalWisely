@@ -71,8 +71,16 @@ export function AddK8sClusterModal({ onClose }: Props) {
   };
 
   return (
-    <Modal title={t("addClusterTitle")} onClose={onClose}>
-      <div className="k8s-add-cluster">
+    <Modal title={t("addClusterTitle")} wide={tab === "paste"} onClose={onClose}>
+      <form
+        className="connection-form"
+        data-testid="k8s-add-cluster"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (tab === "file") void pickFile();
+          else void onPaste(event);
+        }}
+      >
         <label className="k8s-add-name">
           {t("addClusterName")}
           <input
@@ -82,6 +90,10 @@ export function AddK8sClusterModal({ onClose }: Props) {
             placeholder={t("addClusterNamePlaceholder")}
             autoFocus
             required
+            lang="en"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
           />
         </label>
         <div className="k8s-add-tabs" role="tablist">
@@ -104,46 +116,34 @@ export function AddK8sClusterModal({ onClose }: Props) {
             {t("addClusterPaste")}
           </button>
         </div>
-        {tab === "file" ? (
-          <div className="k8s-add-file">
-            <button
-              type="button"
-              className="find-panel-run primary"
-              disabled={busy || !nameReady}
-              onClick={() => void pickFile()}
-            >
+        {tab === "paste" ? (
+          <label>
+            {t("addClusterPasteLabel")}
+            <textarea
+              className="k8s-add-yaml"
+              value={yaml}
+              onChange={(e) => setYaml(e.target.value)}
+              spellCheck={false}
+              rows={10}
+              placeholder={"apiVersion: v1\nkind: Config\n..."}
+            />
+          </label>
+        ) : null}
+        <div className="form-row">
+          <button type="button" onClick={onClose}>
+            {t("common:cancel")}
+          </button>
+          {tab === "file" ? (
+            <button type="submit" disabled={busy || !nameReady}>
               {t("addClusterPickFile")}
             </button>
-            <div className="form-row">
-              <button type="button" onClick={onClose}>
-                {t("common:cancel")}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form className="connection-form" onSubmit={(e) => void onPaste(e)}>
-            <label>
-              {t("addClusterPasteLabel")}
-              <textarea
-                className="k8s-add-yaml"
-                value={yaml}
-                onChange={(e) => setYaml(e.target.value)}
-                spellCheck={false}
-                rows={16}
-                placeholder={"apiVersion: v1\nkind: Config\n..."}
-              />
-            </label>
-            <div className="form-row">
-              <button type="submit" disabled={busy || !nameReady || !yaml.trim()}>
-                {t("addClusterSubmit")}
-              </button>
-              <button type="button" onClick={onClose}>
-                {t("common:cancel")}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
+          ) : (
+            <button type="submit" disabled={busy || !nameReady || !yaml.trim()}>
+              {t("addClusterSubmit")}
+            </button>
+          )}
+        </div>
+      </form>
     </Modal>
   );
 }

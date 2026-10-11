@@ -35,6 +35,7 @@ import {
 import {
   canSelectExternalRuntime,
   externalRuntimeStatusKind,
+  mergeRuntimeProbe,
   type ExternalRuntimeStatusKind,
 } from "../../lib/aiEngineer/cursorRuntimeStatus";
 import { openExternalUrl } from "../../lib/aiEngineer/openExternalUrl";
@@ -168,7 +169,10 @@ import {
   type RuntimeProbeResult,
   type UserSkillsCatalog,
 } from "../../lib/aiEngineer/api";
-import { runGuidedRuntimeLogin } from "../../lib/aiEngineer/guidedRuntimeLogin";
+import {
+  guidedLoginErrorDetail,
+  runGuidedRuntimeLogin,
+} from "../../lib/aiEngineer/guidedRuntimeLogin";
 
 type Props = {
   sessionId: string;
@@ -1070,6 +1074,7 @@ export function AiEngineerPanel({
   const [runtimeProbes, setRuntimeProbes] = useState<
     Partial<Record<"cursor" | "codex" | "claude", RuntimeProbeResult>>
   >({});
+  const runtimeProbesRef = useRef(runtimeProbes);
   const [runtimeProbing, setRuntimeProbing] = useState(false);
   const [runtimeLoggingIn, setRuntimeLoggingIn] = useState(false);
   const [runtimeLoginDetail, setRuntimeLoginDetail] = useState<string | null>(
@@ -2303,9 +2308,11 @@ export function AiEngineerPanel({
     try {
       const info = await ensureSidecar();
       const result = await probeRuntime(info, kind);
-      setRuntimeProbes((prev) => ({ ...prev, [kind]: result }));
-      releaseUndetectedRuntime(kind, result);
-      return result;
+      const merged = mergeRuntimeProbe(runtimeProbesRef.current[kind], result);
+      runtimeProbesRef.current = { ...runtimeProbesRef.current, [kind]: merged };
+      setRuntimeProbes(runtimeProbesRef.current);
+      releaseUndetectedRuntime(kind, merged);
+      return merged;
     } catch {
       const failed: RuntimeProbeResult = {
         kind,
@@ -2313,12 +2320,14 @@ export function AiEngineerPanel({
         authenticated: false,
         detail: "probe_failed",
         fake: false,
-        code: "install_needed",
+        code: "probe_failed",
         install_url: RUNTIME_INSTALL_URL[kind],
       };
-      setRuntimeProbes((prev) => ({ ...prev, [kind]: failed }));
-      releaseUndetectedRuntime(kind, failed);
-      return failed;
+      const merged = mergeRuntimeProbe(runtimeProbesRef.current[kind], failed);
+      runtimeProbesRef.current = { ...runtimeProbesRef.current, [kind]: merged };
+      setRuntimeProbes(runtimeProbesRef.current);
+      releaseUndetectedRuntime(kind, merged);
+      return merged;
     } finally {
       setRuntimeProbing(false);
     }
@@ -2332,8 +2341,16 @@ export function AiEngineerPanel({
         EXTERNAL_RUNTIME_KINDS.map(async (kind) => {
           try {
             const result = await probeRuntime(info, kind);
-            setRuntimeProbes((prev) => ({ ...prev, [kind]: result }));
-            releaseUndetectedRuntime(kind, result);
+            const merged = mergeRuntimeProbe(
+              runtimeProbesRef.current[kind],
+              result,
+            );
+            runtimeProbesRef.current = {
+              ...runtimeProbesRef.current,
+              [kind]: merged,
+            };
+            setRuntimeProbes(runtimeProbesRef.current);
+            releaseUndetectedRuntime(kind, merged);
           } catch {
             const failed: RuntimeProbeResult = {
               kind,
@@ -2341,11 +2358,19 @@ export function AiEngineerPanel({
               authenticated: false,
               detail: "probe_failed",
               fake: false,
-              code: "install_needed",
+              code: "probe_failed",
               install_url: RUNTIME_INSTALL_URL[kind],
             };
-            setRuntimeProbes((prev) => ({ ...prev, [kind]: failed }));
-            releaseUndetectedRuntime(kind, failed);
+            const merged = mergeRuntimeProbe(
+              runtimeProbesRef.current[kind],
+              failed,
+            );
+            runtimeProbesRef.current = {
+              ...runtimeProbesRef.current,
+              [kind]: merged,
+            };
+            setRuntimeProbes(runtimeProbesRef.current);
+            releaseUndetectedRuntime(kind, merged);
           }
         }),
       );
@@ -2379,15 +2404,17 @@ export function AiEngineerPanel({
           }
         },
       });
-      setRuntimeProbes((prev) => ({ ...prev, [kind]: probe }));
+      runtimeProbesRef.current = { ...runtimeProbesRef.current, [kind]: probe };
+      setRuntimeProbes(runtimeProbesRef.current);
       setRuntimeLoginDetail(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setRuntimeLoginDetail(null);
         return;
       }
+      setRuntimeLoggingIn(false);
       setRuntimeLoginDetail(
-        err instanceof Error ? err.message : t("aiEngineer.runtime.loginFailed"),
+        guidedLoginErrorDetail(err, t("aiEngineer.runtime.loginFailed")),
       );
       await refreshRuntimeProbe(kind);
     } finally {

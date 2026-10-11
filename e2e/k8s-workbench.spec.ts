@@ -53,6 +53,15 @@ test.describe("K8s workbench", () => {
     await expect(menu).toContainText(/demo/i);
   });
 
+  test("title-bar plus opens add cluster", async ({ page }) => {
+    await expect(page.getByTestId("chrome-new-session")).toBeVisible();
+    await page.getByTestId("chrome-new-session").click();
+    await expect(page.getByTestId("k8s-add-cluster")).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText(
+      /Add Kubernetes cluster|添加 Kubernetes/,
+    );
+  });
+
   test("can open AI engineer from titlebar", async ({ page }) => {
     await page.getByTestId("ai-engineer-tool").click();
     await expect(page.getByTestId("ai-engineer-composer")).toBeVisible({

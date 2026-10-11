@@ -5,9 +5,9 @@ test.describe("Database workbench", () => {
   test("direct connection, query, approval, and status pages", async ({ page }) => {
     await gotoApp(page);
     await page.getByTestId("sidebar-view-db").click();
-    // Entering DB stays on Home; chrome + (SSH) is hidden — add connection is in the sidebar.
+    // Entering DB stays on Home. The title-bar plus adds a connection.
     await expect(page.getByTestId("workspace-welcome")).toBeVisible();
-    await expect(page.getByTestId("chrome-new-session")).toHaveCount(0);
+    await expect(page.getByTestId("chrome-new-session")).toBeVisible();
     await expect(page.getByTestId("db-connection-new")).toBeVisible();
     await expect(page.getByTestId("sidebar-view-db").locator("svg")).toBeVisible();
     await expect(page.getByTestId("db-nav-empty")).toHaveCount(0);
@@ -16,7 +16,7 @@ test.describe("Database workbench", () => {
     await expect(page.getByText(/还没有连接|No connections yet/)).toHaveCount(0);
     await page.getByTestId("entity-add-group-db").click();
     await expect(page.locator(".entity-group-title").filter({ hasText: /^(Group|分组)$/ })).toBeVisible();
-    await page.getByTestId("db-connection-new").click();
+    await page.getByTestId("chrome-new-session").click();
     await expect(page.getByTestId("db-workbench")).toBeVisible();
     await expect(page.getByTestId("db-connection-form")).toBeVisible();
     const hostBox = await page.getByTestId("db-connection-host").boundingBox();

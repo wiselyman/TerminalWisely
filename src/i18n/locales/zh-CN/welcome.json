@@ -1,6 +1,6 @@
 {
   "sectionAria": "欢迎",
-  "eyebrow": "v0.0.5",
+  "eyebrow": "v0.0.6",
   "productName": "TerminalWisely",
   "tagline": "主机、集群和数据库，在同一个窗口",
   "summary": "侧栏分成主机、Kubernetes、数据库。打开哪一块，标题栏的 AI 就跟到哪一块，聊天按对象隔开。Home 是欢迎页。变更要批准，随时可以 STOP。",

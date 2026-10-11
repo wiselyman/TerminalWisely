@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.0.6] - 2026-10-11
+
+Hosts, Kubernetes, and Databases share one set of chrome. No new features.
+
+- A selected row is one accent border. Tree selection keeps the foreground color
+- List inset, row padding, group labels, icon buttons, search fields, and secondary tabs use the same sizes
+- An empty Kubernetes workspace shows the existing hint. An empty database result uses the same empty style
+- Tests cover tab menus, the settings version, locale and theme across the three sidebars, and sidebar width after reload
+- The title-bar plus adds a server, a cluster, or a database connection for the sidebar that is open
+- The first letter in an empty field is not auto-capitalized
+- Add cluster uses the same dialog footer as the other dialogs
+- On Windows, agent sign-in opens the system browser, and a slow probe does not mark an installed CLI as missing
+
+主机、Kubernetes、数据库共用一套界面。没有新功能。
+
+- 选中行是一条强调色边。树里的选中保持前景色
+- 列表留白、行内边距、分组标题、图标按钮、搜索框和次级页签用同一套尺寸
+- 没有集群时显示已有提示。数据库空结果用同一套空状态
+- 测试补上页签菜单、设置里的版本号、三条侧栏的语言和主题，以及刷新后的侧栏宽度
+- 标题栏加号按当前侧栏添加服务器、集群或数据库连接
+- 空输入框的第一个字母不会被自动改成大写
+- 添加集群和其它对话框共用同一套底栏
+- Windows 上 Agent 登录会打开系统浏览器；探测变慢时，已安装的 CLI 不再显示成未安装
+
 ## [0.0.5] - 2026-10-10
 
 Hosts, Kubernetes, and databases are three sidebars. AI follows the open object.

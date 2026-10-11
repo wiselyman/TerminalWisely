@@ -33,6 +33,7 @@ import { useSidebarViewStore } from "./stores/sidebarViewStore";
 import { useK8sStore } from "./stores/k8sStore";
 import { useDbWorkspaceStore } from "./stores/dbWorkspaceStore";
 import { useManagedEntityStore } from "./stores/managedEntityStore";
+import { chromeNewAction } from "./lib/chromeNewSession";
 import { extractDroppedPaths } from "./lib/terminalLinks";
 import { getTerminalFontFamily, ensureTerminalFontsLoaded } from "./lib/terminalFont";
 import {
@@ -316,8 +317,12 @@ function App() {
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
+  const openNewDbRef = useRef<() => void>(() => {});
   const registerNewRemote = useCallback((open: () => void) => {
     openNewRemoteRef.current = open;
+  }, []);
+  const registerNewDb = useCallback((open: () => void) => {
+    openNewDbRef.current = open;
   }, []);
   const aiEngineerOpen = useAiEngineerStore((s) => s.open);
   const aiEngineerSessionId = useAiEngineerStore((s) => s.sessionId);
@@ -345,7 +350,7 @@ function App() {
   // into the sidebar while Home is still showing.
   const showDbWorkbench = sidebarView === "db";
   const showHostsSession = sidebarView === "hosts" && !homeOpen;
-  const showChromeNewSession = sidebarView === "hosts";
+  const chromeNew = chromeNewAction(sidebarView);
   const aiPanelSessionId = aiEngineerSessionId;
   const showAiEngineerPanel = shouldShowAiEngineerPanel({
     open: aiEngineerOpen,
@@ -1230,20 +1235,38 @@ function App() {
                 </>
               ) : null}
               </div>
-              {showChromeNewSession ? (
-                <button
+              <button
                   type="button"
                   className="chrome-new-session"
                   data-testid="chrome-new-session"
-                  aria-label={t("newSsh")}
-                  title={t("newSsh")}
+                  aria-label={
+                    chromeNew === "cluster"
+                      ? t("k8s:addClusterTitle")
+                      : chromeNew === "database"
+                        ? t("dbNewConnection")
+                        : t("newSsh")
+                  }
+                  title={
+                    chromeNew === "cluster"
+                      ? t("k8s:addClusterTitle")
+                      : chromeNew === "database"
+                        ? t("dbNewConnection")
+                        : t("newSsh")
+                  }
                   onClick={() => {
+                    if (chromeNew === "cluster") {
+                      setAddClusterOpen(true);
+                      return;
+                    }
+                    if (chromeNew === "database") {
+                      openNewDbRef.current();
+                      return;
+                    }
                     openNewRemoteRef.current();
                   }}
                 >
                   <ChromePlusIcon />
                 </button>
-              ) : null}
 
           <div
             className="chrome-titlebar-drag"
@@ -1344,7 +1367,9 @@ function App() {
               <div className="terminal-stack">
                 {homeOpen ? <WorkspaceWelcome /> : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}
-                {showDbWorkbench ? <DbWorkbench /> : null}
+                {showDbWorkbench ? (
+                  <DbWorkbench onRegisterNewConnection={registerNewDb} />
+                ) : null}
                 {tabs.map((tab) => (
                   <TerminalView
                     key={tab.id}

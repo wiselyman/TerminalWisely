@@ -30,4 +30,18 @@ test.describe("Tab management", () => {
     });
     await expect(page.locator('.tab[data-session-id="e2e-ssh-session-1"]')).toBeVisible();
   });
+
+  test("closes other tabs from the tab menu", async ({ page }) => {
+    await page.locator('.tab[data-session-id="e2e-ssh-session-2"]').click({ button: "right" });
+    await page.getByRole("menuitem", { name: /Close others|关闭其他/ }).click();
+    await expect(page.locator('.tab[data-session-id="e2e-ssh-session-1"]')).toHaveCount(0);
+    await expect(page.locator('.tab[data-session-id="e2e-ssh-session-2"]')).toBeVisible();
+  });
+
+  test("closes tabs to the left from the tab menu", async ({ page }) => {
+    await page.locator('.tab[data-session-id="e2e-ssh-session-2"]').click({ button: "right" });
+    await page.getByRole("menuitem", { name: /Close tabs to the left|关闭左侧/ }).click();
+    await expect(page.locator('.tab[data-session-id="e2e-ssh-session-1"]')).toHaveCount(0);
+    await expect(page.locator('.tab[data-session-id="e2e-ssh-session-2"]')).toBeVisible();
+  });
 });

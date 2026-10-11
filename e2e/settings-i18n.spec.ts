@@ -16,6 +16,12 @@ test.describe("Settings and locale", () => {
     });
   });
 
+  test("shows the app version in settings", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openSettings();
+    await expect(page.getByRole("dialog")).toContainText(/Version 0\.0\.0|版本 0\.0\.0/);
+  });
+
   test("locale toggle updates welcome text", async ({ page }) => {
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
