@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import platform
 import time
 import uuid
 from typing import Any, Protocol
@@ -281,15 +282,128 @@ class AgentLoop:
             - paused_now
         )
 
+    def _execution_target(self) -> str:
+        raw = str(self.run.metadata.get("target") or "ssh").strip().lower()
+        return "local" if raw == "local" else "ssh"
+
     def _tool_schemas(self) -> list[dict[str, Any]]:
         from app.agent.db_context import bound_ssh_session_id
 
         engineer_mode = str(self.run.metadata.get("engineer_mode") or "linux")
-        return tools_for_interaction_mode(
+        target = self._execution_target()
+        schemas = tools_for_interaction_mode(
             self.run.interaction_mode,
             engineer_mode=engineer_mode,
             ssh_session_id=bound_ssh_session_id(self.run.metadata),
+            target=target,
         )
+        if target == "local":
+            schemas = [*schemas, *self._user_mcp_openai_tools()]
+        return schemas
+
+    def _user_mcp_servers(self):
+        from app.paths import data_dir
+        from app.runtime.user_mcp import resolve_user_mcp_servers
+
+        path = data_dir() / "user_mcp.json"
+        file_text = path.read_text(encoding="utf-8") if path.is_file() else None
+        return resolve_user_mcp_servers(
+            self.run.metadata.get("user_mcp_servers"),
+            file_text,
+        )
+
+    def _user_mcp_clients(self):
+        if getattr(self, "_user_mcp_cached", None) is not None:
+            return self._user_mcp_cached
+        from app.runtime.user_mcp import UserMcpClient
+
+        cached = []
+        for server in self._user_mcp_servers():
+            try:
+                cached.append(
+                    (
+                        server,
+                        UserMcpClient(
+                            server.command,
+                            server.args,
+                            env=dict(server.env),
+                        ),
+                    )
+                )
+            except OSError:
+                continue
+        self._user_mcp_cached = cached
+        return cached
+
+    def _user_mcp_tool_names(self) -> set[str]:
+        names: set[str] = set()
+        for _server, client in self._user_mcp_clients():
+            for tool in client.list_tools():
+                name = str(tool.get("name") or "").strip()
+                if name:
+                    names.add(name)
+        return names
+
+    def _user_mcp_openai_tools(self) -> list[dict[str, Any]]:
+        from app.runtime.tw_mcp import tw_mcp_tool_names
+
+        reserved = set(tw_mcp_tool_names(target="local"))
+        tools: list[dict[str, Any]] = []
+        for _server, client in self._user_mcp_clients():
+            for tool in client.list_tools():
+                name = str(tool.get("name") or "").strip()
+                if not name or name in reserved:
+                    continue
+                schema = tool.get("inputSchema")
+                if not isinstance(schema, dict):
+                    schema = {"type": "object", "additionalProperties": True}
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "description": str(tool.get("description") or name),
+                            "parameters": schema,
+                        },
+                    }
+                )
+        return tools
+
+    async def _call_user_mcp(
+        self, call_id: str, name: str, args: dict[str, Any]
+    ) -> None:
+        import asyncio
+
+        client = None
+        for _server, candidate in self._user_mcp_clients():
+            names = {
+                str(tool.get("name") or "")
+                for tool in candidate.list_tools()
+            }
+            if name in names:
+                client = candidate
+                break
+        if client is None:
+            await self._add_tool_result(
+                call_id,
+                {
+                    "ok": False,
+                    "error": "MCP tool is not configured",
+                    "_untrusted": True,
+                },
+            )
+            return
+        try:
+            result = await asyncio.to_thread(client.call_tool, name, args)
+        except Exception as exc:  # noqa: BLE001 — surface server failure as tool data
+            result = {"ok": False, "error": str(exc), "_untrusted": True}
+        if isinstance(result, dict):
+            result["_untrusted"] = True
+        self.run.append_event(
+            "tool_call",
+            {"call_id": call_id, "name": name, "arguments": args},
+        )
+        await self._add_tool_result(call_id, result)
 
     def _engineer_mode(self) -> str:
         mode = str(self.run.metadata.get("engineer_mode") or "linux").strip().lower()
@@ -324,6 +438,8 @@ class AgentLoop:
                 else None
             ),
             "memory_scope": scope,
+            "target": self._execution_target(),
+            "machine_os": platform.system() or "unknown",
         }
 
     def _should_cancel(self) -> bool:
@@ -1281,6 +1397,28 @@ class AgentLoop:
         self.run.tool_calls_used += 1
         self.run.session_log.append_tool_call_log(call_id, name, args)
 
+        if self._execution_target() == "local":
+            from app.runtime.tw_mcp import tw_mcp_tool_names
+
+            allowed = set(tw_mcp_tool_names(target="local"))
+            if name not in allowed:
+                if name in self._user_mcp_tool_names():
+                    await self._call_user_mcp(call_id, name, args)
+                    return
+                self.run.append_event(
+                    "tool_call",
+                    {"call_id": call_id, "name": name, "arguments": args},
+                )
+                await self._add_tool_result(
+                    call_id,
+                    {
+                        "ok": False,
+                        "error": "MCP tool is not configured",
+                        "_untrusted": True,
+                    },
+                )
+                return
+
         handler = resolve_handler(self, name)
         if handler is None:
             self.run.append_event(
@@ -1961,6 +2099,8 @@ class AgentLoop:
         if lease is not None:
             payload["lease"] = lease.model_dump(mode="json")
             payload["lease_id"] = lease.lease_id
+        if self._execution_target() == "local":
+            payload["target"] = "local"
         if rollback_plan is not None:
             payload["rollback_plan"] = rollback_plan
             payload["apply_command"] = apply_command
