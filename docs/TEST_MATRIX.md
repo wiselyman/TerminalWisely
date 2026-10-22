@@ -205,7 +205,6 @@
 | Run stall 看门狗（冷启动 + 工具后无进度；**工具执行中 / 审批中不误杀**；FE idle abort 同） | `test_stall_watch` + `thinkingIdleAbort.test` | main stall wrap | smoke + run_stalled 清 busy | — | ✓ |
 | Wall-clock run 预算 | paths `max_run_wall_seconds` | loop `_check_budgets` | — | — | ✓ |
 | Home 本机终端 + 聊天（scope `local`；左侧 portable-pty，Windows PowerShell；右侧 `AiEngineerPanel`） | Rust `local_terminal::tests`（shell 选择、PTY 输出） | — | 打开 Home 不发起 SSH | Playwright `home-local-terminal-chat` | Windows 真机未测 |
-| MCP 目录（设置列出常见服务器；安装说明发到 Home 聊天；自定义登记；`user_mcp.json` 含 env） | vitest `mcpCatalog` / `userMcpConfig`；pytest `test_user_mcp` | Rust `user_mcp_store` | 设置不直接跑 npm/uvx | e2e `settings-i18n` MCP catalog | 飞书等要密钥的安装流程未在真机走完 |
 
 ## 10. AI chat 可观测性
 

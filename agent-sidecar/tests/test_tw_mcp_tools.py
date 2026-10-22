@@ -66,8 +66,6 @@ def test_local_prompt_targets_this_computer() -> None:
     assert "CONNECTED Terminal" not in text
     assert "TestOS" in text
     assert "MCP" in text
-    assert "user_mcp.json" in text
-    assert "web_search" in text
 
 
 def test_local_mutation_is_not_preapproved() -> None:

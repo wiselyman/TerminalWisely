@@ -331,8 +331,6 @@ pub fn run() {
             commands::ai_sidecar_stream,
             commands::get_ai_settings,
             commands::save_ai_settings,
-            commands::get_ai_user_mcp,
-            commands::save_ai_user_mcp,
             commands::ai_list_models,
             commands::ai_local_exec,
             commands::local_terminal_start,

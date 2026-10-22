@@ -22,24 +22,12 @@ test.describe("Settings and locale", () => {
     await expect(page.getByRole("dialog")).toContainText(/Version 0\.0\.0|版本 0\.0\.0/);
   });
 
-  test("locale toggle updates welcome text", async ({ page }) => {
+  test("locale toggle keeps Home chat visible", async ({ page }) => {
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
     await page.getByTestId("locale-option-zh-CN").click();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
+    await expect(page.getByTestId("home-work-chat")).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  });
-
-  test("MCP catalog install sends instructions to Home chat", async ({ page }) => {
-    const api = await twE2e(page);
-    await api.openSettings();
-    await expect(page.getByTestId("settings-mcp-section")).toBeVisible();
-    await expect(page.getByTestId("settings-mcp-catalog")).toBeVisible();
-    await expect(page.getByTestId("settings-mcp-playwright")).toBeVisible();
-    await page.getByTestId("settings-mcp-install-playwright").click();
-    await expect(page.getByTestId("home-local-chat")).toBeVisible();
-    await expect(page.getByTestId("home-local-chat")).toContainText(
-      /Playwright MCP|user_mcp\.json/,
-    );
   });
 });

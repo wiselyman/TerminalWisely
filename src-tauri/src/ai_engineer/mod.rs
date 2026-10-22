@@ -9,7 +9,6 @@ mod media_cache;
 mod secrets;
 mod sidecar;
 mod terminal;
-mod user_mcp_store;
 
 pub use chat_history::{
     import_localstorage_snapshot, load_chat_history, load_chat_history_index, load_chat_scope,
@@ -32,4 +31,3 @@ pub use sidecar::{
     SidecarHttpRequest, SidecarHttpResponse, SidecarInfo,
 };
 pub use terminal::{ai_terminal_exec, AiTerminalExecRequest, AiTerminalExecResult};
-pub use user_mcp_store::{get_user_mcp, save_user_mcp, UserMcpView};
