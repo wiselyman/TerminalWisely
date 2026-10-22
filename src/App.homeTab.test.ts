@@ -5,12 +5,13 @@ import { describe, expect, it } from "vitest";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const app = readFileSync(join(dir, "App.tsx"), "utf8");
+const css = readFileSync(join(dir, "App.css"), "utf8");
 
 describe("App Home tab", () => {
-  it("keeps the database sidebar when Home is activated from the DB view", () => {
+  it("keeps the database view selected when Home is activated", () => {
     expect(app).toContain('data-tab-role="home"');
     expect(app).toContain("activateHome()");
-    // Switching to hosts here emptied the DB tree while the Home page stayed open.
+    // Preserve the selected view so its directory returns when leaving Home.
     expect(app).not.toMatch(
       /data-tab-role="home"[\s\S]{0,400}setSidebarView\("hosts"\)/,
     );
@@ -29,7 +30,10 @@ describe("Home space navigation", () => {
 });
 
 describe("Home sidebar content", () => {
-  it("passes Home visibility into ConnectionPanel so Hosts content can be hidden", () => {
-    expect(app).toMatch(/<ConnectionPanel[\s\S]{0,500}homeOpen=\{homeOpen\}/);
+  it("hides the sidebar while retaining its portal host for other spaces", () => {
+    expect(app).toContain("<ConnectionPanel");
+    expect(app).toContain('homeOpen ? "home-space " : ""');
+    expect(css).toMatch(/\.app-shell\.home-space \.sidebar-shell\s*\{\s*display:\s*none;/);
+    expect(css).toContain(".app-shell.home-space .app-body");
   });
 });
