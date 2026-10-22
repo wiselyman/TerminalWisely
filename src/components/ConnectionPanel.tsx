@@ -35,7 +35,6 @@ import { UpdateAvailableBadge } from "./UpdateAvailableBadge";
 interface ConnectionPanelProps {
   cols: number;
   rows: number;
-  homeOpen: boolean;
   collapsed: boolean;
   expandedWidth: number;
   onExpandedWidthChange: (width: number) => void;
@@ -107,7 +106,6 @@ function toolTitle(
 export function ConnectionPanel({
   cols,
   rows,
-  homeOpen,
   collapsed,
   expandedWidth,
   onExpandedWidthChange,
@@ -854,7 +852,7 @@ export function ConnectionPanel({
     <>
       <div className="sidebar-shell">
         <aside className="sidebar">
-          {sidebarView === "hosts" && !homeOpen ? (
+          {sidebarView === "hosts" ? (
             <EntityCatalog>
               <EntityListView
                 scope="hosts"

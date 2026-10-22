@@ -179,6 +179,14 @@ body,
   min-width: 0;
 }
 
+.app-shell.home-space .app-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-shell.home-space .sidebar-shell {
+  display: none;
+}
+
 /* Collapsed: ConnectionPanel renders no sidebar cell — use a single column
    so workspace-frame is not auto-placed into a 0-width track. */
 .app-shell.sidebar-collapsed .app-body {

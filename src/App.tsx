@@ -824,7 +824,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${platformClass} ${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""} has-host-stats-statusbar`}
+      className={`app-shell ${platformClass} ${homeOpen ? "home-space " : ""}${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""} has-host-stats-statusbar`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -898,7 +898,10 @@ function App() {
                     title={t("sidebarViewK8s")}
                     aria-selected={sidebarView === "k8s"}
                     data-testid="sidebar-view-k8s"
-                    onClick={() => setSidebarView("k8s")}
+                    onClick={() => {
+                      setSidebarView("k8s");
+                      leaveHome();
+                    }}
                   >
                     <K8sClusterIcon />
                   </button>
@@ -910,7 +913,10 @@ function App() {
                     title={t("sidebarViewDb")}
                     aria-selected={sidebarView === "db"}
                     data-testid="sidebar-view-db"
-                    onClick={() => setSidebarView("db")}
+                    onClick={() => {
+                      setSidebarView("db");
+                      leaveHome();
+                    }}
                   >
                     <DatabaseIcon />
                   </button>
@@ -1370,7 +1376,6 @@ function App() {
         <ConnectionPanel
           cols={terminalSize.cols}
           rows={terminalSize.rows}
-          homeOpen={homeOpen}
           collapsed={sidebarCollapsed}
           expandedWidth={sidebarExpandedWidth}
           onExpandedWidthChange={setSidebarExpandedWidth}
