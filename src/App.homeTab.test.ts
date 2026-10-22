@@ -27,3 +27,9 @@ describe("Home space navigation", () => {
     expect(app).toContain('onClick={() => activateHome()}');
   });
 });
+
+describe("Home sidebar content", () => {
+  it("passes Home visibility into ConnectionPanel so Hosts content can be hidden", () => {
+    expect(app).toMatch(/<ConnectionPanel[\s\S]{0,500}homeOpen=\{homeOpen\}/);
+  });
+});

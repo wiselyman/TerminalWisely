@@ -883,7 +883,10 @@ function App() {
                     title={t("sidebarViewHosts")}
                     aria-selected={sidebarView === "hosts"}
                     data-testid="sidebar-view-hosts"
-                    onClick={() => setSidebarView("hosts")}
+                    onClick={() => {
+                      setSidebarView("hosts");
+                      leaveHome();
+                    }}
                   >
                     <SystemInfoIcon />
                   </button>
@@ -1367,6 +1370,7 @@ function App() {
         <ConnectionPanel
           cols={terminalSize.cols}
           rows={terminalSize.rows}
+          homeOpen={homeOpen}
           collapsed={sidebarCollapsed}
           expandedWidth={sidebarExpandedWidth}
           onExpandedWidthChange={setSidebarExpandedWidth}

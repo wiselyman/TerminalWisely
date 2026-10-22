@@ -1,11 +1,23 @@
 import { expect, test } from "@playwright/test";
-import { gotoApp, twE2e } from "./tw-e2e";
+import { expandUngroupedEntities, gotoApp, twE2e } from "./tw-e2e";
 
 test.describe("App shell & welcome", () => {
   test.beforeEach(async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openHome();
+  });
+
+  test("Home keeps the hosts list out of its left space pane", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.resetMocks();
+    await expect(page.getByRole("button", { name: "E2E Test Host" })).toHaveCount(0);
+    await page.getByTestId("sidebar-view-hosts").click();
+    await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
+    await expandUngroupedEntities(page);
+    await expect(page.getByRole("button", { name: "E2E Test Host" })).toBeVisible();
+    await page.getByTestId("sidebar-view-home").click();
+    await expect(page.getByRole("button", { name: "E2E Test Host" })).toHaveCount(0);
   });
 
   test("shows the local home chat", async ({ page }) => {
