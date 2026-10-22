@@ -866,6 +866,18 @@ function App() {
                   <button
                     type="button"
                     role="tab"
+                    className={`chrome-sidebar-view-btn${homeOpen ? " active" : ""}`}
+                    aria-label={t("sidebarViewHome")}
+                    title={t("sidebarViewHome")}
+                    aria-selected={homeOpen}
+                    data-testid="sidebar-view-home"
+                    onClick={() => activateHome()}
+                  >
+                    <TabHomeIcon />
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
                     className={`chrome-sidebar-view-btn${sidebarView === "hosts" ? " active" : ""}`}
                     aria-label={t("sidebarViewHosts")}
                     title={t("sidebarViewHosts")}

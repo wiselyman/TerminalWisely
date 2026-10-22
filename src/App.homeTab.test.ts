@@ -16,3 +16,14 @@ describe("App Home tab", () => {
     );
   });
 });
+
+describe("Home space navigation", () => {
+  it("places Home before Hosts and binds it to the existing Home activation", () => {
+    const homeButton = app.indexOf('data-testid="sidebar-view-home"');
+    const hostsButton = app.indexOf('data-testid="sidebar-view-hosts"');
+    expect(homeButton).toBeGreaterThan(-1);
+    expect(homeButton).toBeLessThan(hostsButton);
+    expect(app).toContain('aria-selected={homeOpen}');
+    expect(app).toContain('onClick={() => activateHome()}');
+  });
+});

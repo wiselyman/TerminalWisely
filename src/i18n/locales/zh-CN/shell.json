@@ -23,6 +23,7 @@
   "entityDragItem": "拖动排序",
   "entityDragGroup": "拖动分组",
   "sidebarViewsAria": "侧栏视图",
+  "sidebarViewHome": "Home",
   "sidebarViewHosts": "主机",
   "sidebarViewK8s": "Kubernetes",
   "sidebarViewDb": "数据库",

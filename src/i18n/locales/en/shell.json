@@ -23,6 +23,7 @@
   "entityDragItem": "Drag to reorder",
   "entityDragGroup": "Drag to reorder group",
   "sidebarViewsAria": "Sidebar views",
+  "sidebarViewHome": "Home",
   "sidebarViewHosts": "Hosts",
   "sidebarViewK8s": "Kubernetes",
   "sidebarViewDb": "Databases",
