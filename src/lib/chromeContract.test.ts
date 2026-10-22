@@ -61,4 +61,15 @@ describe("shared chrome", () => {
     expect(db).toContain('className="empty-state" data-testid="db-empty"');
     expect(css).not.toContain('[data-testid="db-empty"]');
   });
+
+  it("keeps Home as a bordered terminal and chat split", () => {
+    const split = rule(".home-local-chat");
+    expect(split).toContain("display: grid");
+    expect(split).toContain("grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)");
+    expect(rule(".home-local-terminal-pane")).toContain("border-right: 1px solid var(--tw-border)");
+    expect(rule(".home-local-terminal")).toContain("inset: 0");
+    expect(rule(".home-work-chat .ai-engineer-panel.is-home-workspace")).toContain(
+      "position: relative !important",
+    );
+  });
 });

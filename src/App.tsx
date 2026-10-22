@@ -15,6 +15,7 @@ import { HostStatsStatusBar } from "./components/hostStats/HostStatsStatusBar";
 import { K8sClusterStatusBar } from "./components/k8s/K8sClusterStatusBar";
 import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
+import { HomeWorkspace } from "./components/home/HomeWorkspace";
 import { LocalFsTool } from "./components/LocalFsTool";
 import { BrowserPanel } from "./components/browser/BrowserPanel";
 import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
@@ -1379,13 +1380,7 @@ function App() {
             <div className="workspace-split">
               <div className="terminal-stack">
                 {homeOpen ? (
-                  <div className="home-local-chat" data-testid="home-local-chat">
-                    <AiEngineerPanel
-                      sessionId={LOCAL_CHAT_SESSION}
-                      placement="home"
-                      surfaceActive
-                    />
-                  </div>
+                  <HomeWorkspace />
                 ) : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}
                 {showDbWorkbench ? (

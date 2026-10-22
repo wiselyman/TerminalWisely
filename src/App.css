@@ -4577,6 +4577,11 @@ body.preview-float-resizing {
 .home-local-chat {
   position: absolute;
   inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  background: var(--tw-bg);
   min-width: 0;
   min-height: 0;
   z-index: 2;
@@ -4601,6 +4606,36 @@ body.preview-float-resizing {
 
 .ai-engineer-panel.is-home-workspace .find-panel-resizer {
   display: none;
+}
+
+.home-local-terminal-pane,
+.home-work-chat {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-local-terminal-pane {
+  border-right: 1px solid var(--tw-border);
+  background: var(--tw-canvas);
+}
+
+.home-local-terminal {
+  position: absolute;
+  inset: 0;
+  padding: 8px;
+}
+
+.home-local-terminal .xterm {
+  height: 100%;
+}
+
+.home-work-chat .ai-engineer-panel.is-home-workspace {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .host-desktop-panel.find-panel,

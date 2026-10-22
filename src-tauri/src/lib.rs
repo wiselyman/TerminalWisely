@@ -27,6 +27,7 @@ mod db;
 mod webkit_localstorage;
 mod durable;
 pub(crate) mod local_exec;
+mod local_terminal;
 
 use session::SessionManager;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -334,6 +335,10 @@ pub fn run() {
             commands::save_ai_user_mcp,
             commands::ai_list_models,
             commands::ai_local_exec,
+            commands::local_terminal_start,
+            commands::local_terminal_input,
+            commands::local_terminal_resize,
+            commands::local_terminal_stop,
             commands::ai_terminal_exec,
             commands::ai_register_privilege_lease,
             commands::ai_chat_cache_remote_media,

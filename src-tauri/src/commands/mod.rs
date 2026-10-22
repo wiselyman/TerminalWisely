@@ -1279,6 +1279,30 @@ pub async fn ai_local_exec(
 }
 
 #[tauri::command]
+pub fn local_terminal_start(
+    app: AppHandle,
+    cols: u16,
+    rows: u16,
+) -> Result<String, String> {
+    crate::local_terminal::start(app, cols, rows).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_terminal_input(id: String, data: String) -> Result<(), String> {
+    crate::local_terminal::input(&id, &data).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_terminal_resize(id: String, cols: u16, rows: u16) -> Result<(), String> {
+    crate::local_terminal::resize(&id, cols, rows).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn local_terminal_stop(id: String) {
+    crate::local_terminal::stop(&id);
+}
+
+#[tauri::command]
 pub async fn ai_terminal_exec(
     app: tauri::AppHandle,
     request: crate::ai_engineer::AiTerminalExecRequest,
