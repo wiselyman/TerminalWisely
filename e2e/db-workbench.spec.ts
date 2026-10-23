@@ -8,6 +8,7 @@ test.describe("Database workbench", () => {
     // Database is its own space; its directory replaces the Home terminal surface.
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
     await expect(page.locator(".sidebar-shell")).toBeVisible();
+    await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
     await expect(page.getByTestId("chrome-new-session")).toBeVisible();
     await expect(page.getByTestId("db-connection-new")).toBeVisible();
     await expect(page.getByTestId("sidebar-view-db").locator("svg")).toBeVisible();
@@ -217,7 +218,7 @@ test.describe("Database workbench", () => {
     );
     await page.getByTestId("ai-engineer-tool").click();
     await expect(page.getByTestId("ai-engineer-panel")).toBeVisible({ timeout: 20_000 });
-    await page.locator('[data-tab-role="home"]').click();
+    await page.getByTestId("sidebar-view-home").click();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
     await expect(page.locator(".ai-engineer-panel:not(.is-home-workspace):not(.ai-engineer-panel-parked)")).toHaveCount(0);
     await page.getByTestId("db-workspace-tab").click();
@@ -235,7 +236,7 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-schema")).toHaveCount(0);
 
     // Home hides the database directory with the rest of the side panel; DB state survives.
-    await page.locator('[data-tab-role="home"]').click();
+    await page.getByTestId("sidebar-view-home").click();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.locator(".ai-engineer-panel:not(.is-home-workspace):not(.ai-engineer-panel-parked)")).toHaveCount(0);

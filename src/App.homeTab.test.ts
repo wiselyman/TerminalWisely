@@ -8,13 +8,11 @@ const app = readFileSync(join(dir, "App.tsx"), "utf8");
 const css = readFileSync(join(dir, "App.css"), "utf8");
 
 describe("App Home tab", () => {
-  it("keeps the database view selected when Home is activated", () => {
-    expect(app).toContain('data-tab-role="home"');
-    expect(app).toContain("activateHome()");
-    // Preserve the selected view so its directory returns when leaving Home.
-    expect(app).not.toMatch(
-      /data-tab-role="home"[\s\S]{0,400}setSidebarView\("hosts"\)/,
-    );
+  it("has no Home tab and keeps Home navigation in the space buttons", () => {
+    expect(app).not.toContain('data-tab-role="home"');
+    expect(app).not.toContain('t("homeTabTitle")');
+    expect(app).toContain('data-testid="sidebar-view-home"');
+    expect(app).toContain("onClick={() => activateHome()}");
   });
 });
 

@@ -15,11 +15,12 @@ test.describe("App shell & welcome", () => {
     const terminalBounds = await page.locator(".home-local-terminal-pane").boundingBox();
     expect(terminalBounds?.x).toBe(0);
     await page.getByTestId("sidebar-view-hosts").click();
+    await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
     await expect(page.locator(".sidebar-shell")).toBeVisible();
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
     await expandUngroupedEntities(page);
     await expect(page.getByRole("button", { name: "E2E Test Host" })).toBeVisible();
-    await page.locator('[data-tab-role="home"]').click();
+    await page.getByTestId("sidebar-view-home").click();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.getByRole("button", { name: "E2E Test Host" })).toHaveCount(0);
   });
@@ -70,11 +71,13 @@ test.describe("App shell & welcome", () => {
       "aria-selected",
       "true",
     );
+    await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
     await page.getByRole("tab", { name: /Kubernetes/i }).click();
     await expect(page.getByRole("tab", { name: /Kubernetes/i })).toHaveAttribute(
       "aria-selected",
       "true",
     );
+    await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
   });
 
   test("locale and theme stay across the three sidebars", async ({ page }) => {
