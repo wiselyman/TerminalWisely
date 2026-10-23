@@ -12,6 +12,8 @@ import {
 const HOME_TERMINAL_RATIO_KEY = "tw.home-terminal-ratio";
 const SPLIT_KEYBOARD_STEP = 0.02;
 
+type HomeTerminalTab = { id: string; title: string };
+
 function readSavedRatio(): number {
   try {
     return parseHomeSplitRatio(window.localStorage.getItem(HOME_TERMINAL_RATIO_KEY));
@@ -20,7 +22,13 @@ function readSavedRatio(): number {
   }
 }
 
-export function HomeWorkspace() {
+export function HomeWorkspace({
+  terminalTabs,
+  activeTerminalId,
+}: {
+  terminalTabs: HomeTerminalTab[];
+  activeTerminalId: string;
+}) {
   const { t } = useTranslation("terminal");
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [terminalRatio, setTerminalRatio] = useState(readSavedRatio);
@@ -81,7 +89,16 @@ export function HomeWorkspace() {
         className="home-local-terminal-pane"
         aria-label={t("localTerminalTitle")}
       >
-        <LocalTerminal />
+        {terminalTabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={`home-terminal-instance${tab.id === activeTerminalId ? " active" : ""}`}
+            data-terminal-id={tab.id}
+            aria-hidden={tab.id !== activeTerminalId}
+          >
+            <LocalTerminal />
+          </div>
+        ))}
       </section>
       <div
         className="home-local-splitter"

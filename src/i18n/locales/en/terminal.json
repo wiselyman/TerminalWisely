@@ -22,6 +22,8 @@
   "extract": "Extract",
   "blankMenuAria": "Terminal actions",
   "localTerminalTitle": "Local terminal",
+  "localTerminalTabTitle": "Terminal {{number}}",
+  "newLocalTerminal": "New local terminal",
   "homeSplitAria": "Resize terminal and chat panels",
   "homeSplitValue": "Terminal width {{percent}} percent",
   "localTerminalDesktopOnly": "The local terminal is available in the desktop app.",

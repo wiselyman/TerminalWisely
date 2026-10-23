@@ -49,3 +49,26 @@ test("Home is a local terminal beside local chat", async ({ page }) => {
   expect(restoredTerminal!.width).toBeGreaterThan(initialWidth + 150);
   await expect(page.getByTestId("home-split-resizer")).toHaveAttribute("aria-valuenow", "78");
 });
+
+test("Home plus adds an independent local Terminal tab instead of starting SSH", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+
+  await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
+  const sshCallsBefore = await api.getCreateSshCallCount();
+  await page.getByTestId("chrome-new-session").click();
+
+  await expect(page.getByTestId("home-terminal-tab")).toHaveCount(2);
+  await expect(page.getByTestId("home-terminal-tab").nth(1)).toHaveClass(/active/);
+  await expect(page.getByTestId("home-local-terminal")).toHaveCount(2);
+  expect(await api.getCreateSshCallCount()).toBe(sshCallsBefore);
+
+  await page.getByTestId("home-terminal-tab").first().click();
+  await expect(page.getByTestId("home-terminal-tab").first()).toHaveClass(/active/);
+  await page.getByTestId("close-home-terminal-2").click();
+  await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
+  await page.getByTestId("close-home-terminal-1").click();
+  await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
+  await expect(page.getByTestId("home-terminal-tab")).toHaveAttribute("data-terminal-id", "home-terminal-3");
+});

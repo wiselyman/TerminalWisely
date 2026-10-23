@@ -81,7 +81,7 @@ import {
   ChromePlusIcon,
   SidebarToggleIcon,
 } from "./components/SidebarIcons";
-import { DatabaseIcon, SystemInfoIcon } from "./components/WorkspaceToolIcons";
+import { DatabaseIcon, SystemInfoIcon, TerminalIcon } from "./components/WorkspaceToolIcons";
 import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
 import { isTauriRuntime } from "./lib/isTauri";
 import { showManualUpdateCheckResult } from "./lib/updateCheckFeedback";
@@ -316,6 +316,38 @@ function App() {
   const [sidebarExpandedWidth, setSidebarExpandedWidth] = useState(loadSidebarWidth);
   const [windowFullscreen, setWindowFullscreen] = useState(false);
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
+  const [homeTerminalTabs, setHomeTerminalTabs] = useState([
+    { id: "home-terminal-1", title: t("localTerminalTabTitle", { ns: "terminal", number: 1 }) },
+  ]);
+  const [activeHomeTerminalId, setActiveHomeTerminalId] = useState("home-terminal-1");
+  const homeTerminalSequence = useRef(1);
+  const addHomeTerminalTab = useCallback(() => {
+    homeTerminalSequence.current += 1;
+    const tab = {
+      id: `home-terminal-${homeTerminalSequence.current}`,
+      title: t("localTerminalTabTitle", { ns: "terminal", number: homeTerminalSequence.current }),
+    };
+    setHomeTerminalTabs((current) => [...current, tab]);
+    setActiveHomeTerminalId(tab.id);
+  }, [t]);
+  const closeHomeTerminalTab = useCallback((terminalId: string) => {
+    const remaining = homeTerminalTabs.filter((tab) => tab.id !== terminalId);
+    if (remaining.length === 0) {
+      homeTerminalSequence.current += 1;
+      const replacement = {
+        id: `home-terminal-${homeTerminalSequence.current}`,
+        title: t("localTerminalTabTitle", { ns: "terminal", number: homeTerminalSequence.current }),
+      };
+      setHomeTerminalTabs([replacement]);
+      setActiveHomeTerminalId(replacement.id);
+      return;
+    }
+    if (activeHomeTerminalId === terminalId) {
+      const oldIndex = homeTerminalTabs.findIndex((tab) => tab.id === terminalId);
+      setActiveHomeTerminalId(remaining[Math.min(oldIndex, remaining.length - 1)].id);
+    }
+    setHomeTerminalTabs(remaining);
+  }, [activeHomeTerminalId, homeTerminalTabs, t]);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
   const openNewDbRef = useRef<() => void>(() => {});
@@ -1124,6 +1156,40 @@ function App() {
           })}
                   </>
               ) : null}
+              {homeOpen ? homeTerminalTabs.map((tab) => {
+                const active = tab.id === activeHomeTerminalId;
+                return (
+                  <div
+                    key={tab.id}
+                    className={`tab${active ? " active" : ""}`}
+                    data-testid="home-terminal-tab"
+                    data-terminal-id={tab.id}
+                    onClick={() => setActiveHomeTerminalId(tab.id)}
+                  >
+                    {active ? (
+                      <>
+                        <span className="tab-curve tab-curve-start" aria-hidden="true" />
+                        <span className="tab-curve tab-curve-end" aria-hidden="true" />
+                      </>
+                    ) : null}
+                    <span className="tab-kind home-terminal" title={t("localTerminalTitle", { ns: "terminal" })}>
+                      <TerminalIcon />
+                    </span>
+                    <span className="tab-title" title={tab.title}>{tab.title}</span>
+                    <button
+                      type="button"
+                      className="tab-close"
+                      data-testid={`close-${tab.id}`}
+                      aria-label={t("closeTabAria", { title: tab.title })}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeHomeTerminalTab(tab.id);
+                      }}
+                    >×</button>
+                  </div>
+                );
+              }) : null}
               {sidebarView === "k8s" ? (
                 <>
                   {openClusterIds.map((id) => {
@@ -1250,21 +1316,27 @@ function App() {
                   type="button"
                   className="chrome-new-session"
                   data-testid="chrome-new-session"
-                  aria-label={
-                    chromeNew === "cluster"
+                  aria-label={homeOpen
+                    ? t("newLocalTerminal", { ns: "terminal" })
+                    : chromeNew === "cluster"
                       ? t("k8s:addClusterTitle")
                       : chromeNew === "database"
                         ? t("dbNewConnection")
                         : t("newSsh")
                   }
-                  title={
-                    chromeNew === "cluster"
+                  title={homeOpen
+                    ? t("newLocalTerminal", { ns: "terminal" })
+                    : chromeNew === "cluster"
                       ? t("k8s:addClusterTitle")
                       : chromeNew === "database"
                         ? t("dbNewConnection")
                         : t("newSsh")
                   }
                   onClick={() => {
+                    if (homeOpen) {
+                      addHomeTerminalTab();
+                      return;
+                    }
                     if (chromeNew === "cluster") {
                       setAddClusterOpen(true);
                       return;
@@ -1377,7 +1449,10 @@ function App() {
             <div className="workspace-split">
               <div className="terminal-stack">
                 {homeOpen ? (
-                  <HomeWorkspace />
+                  <HomeWorkspace
+                    terminalTabs={homeTerminalTabs}
+                    activeTerminalId={activeHomeTerminalId}
+                  />
                 ) : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}
                 {showDbWorkbench ? (

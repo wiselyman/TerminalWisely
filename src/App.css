@@ -4604,6 +4604,18 @@ body.preview-float-resizing {
   background: var(--tw-canvas);
 }
 
+.home-terminal-instance {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.home-terminal-instance.active {
+  visibility: visible;
+  pointer-events: auto;
+}
+
 .home-local-splitter {
   position: relative;
   z-index: 3;

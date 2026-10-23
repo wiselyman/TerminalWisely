@@ -35,3 +35,15 @@ describe("Home sidebar content", () => {
     expect(css).toContain(".app-shell.home-space .app-body");
   });
 });
+
+describe("Home local terminal tabs", () => {
+  it("routes Home plus to local terminal tabs and keeps other spaces on their existing add flows", () => {
+    expect(app).toContain('data-testid="home-terminal-tab"');
+    expect(app).toContain("addHomeTerminalTab");
+    expect(app).toContain("if (homeOpen)");
+    expect(app).toContain("addHomeTerminalTab();");
+    expect(app).toContain("chromeNew === \"cluster\"");
+    expect(app).toContain("chromeNew === \"database\"");
+    expect(app).toContain("openNewRemoteRef.current()");
+  });
+});
