@@ -6,9 +6,9 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.6](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.6)**
+**当前版本：[v0.0.7](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.7)**
 
-**主机、集群和数据库，在同一个窗口。** 侧栏分成主机、Kubernetes、数据库。打开哪一块，标题栏的 AI 就跟到哪一块，聊天按对象隔开。Home 是欢迎页。变更要批准，随时可以 STOP。
+**本机与远程运维，在同一个窗口。** Home 将本机交互式 Terminal 和本机聊天并排显示；主机、Kubernetes、数据库提供远程工作区和按对象隔离的聊天。变更要批准，随时可以 STOP。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
@@ -23,6 +23,7 @@
 
 | 模块 | 能力 |
 |------|------|
+| **Home** | 本机交互式 Terminal 与本机聊天并排；支持多个 Terminal 页签，第一个固定保留；Windows 使用 PowerShell |
 | **数据库** | 直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天。表页签标出库和 schema。连接可以分组 |
 | **Agent 运行时** | Cursor Agent / Codex / Claude Code 跟到已打开的主机、集群或数据库；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
@@ -30,7 +31,7 @@
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **Kubernetes** | 侧栏 Hosts ↔ K8s；+ 添加集群（文件或粘贴 kubeconfig）或 SSH kubectl；资源树、YAML、日志、Pod Shell。可一键把最新 kubectl/Helm 装到应用数据目录（也可用 PATH / SSH）。受 Lens 启发的实用子集，非完整 Lens IDE |
 | **文件** | 拖拽上传、`ls` 点击进目录或预览；Markdown 类 Typora 所见即所得；下载、压缩、跨服务器发送 |
-| **AI 工程师** | 跟随打开的侧栏：主机上是 Linux，集群上是 K8S，数据库服务上是 SQL。Home 不显示聊天。长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
+| **AI 工程师** | Home 使用本机聊天；其他空间跟随当前主机、集群或数据库。长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
 | **可观测** | 状态栏显示 CPU、内存、磁盘读写、网络 |
@@ -68,7 +69,7 @@
 
 - **Hosts** → **AI Linux Engineer**（已连接 SSH，`terminal_exec`）
 - **K8s** → **AI K8S Engineer**（当前集群，`k8s_*` 工具）
-- **数据库** → 当前服务上的 SQL（`db_search_objects` / `db_query` / `db_explain`）。Home 不打开聊天
+- **数据库** → 当前服务上的 SQL（`db_search_objects` / `db_query` / `db_explain`）
 
 - **同一会话 / 集群** — 不另开静默登录；SSH kubectl 走已绑定会话。  
 - **先看证据** — 在真机/集群上读输出再下结论。  
@@ -187,7 +188,7 @@
 1. **主机** — 添加 SSH 并连接，或点主机图标打开这台机器的桌面。
 2. **Kubernetes** — 切到这一侧，点 **+** 添加集群（kubeconfig 文件或粘贴）。
 3. **数据库** — 切到这一侧，新建连接。
-4. 可选：打开 **AI 工程师** → 选择运行时（内置模型，或已安装的 Cursor / Codex / Claude Code）。Home 不显示聊天。
+4. 可选：打开 **AI 工程师** → 选择运行时（内置模型，或已安装的 Cursor / Codex / Claude Code）。Home 的本机聊天位于本机 Terminal 旁边。
 5. 内置模式：设置 → 添加模型 Profile（Base URL + 模型名；Ollama 通常免 Key）。
 6. 对标记为「系统变更」的命令选择批准或拒绝。
 

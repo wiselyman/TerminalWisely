@@ -139,7 +139,8 @@ Release 默认直接发布（非 Draft），可在 [Releases](https://github.com
 
 CI 全绿只代表「能编出来」，以下需在**真实机器**上各测一遍（约 5 分钟/平台）：
 
-- [ ] 应用能启动，欢迎页/侧栏正常（无本地终端入口）；侧栏收起后工作区仍可见
+- [ ] 应用能启动；Home 显示本机 Terminal 与本机聊天，Windows 使用 PowerShell；Hosts/Kubernetes/Databases 侧栏可正常切换
+- [ ] Home 的 Terminal 页签可新增，首个页签固定；Terminal 与聊天的分隔栏可调整
 - [ ] SSH 能连接，执行 `ls`、`docker ps` 正常
 - [ ] 拖拽本机文件到 SSH 窗口能上传
 - [ ] 拖拽本机文件到 SSH 标签能上传到该会话

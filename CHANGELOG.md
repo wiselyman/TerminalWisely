@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.7] - 2026-10-23
+
+Home is now a local operations space with an interactive Terminal beside local chat.
+
+- Home opens directly to the local Terminal and chat; Windows uses PowerShell
+- Add independent local Terminal tabs; keep the first tab fixed
+- Hide the Hosts list in Home, fill the left workspace with Terminal, and resize the Terminal/chat split
+- Open Home from space navigation without a duplicate Home tab or bottom host status strip
+- Keep existing Hosts, Kubernetes, and Databases workflows
+
+Home 现在是本机运维空间：交互式 Terminal 与本机聊天并排显示。
+
+- 打开 Home 后直接进入本机 Terminal 和聊天；Windows 使用 PowerShell
+- 可新增独立的本机 Terminal 页签，第一个页签固定保留
+- Home 隐藏 Hosts 列表，Terminal 占满左侧工作区，Terminal 与聊天的分隔栏可调整
+- 从空间导航进入 Home，不再重复显示 Home 页签或底部主机状态条
+- 保留 Hosts、Kubernetes 和 Databases 的现有工作流
+
 ## [0.0.6] - 2026-10-11
 
 Hosts, Kubernetes, and Databases share one set of chrome. No new features.

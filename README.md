@@ -6,9 +6,9 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.0.6](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.6)**
+**Current version: [v0.0.7](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.7)**
 
-**Hosts, clusters, and databases in one window.** The sidebar is three surfaces: Hosts, Kubernetes, and Databases. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page. Changes wait for approval, and STOP is always there.
+**Local and remote operations in one window.** Home pairs an interactive local Terminal with local chat; Hosts, Kubernetes, and Databases provide remote workspaces with object-specific chats. Changes wait for approval, and STOP is always there.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
@@ -23,6 +23,7 @@
 
 | Area | Highlights |
 |------|------------|
+| **Home** | Local interactive Terminal beside local chat; multiple Terminal tabs, with the first tab fixed. Windows uses PowerShell |
 | **Databases** | Direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show database and schema. Connections can be grouped |
 | **Agent runtimes** | Cursor Agent, Codex, Claude Code on the open host, cluster, or database; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
@@ -30,7 +31,7 @@
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
 | **Kubernetes** | Sidebar Hosts ↔ K8s; add cluster via + (file or paste kubeconfig) or SSH kubectl; resource tree, YAML, logs, Pod shell. One-click install of kubectl/Helm into the app data dir (or use PATH / SSH). Practical Lens-inspired subset — not a full Lens IDE |
 | **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; Markdown Typora-like WYSIWYG; download, compress, cross-server send |
-| **AI Engineer** | Follows the open sidebar: Linux on a host, K8S on a cluster, SQL on a database service. Home does not show a chat. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
+| **AI Engineer** | Local chat in Home; follows the open host, cluster, or database elsewhere. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
 | **Insight** | Host CPU, memory, disk I/O, and network on the status bar |
@@ -68,7 +69,7 @@ Mode follows the sidebar:
 
 - **Hosts** → **AI Linux Engineer** on the connected SSH session (`terminal_exec`)
 - **K8s** → **AI K8S Engineer** on the selected cluster (`k8s_list` / `k8s_get` / `k8s_logs` / …)
-- **Databases** → SQL on that service (`db_search_objects` / `db_query` / `db_explain`). Home shows no chat
+- **Databases** → SQL on that service (`db_search_objects` / `db_query` / `db_explain`)
 
 - **Same session / cluster** — no hidden second SSH login; kubectl jumps use the bound session.
 - **Evidence first** — the agent reads output before concluding.
@@ -187,7 +188,7 @@ Switch the sidebar to **Databases** and add a connection. The workbench opens a 
 1. **Hosts** — add an SSH host and connect, or click the host icon to open that machine’s desktop.
 2. **Kubernetes** — switch the sidebar and click **+** to add a cluster (kubeconfig file or paste).
 3. **Databases** — switch the sidebar and add a connection.
-4. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed). Home does not show the chat.
+4. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed). Home provides a local chat beside the local Terminal.
 5. For Built-in: Settings → add a model profile (Base URL + model id; Ollama often needs no key).
 6. Approve or reject any command the agent marks as a system change.
 
