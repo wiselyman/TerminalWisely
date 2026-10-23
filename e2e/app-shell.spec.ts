@@ -12,12 +12,16 @@ test.describe("App shell & welcome", () => {
     const api = await twE2e(page);
     await api.resetMocks();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
+    await expect(page.locator(".host-stats-statusbar")).toHaveCount(0);
+    await expect(page.locator(".app-shell")).not.toHaveClass(/has-host-stats-statusbar/);
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     const terminalBounds = await page.locator(".home-local-terminal-pane").boundingBox();
     expect(terminalBounds?.x).toBe(0);
     await page.getByTestId("sidebar-view-hosts").click();
     await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
     await expect(page.locator(".sidebar-shell")).toBeVisible();
+    await expect(page.locator(".host-stats-statusbar")).toBeVisible();
+    await expect(page.locator(".app-shell")).toHaveClass(/has-host-stats-statusbar/);
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toBeVisible();
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
     await expandUngroupedEntities(page);

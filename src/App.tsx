@@ -849,7 +849,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${platformClass} ${homeOpen ? "home-space " : ""}${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""} has-host-stats-statusbar`}
+      className={`app-shell ${platformClass} ${homeOpen ? "home-space " : ""}${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""}${homeOpen ? "" : " has-host-stats-statusbar"}`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -1543,13 +1543,15 @@ function App() {
           sessionTitle={activeSessionTitle ?? undefined}
         />
       ) : null}
-      {sidebarView === "k8s" ? (
-        <K8sClusterStatusBar />
-      ) : activeTabId && !activeTabDisconnected ? (
-        <HostStatsStatusBar sessionId={activeTabId} />
-      ) : (
-        <HostStatsStatusBar sessionId={null} />
-      )}
+      {!homeOpen ? (
+        sidebarView === "k8s" ? (
+          <K8sClusterStatusBar />
+        ) : activeTabId && !activeTabDisconnected ? (
+          <HostStatsStatusBar sessionId={activeTabId} />
+        ) : (
+          <HostStatsStatusBar sessionId={null} />
+        )
+      ) : null}
     </div>
   );
 }
