@@ -39,6 +39,7 @@
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
 | 0.0.8 UI 暗亮基线（Home / Hosts / K8s / DB / AI 聊天与审批 / 文件 / 桌面 / 设置） | — | — | smoke | Playwright `ui-visual-baselines`（固定视口截图；Home 窄屏与键盘焦点） | ✓ |
+| Home Terminal 留白、Home/Hosts/K8s/DB 空间标签隔离与 K8s 空集群无冗余提示 | `chromeContract` | — | smoke | Playwright `app-shell` / `home-local-terminal-chat` / `db-workbench` | ✓ |
 | 自定义标题栏 / 窗口控制 | — | — | smoke | — | ✓ |
 | 活动栏 Hosts / K8s 切换 | — | — | smoke | — | ✓ |
 | 多 Tab SSH 会话 | Rust shell | — | smoke | — | ✓ |

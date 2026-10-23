@@ -10,6 +10,10 @@ test("Home is a local terminal beside local chat", async ({ page }) => {
   const chat = home.getByTestId("home-work-chat");
   await expect(terminal).toBeVisible();
   await expect(terminal.locator(".xterm-screen")).toBeVisible();
+  const terminalPadding = await terminal.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).paddingLeft),
+  );
+  expect(terminalPadding).toBeGreaterThanOrEqual(12);
   await expect(chat).toBeVisible();
   await expect(home.getByTestId("ai-engineer-composer")).toBeVisible();
   await expect(home.getByTestId("home-work-tab-web")).toHaveCount(0);

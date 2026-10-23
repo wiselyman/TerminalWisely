@@ -55,7 +55,6 @@
   "sourceSsh": "SSH",
   "kindLocal": "本机 kubeconfig",
   "kindSsh": "SSH kubectl",
-  "selectClusterHint": "请从侧栏选择集群，或点 + 添加。",
   "selectResourceHint": "选择资源以查看 YAML 与详情。",
   "resourceTree": "资源",
   "navGroup.overview": "概览",

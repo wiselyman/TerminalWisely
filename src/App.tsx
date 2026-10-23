@@ -914,10 +914,10 @@ function App() {
                   <button
                     type="button"
                     role="tab"
-                    className={`chrome-sidebar-view-btn${sidebarView === "hosts" ? " active" : ""}`}
+                    className={`chrome-sidebar-view-btn${!homeOpen && sidebarView === "hosts" ? " active" : ""}`}
                     aria-label={t("sidebarViewHosts")}
                     title={t("sidebarViewHosts")}
-                    aria-selected={sidebarView === "hosts"}
+                    aria-selected={!homeOpen && sidebarView === "hosts"}
                     data-testid="sidebar-view-hosts"
                     onClick={() => {
                       setSidebarView("hosts");
@@ -929,10 +929,10 @@ function App() {
                   <button
                     type="button"
                     role="tab"
-                    className={`chrome-sidebar-view-btn${sidebarView === "k8s" ? " active" : ""}`}
+                    className={`chrome-sidebar-view-btn${!homeOpen && sidebarView === "k8s" ? " active" : ""}`}
                     aria-label={t("sidebarViewK8s")}
                     title={t("sidebarViewK8s")}
-                    aria-selected={sidebarView === "k8s"}
+                    aria-selected={!homeOpen && sidebarView === "k8s"}
                     data-testid="sidebar-view-k8s"
                     onClick={() => {
                       setSidebarView("k8s");
@@ -944,10 +944,10 @@ function App() {
                   <button
                     type="button"
                     role="tab"
-                    className={`chrome-sidebar-view-btn${sidebarView === "db" ? " active" : ""}`}
+                    className={`chrome-sidebar-view-btn${!homeOpen && sidebarView === "db" ? " active" : ""}`}
                     aria-label={t("sidebarViewDb")}
                     title={t("sidebarViewDb")}
-                    aria-selected={sidebarView === "db"}
+                    aria-selected={!homeOpen && sidebarView === "db"}
                     data-testid="sidebar-view-db"
                     onClick={() => {
                       setSidebarView("db");
@@ -971,7 +971,7 @@ function App() {
                   event.preventDefault();
                 }}
               >
-                {sidebarView === "hosts" ? (
+                {!homeOpen && sidebarView === "hosts" ? (
                   <>
           {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
@@ -1195,7 +1195,7 @@ function App() {
                   </div>
                 );
               }) : null}
-              {sidebarView === "k8s" ? (
+              {!homeOpen && sidebarView === "k8s" ? (
                 <>
                   {openClusterIds.map((id) => {
                     const cluster = clusters.find((c) => c.id === id);
@@ -1257,7 +1257,7 @@ function App() {
                   })}
                 </>
               ) : null}
-              {sidebarView === "db" ? (
+              {!homeOpen && sidebarView === "db" ? (
                 <>
                   {dbWorkspaces.map((workspace) => {
                     const active = !homeOpen && activeDbWorkspaceId === workspace.id;

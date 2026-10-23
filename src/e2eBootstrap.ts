@@ -21,6 +21,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useAiEngineerStore } from "./stores/aiEngineerStore";
 import { useK8sStore } from "./stores/k8sStore";
+import { useDbWorkspaceStore } from "./stores/dbWorkspaceStore";
 import { useLocalFsStore } from "./stores/localFsStore";
 import { useSidebarViewStore } from "./stores/sidebarViewStore";
 import { focusManagedEntity } from "./stores/managedEntityStore";
@@ -37,6 +38,8 @@ import type { TabSession } from "./types";
 export interface TwE2eApi {
   openHome: () => void;
   openK8sWorkbench: () => Promise<void>;
+  openDbWorkspace: () => void;
+  clearK8sSelection: () => void;
   openSshTab: () => void;
   openSecondSshTab: () => void;
   closeTab: (sessionId: string) => Promise<void>;
@@ -114,6 +117,19 @@ async function openK8sWorkbench() {
     useK8sStore.getState().setCategory("pods");
     await useK8sStore.getState().refreshResources();
   }
+}
+
+function openDbWorkspace() {
+  useDbWorkspaceStore.getState().openWorkspace({
+    connectionId: "e2e-db-connection",
+    connectionName: "e2e-db",
+    database: "app",
+    engine: "postgres",
+  });
+}
+
+function clearK8sSelection() {
+  useK8sStore.setState({ selectedCluster: null, selectedClusterId: null });
 }
 
 function mountSshTab(tab: TabSession) {
@@ -418,6 +434,8 @@ export function runE2eBootstrap(): void {
   const api: TwE2eApi = {
     openHome,
     openK8sWorkbench,
+    openDbWorkspace,
+    clearK8sSelection,
     openSshTab,
     openSecondSshTab,
     closeTab,

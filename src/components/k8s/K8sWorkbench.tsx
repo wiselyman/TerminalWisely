@@ -919,9 +919,7 @@ export function K8sWorkbench() {
 
   if (!cluster) {
     return (
-      <div className="k8s-workbench-empty" data-testid="k8s-workbench-empty">
-        <p className="empty-state">{t("selectClusterHint")}</p>
-      </div>
+      <div className="k8s-workbench-empty" data-testid="k8s-workbench-empty" />
     );
   }
 

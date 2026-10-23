@@ -221,6 +221,8 @@ test.describe("Database workbench", () => {
     await page.getByTestId("sidebar-view-home").click();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
     await expect(page.locator(".ai-engineer-panel:not(.is-home-workspace):not(.ai-engineer-panel-parked)")).toHaveCount(0);
+    await expect(page.getByTestId("db-workspace-tab")).toHaveCount(0);
+    await page.getByTestId("sidebar-view-db").click();
     await page.getByTestId("db-workspace-tab").click();
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
     await expect(page.locator(".ai-engineer-panel:not(.ai-engineer-panel-parked)")).toBeVisible();

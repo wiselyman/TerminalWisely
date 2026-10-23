@@ -55,7 +55,6 @@
   "sourceSsh": "SSH",
   "kindLocal": "Local kubeconfig",
   "kindSsh": "SSH kubectl",
-  "selectClusterHint": "Select a cluster from the sidebar, or click + to add one.",
   "selectResourceHint": "Select a resource to view YAML and details.",
   "resourceTree": "Resources",
   "navGroup.overview": "Overview",

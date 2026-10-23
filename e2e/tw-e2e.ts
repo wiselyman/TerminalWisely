@@ -24,6 +24,8 @@ function wrapApi(page: Page): TwE2eApi {
       await call("openK8sWorkbench");
       await page.locator(".k8s-workbench").waitFor({ state: "visible", timeout: 30_000 });
     },
+    openDbWorkspace: () => call("openDbWorkspace"),
+    clearK8sSelection: () => call("clearK8sSelection"),
     openSshTab: async () => {
       await call("openSshTab");
       await page.getByTestId("terminal-view").waitFor({ state: "visible", timeout: 15_000 });

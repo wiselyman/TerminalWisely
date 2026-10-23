@@ -84,7 +84,8 @@
 .home-local-terminal {
   position: absolute;
   inset: 0;
-  padding: 0;
+  box-sizing: border-box;
+  padding: 12px;
 }
 
 .home-local-terminal .xterm {
@@ -123,7 +124,8 @@
 }
 
 .home-local-terminal {
-  padding: 0;
+  box-sizing: border-box;
+  padding: 12px;
   background: var(--tw-bg);
 }
 

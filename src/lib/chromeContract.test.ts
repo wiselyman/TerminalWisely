@@ -75,8 +75,8 @@ describe("shared chrome", () => {
     expect(tab).toContain("height: 28px");
     expect(tab).toContain("font-size: var(--tw-font-dense)");
     expect(tab).toContain("border: 1px solid var(--tw-border)");
-    expect(k8s).toContain('t("selectClusterHint")');
-    expect(k8s).toContain('className="empty-state"');
+    expect(k8s).not.toContain('t("selectClusterHint")');
+    expect(k8s).toContain('className="k8s-workbench-empty"');
     expect(db).toContain('className="empty-state" data-testid="db-empty"');
     expect(css).not.toContain('[data-testid="db-empty"]');
   });
@@ -88,7 +88,7 @@ describe("shared chrome", () => {
     expect(rule(".home-local-splitter")).toContain("cursor: col-resize");
     expect(rule(".home-local-terminal-pane")).not.toContain("border-right: 1px solid var(--tw-border)");
     expect(rule(".home-local-terminal")).toContain("inset: 0");
-    expect(rule(".home-local-terminal")).toContain("padding: 0");
+    expect(rule(".home-local-terminal")).toContain("padding: 12px");
     expect(rule(".home-work-chat .ai-engineer-panel.is-home-workspace")).toContain(
       "position: relative !important",
     );
