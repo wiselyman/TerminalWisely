@@ -4644,7 +4644,7 @@ body.preview-float-resizing {
 .home-local-terminal {
   position: absolute;
   inset: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .home-local-terminal .xterm {

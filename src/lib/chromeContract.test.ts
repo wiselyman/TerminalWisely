@@ -69,6 +69,7 @@ describe("shared chrome", () => {
     expect(rule(".home-local-splitter")).toContain("cursor: col-resize");
     expect(rule(".home-local-terminal-pane")).not.toContain("border-right: 1px solid var(--tw-border)");
     expect(rule(".home-local-terminal")).toContain("inset: 0");
+    expect(rule(".home-local-terminal")).toContain("padding: 0");
     expect(rule(".home-work-chat .ai-engineer-panel.is-home-workspace")).toContain(
       "position: relative !important",
     );
