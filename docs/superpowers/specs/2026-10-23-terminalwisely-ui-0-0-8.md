@@ -44,4 +44,4 @@ Playwright 为代表性关键页面建立深色/浅色截图基线，采用固�
 - 已建立主题 token、焦点/基础控件样式，并将应用壳层、Home、Hosts、Kubernetes、数据库、AI、文件、桌面和弹窗样式按子系统迁入 `src/styles/`；旧 `App.css` 保留剩余样式，样式归属测试防止迁回总表。
 - macOS Chromium 已存档关键界面的深浅主题基线，覆盖 Home、Hosts/Kubernetes、AI 聊天/审批、数据库、文件预览、本地文件/桌面和设置；窄窗口与键盘焦点由 E2E 合约验证。
 - 2026-10-23 本地最终全量结果：`./scripts/run-all-tests.sh` 通过；Vitest 571 passed、Sidecar 502 passed / 3 skipped、Playwright 93 passed，Rust 与其余流水线检查通过。`node scripts/check-no-agent-hardcoding.mjs` 和 `git diff --check` 通过。
-- GitHub Actions 已为 Windows 加入 PowerShell E2E harness，并保持 Linux 两个 runner 的 UI E2E；推送后需核实本次 commit 的 Linux/Windows CI 结果。Windows/Linux 原生控件及系统字体的像素截图未由本机基线验证，平台差异仍依赖对应 runner 检查。
+- GitHub Actions 提交 `e358a6bfbabd754557878a26adb32ffb4456e6dd` 全部通过：macOS、Windows x86_64、Linux x86_64/ARM64、数据库 live 和署名检查均 success；Windows Chromium 安装与 PowerShell Playwright E2E 实际通过，Linux 两个 runner 的 Playwright E2E 实际通过。Windows/Linux 原生控件及系统字体的像素截图未由本机基线验证，平台差异由对应 runner 的交互/主题/布局检查覆盖。

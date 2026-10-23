@@ -109,4 +109,4 @@
 
 - [x] 核查 GitHub Actions 是否已对 macOS、Windows、Linux 执行构建与 E2E；先补工作流契约检查并确认 Windows UI E2E 缺失时失败。
 - [x] 为 Windows runner 增加原生 PowerShell E2E harness，并在 Windows 矩阵启用 Playwright；Linux 现有矩阵保持，平台截图仅在 macOS 维护。
-- [ ] 推送后核实最新 commit 的 Linux/Windows CI 结果；没有结果时保留未验收状态，不将本机结果描述为三平台完成。
+- [x] 推送后核实提交 `e358a6bfbabd754557878a26adb32ffb4456e6dd` 的 GitHub Actions：macOS、Windows、Linux x86_64/ARM64、数据库 live 和署名检查全部 success；Windows Chromium 安装及 PowerShell Playwright E2E 均通过。
