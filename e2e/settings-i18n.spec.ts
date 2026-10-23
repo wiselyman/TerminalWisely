@@ -22,12 +22,15 @@ test.describe("Settings and locale", () => {
     await expect(page.getByRole("dialog")).toContainText(/Version 0\.0\.0|版本 0\.0\.0/);
   });
 
-  test("locale toggle keeps Home chat visible", async ({ page }) => {
+  test("locale toggle keeps Home chat collapsed until requested", async ({ page }) => {
+    await expect(page.getByTestId("home-work-chat")).toBeHidden();
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
     await page.getByTestId("locale-option-zh-CN").click();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
-    await expect(page.getByTestId("home-work-chat")).toBeVisible();
+    await expect(page.getByTestId("home-work-chat")).toBeHidden();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+    await page.getByTestId("ai-engineer-tool").click();
+    await expect(page.getByTestId("home-work-chat")).toBeVisible();
   });
 });

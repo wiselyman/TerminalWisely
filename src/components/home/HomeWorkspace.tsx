@@ -25,9 +25,11 @@ function readSavedRatio(): number {
 export function HomeWorkspace({
   terminalTabs,
   activeTerminalId,
+  chatOpen,
 }: {
   terminalTabs: HomeTerminalTab[];
   activeTerminalId: string;
+  chatOpen: boolean;
 }) {
   const { t } = useTranslation("terminal");
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -78,10 +80,12 @@ export function HomeWorkspace({
   return (
     <div
       ref={workspaceRef}
-      className="home-local-chat"
+      className={`home-local-chat${chatOpen ? "" : " is-chat-collapsed"}`}
       data-testid="home-local-chat"
       style={{
-        gridTemplateColumns: `minmax(0, ${terminalRatio}fr) 8px minmax(0, ${1 - terminalRatio}fr)`,
+        gridTemplateColumns: chatOpen
+          ? `minmax(0, ${terminalRatio}fr) 8px minmax(0, ${1 - terminalRatio}fr)`
+          : "minmax(0, 1fr)",
       }}
     >
       <section
@@ -104,10 +108,11 @@ export function HomeWorkspace({
         className="home-local-splitter"
         data-testid="home-split-resizer"
         role="separator"
-        tabIndex={0}
         aria-label={t("homeSplitAria")}
         aria-orientation="vertical"
         aria-controls="home-local-terminal-pane home-local-chat-pane"
+        aria-hidden={!chatOpen}
+        tabIndex={chatOpen ? 0 : -1}
         aria-valuemin={20}
         aria-valuemax={80}
         aria-valuenow={Math.round(terminalRatio * 100)}
@@ -126,6 +131,7 @@ export function HomeWorkspace({
         id="home-local-chat-pane"
         className="home-work-chat"
         data-testid="home-work-chat"
+        aria-hidden={!chatOpen}
       >
         <AiEngineerPanel
           sessionId={LOCAL_CHAT_SESSION}

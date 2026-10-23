@@ -5,7 +5,6 @@ import {
   setAppLocale,
   type AppLocale,
 } from "../i18n";
-import { LocaleFlagMark } from "../lib/localeFlag";
 
 type MenuPos = { top: number; right: number };
 
@@ -87,7 +86,6 @@ export function LocaleSwitcher() {
               }
               onClick={() => choose("zh-CN")}
             >
-              <LocaleFlagMark locale="zh-CN" className="locale-switcher-flag" />
               <span>{t("languageZh")}</span>
             </button>
             <button
@@ -102,7 +100,6 @@ export function LocaleSwitcher() {
               }
               onClick={() => choose("en")}
             >
-              <LocaleFlagMark locale="en" className="locale-switcher-flag" />
               <span>{t("languageEn")}</span>
             </button>
           </div>,
@@ -122,10 +119,9 @@ export function LocaleSwitcher() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <LocaleFlagMark
-          locale={current}
-          className="locale-switcher-trigger-flag"
-        />
+        <span className="locale-switcher-code" data-testid="locale-switcher-code">
+          {current === "zh-CN" ? "中" : "EN"}
+        </span>
       </button>
       {menu}
     </div>

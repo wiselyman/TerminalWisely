@@ -46,7 +46,7 @@
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
 | 语言切换 | — | Playwright `app-shell`/`settings-i18n`（menu portal + html lang） | smoke `locale-switcher` | — | ✓ |
-| 语言国旗 UI（zh-CN/en） | `localeFlag.test` | Playwright `app-shell` / `host-browser` | smoke `ui.locale-flags`（扁平矩形 SVG） | — | ✓ |
+| 语言入口文字标记（zh-CN/en） | — | Playwright `app-shell` / `settings-i18n`（语言标记与菜单无旗帜 SVG，切换后 Home 收起态保持） | smoke `ui.locale-labels`（中 / EN） | — | ✓ |
 | 主题切换（深色/浅色） | `appTheme` | Playwright `app-shell`（data-theme） | smoke `theme-switcher` | — | ✓ |
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
@@ -206,7 +206,7 @@
 | Long-job exec idle 豁免 | Rust `ai_exec_limits` | — | timeout≥600 关 idle | — | ✓ |
 | Run stall 看门狗（冷启动 + 工具后无进度；**工具执行中 / 审批中不误杀**；FE idle abort 同） | `test_stall_watch` + `thinkingIdleAbort.test` | main stall wrap | smoke + run_stalled 清 busy | — | ✓ |
 | Wall-clock run 预算 | paths `max_run_wall_seconds` | loop `_check_budgets` | — | — | ✓ |
-| Home 本机终端 + 聊天（scope `local`；左侧 portable-pty，Windows PowerShell；右侧 `AiEngineerPanel`；无 Home 页签；终端/聊天分隔条可调且持久化） | Rust `local_terminal::tests`（shell 选择、PTY 输出）+ `homeSplit.test` | — | Home 空间按钮，无 Home tab | Playwright `home-local-terminal-chat`（拖动、键盘边界、重载恢复） | Windows 真机未测 |
+| Home 本机终端 + 可折叠聊天（scope `local`；Windows PowerShell；Home 默认隐藏聊天，顶栏 AI 按钮或聊天面板按钮可展开/收起；展开后分隔条可调且持久化） | `homeSplit.test` | — | Home 空间按钮，无 Home tab | Playwright `home-local-terminal-chat` / `app-shell`（默认收起、展开/收起、比例拖动与重载恢复） | Windows 真机未测 |
 
 ## 10. AI chat 可观测性
 

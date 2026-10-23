@@ -4667,16 +4667,22 @@ body.cmd-nav-panel-resizing {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--chrome-control-size, 24px);
+  min-width: var(--chrome-control-size, 24px);
   height: var(--chrome-control-size, 24px);
-  padding: 0;
+  padding: 0 5px;
   border: none;
-  border-radius: 50%;
+  border-radius: 6px;
   background: transparent;
   color: var(--tw-fg-subtle);
   cursor: pointer;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+.locale-switcher-code {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
 }
 .locale-switcher-trigger:hover {
   background: var(--tw-hover);
@@ -4710,17 +4716,6 @@ body.cmd-nav-panel-resizing {
   text-align: left;
   font-size: 0.85rem;
   cursor: pointer;
-}
-.locale-flag-mark,
-.locale-switcher-flag,
-.locale-switcher-trigger-flag {
-  display: block;
-  flex-shrink: 0;
-  width: 18px;
-  height: 12px;
-  border-radius: 1px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
 }
 .locale-switcher-item:hover,
 .locale-switcher-item.active {

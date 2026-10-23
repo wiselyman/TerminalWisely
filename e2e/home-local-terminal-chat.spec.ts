@@ -10,6 +10,15 @@ test("Home is a local terminal beside local chat", async ({ page }) => {
   const chat = home.getByTestId("home-work-chat");
   await expect(terminal).toBeVisible();
   await expect(terminal.locator(".xterm-screen")).toBeVisible();
+  await expect(chat).toBeHidden();
+  await expect(home.getByTestId("home-split-resizer")).toBeHidden();
+  const collapsedHomeBounds = await home.boundingBox();
+  const collapsedTerminalBounds = await home.locator("#home-local-terminal-pane").boundingBox();
+  expect(collapsedHomeBounds).not.toBeNull();
+  expect(collapsedTerminalBounds).not.toBeNull();
+  expect(Math.abs(collapsedHomeBounds!.width - collapsedTerminalBounds!.width)).toBeLessThan(2);
+  await page.getByTestId("ai-engineer-tool").click();
+  await expect(chat).toBeVisible();
   const terminalPadding = await terminal.evaluate((element) =>
     Number.parseFloat(getComputedStyle(element).paddingLeft),
   );
@@ -27,6 +36,11 @@ test("Home is a local terminal beside local chat", async ({ page }) => {
   }
   await expect(chat).toBeVisible();
   await expect(home.getByTestId("ai-engineer-composer")).toBeVisible();
+  await page.getByRole("button", { name: /collapse panel|收起面板/i }).click();
+  await expect(chat).toBeHidden();
+  await expect(home.getByTestId("home-split-resizer")).toBeHidden();
+  await page.getByTestId("ai-engineer-tool").click();
+  await expect(chat).toBeVisible();
   await expect(home.getByTestId("home-work-tab-web")).toHaveCount(0);
   await expect(home.getByTestId("home-work-tab-command")).toHaveCount(0);
   await expect(home.getByTestId("home-work-tab-file")).toHaveCount(0);

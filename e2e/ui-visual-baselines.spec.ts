@@ -18,6 +18,9 @@ test.describe("UI visual baselines", () => {
     await (await twE2e(page)).openHome();
     const home = page.getByTestId("home-local-chat");
     const splitter = page.getByTestId("home-split-resizer");
+    await expect(page.getByTestId("home-work-chat")).toBeHidden();
+    await page.getByTestId("ai-engineer-tool").click();
+    await expect(page.getByTestId("home-work-chat")).toBeVisible();
     const bounds = await home.boundingBox();
     expect(bounds).not.toBeNull();
     expect(Math.round(bounds!.y + bounds!.height)).toBe(720);
@@ -43,6 +46,9 @@ test.describe("UI visual baselines", () => {
     await gotoApp(page);
     await (await twE2e(page)).openHome();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
+    await expect(page.getByTestId("home-work-chat")).toBeHidden();
+    await page.getByTestId("ai-engineer-tool").click();
+    await expect(page.getByTestId("home-work-chat")).toBeVisible();
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(page).toHaveScreenshot(`home-${theme}.png`, {

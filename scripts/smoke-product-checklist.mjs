@@ -1779,23 +1779,18 @@ function readStyles() {
     }
   }
   const localeSwitcher = read("src/components/LocaleSwitcher.tsx");
-  const localeFlagLib = read("src/lib/localeFlag.tsx");
   if (
     localeSwitcher.includes("createPortal") &&
     localeSwitcher.includes("locale-switcher-trigger") &&
-    localeSwitcher.includes("LocaleFlagMark") &&
-    localeFlagLib.includes("locale-flag-mark") &&
-    localeFlagLib.includes('viewBox="0 0 24 16"') &&
-    localeFlagLib.includes("chineseFlagStarPaths") &&
-    localeFlagLib.includes("#de2910") &&
-    !localeFlagLib.includes("🇨🇳") &&
-    !localeFlagLib.includes("🇺🇸")
+    localeSwitcher.includes("locale-switcher-code") &&
+    !localeSwitcher.includes("LocaleFlagMark") &&
+    localeSwitcher.includes('current === "zh-CN" ? "中" : "EN"')
   ) {
     pass("ui.locale-switcher-portal", "menu portaled out of titlebar overflow");
-    pass("ui.locale-flags", "zh-CN/en use flat rectangular SVG marks");
+    pass("ui.locale-labels", "locale switcher uses compact text labels");
   } else {
     fail("ui.locale-switcher-portal", "LocaleSwitcher must portal menu (titlebar clips)");
-    fail("ui.locale-flags", "LocaleSwitcher missing flat SVG flag UI");
+    fail("ui.locale-labels", "LocaleSwitcher must use 中 / EN text labels instead of flags");
   }
 }
 

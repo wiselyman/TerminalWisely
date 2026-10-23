@@ -376,6 +376,8 @@ function App() {
   const addClusterOpen = useK8sStore((s) => s.addClusterOpen);
   const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
+  const homeChatOpen = useManagedEntityStore((s) => s.homeChatOpen);
+  const toggleHomeChat = useManagedEntityStore((s) => s.toggleHomeChat);
   const homeWasOpen = useRef(false);
   useLayoutEffect(() => {
     if (homeOpen) {
@@ -1364,15 +1366,21 @@ function App() {
 
               <div className="chrome-titlebar-actions">
                 <AiEngineerTool
-                  active={showAiEngineerPanel}
+                  active={homeOpen ? homeChatOpen : showAiEngineerPanel}
                   disabled={
-                    sidebarView === "k8s"
+                    homeOpen
+                      ? false
+                      : sidebarView === "k8s"
                       ? !selectedCluster
                       : sidebarView === "db"
                         ? !dbConnectionId
                         : !activeTabReady
                   }
                   onClick={() => {
+                    if (homeOpen) {
+                      toggleHomeChat();
+                      return;
+                    }
                     if (sidebarView === "db" && dbConnectionId) {
                       leaveHome();
                       useAiEngineerStore.setState({ open: true });
@@ -1457,6 +1465,7 @@ function App() {
                   <HomeWorkspace
                     terminalTabs={homeTerminalTabs}
                     activeTerminalId={activeHomeTerminalId}
+                    chatOpen={homeChatOpen}
                   />
                 ) : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}

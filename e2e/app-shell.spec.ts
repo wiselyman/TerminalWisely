@@ -82,17 +82,40 @@ test.describe("App shell & welcome", () => {
     await expect(page.getByTestId("k8s-add-cluster")).toBeVisible();
   });
 
-  test("shows the local home chat", async ({ page }) => {
+  test("keeps the Home chat collapsed until opened from the titlebar", async ({ page }) => {
     const home = page.getByTestId("home-local-chat");
     await expect(home).toBeVisible();
+    await expect(page.getByTestId("home-work-chat")).toBeHidden();
+    await expect(page.locator("#home-local-terminal-pane")).toHaveJSProperty("clientWidth", await home.evaluate((el) => el.clientWidth));
+    await page.getByTestId("ai-engineer-tool").click();
     await expect(home.getByTestId("home-local-empty")).toBeVisible();
     await expect(home.getByTestId("ai-engineer-composer")).toBeVisible();
     await expect(page.getByTestId("workspace-welcome")).toHaveCount(0);
   });
 
+  test("Home chat toggle does not change the Hosts AI chat", async ({ page }) => {
+    const api = await twE2e(page);
+    await page.getByTestId("sidebar-view-hosts").click();
+    await api.openSshTab();
+    await page.getByTestId("ai-engineer-tool").click();
+    const hostsChat = page.locator('.ai-engineer-panel:not(.is-home-workspace)');
+    await expect(hostsChat).toBeVisible();
+
+    await page.getByTestId("sidebar-view-home").click();
+    await expect(page.getByTestId("home-work-chat")).toBeHidden();
+    await page.getByTestId("ai-engineer-tool").click();
+    await expect(page.getByTestId("home-work-chat")).toBeVisible();
+    await page.getByTestId("sidebar-view-hosts").click();
+    await expect(hostsChat).toBeVisible();
+  });
+
   test("switches locale en ↔ zh-CN", async ({ page }) => {
+    await page.getByTestId("ai-engineer-tool").click();
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
+    await expect(page.getByTestId("locale-switcher-trigger")).toContainText("EN");
+    await expect(page.locator("[data-locale-flag]")).toHaveCount(0);
+    await expect(page.getByTestId("locale-option-zh-CN")).toContainText("中文");
     await page.getByTestId("locale-option-zh-CN").click();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await expect(page.getByTestId("home-local-empty")).toContainText("本机聊天");
@@ -101,6 +124,8 @@ test.describe("App shell & welcome", () => {
 
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
+    await expect(page.getByTestId("locale-switcher-trigger")).toContainText("中");
+    await expect(page.locator("[data-locale-flag]")).toHaveCount(0);
     await page.getByTestId("locale-option-en").click();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.getByTestId("home-local-empty")).toContainText(

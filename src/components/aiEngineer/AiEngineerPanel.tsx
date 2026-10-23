@@ -44,6 +44,7 @@ import {
   subscribeDesktopEmbedHosts,
 } from "../../lib/desktopEmbedHost";
 import { useDesktopStore } from "../../stores/desktopStore";
+import { useManagedEntityStore } from "../../stores/managedEntityStore";
 import { rememberAiFiber } from "../../stores/hostWorkspaceMemory";
 import {
   AI_CHAT_SCROLL_FIX_ID,
@@ -1016,6 +1017,7 @@ export function AiEngineerPanel({
   const liveSessionId = useAiEngineerStore((s) => s.sessionId);
   // Per-host fiber: only the active host's panel is interactive/visible.
   const homePlacement = placement === "home";
+  const setHomeChatOpen = useManagedEntityStore((state) => state.setHomeChatOpen);
   const open = homePlacement
     ? surfaceActive
     : surfaceActive && storeOpen && liveSessionId === sessionId;
@@ -2953,6 +2955,7 @@ export function AiEngineerPanel({
               panelId="aiEngineer"
               sessionId={sessionId}
               serverId={serverId}
+              onCollapse={homePlacement ? () => setHomeChatOpen(false) : undefined}
             />
           </div>
         </header>

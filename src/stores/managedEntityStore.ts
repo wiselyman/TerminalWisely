@@ -4,10 +4,14 @@ import type { ManagedEntityRef, ManagedKind } from "../lib/management/types";
 interface ManagedEntityState {
   /** Shared Home surface for Hosts and Kubernetes. */
   homeOpen: boolean;
+  /** Home local chat starts collapsed and is independent of workspace AI panels. */
+  homeChatOpen: boolean;
   /** Last focused entity per management domain. */
   focusedByKind: Partial<Record<ManagedKind, ManagedEntityRef>>;
   openHome: () => void;
   leaveHome: () => void;
+  setHomeChatOpen: (open: boolean) => void;
+  toggleHomeChat: () => void;
   focus: (ref: ManagedEntityRef) => void;
   clear: (kind?: ManagedKind) => void;
   /** Focused entity for the given kind (defaults to latest of that kind). */
@@ -16,11 +20,16 @@ interface ManagedEntityState {
 
 export const useManagedEntityStore = create<ManagedEntityState>((set, get) => ({
   homeOpen: true,
+  homeChatOpen: false,
   focusedByKind: {},
 
-  openHome: () => set({ homeOpen: true }),
+  openHome: () => set({ homeOpen: true, homeChatOpen: false }),
 
   leaveHome: () => set({ homeOpen: false }),
+
+  setHomeChatOpen: (homeChatOpen) => set({ homeChatOpen }),
+
+  toggleHomeChat: () => set((state) => ({ homeChatOpen: !state.homeChatOpen })),
 
   focus: (ref) => {
     set((s) => ({

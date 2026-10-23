@@ -11,6 +11,7 @@ type Props = {
   sessionId: string;
   serverId?: string;
   children?: ReactNode;
+  onCollapse?: () => void;
 };
 
 const PANEL_ROOT_SELECTOR = [
@@ -24,7 +25,7 @@ const PANEL_ROOT_SELECTOR = [
 ].join(", ");
 
 /** Cursor-style panel-right collapse for every right workspace panel. */
-export function WorkspacePanelHeadActions({ panelId, children }: Props) {
+export function WorkspacePanelHeadActions({ panelId, children, onCollapse }: Props) {
   const { t } = useTranslation("tools");
 
   const collapseToRight = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -33,7 +34,8 @@ export function WorkspacePanelHeadActions({ panelId, children }: Props) {
     ) as HTMLElement | null;
 
     const finish = () => {
-      collapseWorkspacePanel(panelId);
+      if (onCollapse) onCollapse();
+      else collapseWorkspacePanel(panelId);
     };
 
     if (!panel || panel.classList.contains("workspace-panel-exiting")) {
