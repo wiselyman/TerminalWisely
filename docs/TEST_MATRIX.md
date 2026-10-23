@@ -25,7 +25,7 @@
 | `linux-x86_64` | Ubuntu 22.04 | x86_64 | smoke + Vitest + build + `cargo test` + SSH/K8s live + pytest + Playwright |
 | `linux-aarch64` | Ubuntu 24.04 ARM | aarch64 | 同上（含 SSH/K8s live） |
 | `macos-aarch64` | macOS latest | Apple Silicon | smoke + Vitest + build + `cargo test` + `cargo check` x86_64 + pytest |
-| `windows-x86_64` | Windows latest | x86_64 | smoke + Vitest + build + `cargo check` + `cargo check` ARM64 + pytest |
+| `windows-x86_64` | Windows latest | x86_64 | smoke + Vitest + build + `cargo check` + `cargo check` ARM64 + pytest + Playwright UI E2E (PowerShell harness) |
 
 > Linux 上不做 GTK/Tauri 的跨 GNU 架构编译（需 sysroot）；由 **linux-x86_64** 与 **linux-aarch64** 两个原生 runner 覆盖。  
 > macOS Intel / Windows ARM64 安装包由 **Release** workflow 在对应 triple 上构建；CI 在 macOS 上交叉 `cargo check` Intel，在 Windows 上交叉 `cargo check` ARM64。
@@ -38,6 +38,7 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
+| 0.0.8 UI 暗亮基线（Home / Hosts / K8s / DB / AI 聊天与审批 / 文件 / 桌面 / 设置） | — | — | smoke | Playwright `ui-visual-baselines`（固定视口截图；Home 窄屏与键盘焦点） | ✓ |
 | 自定义标题栏 / 窗口控制 | — | — | smoke | — | ✓ |
 | 活动栏 Hosts / K8s 切换 | — | — | smoke | — | ✓ |
 | 多 Tab SSH 会话 | Rust shell | — | smoke | — | ✓ |

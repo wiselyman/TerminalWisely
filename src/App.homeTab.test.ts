@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const dir = dirname(fileURLToPath(import.meta.url));
 const app = readFileSync(join(dir, "App.tsx"), "utf8");
 const css = readFileSync(join(dir, "App.css"), "utf8");
+const shellCss = readFileSync(join(dir, "styles/shell.css"), "utf8");
 const toolsZh = JSON.parse(readFileSync(join(dir, "i18n/locales/zh-CN/tools.json"), "utf8")) as Record<string, string>;
 const toolsEn = JSON.parse(readFileSync(join(dir, "i18n/locales/en/tools.json"), "utf8")) as Record<string, string>;
 
@@ -33,8 +34,9 @@ describe("Home sidebar content", () => {
   it("hides the sidebar while retaining its portal host for other spaces", () => {
     expect(app).toContain("<ConnectionPanel");
     expect(app).toContain('homeOpen ? "home-space " : ""');
-    expect(css).toMatch(/\.app-shell\.home-space \.sidebar-shell\s*\{\s*display:\s*none;/);
-    expect(css).toContain(".app-shell.home-space .app-body");
+    expect(shellCss).toMatch(/\.app-shell\.home-space \.sidebar-shell\s*\{\s*display:\s*none;/);
+    expect(shellCss).toContain(".app-shell.home-space .app-body");
+    expect(app).toContain('import "./styles/shell.css";');
   });
 
   it("hides the sidebar collapse control only while Home is active", () => {

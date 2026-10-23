@@ -3,7 +3,20 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
-const css = readFileSync(resolve(root, "src/App.css"), "utf8");
+const css = [
+  "App.css",
+  "styles/home.css",
+  "styles/shell.css",
+  "styles/management.css",
+  "styles/k8s.css",
+  "styles/database.css",
+  "styles/ai-chat.css",
+  "styles/files.css",
+  "styles/desktop.css",
+  "styles/dialogs.css",
+]
+  .map((file) => readFileSync(resolve(root, "src", file), "utf8"))
+  .join("\n");
 const k8s = readFileSync(resolve(root, "src/components/k8s/K8sWorkbench.tsx"), "utf8");
 const db = readFileSync(resolve(root, "src/components/db/DbWorkbench.tsx"), "utf8");
 const hosts = readFileSync(resolve(root, "src/components/ConnectionPanel.tsx"), "utf8");
@@ -16,6 +29,12 @@ function rule(selector: string): string {
 }
 
 describe("shared chrome", () => {
+  it("keeps Kubernetes overlays positioned inside the terminal stack", () => {
+    const overlay = rule(".terminal-stack > .k8s-workbench");
+    expect(overlay).toContain("position: absolute");
+    expect(overlay).toContain("inset: 0");
+    expect(overlay).toContain("z-index: 1");
+  });
   it("selects a row with one accent border", () => {
     const selected = rule(".saved-item.selected");
     expect(selected).toContain("outline: none");

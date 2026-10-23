@@ -1,0 +1,170 @@
+/* —— Shared management chrome (Hosts + K8s) —— */
+.mgmt-workbench {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.mgmt-workbench-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 40px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--tw-surface-2);
+  flex-shrink: 0;
+}
+.mgmt-workbench-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.mgmt-workbench-title h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--tw-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mgmt-workbench-subtitle {
+  font-size: 11px;
+  color: var(--tw-fg-subtle);
+  flex-shrink: 0;
+}
+.mgmt-workbench-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.mgmt-workbench-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.mgmt-workbench-nav {
+  width: 160px;
+  flex-shrink: 0;
+  overflow: auto;
+  border-right: 1px solid var(--tw-surface-2);
+  padding: 8px 6px;
+}
+.mgmt-workbench-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 8px;
+}
+.mgmt-workbench-detail {
+  width: min(420px, 38%);
+  flex-shrink: 0;
+  border-left: 1px solid var(--tw-surface-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+}
+.mgmt-bottom-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 42%;
+  background: var(--tw-canvas);
+  border-top: 1px solid var(--tw-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+.mgmt-bottom-dock header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--tw-surface-2);
+  flex-wrap: wrap;
+}
+.mgmt-bottom-dock-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--tw-fg-subtle);
+}
+.mgmt-bottom-dock header button {
+  background: transparent;
+  border: none;
+  color: var(--tw-fg-default);
+  font-size: 16px;
+  cursor: pointer;
+}
+.mgmt-bottom-dock-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.mgmt-bottom-dock-body pre {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 0.0.8 shared management surface refinements */
+.mgmt-workbench-header {
+  min-height: 44px;
+  height: auto;
+  padding: 0 var(--tw-space-4);
+  border-bottom-color: var(--tw-border);
+  background: var(--tw-bg);
+}
+
+.mgmt-workbench-nav {
+  border-right-color: var(--tw-border);
+  background: var(--tw-bg);
+}
+
+.mgmt-workbench-main,
+.mgmt-workbench-detail {
+  background: var(--tw-bg);
+}
+
+.mgmt-workbench-detail {
+  border-left-color: var(--tw-border);
+}
+
+.mgmt-workbench-header-actions {
+  gap: var(--tw-space-2);
+}
+
+.entity-row,
+.entity-group-header,
+.saved-item {
+  border-color: var(--tw-border);
+}
+
+.entity-row:hover,
+.entity-group-header:hover {
+  background: var(--tw-hover);
+}
+
+.saved-item.selected,
+.entity-row.selected {
+  border-color: var(--tw-accent);
+  background: color-mix(in srgb, var(--tw-accent) 8%, var(--tw-surface));
+}
+
+.entity-row:focus-within,
+.saved-item:focus-within {
+  outline: 2px solid var(--tw-focus-ring);
+  outline-offset: -2px;
+}

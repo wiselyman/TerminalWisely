@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(dir, "DbIcons.tsx"), "utf8");
-const css = readFileSync(join(dir, "../../App.css"), "utf8");
+const css = readFileSync(join(dir, "../../styles/database.css"), "utf8");
 
 describe("DbIcons", () => {
   it("object tree marks use Lucide, not hand-drawn cylinder/sheet glyphs", () => {

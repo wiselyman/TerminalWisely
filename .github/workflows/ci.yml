@@ -53,6 +53,7 @@ jobs:
             rust_mode: check
             rust_cross_arm64: true
             pytest: true
+            playwright: true
             cross_arch: true
 
     runs-on: ${{ matrix.os }}
@@ -149,13 +150,22 @@ jobs:
           $env:PYTHONPATH = "."
           python -m pytest tests/ -q --tb=line
 
-      - name: Install Playwright Chromium
-        if: matrix.playwright
+      - name: Install Playwright Chromium (Linux)
+        if: matrix.playwright && runner.os == 'Linux'
         run: npx playwright install chromium --with-deps
 
-      - name: Playwright UI E2E
-        if: matrix.playwright
+      - name: Install Playwright Chromium (Windows)
+        if: matrix.playwright && runner.os == 'Windows'
+        run: npx playwright install chromium
+
+      - name: Playwright UI E2E (Unix)
+        if: matrix.playwright && runner.os != 'Windows'
         run: bash scripts/e2e-playwright.sh
+
+      - name: Playwright UI E2E (Windows)
+        if: matrix.playwright && runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/e2e-playwright.ps1
 
   db-live:
     name: database live

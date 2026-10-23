@@ -1,0 +1,134 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 36000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--tw-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  width: min(100%, 420px);
+  max-height: min(90vh, 640px);
+  overflow: auto;
+  border: 1px solid var(--tw-border);
+  border-radius: 12px;
+  background: var(--tw-bg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.modal.modal-wide {
+  width: min(100%, 560px);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tw-surface-2);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--tw-fg);
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--tw-border);
+  border-radius: 6px;
+  background: var(--tw-surface);
+  color: var(--tw-fg-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: var(--tw-surface-2);
+  color: var(--tw-fg);
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.modal-hint {
+  margin: 0;
+  color: var(--tw-fg-default);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.modal-hint.k8s-delete-owned-warn {
+  margin-top: -4px;
+  color: #d29922;
+}
+
+.modal-body .form-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+}
+
+.modal-body .form-row button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  border: 1px solid var(--tw-border);
+  background: var(--tw-surface);
+  color: var(--tw-fg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.modal-body .form-row button:hover {
+  background: var(--tw-surface-2);
+  border-color: var(--tw-border-strong);
+}
+
+.modal-body .form-row button.find-panel-run,
+.modal-body .form-row button.primary {
+  border-color: var(--tw-accent-emphasis);
+  background: #1f6feb;
+  color: #fff;
+}
+
+.modal-body .form-row button.find-panel-run:hover,
+.modal-body .form-row button.primary:hover {
+  background: var(--tw-accent-emphasis);
+}
+
+
+.modal {
+  border-color: var(--tw-border);
+  border-radius: var(--tw-radius-lg);
+  background: var(--tw-elevated);
+  box-shadow: var(--tw-panel-shadow);
+}
+
+.modal-header {
+  border-bottom-color: var(--tw-border);
+}
+
+.modal-backdrop,
+.preview-float-backdrop {
+  background: var(--tw-scrim);
+}

@@ -1,0 +1,25 @@
+:where(button, input, select, textarea, a[href], [role="button"], [role="tab"], [role="menuitem"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--tw-focus-ring);
+  outline-offset: 2px;
+}
+
+:where(button, input, select, textarea) {
+  accent-color: var(--tw-accent);
+}
+
+:where(button, input, select, textarea):disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  color: var(--tw-fg);
+  background: color-mix(in srgb, var(--tw-accent) 30%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where(button, input, select, textarea, a[href], [role="button"], [role="tab"]) {
+    transition-property: color, background-color, border-color, box-shadow, outline-color;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out;
+  }
+}

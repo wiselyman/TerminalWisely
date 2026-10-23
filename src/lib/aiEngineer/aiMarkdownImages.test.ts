@@ -48,7 +48,7 @@ describe("selectStreamingMarkdownHtml", () => {
 describe("ai chat markdown image css", () => {
   it("centers and scales all .ai-engineer-md img with chat container", () => {
     const css = readFileSync(
-      resolve(process.cwd(), "src/App.css"),
+      resolve(process.cwd(), "src/styles/ai-chat.css"),
       "utf8",
     );
     expect(css).toMatch(/\.ai-engineer-chat\s*\{[^}]*container-type:\s*inline-size/);

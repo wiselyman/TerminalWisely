@@ -3,7 +3,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
-const css = readFileSync(resolve(root, "src/App.css"), "utf8");
+const css = ["dialogs.css", "k8s.css"]
+  .map((file) => readFileSync(resolve(root, "src/styles", file), "utf8"))
+  .join("\n");
 const addCluster = readFileSync(
   resolve(root, "src/components/k8s/AddK8sClusterModal.tsx"),
   "utf8",

@@ -29,6 +29,23 @@ function exists(rel) {
   return fs.existsSync(path.join(root, rel));
 }
 
+function readStyles() {
+  return [
+    "src/App.css",
+    "src/styles/tokens.css",
+    "src/styles/primitives.css",
+    "src/styles/shell.css",
+    "src/styles/home.css",
+    "src/styles/management.css",
+    "src/styles/k8s.css",
+    "src/styles/database.css",
+    "src/styles/ai-chat.css",
+    "src/styles/files.css",
+    "src/styles/desktop.css",
+    "src/styles/dialogs.css",
+  ].map(read).join("\n");
+}
+
 // --- Cursor UI / titlebar tools ---
 {
   const app = read("src/App.tsx");
@@ -78,7 +95,7 @@ function exists(rel) {
     const md = read("src/components/aiEngineer/AiMarkdown.tsx");
     const open = read("src/lib/aiEngineer/openExternalUrl.ts");
     const media = read("src/lib/aiEngineer/chatMedia.ts");
-    const css = read("src/App.css");
+    const css = readStyles();
     if (
       md.includes('data-testid="ai-md-external-link"') &&
       md.includes("openExternalUrl") &&
@@ -165,7 +182,7 @@ function exists(rel) {
       );
     }
   }
-  const css = read("src/App.css");
+  const css = readStyles();
   if (
     css.includes(".ai-engineer-exec-card.is-collapsed") &&
     css.includes("background: var(--tw-surface)") &&
@@ -294,7 +311,7 @@ function exists(rel) {
   } else {
     fail("k8s.host-add-cluster", "missing k8s-host-add-cluster testid");
   }
-  const appCss = read("src/App.css");
+  const appCss = readStyles();
   if (
     appCss.includes("saved-item-action--k8s-detected") &&
     appCss.includes("k8s-host-detected-flash")
@@ -478,7 +495,7 @@ function exists(rel) {
 // --- AI exec busy dots placement ---
 {
   const panel = read("src/components/aiEngineer/AiEngineerPanel.tsx");
-  const css = read("src/App.css");
+  const css = readStyles();
   const phase = read("src/lib/aiEngineer/runBusyPhase.ts");
   if (panel.includes("ai-engineer-exec-live-banner")) {
     fail("ai.exec-no-live-banner", "live banner still rendered");
@@ -504,7 +521,7 @@ function exists(rel) {
 
 // --- Keep upload / drop-kind local ---
 {
-  const appCss = read("src/App.css");
+  const appCss = readStyles();
   if (appCss.includes('data-drop-kind="local"') || appCss.includes("[data-drop-kind=\"local\"]")) {
     pass("keep.drop-kind-local", "CSS retains OS-file drop-kind local");
   } else {
@@ -655,7 +672,7 @@ function exists(rel) {
   } else {
     fail("gateway.list-models", "missing list_models");
   }
-  const css = read("src/App.css");
+  const css = readStyles();
   if (/terminal-view-inner[\s\S]*?padding:\s*8px/.test(css)) {
     pass("ui.terminal-padding", "terminal inset padding");
   } else {
@@ -738,7 +755,7 @@ function exists(rel) {
       );
     }
   }
-  const css = read("src/App.css");
+  const css = readStyles();
   const backdropIdx = css.indexOf(".send-to-backdrop");
   const backdropSlice = backdropIdx >= 0 ? css.slice(backdropIdx, backdropIdx + 280) : "";
   if (/z-index:\s*(3[6-9]\d{3}|[4-9]\d{4})\b/.test(backdropSlice)) {
@@ -1026,7 +1043,7 @@ function exists(rel) {
     /shouldPinChatAfterViewportResize[\s\S]*return opts\.stickToBottom/.test(
       chatScroll,
     ) &&
-    read("src/App.css").includes("table-layout: fixed") &&
+    readStyles().includes("table-layout: fixed") &&
     read("src/components/aiEngineer/AiMarkdown.tsx").includes(
       "selectStreamingMarkdownHtml",
     ) &&
@@ -1175,7 +1192,7 @@ function exists(rel) {
     }
   }
 
-  const appCss = read("src/App.css");
+  const appCss = readStyles();
   if (
     appCss.includes(".ai-engineer-panel.ai-engineer-panel-parked") &&
     appCss.includes("opacity: 0 !important") &&
@@ -1222,7 +1239,7 @@ function exists(rel) {
   } else {
     fail("ai.chat-copy-reply", "missing ai-engineer-copy-reply");
   }
-  const css = read("src/App.css");
+  const css = readStyles();
   const overlayZ = css.match(/\.ai-engineer-settings-overlay\s*\{[^}]*z-index\s*:\s*(\d+)/);
   if (overlayZ && Number(overlayZ[1]) >= 36000) {
     pass("ai.settings-zindex", `settings overlay z-index ${overlayZ[1]}`);
@@ -1286,7 +1303,7 @@ function exists(rel) {
     storeTs.includes("agentSource") &&
     externalAct.includes("isMirroredTwMcpActivity") &&
     externalAct.includes("return null") &&
-    read("src/App.css").includes(".ai-engineer-exec-agent-source")
+    readStyles().includes(".ai-engineer-exec-agent-source")
   ) {
     pass(
       "ai.runtime-exec-agent-source",
@@ -1622,7 +1639,7 @@ function exists(rel) {
 
 // --- App type / density tokens ---
 {
-  const css = read("src/App.css");
+  const css = readStyles();
   if (
     css.includes("--tw-font-dense") &&
     css.includes("--tw-font-ui") &&
@@ -1685,6 +1702,11 @@ function exists(rel) {
   if (ci.includes("linux-aarch64") && ci.includes("windows-x86_64"))
     pass("ci.cross-platform-matrix", "linux arm64 + windows in CI");
   else fail("ci.cross-platform-matrix", "CI matrix missing arch runners");
+  if (/label: windows-x86_64[\s\S]*?playwright: true/.test(ci) &&
+      ci.includes("scripts/e2e-playwright.ps1") &&
+      exists("scripts/e2e-playwright.ps1"))
+    pass("ci.windows-ui-e2e", "Windows runner uses its native PowerShell UI E2E harness");
+  else fail("ci.windows-ui-e2e", "Windows UI E2E matrix or PowerShell harness is missing");
   if (exists("docs/TEST_MATRIX.md")) pass("test.matrix-doc", "TEST_MATRIX.md");
   else fail("test.matrix-doc", "missing TEST_MATRIX.md");
   if (exists("scripts/check-no-agent-hardcoding.mjs")) {
@@ -1906,8 +1928,8 @@ function exists(rel) {
     read("src/components/aiEngineer/AiEngineerPanel.tsx").includes(
       "ai-engineer-panel-parked",
     ) &&
-    read("src/App.css").includes("opacity: 0 !important") &&
-    read("src/App.css").includes("visibility: visible !important") &&
+    readStyles().includes("opacity: 0 !important") &&
+    readStyles().includes("visibility: visible !important") &&
     read("src/components/aiEngineer/AiEngineerPanel.tsx").includes(
       "shouldParkChatScrollerAtBottom",
     ) &&
@@ -1979,7 +2001,7 @@ function exists(rel) {
     fail("ui.theme-switcher", "ThemeSwitcher missing or not mounted in App.tsx");
   }
   const appTheme = read("src/lib/appTheme.ts");
-  const appCss = read("src/App.css");
+  const appCss = readStyles();
   if (
     appTheme.includes('THEME_STORAGE_KEY') &&
     appCss.includes('[data-theme="light"]') &&

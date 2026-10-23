@@ -98,6 +98,17 @@ import {
   loadSidebarWidth,
 } from "./lib/sidebarLayout";
 import "./App.css";
+import "./styles/tokens.css";
+import "./styles/primitives.css";
+import "./styles/shell.css";
+import "./styles/home.css";
+import "./styles/management.css";
+import "./styles/k8s.css";
+import "./styles/database.css";
+import "./styles/ai-chat.css";
+import "./styles/desktop.css";
+import "./styles/files.css";
+import "./styles/dialogs.css";
 
 function App() {
   const { t } = useTranslation(["shell", "k8s"]);

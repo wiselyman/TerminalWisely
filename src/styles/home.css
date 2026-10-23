@@ -1,0 +1,139 @@
+.home-local-chat {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  background: var(--tw-bg);
+  min-width: 0;
+  min-height: 0;
+  z-index: 2;
+}
+
+.ai-engineer-panel.is-home-workspace {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 1 !important;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.ai-engineer-panel.is-home-workspace .find-panel-resizer {
+  display: none;
+}
+
+.home-local-terminal-pane,
+.home-work-chat {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-local-terminal-pane {
+  background: var(--tw-canvas);
+}
+
+.home-terminal-instance {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.home-terminal-instance.active {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.home-local-splitter {
+  position: relative;
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--tw-bg);
+}
+
+.home-local-splitter::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--tw-border);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.home-local-splitter:hover::after,
+.home-local-splitter:focus-visible::after {
+  width: 2px;
+  background: var(--tw-accent);
+}
+
+.home-local-terminal {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+}
+
+.home-local-terminal .xterm {
+  height: 100%;
+}
+
+.home-work-chat .ai-engineer-panel.is-home-workspace {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+
+.home-local-chat {
+  background: var(--tw-canvas);
+}
+
+.home-local-terminal-pane,
+.home-work-chat {
+  background: var(--tw-bg);
+}
+
+.home-local-splitter {
+  background: var(--tw-bg);
+}
+
+.home-local-splitter::after {
+  background: var(--tw-border-strong);
+}
+
+.home-local-splitter:hover::after,
+.home-local-splitter:focus-visible::after {
+  width: 2px;
+  background: var(--tw-focus-ring);
+}
+
+.home-local-terminal {
+  padding: 0;
+  background: var(--tw-bg);
+}
+
+.home-work-chat .ai-engineer-panel.is-home-workspace {
+  background: var(--tw-bg);
+}
+
+@media (max-width: 900px) {
+  .home-local-chat {
+    grid-template-columns: minmax(280px, 1fr) 8px minmax(320px, 1fr) !important;
+    overflow-x: auto;
+  }
+}
