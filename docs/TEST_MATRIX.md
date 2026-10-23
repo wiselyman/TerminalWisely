@@ -49,7 +49,7 @@
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
 | 功能五段（计划闸门） | — | — | smoke `process.feature-flow` | — | 计划缺旧行为、架构或设计时不改产品代码；不走 Codex 联合审查 |
-| DB 侧栏 / AI SQL / sqlglot（2026-10-10） | vitest `App.homeTab` + `panelVisibility` + `aiEngineerDbBind` + `objectPaneVisibleColumns` + `hostTools` + `dbWorkspaceStore` + `entityListLayout` | — | smoke `sidecar.runtime-sqlglot` | Playwright：Home 不显示 AI 聊天、回到服务页签恢复聊天、数据库连接可分组、Home 保持 DB 侧栏、连接卡片无引擎副标题、表页签同一行标出库和 schema | 计划 `docs/superpowers/plans/2026-10-10-sidebar-groups-consistent.md`；顶层页签是数据库服务，一个服务一份聊天；表页签路径为 `库 / schema` |
+| DB 侧栏 / AI SQL / sqlglot（2026-10-10） | vitest `App.homeTab` + `panelVisibility` + `aiEngineerDbBind` + `objectPaneVisibleColumns` + `hostTools` + `dbWorkspaceStore` + `entityListLayout` | — | smoke `sidecar.runtime-sqlglot` | Playwright：Home 不显示 AI 聊天、回到服务页签恢复聊天、数据库连接可分组、Home 隐藏 DB 目录侧栏并在切回数据库空间后恢复、连接卡片无引擎副标题、表页签同一行标出库和 schema | 计划 `docs/superpowers/plans/2026-10-10-sidebar-groups-consistent.md`；顶层页签是数据库服务，一个服务一份聊天；表页签路径为 `库 / schema` |
 | 连接表单紧凑状态（测试 ✅ / 保存错误） | vitest `formatDbFormError`；cargo `format_error` 展开 pg `db error` | — | — | Playwright `db-form-status` / `db-test-ok` / `db-form-error` | 真机 PG 保存依赖本机 vault |
 | 引擎能力差异（菜单/维护/Redis·Mongo） | vitest `objectMenuActions` / `maintainSql` / redis TTL / `parseMongoJson` | — | smoke `db.engine-capability-diff` | Playwright maintain 审批、Redis TTL、Mongo JSON | SQL Server/Oracle 维护清单后补；真机未测项见计划 |
 
@@ -204,7 +204,7 @@
 | Long-job exec idle 豁免 | Rust `ai_exec_limits` | — | timeout≥600 关 idle | — | ✓ |
 | Run stall 看门狗（冷启动 + 工具后无进度；**工具执行中 / 审批中不误杀**；FE idle abort 同） | `test_stall_watch` + `thinkingIdleAbort.test` | main stall wrap | smoke + run_stalled 清 busy | — | ✓ |
 | Wall-clock run 预算 | paths `max_run_wall_seconds` | loop `_check_budgets` | — | — | ✓ |
-| Home 本机终端 + 聊天（scope `local`；左侧 portable-pty，Windows PowerShell；右侧 `AiEngineerPanel`） | Rust `local_terminal::tests`（shell 选择、PTY 输出） | — | 打开 Home 不发起 SSH | Playwright `home-local-terminal-chat` | Windows 真机未测 |
+| Home 本机终端 + 聊天（scope `local`；左侧 portable-pty，Windows PowerShell；右侧 `AiEngineerPanel`；无 Home 页签；终端/聊天分隔条可调且持久化） | Rust `local_terminal::tests`（shell 选择、PTY 输出）+ `homeSplit.test` | — | Home 空间按钮，无 Home tab | Playwright `home-local-terminal-chat`（拖动、键盘边界、重载恢复） | Windows 真机未测 |
 
 ## 10. AI chat 可观测性
 

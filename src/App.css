@@ -2557,30 +2557,6 @@ body.tab-reordering .terminal-drop-overlay {
   height: 16px;
 }
 
-.tab.tab-home-entry {
-  flex: 0 0 auto;
-  max-width: none;
-}
-
-.tab-kind.home {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: var(--tw-fg-subtle);
-}
-
-.tab-kind.home svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-.tab.tab-home-entry.active .tab-kind.home {
-  color: var(--tw-fg);
-}
-
 /* Keep in-tab home action compact inside the 18px hit target. */
 .tab-home svg {
   width: 14px;
@@ -4586,7 +4562,7 @@ body.preview-float-resizing {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
   background: var(--tw-bg);
@@ -4625,8 +4601,32 @@ body.preview-float-resizing {
 }
 
 .home-local-terminal-pane {
-  border-right: 1px solid var(--tw-border);
   background: var(--tw-canvas);
+}
+
+.home-local-splitter {
+  position: relative;
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--tw-bg);
+}
+
+.home-local-splitter::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--tw-border);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.home-local-splitter:hover::after,
+.home-local-splitter:focus-visible::after {
+  width: 2px;
+  background: var(--tw-accent);
 }
 
 .home-local-terminal {

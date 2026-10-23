@@ -935,30 +935,6 @@ function App() {
                   event.preventDefault();
                 }}
               >
-                <div
-                  className={`tab tab-home-entry ${homeOpen ? "active" : ""}`}
-                  data-tab-role="home"
-                  onClick={() => {
-                    if (tabPointerButtonRef.current !== 0) {
-                      tabPointerButtonRef.current = 0;
-                      return;
-                    }
-                    if (Date.now() < suppressTabClickUntilRef.current) return;
-                    activateHome();
-                  }}
-                  onContextMenu={(event) => event.preventDefault()}
-                >
-                  {homeOpen ? (
-                    <>
-                      <span className="tab-curve tab-curve-start" aria-hidden="true" />
-                      <span className="tab-curve tab-curve-end" aria-hidden="true" />
-                    </>
-                  ) : null}
-                  <span className="tab-kind home" title={t("homeTabTitle")}>
-                    <TabHomeIcon />
-                  </span>
-                  <span className="tab-title">{t("homeTabTitle")}</span>
-                </div>
                 {sidebarView === "hosts" ? (
                   <>
           {tabs.map((tab) => {

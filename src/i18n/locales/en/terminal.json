@@ -22,6 +22,8 @@
   "extract": "Extract",
   "blankMenuAria": "Terminal actions",
   "localTerminalTitle": "Local terminal",
+  "homeSplitAria": "Resize terminal and chat panels",
+  "homeSplitValue": "Terminal width {{percent}} percent",
   "localTerminalDesktopOnly": "The local terminal is available in the desktop app.",
   "localTerminalStartFailed": "Could not start local terminal",
   "copy": "Copy",

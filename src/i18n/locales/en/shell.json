@@ -2,7 +2,6 @@
   "newSsh": "Add server",
   "importKubeconfig": "Import kubeconfig",
   "remoteSshTitle": "Remote SSH",
-  "homeTabTitle": "Home",
   "closeTabAria": "Close {{title}}",
   "goHomeTitle": "Go to home directory ~",
   "goHomeAria": "Go home · {{title}}",

@@ -2,7 +2,6 @@
   "newSsh": "添加服务器",
   "importKubeconfig": "导入 kubeconfig",
   "remoteSshTitle": "Remote 远程 SSH",
-  "homeTabTitle": "Home",
   "closeTabAria": "关闭 {{title}}",
   "goHomeTitle": "回到用户目录 ~",
   "goHomeAria": "回到用户目录 {{title}}",

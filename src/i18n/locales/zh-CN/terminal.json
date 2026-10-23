@@ -22,6 +22,8 @@
   "extract": "解压",
   "blankMenuAria": "终端操作",
   "localTerminalTitle": "本机终端",
+  "homeSplitAria": "调整终端和聊天面板宽度",
+  "homeSplitValue": "终端宽度 {{percent}}%",
   "localTerminalDesktopOnly": "本机终端仅在桌面应用中可用。",
   "localTerminalStartFailed": "无法启动本机终端",
   "copy": "复制",
