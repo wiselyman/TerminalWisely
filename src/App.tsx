@@ -331,23 +331,16 @@ function App() {
     setActiveHomeTerminalId(tab.id);
   }, [t]);
   const closeHomeTerminalTab = useCallback((terminalId: string) => {
-    const remaining = homeTerminalTabs.filter((tab) => tab.id !== terminalId);
-    if (remaining.length === 0) {
-      homeTerminalSequence.current += 1;
-      const replacement = {
-        id: `home-terminal-${homeTerminalSequence.current}`,
-        title: t("localTerminalTabTitle", { ns: "terminal", number: homeTerminalSequence.current }),
-      };
-      setHomeTerminalTabs([replacement]);
-      setActiveHomeTerminalId(replacement.id);
+    if (homeTerminalTabs.length <= 1 || homeTerminalTabs[0]?.id === terminalId) {
       return;
     }
+    const remaining = homeTerminalTabs.filter((tab) => tab.id !== terminalId);
     if (activeHomeTerminalId === terminalId) {
       const oldIndex = homeTerminalTabs.findIndex((tab) => tab.id === terminalId);
       setActiveHomeTerminalId(remaining[Math.min(oldIndex, remaining.length - 1)].id);
     }
     setHomeTerminalTabs(remaining);
-  }, [activeHomeTerminalId, homeTerminalTabs, t]);
+  }, [activeHomeTerminalId, homeTerminalTabs]);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
   const openNewDbRef = useRef<() => void>(() => {});
@@ -1158,6 +1151,7 @@ function App() {
               ) : null}
               {homeOpen ? homeTerminalTabs.map((tab) => {
                 const active = tab.id === activeHomeTerminalId;
+                const canClose = homeTerminalTabs[0]?.id !== tab.id;
                 return (
                   <div
                     key={tab.id}
@@ -1176,7 +1170,7 @@ function App() {
                       <TerminalIcon />
                     </span>
                     <span className="tab-title" title={tab.title}>{tab.title}</span>
-                    <button
+                    {canClose ? <button
                       type="button"
                       className="tab-close"
                       data-testid={`close-${tab.id}`}
@@ -1186,7 +1180,7 @@ function App() {
                         event.stopPropagation();
                         closeHomeTerminalTab(tab.id);
                       }}
-                    >×</button>
+                    >×</button> : null}
                   </div>
                 );
               }) : null}

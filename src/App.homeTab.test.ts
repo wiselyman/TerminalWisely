@@ -42,6 +42,8 @@ describe("Home local terminal tabs", () => {
     expect(app).toContain("addHomeTerminalTab");
     expect(app).toContain("if (homeOpen)");
     expect(app).toContain("addHomeTerminalTab();");
+    expect(app).toContain("homeTerminalTabs[0]?.id !== tab.id");
+    expect(app).toContain("homeTerminalTabs[0]?.id === terminalId");
     expect(app).toContain("chromeNew === \"cluster\"");
     expect(app).toContain("chromeNew === \"database\"");
     expect(app).toContain("openNewRemoteRef.current()");

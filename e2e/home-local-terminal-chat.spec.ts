@@ -62,13 +62,16 @@ test("Home plus adds an independent local Terminal tab instead of starting SSH",
   await expect(page.getByTestId("home-terminal-tab")).toHaveCount(2);
   await expect(page.getByTestId("home-terminal-tab").nth(1)).toHaveClass(/active/);
   await expect(page.getByTestId("home-local-terminal")).toHaveCount(2);
+  await expect(page.getByTestId("close-home-terminal-1")).toHaveCount(0);
   expect(await api.getCreateSshCallCount()).toBe(sshCallsBefore);
 
   await page.getByTestId("home-terminal-tab").first().click();
   await expect(page.getByTestId("home-terminal-tab").first()).toHaveClass(/active/);
   await page.getByTestId("close-home-terminal-2").click();
   await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
-  await page.getByTestId("close-home-terminal-1").click();
+  await page.getByTestId("chrome-new-session").click();
+  await expect(page.getByTestId("home-terminal-tab")).toHaveCount(2);
+  await page.getByTestId("close-home-terminal-3").click();
   await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
-  await expect(page.getByTestId("home-terminal-tab")).toHaveAttribute("data-terminal-id", "home-terminal-3");
+  await expect(page.getByTestId("home-terminal-tab")).toHaveAttribute("data-terminal-id", "home-terminal-1");
 });
