@@ -4667,9 +4667,11 @@ body.cmd-nav-panel-resizing {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--chrome-control-size, 24px);
+  width: 28px;
+  min-width: 28px;
+  flex: 0 0 28px;
   height: var(--chrome-control-size, 24px);
-  padding: 0 5px;
+  padding: 0;
   border: none;
   border-radius: 6px;
   background: transparent;

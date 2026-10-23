@@ -46,7 +46,7 @@
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
 | 语言切换 | — | Playwright `app-shell`/`settings-i18n`（menu portal + html lang） | smoke `locale-switcher` | — | ✓ |
-| 语言入口文字标记（zh-CN/en） | — | Playwright `app-shell` / `settings-i18n`（语言标记与菜单无旗帜 SVG，切换后 Home 收起态保持） | smoke `ui.locale-labels`（中 / EN） | — | ✓ |
+| 语言入口文字标记（zh-CN/en） | — | Playwright `app-shell` / `settings-i18n`（语言标记与菜单无旗帜 SVG、切换时入口宽度与邻近图标位置稳定、Home 收起态保持） | smoke `ui.locale-labels`（中 / EN） | — | ✓ |
 | 主题切换（深色/浅色） | `appTheme` | Playwright `app-shell`（data-theme） | smoke `theme-switcher` | — | ✓ |
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |

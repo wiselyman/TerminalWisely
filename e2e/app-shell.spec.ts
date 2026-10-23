@@ -110,14 +110,26 @@ test.describe("App shell & welcome", () => {
   });
 
   test("switches locale en ↔ zh-CN", async ({ page }) => {
+    const localeTrigger = page.getByTestId("locale-switcher-trigger");
+    const themeTrigger = page.getByTestId("theme-switcher-trigger");
+    await localeTrigger.click();
+    await page.getByTestId("locale-option-en").click();
+    await expect(localeTrigger).toContainText("EN");
+    const englishLocaleWidth = (await localeTrigger.boundingBox())?.width;
+    const englishThemeX = (await themeTrigger.boundingBox())?.x;
+
     await page.getByTestId("ai-engineer-tool").click();
-    await page.getByTestId("locale-switcher-trigger").click();
+    await localeTrigger.click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
     await expect(page.getByTestId("locale-switcher-trigger")).toContainText("EN");
     await expect(page.locator("[data-locale-flag]")).toHaveCount(0);
     await expect(page.getByTestId("locale-option-zh-CN")).toContainText("中文");
     await page.getByTestId("locale-option-zh-CN").click();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+    const chineseLocaleWidth = (await localeTrigger.boundingBox())?.width;
+    const chineseThemeX = (await themeTrigger.boundingBox())?.x;
+    expect(chineseLocaleWidth).toBe(englishLocaleWidth);
+    expect(chineseThemeX).toBe(englishThemeX);
     await expect(page.getByTestId("home-local-empty")).toContainText("本机聊天");
     await expect(page.getByTestId("home-local-empty")).toContainText("Terminal");
     await expect(page.getByTestId("home-local-empty")).not.toContainText("MCP");
