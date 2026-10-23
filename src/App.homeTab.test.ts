@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 const dir = dirname(fileURLToPath(import.meta.url));
 const app = readFileSync(join(dir, "App.tsx"), "utf8");
 const css = readFileSync(join(dir, "App.css"), "utf8");
+const toolsZh = JSON.parse(readFileSync(join(dir, "i18n/locales/zh-CN/tools.json"), "utf8")) as Record<string, string>;
+const toolsEn = JSON.parse(readFileSync(join(dir, "i18n/locales/en/tools.json"), "utf8")) as Record<string, string>;
 
 describe("App Home tab", () => {
   it("has no Home tab and keeps Home navigation in the space buttons", () => {
@@ -33,6 +35,22 @@ describe("Home sidebar content", () => {
     expect(app).toContain('homeOpen ? "home-space " : ""');
     expect(css).toMatch(/\.app-shell\.home-space \.sidebar-shell\s*\{\s*display:\s*none;/);
     expect(css).toContain(".app-shell.home-space .app-body");
+  });
+
+  it("hides the sidebar collapse control only while Home is active", () => {
+    expect(app).toContain("!homeOpen ? <button");
+    expect(app).toContain('className="chrome-sidebar-toggle"');
+  });
+});
+
+describe("Home chat hint", () => {
+  it("describes the local chat and Terminal without claiming all actions use MCP", () => {
+    expect(toolsZh["aiEngineer.hintLocal"]).toContain("本机聊天");
+    expect(toolsZh["aiEngineer.hintLocal"]).toContain("Terminal");
+    expect(toolsZh["aiEngineer.hintLocal"]).not.toContain("MCP");
+    expect(toolsEn["aiEngineer.hintLocal"]).toContain("Home chat");
+    expect(toolsEn["aiEngineer.hintLocal"]).toContain("Terminal");
+    expect(toolsEn["aiEngineer.hintLocal"]).not.toContain("MCP");
   });
 });
 

@@ -12,16 +12,19 @@ test.describe("App shell & welcome", () => {
     const api = await twE2e(page);
     await api.resetMocks();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
+    await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     const terminalBounds = await page.locator(".home-local-terminal-pane").boundingBox();
     expect(terminalBounds?.x).toBe(0);
     await page.getByTestId("sidebar-view-hosts").click();
     await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
     await expect(page.locator(".sidebar-shell")).toBeVisible();
+    await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toBeVisible();
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
     await expandUngroupedEntities(page);
     await expect(page.getByRole("button", { name: "E2E Test Host" })).toBeVisible();
     await page.getByTestId("sidebar-view-home").click();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
+    await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "E2E Test Host" })).toHaveCount(0);
   });
 
@@ -38,15 +41,18 @@ test.describe("App shell & welcome", () => {
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
     await page.getByTestId("locale-option-zh-CN").click();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-    await expect(page.getByTestId("home-local-empty")).toContainText(/当前这台电脑|MCP/);
+    await expect(page.getByTestId("home-local-empty")).toContainText("本机聊天");
+    await expect(page.getByTestId("home-local-empty")).toContainText("Terminal");
+    await expect(page.getByTestId("home-local-empty")).not.toContainText("MCP");
 
     await page.getByTestId("locale-switcher-trigger").click();
     await expect(page.getByTestId("locale-switcher-menu")).toBeVisible();
     await page.getByTestId("locale-option-en").click();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page.getByTestId("home-local-empty")).toContainText(
-      /computer you are using|MCP/i,
+      /Home chat.*Terminal/i,
     );
+    await expect(page.getByTestId("home-local-empty")).not.toContainText("MCP");
   });
 
   test("switches theme dark ↔ light", async ({ page }) => {

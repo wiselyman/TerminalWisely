@@ -870,7 +870,7 @@ function App() {
                 />
               ) : null}
               <div className="chrome-sidebar-controls">
-                <button
+                {!homeOpen ? <button
                   type="button"
                   className="chrome-sidebar-toggle"
                   onClick={() => setSidebarCollapsed((value) => !value)}
@@ -882,7 +882,7 @@ function App() {
                   }
                 >
                   <SidebarToggleIcon />
-                </button>
+                </button> : null}
                 <div
                   className="chrome-sidebar-views"
                   role="tablist"
