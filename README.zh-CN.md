@@ -6,7 +6,7 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.7](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.7)**
+**当前版本：[v0.0.8](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.8)**
 
 **本机与远程运维，在同一个窗口。** Home 将本机交互式 Terminal 和本机聊天并排显示；主机、Kubernetes、数据库提供远程工作区和按对象隔离的聊天。变更要批准，随时可以 STOP。
 

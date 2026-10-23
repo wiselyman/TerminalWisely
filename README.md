@@ -6,7 +6,7 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.0.7](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.7)**
+**Current version: [v0.0.8](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.8)**
 
 **Local and remote operations in one window.** Home pairs an interactive local Terminal with local chat; Hosts, Kubernetes, and Databases provide remote workspaces with object-specific chats. Changes wait for approval, and STOP is always there.
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.8] - 2026-10-23
+
+Unified the desktop UI and interaction feedback across workspaces, with Home and language-control refinements.
+
+- Align light/dark visual rules and focus, selection, loading, error, and approval feedback across workspaces
+- Start Home with the local Terminal visible and chat collapsed; keep the split adjustable when chat is open
+- Keep Home, Hosts, Kubernetes, and Databases tabs isolated while switching spaces
+- Replace flag icons with compact Chinese/English labels and keep the title-bar control position stable
+- Validate UI and builds across macOS, Windows, and Linux CI runners
+
+统一各工作区的桌面界面与交互反馈，并优化 Home 和语言入口。
+
+- 统一明暗主题，以及焦点、选中、加载、错误和审批状态的反馈
+- Home 默认显示本机 Terminal 并收起聊天；展开聊天后仍可调整分栏
+- 切换空间时隔离 Home、Hosts、Kubernetes 和 Databases 的页签
+- 用简洁的中英文文字替代旗帜图标，切换语言时标题栏控件位置保持稳定
+- 通过 macOS、Windows 和 Linux CI runner 验证界面与构建
+
 ## [0.0.7] - 2026-10-23
 
 Home is now a local operations space with an interactive Terminal beside local chat.

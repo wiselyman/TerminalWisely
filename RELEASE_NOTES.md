@@ -1,31 +1,27 @@
-# TerminalWisely v0.0.7
+# TerminalWisely v0.0.8
 
 ## English
 
-Home is now a local operations space with an interactive Terminal beside local chat.
+TerminalWisely 0.0.8 brings a more consistent, focused desktop experience across Home, Hosts, Kubernetes, Databases, chat, files, and settings.
 
 ### Highlights
 
-- **Local Terminal** — Home opens directly to a local shell and chat; Windows uses PowerShell
-- **Terminal tabs** — add independent local Terminal tabs from Home; the first tab stays open
-- **Room to work** — Home hides the Hosts list, fills the left workspace with Terminal, and lets you resize the Terminal/chat split
-- **Cleaner Home** — open Home from the space navigation; no duplicate Home tab or bottom host status strip
-- **Existing workspaces** — Hosts, Kubernetes, and Databases retain their remote workflows
-
-Installers: Windows, macOS (arm64 + x64), Linux (deb / rpm / AppImage where available).
-
----
+- **Consistent workspaces** — shared visual language across light and dark themes, with clearer focus, selection, and status feedback
+- **Refined Home** — start with the local Terminal; open local chat when needed, and resize the split when chat is visible
+- **Stable space navigation** — Home, Hosts, Kubernetes, and Databases keep their tabs and state isolated
+- **Simpler language control** — use compact text labels instead of flags; the control keeps its position when switching languages
+- **Cross-platform checks** — UI and build workflows cover macOS, Windows, and Linux runners
 
 ## 中文
 
-Home 现在是本机运维空间：交互式 Terminal 与本机聊天并排显示。
+TerminalWisely 0.0.8 统一了 Home、Hosts、Kubernetes、数据库、聊天、文件和设置界面的视觉与交互反馈。
 
-### 要点
+### 主要更新
 
-- **本机 Terminal** — 打开 Home 后直接进入本机 Shell 和聊天；Windows 使用 PowerShell
-- **Terminal 页签** — 可在 Home 新增独立 Terminal 页签；第一个页签固定保留
-- **更大的工作区** — Home 隐藏 Hosts 列表，Terminal 占满左侧工作区，且可拖动调整 Terminal 与聊天的比例
-- **简化 Home** — 从空间导航进入 Home，不再重复显示 Home 页签，也不显示底部主机状态条
-- **保留原有空间** — Hosts、Kubernetes 和 Databases 的远程工作流继续可用
+- **工作区风格统一** — 明暗主题共用清晰的视觉规则，焦点、选中和状态反馈更明确
+- **优化 Home** — 默认显示本机 Terminal，需要时再展开本机聊天；聊天展开后可调整分栏
+- **空间相互隔离** — Home、Hosts、Kubernetes 和 Databases 各自保留标签与状态
+- **简化语言入口** — 使用文字标记替代旗帜，切换语言时控件位置保持稳定
+- **跨平台检查** — UI 与构建工作流覆盖 macOS、Windows 和 Linux runner
 
-安装包：Windows；macOS（arm64 / x64）；Linux（deb / rpm / AppImage，视平台而定）。
+安装包：Windows；macOS（Apple Silicon / Intel）；Linux（x86_64 / ARM64，具体格式视平台而定）。
