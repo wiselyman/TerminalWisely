@@ -2,6 +2,7 @@
 [data-theme="dark"] {
   --tw-canvas: #0c1118;
   --tw-bg: #111820;
+  --tw-terminal-bg: #0d1117;
   --tw-surface: #171f29;
   --tw-surface-2: #202b38;
   --tw-elevated: #1b2430;
@@ -68,6 +69,7 @@
 [data-theme="light"] {
   --tw-canvas: #f3f5f8;
   --tw-bg: #f8fafc;
+  --tw-terminal-bg: #ffffff;
   --tw-surface: #ffffff;
   --tw-surface-2: #edf1f5;
   --tw-elevated: #ffffff;

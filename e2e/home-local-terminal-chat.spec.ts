@@ -14,6 +14,17 @@ test("Home is a local terminal beside local chat", async ({ page }) => {
     Number.parseFloat(getComputedStyle(element).paddingLeft),
   );
   expect(terminalPadding).toBeGreaterThanOrEqual(12);
+  for (const [theme, expectedBackground] of [
+    ["light", "rgb(255, 255, 255)"],
+    ["dark", "rgb(13, 17, 23)"],
+  ] as const) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) {
+      await page.getByTestId("theme-switcher-trigger").click();
+      await page.getByTestId(`theme-option-${theme}`).click();
+    }
+    await expect.poll(() => terminal.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .toBe(expectedBackground);
+  }
   await expect(chat).toBeVisible();
   await expect(home.getByTestId("ai-engineer-composer")).toBeVisible();
   await expect(home.getByTestId("home-work-tab-web")).toHaveCount(0);

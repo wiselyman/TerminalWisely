@@ -126,7 +126,7 @@
 .home-local-terminal {
   box-sizing: border-box;
   padding: 12px;
-  background: var(--tw-bg);
+  background: var(--tw-terminal-bg);
 }
 
 .home-work-chat .ai-engineer-panel.is-home-workspace {
