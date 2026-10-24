@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { ArrowUp, FileText, Folder } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ListLocalDirectoryResult } from "../../types";
 
 type Props = {
   sessionId: string;
   mode: "file" | "directory";
+  initialPath?: string;
   onSelect: (path: string) => void;
   onCancel: () => void;
 };
 
-export function MarkWiselyFilePicker({ sessionId, mode, onSelect, onCancel }: Props) {
+export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, onCancel }: Props) {
   const { t } = useTranslation("tools");
-  const [path, setPath] = useState<string | undefined>();
+  const [path, setPath] = useState<string | undefined>(initialPath);
   const [result, setResult] = useState<ListLocalDirectoryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,15 +46,15 @@ export function MarkWiselyFilePicker({ sessionId, mode, onSelect, onCancel }: Pr
     <section
       className="markwisely-picker"
       data-testid="markwisely-picker"
-      role={mode === "file" ? "dialog" : undefined}
-      aria-modal={mode === "file" ? true : undefined}
-      aria-label={t(mode === "file" ? "markwisely.openTitle" : "markwisely.pickerTitle")}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t(mode === "file" ? "markwisely.openTitle" : "markwisely.chooseFolder")}
     >
       <header className="markwisely-picker-head">
         <button type="button" className="markwisely-back" onClick={onCancel}>{t("markwisely.cancel")}</button>
         <strong>{mode === "file" ? t("markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>
         {mode === "directory" ? (
-          <button type="button" className="markwisely-primary" onClick={() => result && onSelect(result.path)}>
+          <button type="button" className="markwisely-primary" disabled={!result || loading || !!error} onClick={() => result && onSelect(result.path)}>
             {t("markwisely.useFolder")}
           </button>
         ) : null}
@@ -64,7 +66,7 @@ export function MarkWiselyFilePicker({ sessionId, mode, onSelect, onCancel }: Pr
         <div className="markwisely-entry-list">
           {result?.parent ? (
             <button type="button" className="markwisely-entry is-directory" onClick={() => setPath(result.parent ?? undefined)}>
-              <span aria-hidden>↰</span><span>..</span>
+              <ArrowUp aria-hidden="true" /><span>..</span>
             </button>
           ) : null}
           {visibleEntries.map((entry) => (
@@ -73,9 +75,10 @@ export function MarkWiselyFilePicker({ sessionId, mode, onSelect, onCancel }: Pr
               key={entry.path}
               className={`markwisely-entry ${entry.kind === "directory" ? "is-directory" : ""}`}
               onClick={() => entry.kind === "directory" ? setPath(entry.path) : onSelect(entry.path)}
-              data-testid={entry.kind === "directory" ? undefined : "markwisely-file-entry"}
+              data-folder-entry={entry.kind === "directory" ? "true" : undefined}
+              data-testid={entry.kind === "directory" ? "markwisely-folder-entry" : "markwisely-file-entry"}
             >
-              <span aria-hidden>{entry.kind === "directory" ? "▸" : "▤"}</span>
+              {entry.kind === "directory" ? <Folder aria-hidden="true" /> : <FileText aria-hidden="true" />}
               <span>{entry.name}</span>
             </button>
           ))}

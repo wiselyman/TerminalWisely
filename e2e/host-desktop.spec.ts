@@ -24,9 +24,31 @@ test.describe("Host desktop mode", () => {
       /linear-gradient/,
     );
 
+    await page.getByTestId("markwisely-new-document").click();
+    const newFolderDialog = page.getByRole("dialog", { name: "Choose folder" });
+    await expect(newFolderDialog).toBeVisible();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
+    await expect(newFolderDialog.getByTestId("markwisely-folder-entry").first().locator("svg")).toBeVisible();
+    await newFolderDialog.getByTestId("markwisely-folder-entry").filter({ hasText: "logs" }).click();
+    await expect(newFolderDialog.locator(".markwisely-picker-path")).toHaveText("/home/e2e/logs");
+    await newFolderDialog.getByRole("button", { name: "Use this folder" }).click();
+    await expect(page.getByTestId("markwisely-create-view")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Folder" })).toHaveValue("/home/e2e/logs");
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
+
+    await page.getByTestId("markwisely-new-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
+
     await page.getByTestId("markwisely-open-document").click();
+    const chooseOpenFolderDialog = page.getByRole("dialog", { name: "Choose folder" });
+    await expect(chooseOpenFolderDialog).toBeVisible();
+    await chooseOpenFolderDialog.getByTestId("markwisely-folder-entry").filter({ hasText: "logs" }).click();
+    await chooseOpenFolderDialog.getByRole("button", { name: "Use this folder" }).click();
     const openDialog = page.getByRole("dialog", { name: "Open Markdown file" });
     expect(await openDialog.count()).toBe(1);
+    await expect(openDialog.locator(".markwisely-picker-path")).toHaveText("/home/e2e/logs");
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await expect(openDialog).toHaveAttribute("aria-modal", "true");
     await openDialog.getByRole("button", { name: "Cancel" }).click();
@@ -42,6 +64,7 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
     await page.getByTestId("markwisely-new-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await expect(page.getByTestId("markwisely-create-view")).toBeVisible();
     await expect(panel.getByRole("textbox", { name: /Folder|文件夹/i })).toHaveValue("/home/e2e");
     await page.getByTestId("markwisely-file-name").fill("draft.md");
@@ -74,14 +97,24 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
     await page.getByTestId("markwisely-new-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-name").fill("note.md");
     await page.getByTestId("markwisely-create-submit").click();
     await expect(panel.locator(".vditor-ir")).toBeVisible({ timeout: 30_000 });
     await panel.getByRole("button", { name: /All files|全部文件/i }).click();
     await page.getByTestId("markwisely-open-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await expect(page.getByTestId("markwisely-file-entry")).toContainText("note.md");
     await expect(panel.getByText("app.log")).toHaveCount(0);
     await page.getByTestId("markwisely-file-entry").click();
+    await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
+
+    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    await page.getByTestId("markwisely-new-document").click();
+    const chooseNextFolder = page.getByRole("dialog", { name: "Choose folder" });
+    await expect(chooseNextFolder.locator(".markwisely-picker-path")).toHaveText("/home/e2e");
+    await chooseNextFolder.getByRole("button", { name: "Cancel" }).click();
+    await panel.getByRole("button", { name: /note\.md/ }).click();
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
 
     const editor = panel.locator('.vditor-ir [contenteditable="true"]').first();

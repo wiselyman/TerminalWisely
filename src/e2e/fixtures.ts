@@ -131,6 +131,12 @@ export const e2eLocalDir = [
 
 export const e2eRemoteDir = [
   {
+    name: "logs",
+    path: "/home/e2e/logs",
+    kind: "directory",
+    size_bytes: null,
+  },
+  {
     name: "app.log",
     path: "/var/log/app.log",
     kind: "file",

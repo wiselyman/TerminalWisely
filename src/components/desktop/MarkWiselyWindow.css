@@ -290,7 +290,16 @@
   gap: 6px;
 }
 
-.markwisely-folder-row button { min-width: 36px; }
+.markwisely-folder-row button {
+  display: grid;
+  flex: 0 0 38px;
+  place-items: center;
+  min-width: 38px;
+  padding: 0;
+  color: var(--tw-accent);
+}
+
+.markwisely-folder-row button svg { width: 17px; height: 17px; }
 .markwisely-form-actions { justify-content: flex-end; margin-top: 6px; }
 
 .markwisely-editor-view {
@@ -365,6 +374,10 @@
   box-shadow: 0 20px 56px rgba(0, 0, 0, 0.24);
 }
 
+.markwisely-folder-backdrop .markwisely-picker {
+  min-height: min(360px, 100%);
+}
+
 .markwisely-picker-head {
   display: flex;
   align-items: center;
@@ -393,7 +406,17 @@
   overflow: auto;
 }
 
-.markwisely-entry { min-height: 36px; }
+.markwisely-entry { min-height: 38px; }
+
+.markwisely-entry > svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--tw-fg-muted);
+  stroke-width: 1.8;
+}
+
+.markwisely-entry.is-directory > svg { color: var(--tw-accent); }
 
 .markwisely-empty {
   padding: 18px 8px;

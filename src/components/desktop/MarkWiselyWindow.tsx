@@ -12,7 +12,7 @@ import { useMarkWiselyStore } from "../../stores/markWiselyStore";
 import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 
 type Props = { sessionId: string; hostKey: string; sessionTitle?: string | null };
-type View = "start" | "create" | "create-folder" | "open" | "edit";
+type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "edit";
 const EMPTY_RECENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getRecentFiles"]> = [];
 
 export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
@@ -25,6 +25,7 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
   const document = useMarkWiselyStore((state) => state.documents[sessionId]);
   const recents = useMarkWiselyStore((state) => state.recentFiles[hostKey] ?? EMPTY_RECENTS);
   const openDocument = useMarkWiselyStore((state) => state.openDocument);
@@ -165,22 +166,12 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
             />
           </div>
         </div>
-      ) : view === "create-folder" ? (
-        <MarkWiselyFilePicker
-          sessionId={sessionId}
-          mode="directory"
-          onCancel={() => setView("create")}
-          onSelect={(path) => {
-            setParentDir(path);
-            setView("create");
-          }}
-        />
       ) : view === "create" ? (
         <section className="markwisely-form-view" data-testid="markwisely-create-view">
           <button type="button" className="markwisely-back" onClick={() => setView("start")}>{t("markwisely.back")}</button>
           <h2>{t("markwisely.newTitle")}</h2>
           <label>{t("markwisely.folderLabel")}
-            <div className="markwisely-folder-row"><input aria-label={t("markwisely.folderLabel")} value={parentDir} onChange={(event) => setParentDir(event.target.value)} /><button type="button" onClick={() => setView("create-folder")} aria-label={t("markwisely.chooseFolder")}>…</button></div>
+            <div className="markwisely-folder-row"><input aria-label={t("markwisely.folderLabel")} value={parentDir} onChange={(event) => setParentDir(event.target.value)} /><button type="button" onClick={() => { setFolderDialogReturnView("create"); setView("create-folder"); }} aria-label={t("markwisely.chooseFolder")}><FolderOpen aria-hidden="true" /></button></div>
           </label>
           <label>{t("markwisely.fileNameLabel")}<input data-testid="markwisely-file-name" value={name} onChange={(event) => setName(event.target.value)} /></label>
           {error ? <div className="markwisely-error" role="alert">{error}</div> : null}
@@ -190,8 +181,8 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
         <section
           className="markwisely-home"
           data-testid="markwisely-home"
-          aria-hidden={view === "open"}
-          inert={view === "open" ? true : undefined}
+          aria-hidden={view === "open" || view === "open-folder" || view === "create-folder"}
+          inert={view === "open" || view === "open-folder" || view === "create-folder" ? true : undefined}
         >
           <header className="markwisely-home-heading">
             <span className="markwisely-brand-icon" data-testid="markwisely-brand-icon" aria-hidden="true"><MarkWiselyIcon /></span>
@@ -201,11 +192,11 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
             </div>
           </header>
           <div className="markwisely-home-actions">
-            <button type="button" className="markwisely-primary" data-testid="markwisely-new-document" onClick={() => { setError(null); setView("create"); }}>
+            <button type="button" className="markwisely-primary" data-testid="markwisely-new-document" onClick={() => { setError(null); setFolderDialogReturnView("start"); setView("create-folder"); }}>
               <FilePlus2 aria-hidden="true" />
               <span>{t("markwisely.newDocument")}</span>
             </button>
-            <button type="button" className="markwisely-secondary" data-testid="markwisely-open-document" onClick={() => { setError(null); setView("open"); }}>
+            <button type="button" className="markwisely-secondary" data-testid="markwisely-open-document" onClick={() => { setError(null); setView("open-folder"); }}>
               <FolderOpen aria-hidden="true" />
               <span>{t("markwisely.openDocument")}</span>
             </button>
@@ -221,13 +212,23 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
           </section>
         </section>
       )}
-      {view === "open" ? (
-        <div className="markwisely-open-backdrop" data-testid="markwisely-open-backdrop">
+      {view === "create-folder" || view === "open-folder" || view === "open" ? (
+        <div className="markwisely-open-backdrop" data-testid={view === "open" ? "markwisely-open-backdrop" : "markwisely-folder-backdrop"}>
           <MarkWiselyFilePicker
+            key={`${view}:${parentDir}`}
             sessionId={sessionId}
-            mode="file"
-            onCancel={() => setView("start")}
-            onSelect={(path) => void openPath(path)}
+            mode={view === "open" ? "file" : "directory"}
+            initialPath={view === "open" ? parentDir : parentDir || undefined}
+            onCancel={() => setView(view === "create-folder" ? folderDialogReturnView : "start")}
+            onSelect={(path) => {
+              if (view === "create-folder" || view === "open-folder") {
+                setParentDir(path);
+                if (view === "create-folder") setView("create");
+                else setView("open");
+              } else {
+                void openPath(path);
+              }
+            }}
           />
         </div>
       ) : null}
