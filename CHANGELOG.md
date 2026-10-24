@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.9] - 2026-10-25
+
+Refine the Desktop workspace, remote file manager, MarkWisely, and update experience.
+
+- Maximized Desktop apps cover the Dock; moving the pointer to the bottom edge reveals it
+- Show Linux metadata in file list view and filenames only in icon view; remove the redundant terminal-directory locator
+- Keep remote file operations in Desktop and add the MarkWisely remote Markdown app with file/folder pickers
+- Render update release notes as Markdown and make Chat/Desktop switching reliable in one click
+- Show the connected machine name in the Desktop toolbar
+
+改进 Desktop 工作区、远程文件管理器、MarkWisely 和升级体验。
+
+- Desktop 应用最大化时覆盖 Dock；鼠标移至屏幕底边后 Dock 再显示
+- 文件列表显示 Linux 属性，图标视图只显示文件名；移除多余的终端目录定位按钮
+- 远程文件操作集中在 Desktop，并加入支持文件/文件夹选择的 MarkWisely Markdown 应用
+- 升级说明按 Markdown 渲染，聊天与 Desktop 可单击切换
+- Desktop 工具栏显示当前连接的机器名
+
 ## [0.0.8] - 2026-10-23
 
 Unified the desktop UI and interaction feedback across workspaces, with Home and language-control refinements.

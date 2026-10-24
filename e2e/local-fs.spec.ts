@@ -61,6 +61,12 @@ test.describe("Local FS panel", () => {
   test("file manager has path-bar search and chrome", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel).toBeVisible();
+    const locateButton = panel.getByRole("button", { name: "Current directory" });
+    expect(await locateButton.count()).toBe(0);
+    await expect(panel.getByRole("button", { name: "Refresh" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Show hidden files" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "List view" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Icon view" })).toBeVisible();
     await expect(page.getByTestId("file-manager-search")).toBeVisible();
     await expect(page.getByTestId("local-fs-split")).toBeVisible();
     await expect(page.getByTestId("local-fs-contents")).toBeVisible();

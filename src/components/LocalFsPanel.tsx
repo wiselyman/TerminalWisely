@@ -11,8 +11,6 @@ import {
   sendRemotePathToChat,
 } from "../lib/aiEngineer/sendToChat";
 import { uploadLocalPathsToSession } from "../lib/sessionUpload";
-import { readTerminalPromptCwd } from "../lib/terminalContext";
-import { getTerminalSession } from "../lib/terminalSelectionDrag";
 import type { FindFileEntry, LocalFsEntry, PathSizeResult, ProcessEntry } from "../types";
 import { useFindStore } from "../stores/findStore";
 import { useLocalFsStore } from "../stores/localFsStore";
@@ -23,7 +21,7 @@ import { usePreviewStore } from "../stores/previewStore";
 import { useToastStore } from "../stores/toastStore";
 import { clampWorkspacePanelWidth } from "../lib/workspacePanelWidth";
 import { LocalFsContextMenu, type LocalFsContextMenuProps } from "./LocalFsContextMenu";
-import { LocalFsBackIcon, LocalFsCwdIcon, LocalFsHiddenIcon, LocalFsHomeIcon, LocalFsRefreshIcon, LocalFsSettingsIcon, LocalFsUpIcon, LocalFsViewGridIcon, LocalFsViewListIcon } from "./LocalFsIcons";
+import { LocalFsBackIcon, LocalFsHiddenIcon, LocalFsHomeIcon, LocalFsRefreshIcon, LocalFsSettingsIcon, LocalFsUpIcon, LocalFsViewGridIcon, LocalFsViewListIcon } from "./LocalFsIcons";
 import { LocalFsContentsView } from "./LocalFsContentsView";
 import { LocalFsPathBreadcrumb } from "./LocalFsPathBreadcrumb";
 import { LocalFsTreeView } from "./LocalFsTreeView";
@@ -238,28 +236,6 @@ export function LocalFsPanel({
       normalizeRemotePath(parentRemotePath(contentsPath)) !==
         normalizeRemotePath(contentsPath),
   );
-
-  const navigateToTerminalCwd = async () => {
-    try {
-      // Prefer the live prompt (PTY). Exec `pwd` on a new SSH channel always starts at $HOME.
-      const term = getTerminalSession(sessionId);
-      const fromPrompt = term ? readTerminalPromptCwd(term) : null;
-      let cwd = fromPrompt;
-      if (!cwd) {
-        cwd = await invoke<string>("get_session_cwd", {
-          request: { session_id: sessionId },
-        });
-      }
-      if (!cwd) {
-        pushToast(t("localFs.cwdUnavailable"), false);
-        return;
-      }
-      setAddressPath(cwd);
-      await initTree(cwd);
-    } catch (err) {
-      pushToast(formatAppError(err), false);
-    }
-  };
 
   const handleOpenFile = (entry: LocalFsEntry) => {
     void openPreview(sessionId, entry.path, undefined, entry.size_bytes).catch(
@@ -929,19 +905,6 @@ export function LocalFsPanel({
               aria-label={searchMode ? t("find.run") : t("localFs.refresh")}
             >
               <LocalFsRefreshIcon />
-            </button>
-            <button
-              type="button"
-              className="local-fs-tool-btn"
-              onClick={() => {
-                clearInlineSearch();
-                void navigateToTerminalCwd();
-              }}
-              disabled={loadingRoot}
-              title={t("localFs.currentDir")}
-              aria-label={t("localFs.currentDir")}
-            >
-              <LocalFsCwdIcon />
             </button>
             <button
               type="button"
