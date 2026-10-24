@@ -165,18 +165,14 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
             />
           </div>
         </div>
-      ) : view === "open" || view === "create-folder" ? (
+      ) : view === "create-folder" ? (
         <MarkWiselyFilePicker
           sessionId={sessionId}
-          mode={view === "open" ? "file" : "directory"}
-          onCancel={() => setView(view === "open" ? "start" : "create")}
+          mode="directory"
+          onCancel={() => setView("create")}
           onSelect={(path) => {
-            if (view === "create-folder") {
-              setParentDir(path);
-              setView("create");
-            } else {
-              void openPath(path);
-            }
+            setParentDir(path);
+            setView("create");
           }}
         />
       ) : view === "create" ? (
@@ -191,7 +187,12 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
           <div className="markwisely-form-actions"><button type="button" className="markwisely-back" onClick={() => setView("start")}>{t("markwisely.cancel")}</button><button type="button" className="markwisely-primary" data-testid="markwisely-create-submit" disabled={busy || !folderReady || !parentDir.trim() || !name.trim()} onClick={() => void createFile()}>{busy ? t("markwisely.creating") : t("markwisely.create")}</button></div>
         </section>
       ) : (
-        <section className="markwisely-home" data-testid="markwisely-home">
+        <section
+          className="markwisely-home"
+          data-testid="markwisely-home"
+          aria-hidden={view === "open"}
+          inert={view === "open" ? true : undefined}
+        >
           <header className="markwisely-home-heading">
             <span className="markwisely-brand-icon" data-testid="markwisely-brand-icon" aria-hidden="true"><MarkWiselyIcon /></span>
             <div>
@@ -220,6 +221,16 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
           </section>
         </section>
       )}
+      {view === "open" ? (
+        <div className="markwisely-open-backdrop" data-testid="markwisely-open-backdrop">
+          <MarkWiselyFilePicker
+            sessionId={sessionId}
+            mode="file"
+            onCancel={() => setView("start")}
+            onSelect={(path) => void openPath(path)}
+          />
+        </div>
+      ) : null}
       {confirmDiscard ? (
         <div className="markwisely-confirm-backdrop">
           <section className="markwisely-confirm" role="alertdialog" aria-modal="true" aria-labelledby="markwisely-confirm-title">

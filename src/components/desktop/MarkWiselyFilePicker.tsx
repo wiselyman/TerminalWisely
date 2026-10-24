@@ -41,7 +41,13 @@ export function MarkWiselyFilePicker({ sessionId, mode, onSelect, onCancel }: Pr
   });
 
   return (
-    <section className="markwisely-picker" data-testid="markwisely-picker" aria-label={t("markwisely.pickerTitle")}>
+    <section
+      className="markwisely-picker"
+      data-testid="markwisely-picker"
+      role={mode === "file" ? "dialog" : undefined}
+      aria-modal={mode === "file" ? true : undefined}
+      aria-label={t(mode === "file" ? "markwisely.openTitle" : "markwisely.pickerTitle")}
+    >
       <header className="markwisely-picker-head">
         <button type="button" className="markwisely-back" onClick={onCancel}>{t("markwisely.cancel")}</button>
         <strong>{mode === "file" ? t("markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>

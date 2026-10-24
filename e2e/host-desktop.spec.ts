@@ -23,6 +23,14 @@ test.describe("Host desktop mode", () => {
       "background-image",
       /linear-gradient/,
     );
+
+    await page.getByTestId("markwisely-open-document").click();
+    const openDialog = page.getByRole("dialog", { name: "Open Markdown file" });
+    expect(await openDialog.count()).toBe(1);
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
+    await expect(openDialog).toHaveAttribute("aria-modal", "true");
+    await openDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(openDialog).toHaveCount(0);
   });
 
   test("MarkWisely creates, edits, saves, and reopens a remote Markdown file", async ({ page }) => {

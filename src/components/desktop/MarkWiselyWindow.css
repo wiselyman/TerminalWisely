@@ -1,4 +1,5 @@
 .markwisely-window-body {
+  position: relative;
   background: var(--tw-bg);
 }
 
@@ -343,6 +344,27 @@
   padding: 14px;
 }
 
+.markwisely-open-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vw, 28px);
+  background: color-mix(in srgb, #111827 34%, transparent);
+}
+
+.markwisely-open-backdrop .markwisely-picker {
+  flex: 0 1 auto;
+  width: min(720px, 100%);
+  max-height: min(680px, 100%);
+  padding: 20px;
+  border: 1px solid var(--tw-border);
+  border-radius: 12px;
+  background: var(--tw-bg);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.24);
+}
+
 .markwisely-picker-head {
   display: flex;
   align-items: center;
@@ -365,6 +387,7 @@
 
 .markwisely-entry-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-height: 0;
   overflow: auto;

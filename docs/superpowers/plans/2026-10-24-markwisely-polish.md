@@ -85,10 +85,10 @@
 - Modify: `src/components/desktop/MarkWiselyWindow.css`
 - Test: `e2e/host-desktop.spec.ts`
 
-- [ ] **Step 1: 写失败的交互断言** — 点击“Open Markdown”后，首页仍在窗口内，且文件选择器以 `role="dialog"` / `aria-modal="true"` 显示。
-- [ ] **Step 2: 运行对应用例确认失败** — 当前 picker 是整页 section，没有模态语义。
-- [ ] **Step 3: 实现模态展示** — Open 模式保留首页作为背景，将现有 picker 放在弹框遮罩内；目录选择器继续沿用原视图。
-- [ ] **Step 4: 重跑文件筛选、取消、打开、保存与脏文档保护用例确认通过**。
+- [x] **Step 1: 写失败的交互断言** — 点击“Open Markdown”后，首页仍在窗口内，且文件选择器以 `role="dialog"` / `aria-modal="true"` 显示。
+- [x] **Step 2: 运行对应用例确认失败** — 当前 picker 是整页 section，没有模态语义。
+- [x] **Step 3: 实现模态展示** — Open 模式保留首页作为背景，将现有 picker 放在弹框遮罩内；目录选择器继续沿用原视图。
+- [x] **Step 4: 重跑文件筛选、取消、打开、保存与脏文档保护用例确认通过**。
 
 ## 完成验证
 
