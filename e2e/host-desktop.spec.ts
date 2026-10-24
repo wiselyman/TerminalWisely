@@ -13,6 +13,72 @@ test.describe("Host desktop mode", () => {
     await expect(launchButton).toBeVisible();
     await launchButton.click();
     await expect(launchButton).toHaveAttribute("data-state", "open");
+    await expect(page.getByTestId("markwisely-panel")).toBeVisible();
+    await expect(page.getByTestId("markwisely-new-document")).toBeVisible();
+    await expect(page.getByTestId("markwisely-open-document")).toBeVisible();
+  });
+
+  test("MarkWisely creates, edits, saves, and reopens a remote Markdown file", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-markwisely").click();
+    const panel = page.getByTestId("markwisely-panel");
+    await page.getByTestId("markwisely-new-document").click();
+    await expect(page.getByTestId("markwisely-create-view")).toBeVisible();
+    await expect(panel.getByRole("textbox", { name: /Folder|文件夹/i })).toHaveValue("/home/e2e");
+    await page.getByTestId("markwisely-file-name").fill("draft.md");
+    await page.getByTestId("markwisely-create-submit").click();
+    await expect(panel.locator(".vditor-ir")).toBeVisible({ timeout: 30_000 });
+
+    const editor = panel.locator('.vditor-ir [contenteditable="true"]').first();
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("# Saved from MarkWisely");
+    await expect(page.getByTestId("markwisely-save")).toBeEnabled();
+    await page.getByTestId("markwisely-save").click();
+    await expect(panel.getByRole("status")).toContainText(/Saved|已保存/);
+    const saved = await api.getLastPreviewSave();
+    expect(saved?.content).toContain("Saved from MarkWisely");
+
+    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    const recent = panel.getByRole("button", { name: /draft\.md/ });
+    await expect(recent).toBeVisible();
+    await recent.click();
+    await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
+  });
+
+  test("MarkWisely picker filters non-Markdown files and keeps a dirty document when canceling discard", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-markwisely").click();
+    const panel = page.getByTestId("markwisely-panel");
+    await page.getByTestId("markwisely-new-document").click();
+    await page.getByTestId("markwisely-file-name").fill("note.md");
+    await page.getByTestId("markwisely-create-submit").click();
+    await expect(panel.locator(".vditor-ir")).toBeVisible({ timeout: 30_000 });
+    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    await page.getByTestId("markwisely-open-document").click();
+    await expect(page.getByTestId("markwisely-file-entry")).toContainText("note.md");
+    await expect(panel.getByText("app.log")).toHaveCount(0);
+    await page.getByTestId("markwisely-file-entry").click();
+    await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
+
+    const editor = panel.locator('.vditor-ir [contenteditable="true"]').first();
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("unsaved draft");
+    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    const dialog = panel.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /Keep editing|继续编辑/i }).click();
+    await expect(panel.getByTestId("markwisely-editor-view")).toBeVisible();
+    await expect(editor).toContainText("unsaved draft");
   });
 
   test("titlebar Chat and Desktop controls switch in one click", async ({ page }) => {

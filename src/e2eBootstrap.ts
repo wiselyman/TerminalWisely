@@ -14,6 +14,7 @@ import {
   __e2eLastK8sRolloutRestart,
   __e2eLastK8sDelete,
   __e2eLastPreviewOpen,
+  __e2eLastPreviewSave,
   __e2eLastUploadRequest,
   __e2eResetMocks,
   __e2eResetUploadRequest,
@@ -77,6 +78,7 @@ export interface TwE2eApi {
   getCreateSshCallCount: () => number;
   getLastEnterDirectory: () => Record<string, unknown> | null;
   getLastPreviewOpen: () => Record<string, unknown> | null;
+  getLastPreviewSave: () => Record<string, unknown> | null;
   getLastAiTerminalExec: () => Record<string, unknown> | null;
   getLastAiLease: () => Record<string, unknown> | null;
   getLastK8sApply: () => Record<string, unknown> | null;
@@ -477,6 +479,7 @@ export function runE2eBootstrap(): void {
     getCreateSshCallCount: __e2eCreateSshCallCount,
     getLastEnterDirectory: __e2eLastEnterDirectory,
     getLastPreviewOpen: __e2eLastPreviewOpen,
+    getLastPreviewSave: __e2eLastPreviewSave,
     getLastAiTerminalExec: __e2eLastAiTerminalExec,
     getLastAiLease: __e2eLastAiLease,
     getLastK8sApply: __e2eLastK8sApply,

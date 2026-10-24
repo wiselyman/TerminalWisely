@@ -19,6 +19,7 @@ import { HomeWorkspace } from "./components/home/HomeWorkspace";
 import { LocalFsTool } from "./components/LocalFsTool";
 import { BrowserPanel } from "./components/browser/BrowserPanel";
 import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
+import { MarkWiselyWindow } from "./components/desktop/MarkWiselyWindow";
 import { DesktopPanel } from "./components/desktop/DesktopPanel";
 import { DesktopTerminalWindow } from "./components/desktop/DesktopTerminalWindow";
 import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
@@ -438,6 +439,7 @@ function App() {
   const desktopAiOpen = useDesktopStore((s) => s.apps.aiLinux.open);
   const desktopAiMinimized = useDesktopStore((s) => s.apps.aiLinux.minimized);
   const desktopFilesOpen = useDesktopStore((s) => s.apps.files.open);
+  const markWiselyOpen = useDesktopStore((s) => s.apps.markwisely.open);
   const desktopFilesMinimized = useDesktopStore((s) => s.apps.files.minimized);
   const desktopProcessesOpen = useDesktopStore((s) => s.apps.processes.open);
   const desktopProcessesMinimized = useDesktopStore(
@@ -1544,6 +1546,13 @@ function App() {
       ) : null}
       {desktopAiShown && activeTabId ? (
         <DesktopAiWindow subtitle={activeSessionTitle} />
+      ) : null}
+      {sidebarView === "hosts" && activeTabId && markWiselyOpen ? (
+        <MarkWiselyWindow
+          sessionId={activeTabId}
+          hostKey={activeTabServerId || activeTabId}
+          sessionTitle={activeSessionTitle}
+        />
       ) : null}
       {sidebarView === "hosts" && activeTabId && desktopFilesOpen ? (
         <FileManagerPanel

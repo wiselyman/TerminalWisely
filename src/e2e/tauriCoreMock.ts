@@ -47,6 +47,8 @@ let lastUploadRequest: Record<string, unknown> | null = null;
 let lastCreateSshRequest: Record<string, unknown> | null = null;
 let lastEnterDirectory: Record<string, unknown> | null = null;
 let lastPreviewOpen: Record<string, unknown> | null = null;
+let lastPreviewSave: Record<string, unknown> | null = null;
+let createdRemotePaths: string[] = [];
 let lastAiTerminalExec: Record<string, unknown> | null = null;
 let lastAiLease: Record<string, unknown> | null = null;
 let lastK8sApply: Record<string, unknown> | null = null;
@@ -66,6 +68,8 @@ export function __e2eResetMocks() {
   lastCreateSshRequest = null;
   lastEnterDirectory = null;
   lastPreviewOpen = null;
+  lastPreviewSave = null;
+  createdRemotePaths = [];
   lastAiTerminalExec = null;
   lastAiLease = null;
   lastK8sApply = null;
@@ -99,6 +103,10 @@ export function __e2eLastEnterDirectory() {
 
 export function __e2eLastPreviewOpen() {
   return lastPreviewOpen;
+}
+
+export function __e2eLastPreviewSave() {
+  return lastPreviewSave;
 }
 
 export function __e2eLastAiTerminalExec() {
@@ -360,6 +368,13 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   cancel_transfer: () => null,
   transfer_remote_file: () => null,
   rename_path: () => null,
+  create_path: (args) => {
+    const request = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    const parentDir = String(request.parent_dir ?? "").replace(/\/$/, "");
+    const name = String(request.name ?? "");
+    if (name) createdRemotePaths.push(`${parentDir}/${name}`);
+    return null;
+  },
   move_path: () => null,
   delete_path: () => null,
   compress_path: () => null,
@@ -376,7 +391,15 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   list_remote_directory: (args) => {
     const request = (args as { request?: { path?: string } }).request;
     const path = request?.path === "/" ? "/" : request?.path ?? "/home/e2e";
-    return { path, parent: path === "/" ? null : "/home", entries: e2eRemoteDir };
+    const createdEntries = createdRemotePaths
+      .filter((filePath) => filePath.slice(0, filePath.lastIndexOf("/")) === path)
+      .map((filePath) => ({
+        name: filePath.split("/").pop() ?? filePath,
+        path: filePath,
+        kind: "file" as const,
+        size_bytes: 0,
+      }));
+    return { path, parent: path === "/" ? null : "/home", entries: [...e2eRemoteDir, ...createdEntries] };
   },
   rename_local_path: () => null,
   move_local_path: () => null,
@@ -420,7 +443,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     };
   },
   preview_close: () => null,
-  preview_save: () => null,
+  preview_save: (args) => {
+    lastPreviewSave = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    return null;
+  },
   preview_read_bytes: () => ({
     base64: "",
     mime_hint: "application/octet-stream",

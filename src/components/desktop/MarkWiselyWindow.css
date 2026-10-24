@@ -1,0 +1,285 @@
+.markwisely-window-body {
+  background: var(--tw-bg);
+}
+
+.markwisely-home,
+.markwisely-form-view,
+.markwisely-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(680px, 100%);
+  min-height: 0;
+  margin: 0 auto;
+  padding: 24px;
+  overflow: auto;
+}
+
+.markwisely-home { flex: 1; }
+
+.markwisely-home-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.markwisely-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--tw-accent);
+  color: white;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.markwisely-home-heading h2,
+.markwisely-form-view h2,
+.markwisely-confirm h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.markwisely-home-heading p,
+.markwisely-confirm p {
+  margin: 5px 0 0;
+  color: var(--tw-fg-muted);
+}
+
+.markwisely-home-actions,
+.markwisely-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.markwisely-primary,
+.markwisely-secondary,
+.markwisely-danger,
+.markwisely-back,
+.markwisely-folder-row button {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--tw-border);
+  border-radius: 7px;
+  background: var(--tw-surface-1);
+  color: var(--tw-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.markwisely-primary {
+  border-color: var(--tw-accent);
+  background: var(--tw-accent);
+  color: white;
+}
+
+.markwisely-danger {
+  border-color: var(--tw-danger, #dc2626);
+  color: var(--tw-danger, #dc2626);
+}
+
+.markwisely-primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.markwisely-recents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.markwisely-recents h3 {
+  margin: 0 0 4px;
+  color: var(--tw-fg-muted);
+  font-size: 0.85rem;
+}
+
+.markwisely-recent,
+.markwisely-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tw-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.markwisely-recent:hover,
+.markwisely-entry:hover {
+  background: var(--tw-surface-2);
+}
+
+.markwisely-recent span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.markwisely-recent small {
+  overflow: hidden;
+  color: var(--tw-fg-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markwisely-recent-icon,
+.markwisely-entry.is-directory {
+  color: var(--tw-accent);
+}
+
+.markwisely-form-view label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--tw-fg-muted);
+  font-size: 0.82rem;
+}
+
+.markwisely-form-view input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--tw-border);
+  border-radius: 6px;
+  background: var(--tw-surface-1);
+  color: var(--tw-fg);
+  font: inherit;
+}
+
+.markwisely-folder-row {
+  display: flex;
+  gap: 6px;
+}
+
+.markwisely-folder-row button { min-width: 36px; }
+.markwisely-form-actions { justify-content: flex-end; margin-top: 6px; }
+
+.markwisely-editor-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.markwisely-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--tw-border);
+}
+
+.markwisely-current-file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markwisely-save-state {
+  margin-left: auto;
+  color: var(--tw-fg-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.markwisely-save-state.is-dirty { color: var(--tw-warning, #b7791f); }
+
+.markwisely-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.markwisely-editor > div,
+.markwisely-editor .vditor {
+  width: 100%;
+  height: 100%;
+}
+
+.markwisely-picker {
+  flex: 1;
+  width: auto;
+  gap: 8px;
+  padding: 14px;
+}
+
+.markwisely-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+}
+
+.markwisely-picker-head .markwisely-primary { margin-left: auto; }
+
+.markwisely-picker-path {
+  overflow: hidden;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--tw-surface-2);
+  color: var(--tw-fg-muted);
+  font: 0.8rem ui-monospace, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markwisely-entry-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.markwisely-entry { min-height: 36px; }
+
+.markwisely-empty {
+  padding: 18px 8px;
+  color: var(--tw-fg-muted);
+  font-size: 0.85rem;
+}
+
+.markwisely-error {
+  margin: 8px 12px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  background: var(--tw-danger-soft, #fef2f2);
+  color: var(--tw-danger, #b91c1c);
+  font-size: 0.82rem;
+}
+
+.markwisely-confirm-backdrop {
+  position: absolute;
+  inset: 28px 0 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, #000 34%, transparent);
+}
+
+.markwisely-confirm {
+  width: min(400px, 100%);
+  padding: 20px;
+  border: 1px solid var(--tw-border);
+  border-radius: 12px;
+  background: var(--tw-bg);
+  box-shadow: 0 12px 38px #0003;
+}
+
+.markwisely-confirm .markwisely-form-actions { margin-top: 22px; }

@@ -45,6 +45,7 @@ type Props = {
   maximizeTestId: string;
   closeTestId: string;
   bodyClassName?: string;
+  onCloseRequest?: () => boolean | Promise<boolean>;
   children: ReactNode;
 };
 
@@ -63,6 +64,7 @@ export function DesktopAppWindow({
   maximizeTestId,
   closeTestId,
   bodyClassName,
+  onCloseRequest,
   children,
 }: Props) {
   const { t } = useTranslation(["tools", "common"]);
@@ -224,7 +226,10 @@ export function DesktopAppWindow({
               data-testid={closeTestId}
               title={t("common:close")}
               aria-label={t("common:close")}
-              onClick={() => closeApp(appId)}
+              onClick={async () => {
+                if (onCloseRequest && !(await onCloseRequest())) return;
+                closeApp(appId);
+              }}
             >
               <PreviewCloseIcon />
             </button>
