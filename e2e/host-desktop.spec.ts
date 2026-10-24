@@ -2,6 +2,19 @@ import { expect, test } from "@playwright/test";
 import { gotoApp, twE2e } from "./tw-e2e";
 
 test.describe("Host desktop mode", () => {
+  test("MarkWisely opens from the Desktop Dock", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+
+    const launchButton = page.getByTestId("dock-app-markwisely");
+    await expect(launchButton).toBeVisible();
+    await launchButton.click();
+    await expect(launchButton).toHaveAttribute("data-state", "open");
+  });
+
   test("titlebar Chat and Desktop controls switch in one click", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);

@@ -130,4 +130,14 @@ describe("desktopStore", () => {
     expect(useDesktopStore.getState().open).toBe(false);
     expect(useDesktopStore.getState().apps.terminal.open).toBe(false);
   });
+
+  it("launches MarkWisely instead of falling through to Browser", async () => {
+    const { useDesktopStore } = await import("./desktopStore");
+    useDesktopStore.getState().openDesktop("sess-markdown");
+    useDesktopStore.getState().toggleDockApp("markwisely");
+
+    expect(useDesktopStore.getState().apps.markwisely.open).toBe(true);
+    expect(useDesktopStore.getState().apps.browser.open).toBe(false);
+    expect(browserOpenPanel).not.toHaveBeenCalled();
+  });
 });

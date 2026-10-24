@@ -2,6 +2,7 @@ import {
   AiEngineerIcon,
   HostBrowserIcon,
   LocalFilesIcon,
+  MarkWiselyIcon,
   TaskManagerIcon,
   TerminalAppIcon,
 } from "../WorkspaceToolIcons";
@@ -42,5 +43,11 @@ export const DESKTOP_APPS: {
     icon: AiEngineerIcon,
     labelKey: "desktop.appAiLinux",
     testId: "dock-app-ai-linux",
+  },
+  {
+    id: "markwisely",
+    icon: MarkWiselyIcon,
+    labelKey: "desktop.appMarkWisely",
+    testId: "dock-app-markwisely",
   },
 ];

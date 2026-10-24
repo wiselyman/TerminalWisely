@@ -393,6 +393,7 @@
   "desktop.appBrowser": "Browser",
   "desktop.appTerminal": "Terminal",
   "desktop.appAiLinux": "AI Linux",
+  "desktop.appMarkWisely": "MarkWisely",
   "desktop.minimizeToDock": "Minimize to dock",
   "desktop.maximize": "Fill the desktop",
   "desktop.restore": "Restore to desktop",

@@ -98,6 +98,17 @@ export function LocalFilesIcon() {
   );
 }
 
+/** lucide: notebook-pen — MarkWisely Markdown editor */
+export function MarkWiselyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...iconProps}>
+      <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10" />
+      <path d="M8 7h5M8 11h4M8 15h2" />
+      <path d="m16 15 4-4 2 2-4 4-3 1z" />
+    </svg>
+  );
+}
+
 /** lucide: monitor — host workspace / this computer */
 export function HostWorkspaceIcon() {
   return (

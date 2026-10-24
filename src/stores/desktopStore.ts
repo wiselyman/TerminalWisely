@@ -16,7 +16,8 @@ export type DesktopAppId =
   | "processes"
   | "browser"
   | "terminal"
-  | "aiLinux";
+  | "aiLinux"
+  | "markwisely";
 
 export interface DesktopAppWindow {
   open: boolean;
@@ -40,6 +41,7 @@ function idleApps(): AppsState {
     browser: idleApp(),
     terminal: idleApp(),
     aiLinux: idleApp(),
+    markwisely: idleApp(),
   };
 }
 
@@ -240,7 +242,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         return;
       }
 
-      if (app === "terminal" || app === "aiLinux") {
+      if (app === "terminal" || app === "aiLinux" || app === "markwisely") {
         set({
           apps: patchApp(get().apps, app, {
             open: true,

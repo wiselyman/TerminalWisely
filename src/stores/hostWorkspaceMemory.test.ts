@@ -9,8 +9,11 @@ const panel = {
     files: { open: false, minimized: false, maximized: false },
     processes: { open: false, minimized: false, maximized: false },
     browser: { open: false, minimized: false, maximized: false },
+    terminal: { open: false, minimized: false, maximized: false },
+    aiLinux: { open: false, minimized: false, maximized: false },
+    markwisely: { open: false, minimized: false, maximized: false },
   },
-  focusOrder: [] as Array<"files" | "processes" | "browser">,
+  focusOrder: [] as Array<"files" | "processes" | "browser" | "terminal" | "aiLinux" | "markwisely">,
   filesTab: "files" as "files" | "find",
   frames: {} as Record<string, { x: number; y: number; width: number; height: number }>,
 };
@@ -156,6 +159,9 @@ describe("hostWorkspaceMemory", () => {
       files: { open: false, minimized: false, maximized: false },
       processes: { open: false, minimized: false, maximized: false },
       browser: { open: false, minimized: false, maximized: false },
+      terminal: { open: false, minimized: false, maximized: false },
+      aiLinux: { open: false, minimized: false, maximized: false },
+      markwisely: { open: false, minimized: false, maximized: false },
     };
     panel.focusOrder = [];
     panel.filesTab = "files";
@@ -238,6 +244,32 @@ describe("hostWorkspaceMemory", () => {
       apps: { processes: { open: boolean } };
     };
     expect(ui.apps.processes.open).toBe(true);
+  });
+
+  it("restores MarkWisely when returning to its host desktop", async () => {
+    const {
+      closeDesktopRemembering,
+      openDesktopRemembered,
+      peekHostWorkspace,
+    } = await import("./hostWorkspaceMemory");
+    panel.deskOpen = true;
+    panel.deskSession = "host-markdown";
+    panel.apps.markwisely = { open: true, minimized: false, maximized: true };
+    panel.focusOrder = ["markwisely"];
+
+    closeDesktopRemembering();
+    expect(
+      peekHostWorkspace("host-markdown")?.desktop?.apps.markwisely.open,
+    ).toBe(true);
+
+    panel.deskOpen = false;
+    openDesktopRemembered("host-markdown");
+    const ui = applySessionUi.mock.calls.at(-1)?.[0];
+    expect(ui?.apps.markwisely).toEqual({
+      open: true,
+      minimized: false,
+      maximized: true,
+    });
   });
 
   it("keeps a desktop snapshot when AI Linux is open inside it", async () => {
