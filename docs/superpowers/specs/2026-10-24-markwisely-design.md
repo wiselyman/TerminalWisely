@@ -44,7 +44,7 @@
 - 新建 `src/stores/markWiselyStore.ts`：按 SSH session 管理当前文档、脏状态、保存状态和近期路径；不与通用 Preview Store 状态耦合。
 - `src/components/preview/MarkdownWysiwygEditor.tsx`：复用编辑器核心；通过可选的保存回调/编辑器实例出口，让 MarkWisely 执行远程保存，并在关闭/切换文件前刷新编辑器内容。预览原有调用保持原样。
 - 远程文件枚举与创建通过现有 `list_remote_directory`、`create_path` SFTP 命令；文件内容打开/保存通过现有 `preview_open`、`preview_save` 与 `preview_close` 接口，不引入本机文件权限。
-- 最近打开列表使用按 session/host key 分区的本地 UI 元数据存储，仅保存远程路径和显示名；不存文件内容。
+- 最近打开列表用稳定 host key（当前 SSH server id；无 server id 时回退 session id）分区本地 UI 元数据，仅保存远程路径和打开时间；不存文件内容。
 - i18n：`src/i18n/locales/{zh,en}/tools.json` 增加名称、入口、空状态、保存与错误反馈文案。
 
 ## 设计与交互

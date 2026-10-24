@@ -38,7 +38,7 @@
 
 - `src/stores/desktopStore.ts`、`src/stores/hostWorkspaceMemory.ts`：注册 `markwisely` 应用窗口，使其纳入应用生命周期和 host workspace snapshot。
 - `src/components/desktop/desktopApps.ts`、`DesktopDock.tsx`、`DesktopIcons.tsx`：注册 MarkWisely 图标入口；Task 4 的 `src/App.tsx` 按应用 open 状态挂载独立窗口。
-- 新建 `src/stores/markWiselyStore.ts`：以 sessionId 分区当前文件、编辑文本、脏状态、保存状态和最近路径；复用 `preview_open`/`preview_save`/`preview_close` 远程接口，不依赖 Preview Store UI 状态。
+- 新建 `src/stores/markWiselyStore.ts`：以 sessionId 分区当前文件/编辑文本/保存状态，以稳定 host key（SSH server id，缺省 session id）分区最近路径；复用 `preview_open`/`preview_save`/`preview_close` 远程接口，不依赖 Preview Store UI 状态。
 - 新建 `src/components/desktop/MarkWiselyWindow.tsx`、`MarkWiselyFilePicker.tsx`：分别负责应用开始/编辑窗与远程 Markdown 选择器。
 - `src/components/preview/MarkdownWysiwygEditor.tsx`：增加可选编辑值变化/flush 接口，现有 Preview 调用不变。MarkWisely 为每份打开文件保存 `preview_open` 返回的 `handle_id`，保存时使用 `preview_save`，切换/关闭时调用 `preview_close`。
 - i18n：仅在 `src/i18n/locales/zh/tools.json`、`en/tools.json` 增加 MarkWisely 文案。
@@ -96,9 +96,9 @@
 - Modify: `src/lib/previewEditorFlush.ts` only if a narrowly scoped generic flush registration is needed; otherwise use existing API.
 - Test: `src/stores/markWiselyStore.test.ts`
 
-**Interfaces:** Store actions `activateSession(sessionId)`, `beginDocument({sessionId,path,handleId,text})`, `setEditorValue(sessionId,text)`, `saveDocument(sessionId)`, `closeDocument(sessionId)`, and selectors for session document/recent files. Recent metadata is keyed by session ID and stores path/display name/lastOpened only. `saveDocument` invokes `preview_save` with the active document's `handle_id` and current editor text; `closeDocument` releases the handle with `preview_close`.
+**Interfaces:** Store actions `openDocument({sessionId,hostKey,path})`, `createDocument({sessionId,hostKey,parentDir,name})`, `setEditorValue(sessionId,text)`, `saveDocument(sessionId)`, and `closeDocument(sessionId)`, plus selectors for active document and recent paths. Recent metadata is keyed by stable host key (SSH server id, falling back to session id) and stores path/lastOpened only. Opening uses `preview_open` and records `handle_id`; saving invokes `preview_save` with that handle and latest text; closing releases it with `preview_close`.
 
-- [ ] **Step 1: Write failing store tests** for session-isolated recent paths, dirty state, successful save state, latest editor content being saved, and failed save retaining dirty text.
+- [ ] **Step 1: Write failing store tests** for host-isolated recent paths, dirty state, successful save state, latest editor content being saved, and failed save retaining dirty text.
 - [ ] **Step 2: Run `npm test -- --run src/stores/markWiselyStore.test.ts`**; verify expected failures against missing store behavior.
 - [ ] **Step 3: Implement minimal store and editor flush bridge**; do not change existing Preview UI semantics.
 - [ ] **Step 4: Run the store tests plus `npm test -- --run src/components/preview`**; expect PASS.
