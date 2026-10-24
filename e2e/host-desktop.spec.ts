@@ -215,6 +215,25 @@ test.describe("Host desktop mode", () => {
     );
   });
 
+  test("Desktop toolbar uses the machine name and omits the collapse button", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+
+    const panel = page.getByTestId("host-desktop-panel");
+    await expect(panel.getByRole("heading", { name: "Desktop" })).toBeVisible();
+    await api.setHostMachineName("e2e-machine");
+    await expect(panel.getByRole("heading", { name: "e2e-machine" })).toBeVisible({ timeout: 5_000 });
+    await expect(panel.getByRole("heading", { name: "e2e@127.0.0.1" })).toHaveCount(0);
+    await expect(panel.locator(".host-desktop-menubar .workspace-panel-icon-btn")).toHaveCount(0);
+
+    await page.getByTestId("ai-engineer-tool").click();
+    const chat = page.locator(".ai-engineer-panel:not(.is-home-workspace)");
+    await expect(chat.locator(".workspace-panel-head-actions .workspace-panel-icon-btn")).toBeVisible();
+  });
+
   test("maximized Desktop app covers the Dock and reveals it from the bottom edge", async ({
     page,
   }) => {

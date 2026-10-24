@@ -156,6 +156,7 @@ test.describe("UI visual baselines", () => {
     const api = await twE2e(page);
     await page.getByTestId("sidebar-view-hosts").click();
     await api.openSshTab();
+    await api.setHostMachineName("e2e-machine");
     await api.openLocalFsPanel();
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
     await expect(page.getByTestId("host-file-manager-panel")).toBeVisible();

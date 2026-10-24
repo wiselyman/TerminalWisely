@@ -1538,7 +1538,6 @@ function App() {
       {sidebarView === "hosts" && activeTabId && desktopOpen ? (
         <DesktopPanel
           sessionId={activeTabId}
-          sessionTitle={activeSessionTitle ?? undefined}
         />
       ) : null}
       {desktopTerminalShown && activeTabId ? (

@@ -27,6 +27,7 @@ import { useLocalFsStore } from "./stores/localFsStore";
 import { useSidebarViewStore } from "./stores/sidebarViewStore";
 import { focusManagedEntity } from "./stores/managedEntityStore";
 import { useSessionStore } from "./stores/sessionStore";
+import { useHostStatsStore } from "./stores/hostStatsStore";
 import { useAppUpdateStore } from "./stores/appUpdateStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { openAppSettings } from "./stores/downloadSettingsStore";
@@ -35,7 +36,7 @@ import {
   restoreHostWorkspace,
 } from "./stores/hostWorkspaceMemory";
 import type { K8sResourceCategory } from "./lib/k8s/types";
-import type { TabSession } from "./types";
+import type { HostStatsSnapshot, TabSession } from "./types";
 
 export interface TwE2eApi {
   openHome: () => void;
@@ -46,6 +47,7 @@ export interface TwE2eApi {
   openSecondSshTab: () => void;
   closeTab: (sessionId: string) => Promise<void>;
   setActiveTab: (sessionId: string) => void;
+  setHostMachineName: (hostname: string) => void;
   openLocalFsPanel: () => void;
   openBrowserPanel: () => void;
   openAiChat: () => Promise<void>;
@@ -193,6 +195,32 @@ async function closeTab(sessionId: string) {
 
 function setActiveTab(sessionId: string) {
   useSessionStore.getState().setActiveTab(sessionId);
+}
+
+function setHostMachineName(hostname: string) {
+  const sessionId = useSessionStore.getState().activeTabId;
+  if (!sessionId) throw new Error("An SSH session must be active to set its machine name");
+  useHostStatsStore.setState({
+    snapshot: {
+      hostname,
+      os_name: "Linux",
+      arch: "x86_64",
+      cpu_usage_percent: 0,
+      cpu_core_count: 1,
+      memory_total_bytes: 1,
+      memory_used_bytes: 0,
+      swap_total_bytes: 0,
+      swap_used_bytes: 0,
+      load_avg: [0, 0, 0],
+      uptime_secs: 0,
+      process_count: 0,
+      logged_in_users: [],
+      disks: [],
+      networks: [],
+      sampled_at: Date.now(),
+    } satisfies HostStatsSnapshot,
+    activeSessionId: sessionId,
+  });
 }
 
 function openLocalFsPanel() {
@@ -454,6 +482,7 @@ export function runE2eBootstrap(): void {
     openSecondSshTab,
     closeTab,
     setActiveTab,
+    setHostMachineName,
     openLocalFsPanel,
     openBrowserPanel,
     openAiChat,

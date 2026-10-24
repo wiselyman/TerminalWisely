@@ -33,6 +33,7 @@ function wrapApi(page: Page): TwE2eApi {
     openSecondSshTab: () => call("openSecondSshTab"),
     closeTab: (sessionId) => call("closeTab", sessionId) as Promise<void>,
     setActiveTab: (sessionId) => call("setActiveTab", sessionId),
+    setHostMachineName: (hostname) => call("setHostMachineName", hostname),
     openLocalFsPanel: async () => {
       await call("openLocalFsPanel");
     },

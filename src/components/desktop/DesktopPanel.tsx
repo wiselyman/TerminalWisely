@@ -2,17 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { setDesktopSurfaceHost } from "../../lib/desktopSurfaceHost";
 import { useDesktopStore } from "../../stores/desktopStore";
-import { WorkspacePanelHeadActions } from "../WorkspacePanelHeadActions";
+import { useHostStatsStore } from "../../stores/hostStatsStore";
 import { DesktopClock, DesktopDock } from "./DesktopDock";
 import { DesktopIcons } from "./DesktopIcons";
 
 type Props = {
   sessionId: string;
-  sessionTitle?: string | null;
 };
 
-export function DesktopPanel({ sessionId, sessionTitle }: Props) {
+export function DesktopPanel({ sessionId }: Props) {
   const { t } = useTranslation("tools");
+  const machineName = useHostStatsStore((state) =>
+    state.activeSessionId === sessionId ? state.snapshot?.hostname : null,
+  );
   const hasMaximizedApp = useDesktopStore((s) =>
     Object.values(s.apps).some((app) => app.open && !app.minimized && app.maximized),
   );
@@ -65,11 +67,10 @@ export function DesktopPanel({ sessionId, sessionTitle }: Props) {
         data-maximized-app={hasMaximizedApp ? "true" : "false"}
       >
         <div className="host-desktop-menubar">
-          <h2 className="host-desktop-computer" title={sessionTitle ?? t("desktop.title")}>
-            {sessionTitle || t("desktop.title")}
+          <h2 className="host-desktop-computer" title={machineName || t("desktop.title")}>
+            {machineName || t("desktop.title")}
           </h2>
           <DesktopClock />
-          <WorkspacePanelHeadActions panelId="desktop" sessionId={sessionId} />
         </div>
         <div
           ref={bindSurface}
