@@ -78,6 +78,7 @@ function wrapApi(page: Page): TwE2eApi {
     setK8sCategory: (category) => call("setK8sCategory", category) as Promise<void>,
     resetUpload: () => call("resetUpload"),
     openSettings: () => call("openSettings"),
+    showUpdateDialog: (body) => call("showUpdateDialog", body),
     invokeKillProcess: (pid) => call("invokeKillProcess", pid) as Promise<void>,
     invokeK8sApplyYaml: (yaml) => call("invokeK8sApplyYaml", yaml) as Promise<void>,
   };

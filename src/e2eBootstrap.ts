@@ -26,6 +26,7 @@ import { useLocalFsStore } from "./stores/localFsStore";
 import { useSidebarViewStore } from "./stores/sidebarViewStore";
 import { focusManagedEntity } from "./stores/managedEntityStore";
 import { useSessionStore } from "./stores/sessionStore";
+import { useAppUpdateStore } from "./stores/appUpdateStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { openAppSettings } from "./stores/downloadSettingsStore";
 import {
@@ -87,6 +88,7 @@ export interface TwE2eApi {
   setK8sCategory: (category: string) => Promise<void>;
   resetUpload: () => void;
   openSettings: () => void;
+  showUpdateDialog: (body: string) => void;
   invokeKillProcess: (pid: number) => Promise<void>;
   invokeK8sApplyYaml: (yaml: string) => Promise<void>;
   /** Drop model profiles so the picker shows the unconfigured label. */
@@ -197,6 +199,16 @@ function openLocalFsPanel() {
 
 function openBrowserPanel() {
   switchWorkspacePanel("browser", E2E_SSH_SESSION_ID);
+}
+
+function showUpdateDialog(body: string) {
+  const update = { version: "0.0.9", body };
+  const pending = {
+    update: update as never,
+    currentVersion: "0.0.8",
+    needsPrivilege: false,
+  };
+  useAppUpdateStore.setState({ pending, dialog: pending });
 }
 
 async function openAiChat() {
@@ -476,6 +488,7 @@ export function runE2eBootstrap(): void {
     setK8sCategory,
     resetUpload: __e2eResetUploadRequest,
     openSettings,
+    showUpdateDialog,
     invokeKillProcess,
     invokeK8sApplyYaml,
   };

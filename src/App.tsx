@@ -166,7 +166,7 @@ function App() {
     void useSessionStore.getState().hydrateFromBackend();
   }, []);
 
-  // Quiet update check after UI settles — badge only, never a modal on launch.
+  // Check for updates after the UI settles and show the dialog when one is available.
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let cancelled = false;

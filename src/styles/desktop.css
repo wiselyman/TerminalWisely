@@ -2573,7 +2573,6 @@ body.find-panel-resizing {
 }
 
 .update-notes {
-  margin: 0;
   max-height: 180px;
   overflow: auto;
   padding: 10px 12px;
@@ -2583,8 +2582,12 @@ body.find-panel-resizing {
   color: var(--tw-fg-default);
   font-size: 0.78rem;
   line-height: 1.45;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.update-notes .ai-engineer-md {
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .update-error {

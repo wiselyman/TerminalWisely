@@ -8,6 +8,7 @@ import {
   type DownloadProgress,
 } from "../lib/appUpdater";
 import { formatAppError } from "../lib/formatAppError";
+import { AiMarkdown } from "./aiEngineer/AiMarkdown";
 import { Modal } from "./Modal";
 
 export type UpdateDialogPhase =
@@ -95,7 +96,9 @@ export function UpdateAvailableDialog({
               <p className="app-settings-hint">{t("updateNeedsPrivilege")}</p>
             ) : null}
             {update.body ? (
-              <pre className="update-notes">{update.body}</pre>
+              <div className="update-notes" data-testid="update-notes">
+                <AiMarkdown content={update.body} />
+              </div>
             ) : null}
             {error ? <p className="update-error">{error}</p> : null}
             <div className="app-settings-actions">

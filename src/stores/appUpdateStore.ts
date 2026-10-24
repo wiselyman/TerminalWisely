@@ -20,7 +20,7 @@ interface AppUpdateState {
   closeDialog: () => void;
   /** After install: drop badge, keep dialog open for restart prompt. */
   markInstalled: () => void;
-  /** Quiet check: set badge only, do not open dialog. */
+  /** Startup check: notify in the update dialog when a release is available. */
   quietCheck: () => Promise<void>;
   /** Manual check: opens dialog if update found. */
   manualCheck: () => Promise<
@@ -48,16 +48,15 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
     try {
       const result = await checkForAppUpdate();
       if (!result.update) {
-        set({ pending: null });
+        set({ pending: null, dialog: null });
         return;
       }
-      set({
-        pending: {
-          update: result.update,
-          currentVersion: result.currentVersion,
-          needsPrivilege: result.needsPrivilege,
-        },
-      });
+      const payload = {
+        update: result.update,
+        currentVersion: result.currentVersion,
+        needsPrivilege: result.needsPrivilege,
+      };
+      set({ pending: payload, dialog: payload });
     } catch {
       /* network / unsigned channel — keep prior pending if any */
     }
