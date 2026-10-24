@@ -130,7 +130,16 @@ export const e2eLocalDir = [
 ];
 
 export const e2eRemoteDir = [
-  { name: "app.log", path: "/var/log/app.log", kind: "file", size: 4096 },
+  {
+    name: "app.log",
+    path: "/var/log/app.log",
+    kind: "file",
+    size_bytes: 4096,
+    permissions: "-rw-r-----",
+    owner: "ubuntu",
+    group: "adm",
+    modified_ms: 1_729_700_000_125,
+  },
 ];
 
 export const e2eHostStats = {

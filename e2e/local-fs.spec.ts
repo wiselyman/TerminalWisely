@@ -19,6 +19,24 @@ test.describe("Local FS panel", () => {
     await expect(page.getByTestId("local-fs-split")).toBeVisible();
   });
 
+  test("file list shows Linux permissions, ownership, and modified time", async ({ page }) => {
+    const panel = page.getByTestId("host-file-manager-panel");
+    await expect(panel.getByText("Permissions")).toBeVisible();
+    await expect(panel.getByText("Owner")).toBeVisible();
+    await expect(panel.getByText("Group")).toBeVisible();
+    await expect(panel.getByText("Modified")).toBeVisible();
+    const row = panel.locator('[data-path="/var/log/app.log"]');
+    await expect(row).toContainText("-rw-r-----");
+    await expect(row).toContainText("ubuntu");
+    await expect(row).toContainText("adm");
+    await expect(row).toContainText("Oct 24, 2024");
+
+    await panel.getByRole("button", { name: "Icon view" }).click();
+    await expect(panel.locator('[data-path="/var/log/app.log"]')).toContainText(
+      "-rw-r----- · ubuntu:adm · 4.0 KB",
+    );
+  });
+
   test("file manager has path-bar search and chrome", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel).toBeVisible();

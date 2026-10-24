@@ -28,6 +28,19 @@ function formatSize(sizeBytes: number | null | undefined) {
   return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
+function formatModified(modifiedMs: number | null | undefined, locale: string) {
+  if (modifiedMs == null) return "—";
+  const date = new Date(modifiedMs);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 const MARQUEE_THRESHOLD_PX = 4;
 
 type Props = {
@@ -55,7 +68,8 @@ export function LocalFsContentsView({
   emptyLabel,
   onLeaveSearch,
 }: Props) {
-  const { t } = useTranslation("tools");
+  const { t, i18n } = useTranslation("tools");
+  const dateLocale = i18n.language.startsWith("zh") ? "zh-CN" : "en-US";
   const moveCleanupRef = useRef<(() => void) | null>(null);
   const marqueeCleanupRef = useRef<(() => void) | null>(null);
   const contentsRef = useRef<HTMLDivElement | null>(null);
@@ -371,11 +385,11 @@ export function LocalFsContentsView({
               >
                 <LocalFsEntryIcon kind={entry.kind} name={entry.name} />
                 <span className="local-fs-grid-name">{entry.name}</span>
-                {!isDir ? (
-                  <span className="local-fs-grid-meta">
-                    {formatSize(entry.size_bytes)}
-                  </span>
-                ) : null}
+                <span className="local-fs-grid-meta">
+                  {[entry.permissions, [entry.owner, entry.group].filter(Boolean).join(":"), isDir ? "—" : formatSize(entry.size_bytes), formatModified(entry.modified_ms, dateLocale)]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
               </div>
             );
           })}
@@ -398,7 +412,11 @@ export function LocalFsContentsView({
       {marqueeEl}
       <div className="local-fs-list-header" aria-hidden>
         <span>{t("localFs.colName")}</span>
+        <span>{t("localFs.colPermissions")}</span>
+        <span>{t("localFs.colOwner")}</span>
+        <span>{t("localFs.colGroup")}</span>
         <span>{t("localFs.colSize")}</span>
+        <span>{t("localFs.colModified")}</span>
       </div>
       <div className="local-fs-list">
         {entries.map((entry) => {
@@ -428,8 +446,14 @@ export function LocalFsContentsView({
               <span className="local-fs-row-name" title={entry.path}>
                 {entry.name}
               </span>
+              <span className="local-fs-row-meta">{entry.permissions ?? "—"}</span>
+              <span className="local-fs-row-meta">{entry.owner ?? "—"}</span>
+              <span className="local-fs-row-meta">{entry.group ?? "—"}</span>
               <span className="local-fs-row-size">
                 {isDir ? "—" : formatSize(entry.size_bytes)}
+              </span>
+              <span className="local-fs-row-meta local-fs-row-modified">
+                {formatModified(entry.modified_ms, dateLocale)}
               </span>
             </div>
           );

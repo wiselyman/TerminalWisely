@@ -347,6 +347,9 @@ export interface LocalFsEntry {
   kind: LocalEntryKind;
   size_bytes?: number | null;
   modified_ms?: number | null;
+  permissions?: string | null;
+  owner?: string | null;
+  group?: string | null;
 }
 
 export interface ListLocalDirectoryResult {

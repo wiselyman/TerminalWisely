@@ -373,7 +373,11 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   }),
   list_local_roots: () => e2eLocalRoots,
   list_local_directory: () => e2eLocalDir,
-  list_remote_directory: () => e2eRemoteDir,
+  list_remote_directory: (args) => {
+    const request = (args as { request?: { path?: string } }).request;
+    const path = request?.path === "/" ? "/" : request?.path ?? "/home/e2e";
+    return { path, parent: path === "/" ? null : "/home", entries: e2eRemoteDir };
+  },
   rename_local_path: () => null,
   move_local_path: () => null,
   delete_local_path: () => null,

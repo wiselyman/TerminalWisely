@@ -2998,7 +2998,8 @@ body.local-fs-tree-moving .terminal-drop-overlay {
 .local-fs-list-header {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px;
+  grid-template-columns: minmax(160px, 1fr) 100px 90px 90px 84px 150px;
+  min-width: 760px;
   gap: 10px;
   padding: 6px 12px 6px 44px;
   font-size: 0.72rem;
@@ -3015,7 +3016,7 @@ body.local-fs-tree-moving .terminal-drop-overlay {
 
 .local-fs-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 72px;
+  grid-template-columns: 22px minmax(160px, 1fr) 100px 90px 90px 84px 150px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -3031,6 +3032,7 @@ body.local-fs-tree-moving .terminal-drop-overlay {
   transition: background 0.12s ease;
   user-select: none;
   -webkit-user-select: none;
+  min-width: 782px;
 }
 
 .local-fs-row > .local-fs-entry-icon {
@@ -3065,6 +3067,20 @@ body.local-fs-tree-moving .terminal-drop-overlay {
   font-size: 0.75rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.local-fs-row-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tw-fg-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.local-fs-row-modified {
+  text-align: right;
 }
 
 .local-fs-contents-grid {

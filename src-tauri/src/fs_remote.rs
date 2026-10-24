@@ -24,6 +24,14 @@ pub struct RemoteFsEntry {
     pub kind: RemoteEntryKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +55,10 @@ pub struct RemoteDirEntry {
     pub name: String,
     pub is_dir: bool,
     pub size_bytes: Option<u64>,
+    pub modified_ms: Option<i64>,
+    pub permissions: Option<String>,
+    pub owner: Option<String>,
+    pub group: Option<String>,
 }
 
 /// List a remote directory via the existing SSH connection (same path as `ls`, no SFTP handshake).
@@ -66,7 +78,7 @@ pub async fn list_remote_directory_entries(
     let command = format!(
         r#"DIR={quoted}
 test -d "$DIR" || {{ echo "Not a directory" >&2; exit 1; }}
-if find "$DIR" -mindepth 1 -maxdepth 1 {find_filter}\( -xtype d -printf 'd\t0\t%f\n' -o ! -xtype d -printf 'f\t%s\t%f\n' \) 2>/dev/null; then
+if find "$DIR" -mindepth 1 -maxdepth 1 {find_filter}\( -xtype d -printf 'd\0%M\0%u\0%g\0\0%T@\0%f\0' -o ! -xtype d -printf 'f\0%M\0%u\0%g\0%s\0%T@\0%f\0' \) 2>/dev/null; then
   :
 else
   ls -1A "$DIR" 2>/dev/null | while IFS= read -r name || [ -n "$name" ]; do
@@ -115,8 +127,7 @@ pub async fn list_remote_directory(
     };
 
     let parent = remote_parent_path(&resolved).ok();
-    let raw =
-        list_remote_directory_entries(&ssh.handle(), &resolved, request.show_hidden).await?;
+    let raw = list_remote_directory_entries(&ssh.handle(), &resolved, request.show_hidden).await?;
 
     let mut entries = Vec::new();
     for item in raw {
@@ -130,6 +141,10 @@ pub async fn list_remote_directory(
             path: remote_join_path(&resolved, &item.name),
             kind,
             size_bytes: item.size_bytes,
+            modified_ms: item.modified_ms,
+            permissions: item.permissions,
+            owner: item.owner,
+            group: item.group,
         });
     }
 
@@ -151,6 +166,9 @@ pub async fn list_remote_directory(
 }
 
 fn parse_directory_listing(stdout: &str) -> Vec<RemoteDirEntry> {
+    if stdout.contains('\0') {
+        return parse_metadata_listing(stdout);
+    }
     let mut entries = Vec::new();
     for line in stdout.lines() {
         let line = line.trim_end_matches('\r');
@@ -184,7 +202,44 @@ fn parse_directory_listing_line(line: &str) -> Option<RemoteDirEntry> {
         name,
         is_dir,
         size_bytes,
+        modified_ms: None,
+        permissions: None,
+        owner: None,
+        group: None,
     })
+}
+
+fn parse_metadata_listing(stdout: &str) -> Vec<RemoteDirEntry> {
+    let fields: Vec<&str> = stdout.split('\0').collect();
+    fields
+        .chunks_exact(7)
+        .filter_map(|record| {
+            let kind = record[0];
+            let name = record[6];
+            if name.is_empty() || name == "." || name == ".." {
+                return None;
+            }
+            let is_dir = kind == "d";
+            let modified_ms = record[5]
+                .parse::<f64>()
+                .ok()
+                .filter(|seconds| seconds.is_finite())
+                .map(|seconds| (seconds * 1000.0).round() as i64);
+            Some(RemoteDirEntry {
+                name: name.to_string(),
+                is_dir,
+                size_bytes: if is_dir { None } else { record[4].parse().ok() },
+                modified_ms,
+                permissions: non_empty(record[1]),
+                owner: non_empty(record[2]),
+                group: non_empty(record[3]),
+            })
+        })
+        .collect()
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 fn remote_parent_path(path: &str) -> AppResult<String> {
@@ -224,6 +279,36 @@ mod tests {
         assert_eq!(entries[0].name, "lab");
         assert!(!entries[1].is_dir);
         assert_eq!(entries[1].size_bytes, Some(1234));
+    }
+
+    #[test]
+    fn parses_metadata_records_and_preserves_spaces_and_tabs_in_names() {
+        let out = concat!(
+            "d\0drwxr-x---\0alice\0staff\00\01729700000.125\0folder with\ttab\0",
+            "f\0-rw-r-----\0bob\0users\0123\01729700001.5\0file name.txt\0",
+        );
+        let entries = parse_directory_listing(out);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].name, "folder with\ttab");
+        assert!(entries[0].is_dir);
+        assert_eq!(entries[0].permissions.as_deref(), Some("drwxr-x---"));
+        assert_eq!(entries[0].owner.as_deref(), Some("alice"));
+        assert_eq!(entries[0].group.as_deref(), Some("staff"));
+        assert_eq!(entries[0].modified_ms, Some(1_729_700_000_125));
+        assert_eq!(entries[1].name, "file name.txt");
+        assert_eq!(entries[1].size_bytes, Some(123));
+        assert_eq!(entries[1].modified_ms, Some(1_729_700_001_500));
+    }
+
+    #[test]
+    fn legacy_listing_entries_keep_metadata_optional() {
+        let entries = parse_directory_listing("f\t123\told name.txt\n");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "old name.txt");
+        assert_eq!(entries[0].permissions, None);
+        assert_eq!(entries[0].owner, None);
+        assert_eq!(entries[0].group, None);
+        assert_eq!(entries[0].modified_ms, None);
     }
 
     #[test]

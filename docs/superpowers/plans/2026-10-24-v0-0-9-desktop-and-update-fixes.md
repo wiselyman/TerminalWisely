@@ -109,11 +109,11 @@
 - `RemoteFsEntry` and frontend `LocalFsEntry` add optional `modified_ms: number`, `permissions: string`, `owner: string`, and `group: string`.
 - Existing remote list response retains `name`, `path`, `kind`, and `size_bytes` and preserves existing GNU find fallback behavior.
 
-- [ ] Add Rust parser tests for file and directory records, unknown metadata, and names containing spaces/tabs; confirm the metadata assertions fail before implementation.
-- [ ] Extend the `find -printf` record with permission, owner, group, size, modified time, and NUL-delimited name; keep the current fallback listing with absent metadata.
-- [ ] Add localized metadata columns/compact grid details and em-dash rendering for absent values.
-- [ ] Extend E2E directory fixtures and assert Desktop displays the metadata while existing list navigation, file preview, and size behavior remain intact.
-- [ ] Run Rust parser tests, frontend tests, and focused local file manager E2E.
+- [x] Add Rust parser tests for file and directory records, unknown metadata, and names containing spaces/tabs; metadata field assertions failed before implementation.
+- [x] Extend the `find -printf` record with permission, owner, group, size, modified time, and NUL-delimited name; keep the current fallback listing with absent metadata.
+- [x] Add localized metadata columns/compact grid details and em-dash rendering for absent values.
+- [x] Extend E2E directory fixtures and assert Desktop list and grid views display metadata. Local FS panel/actions regression: 5 passed.
+- [x] Rust parser tests (4) and focused Local FS E2E (5) passed; Playwright build also type-checks the frontend.
 - [ ] Commit Task 3 after its scoped tests pass.
 
 ### Task 4: Remove remote file actions from Terminal and keep them in Desktop

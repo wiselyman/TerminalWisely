@@ -9,3 +9,5 @@ Task 1: complete — 3 updater store tests passed; update-dialog Playwright pass
 Ruling: the Chat panel remains mounted as an inert `aria-hidden` parked fiber when Desktop opens; this is intentional host chat continuity, so the one-click test must assert hidden accessibility state rather than DOM removal or CSS visibility. No product source change is justified by this result.
 
 Task 2: browser E2E passed for one-click Chat/Desktop transitions in both directions; checked center hit target and `-webkit-app-region: no-drag`. Chat stays mounted inert/aria-hidden when Desktop is active. No root cause reproduced, so no product source change. Native script attempted but cannot run on this Mac because it hardcodes `/opt/cursor/artifacts` (permission denied). Mac mini native verification remains outstanding.
+
+Task 3: metadata parser/UI implementation is complete locally. Rust `fs_remote::tests` passed (4); focused Local FS Playwright suite passed (5), covering list and grid display. Legacy fallback has optional metadata. Staging/commit follows after this ledger update.
