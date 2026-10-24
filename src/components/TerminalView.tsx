@@ -6,72 +6,25 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type {
-  PathSizeResult,
-  SessionKind,
-  SessionLifecyclePayload,
-  TerminalOutputPayload,
-  TransferCompletePayload,
-} from "../types";
-import {
-  buildLineColumnMap,
-  extractDroppedPaths,
-  findRemotePathMatches,
-  isModifierClick,
-  isPrimaryLinkActivate,
-  isShiftClick,
-  matchToXtermRange,
-  stripOsc8Hyperlinks,
-} from "../lib/terminalLinks";
-import {
-  findRemotePathAtCell,
-  findRemotePathHitAtCell,
-  getTerminalMouseCell,
-  isRemoteDragModifier,
-  type TerminalPathHighlightAnchor,
-} from "../lib/terminalMouse";
+import type { SessionKind, SessionLifecyclePayload, TerminalOutputPayload } from "../types";
+import { stripOsc8Hyperlinks } from "../lib/terminalLinks";
 import { registerTerminalSelectionProvider } from "../lib/aiEngineer/terminalSelectionBridge";
-import {
-  canSendPathToChat,
-  sendConsoleSelectionToChat,
-  sendRemotePathToChat,
-} from "../lib/aiEngineer/sendToChat";
+import { sendConsoleSelectionToChat } from "../lib/aiEngineer/sendToChat";
 import { resetTerminalMouseTracking } from "../lib/terminalMouseMode";
 import {
   armChromeClickSuppress,
   armTerminalPointerSuppress,
   bindTerminalSelectionDragRelease,
-  isSyntheticTerminalMouseEvent,
   registerTerminalSession,
   releaseStaleXtermDocumentMouseListeners,
-  shouldSuppressChromeClickAfterTerminalRelease,
   shouldSuppressTerminalPointer,
   unregisterTerminalSession,
 } from "../lib/terminalSelectionDrag";
-import { startRemotePointerDrag, DRAG_THRESHOLD_PX } from "../lib/remotePointerDrag";
-import {
-  getLinePlainText,
-  isLineInLsOutput,
-  readTerminalPromptCwd,
-  refineListingPath,
-  resolveDirectoryClickPath,
-  resolvePathFromListing,
-} from "../lib/terminalContext";
-import {
-  clearUploadHighlights,
-  scheduleUploadHighlight,
-} from "../lib/terminalHighlight";
-import {
-  getDesktopTerminalHost,
-  subscribeDesktopEmbedHosts,
-} from "../lib/desktopEmbedHost";
+import { getDesktopTerminalHost, subscribeDesktopEmbedHosts } from "../lib/desktopEmbedHost";
 import { useDesktopStore } from "../stores/desktopStore";
 import { useSessionStore } from "../stores/sessionStore";
-import { usePreviewStore } from "../stores/previewStore";
 import { useAiEngineerStore } from "../stores/aiEngineerStore";
 import { shouldAutoReconnectSsh } from "../lib/aiEngineer/sshLease";
-import { isTabReordering } from "../lib/tabPointerReorder";
-import { isLocalFsTreeMoving } from "../lib/localFsPointerMove";
 import {
   TERMINAL_LINE_HEIGHT,
   ensureTerminalFontsLoaded,
@@ -80,29 +33,13 @@ import {
   handleTerminalFontSizeHotkey,
   subscribeTerminalFontSize,
 } from "../lib/terminalFont";
-import {
-  getAppTheme,
-  subscribeAppTheme,
-  terminalThemeFor,
-} from "../lib/appTheme";
-import { uploadLocalPathsToSession } from "../lib/sessionUpload";
-import { downloadRemotePath } from "../lib/sessionDownload";
-import { formatTransferError } from "../lib/transferError";
+import { getAppTheme, subscribeAppTheme, terminalThemeFor } from "../lib/appTheme";
 import { formatAppError } from "../lib/formatAppError";
-import { isTauriRuntime } from "../lib/isTauri";
 import { localizeTerminalOutputChunk } from "../lib/localizeTerminalOutput";
-import { invokeWithSudoRetry } from "../lib/invokeWithSudoRetry";
 import { copyToClipboard, readClipboardText } from "../lib/clipboard";
-import i18n from "../i18n";
 import { useToastStore } from "../stores/toastStore";
 import { TerminalStatusOverlay } from "./TerminalStatusOverlay";
-import { PathSizeDialog } from "./PathSizeDialog";
-import { TerminalLinkContextMenu, TerminalBlankContextMenu } from "./TerminalLinkContextMenu";
-import { TerminalPathContextHighlight } from "./TerminalPathContextHighlight";
-import {
-  TerminalFsDialog,
-  type TerminalFsDialogMode,
-} from "./TerminalFsDialog";
+import { TerminalBlankContextMenu } from "./TerminalLinkContextMenu";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalViewProps {
@@ -119,10 +56,6 @@ async function listenSafely<T>(
   handler: (payload: T) => void,
 ): Promise<UnlistenFn> {
   return listen<T>(event, (e) => handler(e.payload));
-}
-
-function terminalPathBasename(path: string): string {
-  return path.split("/").pop() || path.split("\\").pop() || path;
 }
 
 export function TerminalView({
@@ -180,12 +113,6 @@ export function TerminalView({
   const lastSizeRef = useRef({ cols: 0, rows: 0 });
   const lastContainerSizeRef = useRef({ width: 0, height: 0 });
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingFilenamesRef = useRef<string[]>([]);
-  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const upsertTransfer = useSessionStore((s) => s.upsertTransfer);
-  const removeTransfer = useSessionStore((s) => s.removeTransfer);
-  const openSendTo = useSessionStore((s) => s.openSendTo);
-  const startRemoteTransfer = useSessionStore((s) => s.startRemoteTransfer);
   const setSessionDisconnected = useSessionStore((s) => s.setSessionDisconnected);
   const reconnectSession = useSessionStore((s) => s.reconnectSession);
   const isDisconnected = useSessionStore((s) =>
@@ -194,62 +121,23 @@ export function TerminalView({
   const aiSshLeased = useAiEngineerStore((s) =>
     Boolean(s.leasedSessionIds[sessionId]),
   );
-  const openPreview = usePreviewStore((s) => s.openPreview);
   const pushToast = useToastStore((s) => s.pushToast);
-  const openPreviewRef = useRef(openPreview);
-  const openSendToRef = useRef(openSendTo);
   const pushToastRef = useRef(pushToast);
-  const startRemoteTransferRef = useRef(startRemoteTransfer);
-  const upsertTransferRef = useRef(upsertTransfer);
-  const removeTransferRef = useRef(removeTransfer);
-
-  openPreviewRef.current = openPreview;
-  openSendToRef.current = openSendTo;
   pushToastRef.current = pushToast;
-  startRemoteTransferRef.current = startRemoteTransfer;
-  upsertTransferRef.current = upsertTransfer;
-  removeTransferRef.current = removeTransfer;
-  const [isDragOver, setIsDragOver] = useState(false);
   const [bootOverlayVisible, setBootOverlayVisible] = useState(true);
   const [bootOverlayFading, setBootOverlayFading] = useState(false);
   const [autoReconnecting, setAutoReconnecting] = useState(false);
   const autoReconnectAttemptRef = useRef(0);
-  const [fsContextMenu, setFsContextMenu] = useState<{
-    x: number;
-    y: number;
-    path: string;
-    pathKind: "file" | "directory";
-    pathAnchor: TerminalPathHighlightAnchor;
-  } | null>(null);
   const [blankContextMenu, setBlankContextMenu] = useState<{
     x: number;
     y: number;
     selection: string;
   } | null>(null);
-  const [fsDialog, setFsDialog] = useState<{
-    mode: TerminalFsDialogMode;
-    path: string;
-    pathKind: "file" | "directory";
-  } | null>(null);
-  const [pathSizeDialog, setPathSizeDialog] = useState<{
-    path: string;
-    pathKind: "file" | "directory";
-    loading: boolean;
-    result: PathSizeResult | null;
-    error: string | null;
-  } | null>(null);
-  const setFsContextMenuRef = useRef(setFsContextMenu);
   const setBlankContextMenuRef = useRef(setBlankContextMenu);
-  const setFsDialogRef = useRef(setFsDialog);
-  const fsContextMenuProbeRef = useRef(0);
   /** Saved on right mousedown before contextmenu handlers can clear xterm selection. */
   const contextMenuSelectionRef = useRef("");
   /** Last non-empty selection — xterm often clears selection before contextmenu. */
   const lastSelectionRef = useRef("");
-  setFsContextMenuRef.current = setFsContextMenu;
-  setBlankContextMenuRef.current = setBlankContextMenu;
-  setFsDialogRef.current = setFsDialog;
-  const dragDepthRef = useRef(0);
   const bootPendingRef = useRef(true);
   const bootOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingOutputRef = useRef<string[]>([]);
@@ -281,17 +169,6 @@ export function TerminalView({
       }
     };
   }, [sessionId]);
-
-  const scheduleHighlight = useCallback(
-    (filenames: string[]) => {
-      if (filenames.length === 0) return;
-      pendingFilenamesRef.current = filenames;
-      const terminal = terminalRef.current;
-      if (!terminal) return;
-      scheduleUploadHighlight(terminal, sessionId, filenames);
-    },
-    [sessionId],
-  );
 
   activeRef.current = active;
 
@@ -467,16 +344,12 @@ export function TerminalView({
       }
     };
 
-    const screenElement =
-      host.querySelector<HTMLElement>(".xterm-screen") ?? host;
-
     const openBlankMenu = (event: MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
       const selection = readContextMenuSelection();
       armTerminalPointerSuppress(400);
       releaseStaleXtermDocumentMouseListeners({ armClickSuppress: false });
-      setFsContextMenuRef.current(null);
       setBlankContextMenuRef.current({
         x: event.clientX,
         y: event.clientY,
@@ -485,7 +358,6 @@ export function TerminalView({
     };
 
     const onHostContextMenu = (event: MouseEvent) => {
-      // Snapshot before xterm / browser clears the highlight.
       if (terminal.hasSelection()) {
         const live = terminal.getSelection();
         contextMenuSelectionRef.current = live;
@@ -497,318 +369,12 @@ export function TerminalView({
       armTerminalPointerSuppress(400);
       releaseStaleXtermDocumentMouseListeners({ armClickSuppress: false });
 
-      if (kind !== "ssh") {
-        // Local / other: still allow selection → chat via blank menu.
-        if (hasContextMenuSelection()) {
-          openBlankMenu(event);
-        }
-        return;
-      }
-
-      const cell = getTerminalMouseCell(terminal, screenElement, event);
-      if (!cell) {
+      if (kind === "ssh" || hasContextMenuSelection()) {
         openBlankMenu(event);
-        return;
       }
-
-      const hit = findRemotePathHitAtCell(terminal, cell);
-      if (!hit || hasContextMenuSelection()) {
-        openBlankMenu(event);
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setBlankContextMenuRef.current(null);
-
-      const now = Date.now();
-      if (now - fsContextMenuProbeRef.current < 400) return;
-      fsContextMenuProbeRef.current = now;
-
-      // Show menu immediately — never block UI on remote probe (was 3–4s at 100ms RTT).
-      const guessedKind: "file" | "directory" = hit.directoryHint
-        ? "directory"
-        : "file";
-      const menuPath = hit.path;
-      setFsContextMenuRef.current({
-        x: event.clientX,
-        y: event.clientY,
-        path: menuPath,
-        pathKind: guessedKind,
-        pathAnchor: {
-          bufferLineNumber: hit.bufferLineNumber,
-          startCol: hit.startCol,
-          colWidth: hit.colWidth,
-        },
-      });
-
-      void (async () => {
-        try {
-          const probe = await invoke<string>("probe_remote_path", {
-            request: {
-              session_id: sessionId,
-              path: menuPath,
-            },
-          });
-          const pathKind: "file" | "directory" =
-            probe === "directory" ? "directory" : "file";
-          if (pathKind === guessedKind) return;
-          setFsContextMenuRef.current((prev) =>
-            prev && prev.path === menuPath ? { ...prev, pathKind } : prev,
-          );
-        } catch {
-          // Keep guessed kind; avoid noisy toasts on right-click.
-        }
-      })();
     };
     host.addEventListener("mousedown", onHostMouseDown, true);
     host.addEventListener("contextmenu", onHostContextMenu, true);
-
-    let cleanupRemoteDrag: (() => void) | undefined;
-
-    if (kind === "ssh") {
-      let suppressModifierActivate = false;
-
-      if (kind === "ssh") {
-        const handleRemoteMouseDown = (event: MouseEvent) => {
-          if (!isRemoteDragModifier(event)) return;
-          if (event.button !== 0) return;
-
-          const cell = getTerminalMouseCell(terminal, screenElement, event);
-          if (!cell) return;
-
-          const hit = findRemotePathAtCell(terminal, cell);
-          if (!hit) return;
-
-          const remotePath = hit.path;
-
-          const startX = event.clientX;
-          const startY = event.clientY;
-          let dragStarted = false;
-          let disposed = false;
-
-          const cleanupPending = () => {
-            if (disposed) return;
-            disposed = true;
-            document.removeEventListener("mousemove", onPendingMove, true);
-            document.removeEventListener("mouseup", onPendingUp, true);
-          };
-
-          const setSourceDragVisual = (active: boolean) => {
-            containerRef.current?.classList.toggle(
-              "remote-drag-source-active",
-              active,
-            );
-            host.classList.toggle("remote-drag-source-active", active);
-          };
-
-          const onPendingMove = (moveEvent: MouseEvent) => {
-            if (disposed || dragStarted) return;
-
-            const dx = moveEvent.clientX - startX;
-            const dy = moveEvent.clientY - startY;
-            if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-
-            dragStarted = true;
-            suppressModifierActivate = true;
-            terminal.clearSelection();
-            cleanupPending();
-            setSourceDragVisual(true);
-
-            startRemotePointerDrag({
-              fromSessionId: sessionId,
-              remotePath,
-              startX,
-              startY,
-              onDragStart: () => {
-                suppressModifierActivate = true;
-              },
-              onDragEnd: () => {
-                setSourceDragVisual(false);
-              },
-              onDrop: (toSessionId) => {
-                void startRemoteTransferRef
-                  .current(sessionId, remotePath, toSessionId)
-                  .catch((err) => {
-                    pushToastRef.current(formatAppError(err), false);
-                  });
-              },
-              onCancel: () => {
-                pushToastRef.current(i18n.t("terminal:dragDropOtherTabHint"), false);
-              },
-            });
-          };
-
-          const onPendingUp = () => {
-            cleanupPending();
-          };
-
-          document.addEventListener("mousemove", onPendingMove, true);
-          document.addEventListener("mouseup", onPendingUp, true);
-        };
-
-        host.addEventListener("mousedown", handleRemoteMouseDown, true);
-        cleanupRemoteDrag = () => {
-          host.removeEventListener("mousedown", handleRemoteMouseDown, true);
-        };
-      }
-
-      terminal.registerLinkProvider({
-        provideLinks: (bufferLineNumber, callback) => {
-          try {
-            const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
-            if (!line) {
-              callback(undefined);
-              return;
-            }
-
-            const map = buildLineColumnMap(line);
-            const getLinePlain = (lineNumber: number) =>
-              getLinePlainText(
-                (n) => terminal.buffer.active.getLine(n - 1),
-                lineNumber,
-              );
-            const matches = findRemotePathMatches(map.plain, {
-              inLsOutput: isLineInLsOutput(getLinePlain, bufferLineNumber),
-            });
-            if (matches.length === 0) {
-              callback(undefined);
-              return;
-            }
-
-            const links = matches.map(({ path, start, end, isDirectory }) => {
-              const resolveClickedPath = () => {
-                const fromListing = resolvePathFromListing(
-                  getLinePlain,
-                  terminal.buffer.active.length,
-                  bufferLineNumber,
-                  path,
-                );
-                const liveCwd = readTerminalPromptCwd(terminal);
-                if (isDirectory) {
-                  return resolveDirectoryClickPath(fromListing, liveCwd, path);
-                }
-                return refineListingPath(fromListing, liveCwd);
-              };
-
-              return {
-                range: matchToXtermRange(map, line, start, end, bufferLineNumber),
-                text: path,
-                decorations: {
-                  pointerCursor: true,
-                  underline: true,
-                },
-                activate: (event: MouseEvent, _uri: string) => {
-                  if (!isPrimaryLinkActivate(event)) return;
-                  if (isSyntheticTerminalMouseEvent(event)) return;
-                  if (shouldSuppressChromeClickAfterTerminalRelease()) return;
-
-                  const targetPath = resolveClickedPath();
-                  if (isModifierClick(event)) {
-                    if (suppressModifierActivate) {
-                      suppressModifierActivate = false;
-                      return;
-                    }
-                  }
-                  if (isShiftClick(event)) {
-                    void (async () => {
-                      try {
-                        const probe = await invoke<string>("probe_remote_path", {
-                          request: {
-                            session_id: sessionId,
-                            path: targetPath,
-                          },
-                        });
-                        if (probe === "file" || probe === "directory") {
-                          openSendToRef.current({
-                            fromSessionId: sessionId,
-                            remotePath: targetPath,
-                          });
-                        } else {
-                          pushToastRef.current(i18n.t("terminal:pathUnrecognized"), false);
-                        }
-                      } catch (err) {
-                        pushToastRef.current(formatAppError(err), false);
-                      }
-                    })();
-                    return;
-                  }
-                  if (isModifierClick(event)) {
-                    if (kind !== "ssh") {
-                      return;
-                    }
-                    void (async () => {
-                      try {
-                        const probe = await invoke<string>("probe_remote_path", {
-                          request: {
-                            session_id: sessionId,
-                            path: targetPath,
-                          },
-                        });
-                        await downloadRemotePath(
-                          sessionId,
-                          targetPath,
-                          probe === "directory" || isDirectory
-                            ? "directory"
-                            : "file",
-                        );
-                      } catch (err) {
-                        pushToastRef.current(formatTransferError(err), false);
-                      }
-                    })();
-                    return;
-                  }
-
-                  void (async () => {
-                    try {
-                      // ls -F trailing `/` is authoritative — never open dirs in the file previewer.
-                      if (isDirectory) {
-                        await invoke("enter_directory", {
-                          request: {
-                            session_id: sessionId,
-                            path: targetPath,
-                          },
-                        });
-                        return;
-                      }
-                      const probe = await invoke<string>("probe_remote_path", {
-                        request: {
-                          session_id: sessionId,
-                          path: targetPath,
-                        },
-                      });
-                      if (probe === "directory") {
-                        await invoke("enter_directory", {
-                          request: {
-                            session_id: sessionId,
-                            path: targetPath,
-                          },
-                        });
-                      } else if (probe === "missing") {
-                        pushToastRef.current(
-                          formatAppError(`No such file: ${targetPath}`),
-                          false,
-                        );
-                      } else {
-                        await openPreviewRef.current(sessionId, targetPath);
-                      }
-                    } catch (err) {
-                      pushToastRef.current(formatAppError(err), false);
-                    }
-                  })();
-                },
-              };
-            });
-
-            callback(links);
-          } catch (err) {
-            console.error("Terminal link provider failed:", err);
-            callback(undefined);
-          }
-        },
-      });
-
-    }
 
     const onData = terminal.onData((data) => {
       if (!activeRef.current) return;
@@ -859,14 +425,9 @@ export function TerminalView({
       registerTerminalSelectionProvider(sessionId, null);
       cleanupSelectionDrag();
       unregisterTerminalSession(sessionId);
-      cleanupRemoteDrag?.();
       if (resizeTimerRef.current !== null) {
         clearTimeout(resizeTimerRef.current);
       }
-      if (highlightTimerRef.current !== null) {
-        clearTimeout(highlightTimerRef.current);
-      }
-      clearUploadHighlights(sessionId);
       host.removeEventListener("mousedown", onHostMouseDown, true);
       host.removeEventListener("contextmenu", onHostContextMenu, true);
       host.removeEventListener("focus", onHostFocus, true);
@@ -993,7 +554,7 @@ export function TerminalView({
     let unlisteners: UnlistenFn[] = [];
 
     void (async () => {
-      const [output, complete, disconnected] = await Promise.all([
+      const [output, disconnected] = await Promise.all([
         listenSafely<TerminalOutputPayload>("terminal-output", (payload) => {
           if (payload.session_id !== sessionId) return;
           const terminal = terminalRef.current;
@@ -1008,20 +569,6 @@ export function TerminalView({
             markFirstOutput();
           }
 
-          if (pendingFilenamesRef.current.length === 0) return;
-          if (highlightTimerRef.current !== null) {
-            clearTimeout(highlightTimerRef.current);
-          }
-          highlightTimerRef.current = setTimeout(() => {
-            highlightTimerRef.current = null;
-            scheduleHighlight([...pendingFilenamesRef.current]);
-          }, 200);
-        }),
-        listenSafely<TransferCompletePayload>("transfer-complete", (payload) => {
-          if (payload.session_id !== sessionId) return;
-          if (payload.direction === "upload" && payload.filenames.length > 0) {
-            scheduleHighlight(payload.filenames);
-          }
         }),
         listenSafely<SessionLifecyclePayload>("session-disconnected", (payload) => {
           if (payload.session_id !== sessionId) return;
@@ -1033,157 +580,31 @@ export function TerminalView({
 
       if (disposed) {
         output();
-        complete();
         disconnected();
         return;
       }
 
-      unlisteners = [output, complete, disconnected];
+      unlisteners = [output, disconnected];
     })();
 
     return () => {
       disposed = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
-  }, [kind, markFirstOutput, sessionId, scheduleHighlight, setSessionDisconnected]);
+  }, [kind, markFirstOutput, sessionId, setSessionDisconnected]);
 
-  useEffect(() => {
-    if (isConnecting || !active) return;
-
-    const setDragActive = (activeState: boolean) => {
-      setIsDragOver(activeState);
-    };
-
-    const hasFiles = (event: DragEvent) =>
-      Array.from(event.dataTransfer?.types ?? []).includes("Files");
-
-    const handleDragEnter = (event: DragEvent) => {
-      if (isTabReordering() || isLocalFsTreeMoving()) return;
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current += 1;
-      setDragActive(true);
-    };
-
-    const handleDragLeave = (event: DragEvent) => {
-      if (isTabReordering() || isLocalFsTreeMoving()) return;
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-      if (dragDepthRef.current === 0) {
-        setDragActive(false);
-      }
-    };
-
-    const handleDrop = async (event: DragEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      dragDepthRef.current = 0;
-      setDragActive(false);
-      // In Tauri, onDragDropEvent owns file drops. HTML5 drop is a twin event;
-      // uploading from both races two SFTP TRUNCATEs → "No such file".
-      if (isTauriRuntime()) return;
-      const paths = extractDroppedPaths(event);
-      if (paths.length === 0) return;
-
-      if (kind === "ssh") {
-        try {
-          const results = await uploadLocalPathsToSession(sessionId, paths);
-          pendingFilenamesRef.current = results.map((item) => item.filename);
-          scheduleHighlight(pendingFilenamesRef.current);
-        } catch (err) {
-          pushToast(formatTransferError(err), false);
-        }
-      }
-    };
-
-    const preventDefaults = (event: DragEvent) => {
-      if (isTabReordering() || isLocalFsTreeMoving()) return;
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = "copy";
-      }
-    };
-
-    const container = containerRef.current;
-    container?.addEventListener("dragenter", handleDragEnter);
-    container?.addEventListener("dragleave", handleDragLeave);
-    container?.addEventListener("dragover", preventDefaults);
-    container?.addEventListener("drop", handleDrop);
-
-    let dragUnlisten: UnlistenFn | undefined;
-    let dragDisposed = false;
-
-    const appWindow = getCurrentWindow();
-    void appWindow.onDragDropEvent(async (event) => {
-      if (!activeRef.current) return;
-      if (isTabReordering() || isLocalFsTreeMoving()) return;
-
-      if (event.payload.type === "enter" || event.payload.type === "over") {
-        setIsDragOver(true);
-        return;
-      }
-
-      if (event.payload.type === "leave") {
-        setIsDragOver(false);
-        return;
-      }
-
-      if (event.payload.type !== "drop") return;
-      setIsDragOver(false);
-      const paths = event.payload.paths;
-      if (paths.length === 0) return;
-
-      if (kind === "ssh") {
-        try {
-          const results = await uploadLocalPathsToSession(sessionId, paths);
-          pendingFilenamesRef.current = results.map((item) => item.filename);
-          scheduleHighlight(pendingFilenamesRef.current);
-        } catch (err) {
-          pushToast(formatTransferError(err), false);
-        }
-      }
-    }).then((unlisten) => {
-      if (dragDisposed) {
-        unlisten();
-        return;
-      }
-      dragUnlisten = unlisten;
-    });
-
-    return () => {
-      dragDisposed = true;
-      dragDepthRef.current = 0;
-      setIsDragOver(false);
-      dragUnlisten?.();
-      container?.removeEventListener("dragenter", handleDragEnter);
-      container?.removeEventListener("dragleave", handleDragLeave);
-      container?.removeEventListener("dragover", preventDefaults);
-      container?.removeEventListener("drop", handleDrop);
-    };
-  }, [active, isConnecting, kind, sessionId, pushToast, scheduleHighlight]);
 
   useEffect(() => {
     if (!active || isConnecting) return;
     resetTerminalMouseTracking(terminalRef.current);
   }, [active, isConnecting, sessionId]);
 
-  useEffect(() => {
-    if (!active) {
-      dragDepthRef.current = 0;
-      setIsDragOver(false);
-    }
-  }, [active]);
-
-  const dropHint = t("dropHintUpload");
-
   const bootMessage = t("bootMessageSsh");
   const connectingMessage = t("connectingMessageSsh");
 
   const terminalNode = (
     <div
-      className={`terminal-view ${active ? "active" : ""} ${isDragOver ? "drag-over" : ""}${isConnecting ? " terminal-view-connecting" : ""}`}
+      className={`terminal-view ${active ? "active" : ""}${isConnecting ? " terminal-view-connecting" : ""}`}
       data-testid="terminal-view"
     >
       <div
@@ -1195,18 +616,7 @@ export function TerminalView({
           ref={hostRef}
           className={`tw-terminal-host${isConnecting ? " tw-terminal-host-hidden" : ""}`}
         />
-        {fsContextMenu && active && terminalRef.current && hostRef.current ? (
-          <TerminalPathContextHighlight
-            terminal={terminalRef.current}
-            screenElement={
-              hostRef.current.querySelector<HTMLElement>(".xterm-screen") ??
-              hostRef.current
-            }
-            containerElement={containerRef.current ?? hostRef.current}
-            anchor={fsContextMenu.pathAnchor}
-            layoutRevision={layoutRevision}
-          />
-        ) : null}
+
       </div>
       {isConnecting && active ? (
         <TerminalStatusOverlay message={connectingMessage} subtitle={title} />
@@ -1245,194 +655,10 @@ export function TerminalView({
           ) : null}
         </div>
       ) : null}
-      {isDragOver && active && (
-        <div className="terminal-drop-overlay" aria-hidden="true">
-          <div className="terminal-drop-overlay-card">
-            <div className="terminal-drop-overlay-icon">⇪</div>
-            <p>{dropHint}</p>
-          </div>
-        </div>
-      )}
-      {fsContextMenu && active ? (
-        <TerminalLinkContextMenu
-          x={fsContextMenu.x}
-          y={fsContextMenu.y}
-          pathKind={fsContextMenu.pathKind}
-          path={fsContextMenu.path}
-          onClose={() => setFsContextMenu(null)}
-          onCopyName={() => {
-            void copyToClipboard(terminalPathBasename(fsContextMenu.path))
-              .then(() => {
-                pushToast(t("toastCopiedName"), true);
-              })
-              .catch((err) => {
-                pushToast(formatAppError(err), false);
-              });
-          }}
-          onCopyPath={() => {
-            void copyToClipboard(fsContextMenu.path)
-              .then(() => {
-                pushToast(t("toastCopiedPath"), true);
-              })
-              .catch((err) => {
-                pushToast(formatAppError(err), false);
-              });
-          }}
-          onSendToChat={
-            kind === "ssh" &&
-            fsContextMenu.pathKind === "file" &&
-            canSendPathToChat(fsContextMenu.path)
-              ? () => {
-                  void sendRemotePathToChat(
-                    sessionId,
-                    fsContextMenu.path,
-                    useSessionStore
-                      .getState()
-                      .tabs.find((item) => item.id === sessionId)?.server_id ??
-                      undefined,
-                  );
-                }
-              : undefined
-          }
-          onDownload={
-            kind === "ssh"
-              ? () => {
-                  const { path, pathKind } = fsContextMenu;
-                  void downloadRemotePath(sessionId, path, pathKind).catch(
-                    (err) => {
-                      pushToast(formatTransferError(err), false);
-                    },
-                  );
-                }
-              : undefined
-          }
-          onSendToRemote={
-            kind === "ssh"
-              ? () => {
-                  openSendTo({
-                    fromSessionId: sessionId,
-                    remotePath: fsContextMenu.path,
-                  });
-                }
-              : undefined
-          }
-          onPreview={() => {
-            void openPreview(sessionId, fsContextMenu.path);
-          }}
-          onCompress={() => {
-            const { path } = fsContextMenu;
-            pushToast(t("toastCompressing"), true);
-            void invokeWithSudoRetry(
-              (sudoPassword) =>
-                invoke("compress_path", {
-                  request: {
-                    session_id: sessionId,
-                    path,
-                    sudo_password: sudoPassword ?? null,
-                  },
-                }),
-              { action: t("compress"), path },
-            )
-              .then(() => {
-                pushToast(t("toastCompressed"), true);
-              })
-              .catch((err) => {
-                pushToast(formatAppError(err), false);
-              });
-          }}
-          onExtract={
-            fsContextMenu.pathKind === "file"
-              ? () => {
-                  const { path } = fsContextMenu;
-                  pushToast(t("toastExtracting"), true);
-                  void invokeWithSudoRetry(
-                    (sudoPassword) =>
-                      invoke("extract_archive", {
-                        request: {
-                          session_id: sessionId,
-                          path,
-                          sudo_password: sudoPassword ?? null,
-                        },
-                      }),
-                    { action: t("extract"), path },
-                  )
-                    .then(() => {
-                      pushToast(t("toastExtracted"), true);
-                    })
-                    .catch((err) => {
-                      pushToast(formatAppError(err), false);
-                    });
-                }
-              : undefined
-          }
-          onViewSize={() => {
-            const { path, pathKind } = fsContextMenu;
-            setPathSizeDialog({
-              path,
-              pathKind,
-              loading: true,
-              result: null,
-              error: null,
-            });
-            void (async () => {
-              try {
-                const result = await invokeWithSudoRetry<PathSizeResult>(
-                  (sudoPassword) =>
-                    invoke<PathSizeResult>("get_path_size", {
-                      request: {
-                        session_id: sessionId,
-                        path,
-                        sudo_password: sudoPassword ?? null,
-                      },
-                    }),
-                  { action: t("sudoActionViewSize"), path },
-                );
-                setPathSizeDialog({
-                  path,
-                  pathKind,
-                  loading: false,
-                  result,
-                  error: null,
-                });
-              } catch (err) {
-                setPathSizeDialog({
-                  path,
-                  pathKind,
-                  loading: false,
-                  result: null,
-                  error: formatAppError(err),
-                });
-              }
-            })();
-          }}
-          onRename={() => {
-            setFsDialog({
-              mode: "rename",
-              path: fsContextMenu.path,
-              pathKind: fsContextMenu.pathKind,
-            });
-          }}
-          onDelete={() => {
-            setFsDialog({
-              mode: "delete",
-              path: fsContextMenu.path,
-              pathKind: fsContextMenu.pathKind,
-            });
-          }}
-          onMove={() => {
-            setFsDialog({
-              mode: "move",
-              path: fsContextMenu.path,
-              pathKind: fsContextMenu.pathKind,
-            });
-          }}
-        />
-      ) : null}
       {blankContextMenu && active ? (
         <TerminalBlankContextMenu
           x={blankContextMenu.x}
           y={blankContextMenu.y}
-          showUpload={kind === "ssh"}
           canCopy={blankContextMenu.selection.length > 0}
           canSendToChat={blankContextMenu.selection.trim().length > 0}
           onClose={() => {
@@ -1457,36 +683,6 @@ export function TerminalView({
               tab?.server_id ?? undefined,
             );
           }}
-          onUpload={
-            kind === "ssh"
-              ? () => {
-                  void (async () => {
-                    try {
-                      const { open } = await import("@tauri-apps/plugin-dialog");
-                      const selected = await open({
-                        multiple: true,
-                        title: t("uploadDialogTitle"),
-                      });
-                      if (selected == null) return;
-                      const paths = Array.isArray(selected)
-                        ? selected
-                        : [selected];
-                      if (paths.length === 0) return;
-                      const results = await uploadLocalPathsToSession(
-                        sessionId,
-                        paths,
-                      );
-                      pendingFilenamesRef.current = results.map(
-                        (item) => item.filename,
-                      );
-                      scheduleHighlight(pendingFilenamesRef.current);
-                    } catch (err) {
-                      pushToast(formatTransferError(err), false);
-                    }
-                  })();
-                }
-              : undefined
-          }
           onPaste={() => {
             void (async () => {
               try {
@@ -1511,25 +707,7 @@ export function TerminalView({
           }}
         />
       ) : null}
-      {fsDialog && active ? (
-        <TerminalFsDialog
-          mode={fsDialog.mode}
-          sessionId={sessionId}
-          path={fsDialog.path}
-          pathKind={fsDialog.pathKind}
-          onClose={() => setFsDialog(null)}
-        />
-      ) : null}
-      {pathSizeDialog && active ? (
-        <PathSizeDialog
-          path={pathSizeDialog.path}
-          pathKind={pathSizeDialog.pathKind}
-          loading={pathSizeDialog.loading}
-          result={pathSizeDialog.result}
-          error={pathSizeDialog.error}
-          onClose={() => setPathSizeDialog(null)}
-        />
-      ) : null}
+
     </div>
   );
   return (

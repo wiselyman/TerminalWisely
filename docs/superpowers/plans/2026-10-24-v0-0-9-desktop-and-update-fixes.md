@@ -128,11 +128,11 @@
 - Terminal shell input/output and `TerminalBlankContextMenu` text selection actions remain.
 - Desktop `LocalFsPanel` remains the sole UI entry point for remote file download, upload/drop, preview, send, and file operations.
 
-- [ ] Rewrite E2E contracts so printed remote paths cannot activate preview/download or display a remote file menu, and a terminal file drop creates no upload request or overlay.
-- [ ] Run the focused E2E tests and confirm the old terminal path/drop behavior fails the new assertions before removing it.
-- [ ] Remove Terminal filesystem path activation/context actions and Terminal upload/drop handling; retain normal command interaction and the blank text-selection menu.
-- [ ] Add/extend Desktop E2E assertions that file preview, download/context actions, and upload remain available through the Desktop file manager.
-- [ ] Run focused Terminal and Desktop E2E tests.
+- [x] Rewrite E2E contracts so printed remote paths cannot activate preview or display a remote file menu, and a terminal file drop creates no upload request or overlay.
+- [x] Ran focused E2E first; prior path menu/preview and drag upload/overlay failed the new absence assertions.
+- [x] Remove Terminal filesystem path activation/context actions and Terminal upload/drop handling; retain normal command interaction and the blank text-selection menu.
+- [x] Desktop E2E verifies download, preview, send-to-chat, cross-server send, rename, delete, move, and background upload menu.
+- [x] Focused Terminal/drag/Desktop E2E passed (5 tests); expanded Desktop action test passed.
 - [ ] Commit Task 4 after its scoped tests pass.
 
 ### Task 5: Full verification

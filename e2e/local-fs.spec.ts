@@ -37,6 +37,23 @@ test.describe("Local FS panel", () => {
     );
   });
 
+  test("file actions remain available from Desktop", async ({ page }) => {
+    const panel = page.getByTestId("host-file-manager-panel");
+    const row = panel.locator('[data-path="/var/log/app.log"]');
+    await row.click({ button: "right" });
+    const menu = page.getByRole("menu", { name: "Remote file actions" });
+    await expect(menu.getByRole("menuitem", { name: "Download file" })).toBeVisible({ timeout: 1_000 });
+    await expect(menu.getByRole("menuitem", { name: "Edit & preview" })).toBeVisible({ timeout: 1_000 });
+    await expect(menu.getByRole("menuitem", { name: "Send to chat" })).toBeVisible({ timeout: 1_000 });
+    await expect(menu.getByRole("menuitem", { name: "Send to another server" })).toBeVisible({ timeout: 1_000 });
+    await expect(menu.getByRole("menuitem", { name: "Rename" })).toBeVisible({ timeout: 1_000 });
+    await expect(menu.getByRole("menuitem", { name: "Delete" })).toBeVisible({ timeout: 1_000 });
+    await expect(menu.getByRole("menuitem", { name: "Move to directory" })).toBeVisible({ timeout: 1_000 });
+    await page.keyboard.press("Escape");
+    await panel.locator('[data-testid="local-fs-contents"]').click({ button: "right", position: { x: 20, y: 20 } });
+    await expect(page.getByRole("menuitem", { name: "Upload" })).toBeVisible({ timeout: 1_000 });
+  });
+
   test("file manager has path-bar search and chrome", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel).toBeVisible();

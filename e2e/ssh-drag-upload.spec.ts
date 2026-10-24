@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { gotoApp, twE2e } from "./tw-e2e";
 
-test.describe("SSH drag-and-drop upload", () => {
+test.describe("Terminal file drops", () => {
   test.beforeEach(async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);
@@ -10,7 +10,7 @@ test.describe("SSH drag-and-drop upload", () => {
     await expect(page.getByTestId("terminal-view")).toBeVisible({ timeout: 15_000 });
   });
 
-  test("shows drop overlay on drag enter", async ({ page }) => {
+  test("does not show an upload overlay on drag enter", async ({ page }) => {
     await page.evaluate(() => {
       const el = document.querySelector<HTMLElement>(
         '[data-testid="terminal-view"].active .terminal-view-inner',
@@ -32,18 +32,17 @@ test.describe("SSH drag-and-drop upload", () => {
       el.dispatchEvent(dragEnter);
     });
 
-    await expect(page.locator(".terminal-drop-overlay")).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator(".terminal-drop-overlay")).toHaveCount(0, { timeout: 1_000 });
   });
 
-  test("HTML5 drop invokes upload_files with local paths", async ({ page }) => {
+  test("dropping a local file over Terminal does not upload it", async ({ page }) => {
     const api = await twE2e(page);
     const localPath = "/tmp/tw-e2e-drag-upload.txt";
 
     await api.simulateTerminalDrop([localPath]);
 
     const upload = await api.getLastUpload();
-    expect(upload).not.toBeNull();
-    expect(upload?.session_id).toBeTruthy();
-    expect(upload?.local_paths).toEqual([localPath]);
+    expect(upload).toBeNull();
+    await expect(page.locator(".terminal-drop-overlay")).toHaveCount(0, { timeout: 1_000 });
   });
 });

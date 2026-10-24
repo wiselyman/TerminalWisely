@@ -11,3 +11,5 @@ Ruling: the Chat panel remains mounted as an inert `aria-hidden` parked fiber wh
 Task 2: browser E2E passed for one-click Chat/Desktop transitions in both directions; checked center hit target and `-webkit-app-region: no-drag`. Chat stays mounted inert/aria-hidden when Desktop is active. No root cause reproduced, so no product source change. Native script attempted but cannot run on this Mac because it hardcodes `/opt/cursor/artifacts` (permission denied). Mac mini native verification remains outstanding.
 
 Task 3: metadata parser/UI implementation is complete locally. Rust `fs_remote::tests` passed (4); focused Local FS Playwright suite passed (5), covering list and grid display. Legacy fallback has optional metadata. Staging/commit follows after this ledger update.
+
+Task 4: old path preview/menu and drag upload/overlay behaviors were confirmed by pre-change E2E, then removed from Terminal. The plain blank selection menu remains. Desktop menu assertions cover download, preview, send-to-chat, cross-server send, rename, delete, move, and upload entry. Focused Terminal/drag/Desktop E2E passed (5), with expanded Desktop action E2E passing.
