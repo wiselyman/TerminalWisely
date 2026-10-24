@@ -19,7 +19,7 @@ test.describe("Local FS panel", () => {
     await expect(page.getByTestId("local-fs-split")).toBeVisible();
   });
 
-  test("file list shows Linux permissions, ownership, and modified time", async ({ page }) => {
+  test("Linux file metadata stays in list view and icon view shows filenames only", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel.getByText("Permissions")).toBeVisible();
     await expect(panel.getByText("Owner")).toBeVisible();
@@ -32,31 +32,13 @@ test.describe("Local FS panel", () => {
     await expect(row).toContainText("Oct 24, 2024");
 
     await panel.getByRole("button", { name: "Icon view" }).click();
-    await expect(panel.locator('[data-path="/var/log/app.log"]')).toContainText(
-      "-rw-r----- · ubuntu:adm · 4.0 KB",
-    );
-  });
-
-  test("long metadata wraps inside its icon view card", async ({ page }) => {
-    const panel = page.getByTestId("host-file-manager-panel");
-    await panel.getByRole("button", { name: "Icon view" }).click();
     const card = panel.locator('[data-path="/var/log/app.log"]');
-    const metadata = card.locator(".local-fs-grid-meta");
-    await metadata.evaluate((element) => {
-      element.textContent = `-rw-r----- · ${"verylonglinuxusername".repeat(5)}:${"verylonglinuxgroupname".repeat(5)} · 4.0 KB · Oct 24, 2024`;
-    });
-
-    const metadataLayout = await metadata.evaluate((element) => {
-      const metadataRect = element.getBoundingClientRect();
-      const cardRect = element.parentElement!.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return {
-        fitsInsideCard: metadataRect.left >= cardRect.left && metadataRect.right <= cardRect.right && element.scrollWidth <= element.clientWidth,
-        wrapsLongTokens: style.overflowWrap === "anywhere",
-      };
-    });
-
-    expect(metadataLayout).toEqual({ fitsInsideCard: true, wrapsLongTokens: true });
+    await expect(card).toContainText("app.log");
+    await expect(card.locator(".local-fs-grid-meta")).toHaveCount(0);
+    await expect(card).not.toContainText("-rw-r-----");
+    await expect(card).not.toContainText("ubuntu");
+    await expect(card).not.toContainText("4.0 KB");
+    await expect(card).not.toContainText("Oct 24, 2024");
   });
 
   test("file actions remain available from Desktop", async ({ page }) => {

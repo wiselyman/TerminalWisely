@@ -385,11 +385,6 @@ export function LocalFsContentsView({
               >
                 <LocalFsEntryIcon kind={entry.kind} name={entry.name} />
                 <span className="local-fs-grid-name">{entry.name}</span>
-                <span className="local-fs-grid-meta">
-                  {[entry.permissions, [entry.owner, entry.group].filter(Boolean).join(":"), isDir ? "—" : formatSize(entry.size_bytes), formatModified(entry.modified_ms, dateLocale)]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
               </div>
             );
           })}
