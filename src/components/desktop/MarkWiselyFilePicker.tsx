@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowUp, FileText, Folder } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { LocalFsEntryIcon, LocalFsRefreshIcon, LocalFsUpIcon } from "../LocalFsIcons";
+import { LocalFsPathBreadcrumb } from "../LocalFsPathBreadcrumb";
 import type { ListLocalDirectoryResult } from "../../types";
 
 type Props = {
@@ -18,6 +19,7 @@ export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, o
   const [result, setResult] = useState<ListLocalDirectoryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +35,7 @@ export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, o
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [path, sessionId]);
+  }, [path, refreshKey, sessionId]);
 
   const entries = result?.entries ?? [];
   const visibleEntries = entries.filter((entry) => {
@@ -59,32 +61,65 @@ export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, o
           </button>
         ) : null}
       </header>
-      <div className="markwisely-picker-path" title={result?.path}>{result?.path ?? "…"}</div>
+      <div className="local-fs-toolbar markwisely-picker-toolbar">
+        <div className="local-fs-tool-group">
+          <button
+            type="button"
+            className="local-fs-tool-btn"
+            disabled={!result?.parent || loading}
+            title={t("localFs.goUp")}
+            aria-label={t("localFs.goUp")}
+            onClick={() => result?.parent && setPath(result.parent)}
+          >
+            <LocalFsUpIcon />
+          </button>
+          <button
+            type="button"
+            className="local-fs-tool-btn"
+            disabled={loading}
+            title={t("localFs.refresh")}
+            aria-label={t("localFs.refresh")}
+            onClick={() => setRefreshKey((key) => key + 1)}
+          >
+            <LocalFsRefreshIcon />
+          </button>
+        </div>
+        <div className="local-fs-address-bar">
+          <LocalFsPathBreadcrumb
+            path={result?.path ?? path ?? "/"}
+            disabled={!result || loading}
+            onNavigate={setPath}
+            onEdit={() => undefined}
+          />
+        </div>
+      </div>
       {error ? <div className="markwisely-error" role="alert">{error}</div> : null}
-      {loading ? <div className="markwisely-empty" role="status">{t("markwisely.loading")}</div> : null}
-      {!loading && !error ? (
-        <div className="markwisely-entry-list">
-          {result?.parent ? (
-            <button type="button" className="markwisely-entry is-directory" onClick={() => setPath(result.parent ?? undefined)}>
-              <ArrowUp aria-hidden="true" /><span>..</span>
-            </button>
-          ) : null}
-          {visibleEntries.map((entry) => (
+      <div className="local-fs-contents local-fs-contents-list markwisely-picker-contents">
+        <div className="local-fs-list-header" aria-hidden="true">
+          <span>{t("localFs.colName")}</span>
+        </div>
+        <div className="local-fs-list">
+          {loading ? <div className="markwisely-empty" role="status">{t("markwisely.loading")}</div> : null}
+          {!loading && !error ? visibleEntries.map((entry) => (
             <button
               type="button"
               key={entry.path}
-              className={`markwisely-entry ${entry.kind === "directory" ? "is-directory" : ""}`}
+              className={`local-fs-row markwisely-picker-row${entry.kind === "directory" ? " is-dir" : " is-file"}`}
               onClick={() => entry.kind === "directory" ? setPath(entry.path) : onSelect(entry.path)}
               data-folder-entry={entry.kind === "directory" ? "true" : undefined}
               data-testid={entry.kind === "directory" ? "markwisely-folder-entry" : "markwisely-file-entry"}
             >
-              {entry.kind === "directory" ? <Folder aria-hidden="true" /> : <FileText aria-hidden="true" />}
-              <span>{entry.name}</span>
+              <LocalFsEntryIcon kind={entry.kind} name={entry.name} />
+              <span className="local-fs-row-name" title={entry.path}>{entry.name}</span>
             </button>
-          ))}
-          {visibleEntries.length === 0 ? <div className="markwisely-empty">{t("markwisely.noMarkdownFiles")}</div> : null}
+          )) : null}
+          {!loading && !error && visibleEntries.length === 0 ? (
+            <div className="markwisely-empty">
+              {mode === "directory" ? t("localFs.empty") : t("markwisely.noMarkdownFiles")}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }

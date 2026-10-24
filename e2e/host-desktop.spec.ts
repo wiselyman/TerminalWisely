@@ -28,9 +28,15 @@ test.describe("Host desktop mode", () => {
     const newFolderDialog = page.getByRole("dialog", { name: "Choose folder" });
     await expect(newFolderDialog).toBeVisible();
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
-    await expect(newFolderDialog.getByTestId("markwisely-folder-entry").first().locator("svg")).toBeVisible();
+    await expect(newFolderDialog.locator(".local-fs-toolbar")).toBeVisible();
+    await expect(newFolderDialog.getByTestId("local-fs-path-breadcrumb")).toBeVisible();
+    await expect(newFolderDialog.locator(".local-fs-list-header")).toBeVisible();
+    await expect(newFolderDialog.getByTestId("markwisely-folder-entry").first().locator("svg.local-fs-entry-icon.is-folder")).toBeVisible();
     await newFolderDialog.getByTestId("markwisely-folder-entry").filter({ hasText: "logs" }).click();
-    await expect(newFolderDialog.locator(".markwisely-picker-path")).toHaveText("/home/e2e/logs");
+    await newFolderDialog.getByTestId("local-fs-crumb-e2e").click();
+    await expect(newFolderDialog.getByTestId("local-fs-crumb-e2e")).toHaveAttribute("title", "/home/e2e");
+    await newFolderDialog.getByTestId("markwisely-folder-entry").filter({ hasText: "logs" }).click();
+    await expect(newFolderDialog.getByTestId("local-fs-crumb-logs")).toHaveAttribute("title", "/home/e2e/logs");
     await newFolderDialog.getByRole("button", { name: "Use this folder" }).click();
     await expect(page.getByTestId("markwisely-create-view")).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Folder" })).toHaveValue("/home/e2e/logs");
@@ -48,7 +54,7 @@ test.describe("Host desktop mode", () => {
     await chooseOpenFolderDialog.getByRole("button", { name: "Use this folder" }).click();
     const openDialog = page.getByRole("dialog", { name: "Open Markdown file" });
     expect(await openDialog.count()).toBe(1);
-    await expect(openDialog.locator(".markwisely-picker-path")).toHaveText("/home/e2e/logs");
+    await expect(openDialog.getByTestId("local-fs-crumb-logs")).toHaveAttribute("title", "/home/e2e/logs");
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await expect(openDialog).toHaveAttribute("aria-modal", "true");
     await openDialog.getByRole("button", { name: "Cancel" }).click();
@@ -112,7 +118,7 @@ test.describe("Host desktop mode", () => {
     await panel.getByRole("button", { name: /All files|全部文件/i }).click();
     await page.getByTestId("markwisely-new-document").click();
     const chooseNextFolder = page.getByRole("dialog", { name: "Choose folder" });
-    await expect(chooseNextFolder.locator(".markwisely-picker-path")).toHaveText("/home/e2e");
+    await expect(chooseNextFolder.getByTestId("local-fs-crumb-e2e")).toHaveAttribute("title", "/home/e2e");
     await chooseNextFolder.getByRole("button", { name: "Cancel" }).click();
     await panel.getByRole("button", { name: /note\.md/ }).click();
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });

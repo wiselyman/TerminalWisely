@@ -387,36 +387,44 @@
 
 .markwisely-picker-head .markwisely-primary { margin-left: auto; }
 
-.markwisely-picker-path {
-  overflow: hidden;
-  padding: 7px 9px;
-  border-radius: 6px;
-  background: var(--tw-surface-2);
-  color: var(--tw-fg-muted);
-  font: 0.8rem ui-monospace, monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.markwisely-picker-toolbar {
+  flex: 0 0 auto;
+  padding: 6px 0;
+  background: transparent;
 }
 
-.markwisely-entry-list {
-  display: flex;
+.markwisely-picker-contents {
   flex: 1;
-  flex-direction: column;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
-.markwisely-entry { min-height: 38px; }
-
-.markwisely-entry > svg {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
-  color: var(--tw-fg-muted);
-  stroke-width: 1.8;
+.markwisely-picker-contents .local-fs-list-header {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  padding-left: 43px;
 }
 
-.markwisely-entry.is-directory > svg { color: var(--tw-accent); }
+.markwisely-picker-contents .local-fs-list {
+  min-width: 0;
+}
+
+.markwisely-picker-row {
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 36px;
+}
+
+.markwisely-picker-row:focus-visible,
+.markwisely-picker-toolbar button:focus-visible,
+.markwisely-picker .local-fs-crumb:focus-visible,
+.markwisely-picker-head button:focus-visible {
+  outline: 2px solid var(--tw-accent);
+  outline-offset: 2px;
+  position: relative;
+  z-index: 1;
+}
 
 .markwisely-empty {
   padding: 18px 8px;
