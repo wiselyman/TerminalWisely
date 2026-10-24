@@ -69,6 +69,73 @@ test.describe("Host desktop mode", () => {
     );
   });
 
+  test("maximized Desktop app covers the Dock and reveals it from the bottom edge", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-files").click();
+
+    const app = page.getByTestId("host-file-manager-panel");
+    await page.getByTestId("host-file-manager-maximize").click();
+    await expect(app).toHaveAttribute("data-maximized", "true");
+
+    const stage = page.locator(".host-desktop-stage");
+    const stageBox = await stage.boundingBox();
+    const appBoxBeforeReveal = await app.boundingBox();
+    expect(stageBox && appBoxBeforeReveal).toBeTruthy();
+    expect(appBoxBeforeReveal!.y + appBoxBeforeReveal!.height).toBeGreaterThanOrEqual(
+      stageBox!.y + stageBox!.height - 2,
+    );
+
+    const dock = page.getByTestId("host-desktop-dock");
+    await expect(dock).toHaveAttribute("data-visible", "false");
+    const revealZone = page.getByTestId("host-desktop-dock-reveal-zone");
+    const revealBox = await revealZone.boundingBox();
+    expect(revealBox).toBeTruthy();
+    await page.mouse.move(
+      revealBox!.x + revealBox!.width / 2,
+      revealBox!.y + revealBox!.height / 2,
+    );
+    await expect(dock).toHaveAttribute("data-visible", "true");
+
+    const appBoxAfterReveal = await app.boundingBox();
+    expect(appBoxAfterReveal).toEqual(appBoxBeforeReveal);
+    await dock.getByTestId("dock-app-files").click();
+    await expect(app).toHaveAttribute("data-maximized", "true");
+
+    await page.mouse.move(stageBox!.x + 24, stageBox!.y + 24);
+    await expect(dock).toHaveAttribute("data-visible", "true");
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    });
+    await expect(dock).toHaveAttribute("data-visible", "false");
+    await dock.getByTestId("dock-app-files").focus();
+    await expect(dock).toHaveAttribute("data-visible", "true");
+
+    await page.getByTestId("host-file-manager-maximize").click();
+    await expect(app).toHaveAttribute("data-maximized", "false");
+    await expect(dock).toHaveAttribute("data-visible", "true");
+
+    await page.getByTestId("host-file-manager-maximize").click();
+    await expect(dock).toHaveAttribute("data-visible", "false");
+    await page.getByTestId("host-file-manager-minimize").click();
+    await expect(app).toHaveCount(0);
+    await expect(dock).toHaveAttribute("data-visible", "true");
+
+    await dock.getByTestId("dock-app-files").click();
+    await expect(app).toHaveAttribute("data-maximized", "true");
+    await expect(dock).toHaveAttribute("data-visible", "false");
+    await page.getByTestId("host-file-manager-close").click();
+    await expect(app).toHaveCount(0);
+    await expect(dock).toHaveAttribute("data-visible", "true");
+  });
+
   test("dock apps open as Markdown-style floats over the desktop", async ({
     page,
   }) => {
@@ -173,10 +240,14 @@ test.describe("Host desktop mode", () => {
     expect(afterResize!.height).toBeGreaterThan(beforeResize.height + 20);
 
     await page.getByTestId("host-terminal-maximize").click();
-    const dockBox = await page.getByTestId("host-desktop-dock").boundingBox();
+    const stageBox = await page.locator(".host-desktop-stage").boundingBox();
+    const dock = page.getByTestId("host-desktop-dock");
     const maxBox = await page.getByTestId("host-terminal-panel").boundingBox();
-    expect(dockBox && maxBox).toBeTruthy();
-    expect(maxBox!.y + maxBox!.height).toBeLessThanOrEqual(dockBox!.y + 2);
+    expect(stageBox && maxBox).toBeTruthy();
+    expect(maxBox!.y + maxBox!.height).toBeGreaterThanOrEqual(
+      stageBox!.y + stageBox!.height - 2,
+    );
+    await expect(dock).toHaveAttribute("data-visible", "false");
     await page.getByTestId("host-terminal-maximize").click();
 
     await page.getByTestId("host-terminal-minimize").click();

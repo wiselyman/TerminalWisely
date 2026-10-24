@@ -3,7 +3,21 @@ import { useTranslation } from "react-i18next";
 import { useDesktopStore } from "../../stores/desktopStore";
 import { DESKTOP_APPS } from "./desktopApps";
 
-export function DesktopDock() {
+type Props = {
+  visible?: boolean;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
+  onFocus?: () => void;
+  onBlur?: (event: React.FocusEvent<HTMLElement>) => void;
+};
+
+export function DesktopDock({
+  visible = true,
+  onPointerEnter,
+  onPointerLeave,
+  onFocus,
+  onBlur,
+}: Props) {
   const { t } = useTranslation("tools");
   const apps = useDesktopStore((s) => s.apps);
   const toggleDockApp = useDesktopStore((s) => s.toggleDockApp);
@@ -13,6 +27,11 @@ export function DesktopDock() {
       className="host-desktop-dock"
       aria-label={t("desktop.dockAria")}
       data-testid="host-desktop-dock"
+      data-visible={visible ? "true" : "false"}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onFocus={onFocus}
+      onBlur={onBlur}
     >
       {DESKTOP_APPS.map((app) => {
         const win = apps[app.id];
