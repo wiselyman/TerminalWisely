@@ -586,6 +586,8 @@ body,
   height: var(--chrome-control-size);
   border-radius: 5px;
   box-shadow: none;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .chrome-titlebar-actions .workspace-tool-btn:not(.active):not(:last-child) {

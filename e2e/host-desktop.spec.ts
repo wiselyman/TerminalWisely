@@ -24,6 +24,8 @@ test.describe("Host desktop mode", () => {
     const desktopButton = page.getByTestId("local-fs-tool");
     const actions = page.locator(".chrome-titlebar-actions");
     await expect(actions).toHaveCSS("-webkit-app-region", "no-drag");
+    await expect(chatButton).toHaveCSS("-webkit-app-region", "no-drag");
+    await expect(desktopButton).toHaveCSS("-webkit-app-region", "no-drag");
 
     const clickAndVerifyHitTarget = async (button: typeof chatButton) => {
       const hitTargetInsideButton = await button.evaluate((el) => {
@@ -48,6 +50,17 @@ test.describe("Host desktop mode", () => {
     await clickAndVerifyHitTarget(chatButton);
     await expect(chat).toBeVisible();
     await expect(page.getByTestId("host-desktop-panel")).toHaveCount(0);
+
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      await expect(desktopButton).toBeEnabled();
+      await clickAndVerifyHitTarget(desktopButton);
+      await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
+      await expect(chat).toHaveAttribute("aria-hidden", "true");
+      await expect(chatButton).toBeEnabled();
+      await clickAndVerifyHitTarget(chatButton);
+      await expect(chat).toBeVisible();
+      await expect(page.getByTestId("host-desktop-panel")).toHaveCount(0);
+    }
   });
 
   test("Host tool opens desktop side panel with dock", async ({ page }) => {
