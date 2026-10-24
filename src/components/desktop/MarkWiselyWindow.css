@@ -15,28 +15,152 @@
   overflow: auto;
 }
 
-.markwisely-home { flex: 1; }
+.markwisely-home {
+  flex: 1;
+  width: min(100%, 920px);
+  gap: 26px;
+  padding: clamp(28px, 5vh, 56px) clamp(22px, 5vw, 64px);
+}
 
 .markwisely-home-heading {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 0;
+  gap: 16px;
+  padding: 0 0 22px;
+  border-bottom: 1px solid var(--tw-border);
 }
 
-.markwisely-brand-mark {
+.markwisely-brand-icon {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--tw-accent);
-  color: white;
-  font-size: 23px;
-  font-weight: 700;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid color-mix(in srgb, var(--tw-accent) 28%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--tw-accent) 12%, var(--tw-bg));
+  color: var(--tw-accent);
 }
 
-.markwisely-home-heading h2,
+.markwisely-brand-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.8;
+}
+
+.markwisely-home-heading h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.markwisely-home-heading p {
+  margin: 5px 0 0;
+  color: var(--tw-fg-muted);
+  font-size: 0.9rem;
+}
+
+.markwisely-home-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+}
+
+.markwisely-home-actions > button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 54px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: left;
+  transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.markwisely-home-actions > button svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+
+.markwisely-home-actions > button:hover {
+  transform: translateY(-1px);
+}
+
+.markwisely-home-actions > button:focus-visible,
+.markwisely-recent:focus-visible,
+.markwisely-entry:focus-visible {
+  outline: 2px solid var(--tw-accent);
+  outline-offset: 2px;
+}
+
+.markwisely-home-actions .markwisely-secondary {
+  border-color: var(--tw-border);
+  background: var(--tw-surface-1);
+}
+
+.markwisely-home-actions .markwisely-secondary:hover {
+  border-color: var(--tw-border-strong, var(--tw-accent));
+  background: var(--tw-surface-2);
+}
+
+.markwisely-home-actions .markwisely-primary:hover {
+  filter: brightness(1.06);
+}
+
+.markwisely-home .markwisely-error {
+  margin: 0;
+}
+
+.markwisely-recents {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+  margin: 0;
+}
+
+.markwisely-recents h3 {
+  margin: 0 0 2px;
+  color: var(--tw-fg);
+  font-size: 0.98rem;
+  font-weight: 620;
+}
+
+.markwisely-recents .markwisely-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 112px;
+  margin: 0;
+  padding: 20px;
+  border: 1px dashed var(--tw-border);
+  border-radius: 10px;
+  background: var(--tw-surface-1);
+  text-align: center;
+}
+
+.markwisely-recent {
+  min-height: 50px;
+  padding: 8px 12px;
+  border-color: var(--tw-border);
+  border-radius: 8px;
+  background: var(--tw-surface-1);
+}
+
+.markwisely-recent:hover {
+  border-color: var(--tw-border-strong, var(--tw-accent));
+  background: var(--tw-surface-2);
+}
+
 .markwisely-form-view h2,
 .markwisely-confirm h2 {
   margin: 0;
@@ -283,3 +407,14 @@
 }
 
 .markwisely-confirm .markwisely-form-actions { margin-top: 22px; }
+
+@media (max-width: 600px) {
+  .markwisely-home {
+    gap: 20px;
+    padding: 22px 18px;
+  }
+
+  .markwisely-home-actions {
+    grid-template-columns: 1fr;
+  }
+}

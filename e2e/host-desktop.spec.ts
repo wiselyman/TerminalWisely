@@ -16,6 +16,9 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("markwisely-panel")).toBeVisible();
     await expect(page.getByTestId("markwisely-new-document")).toBeVisible();
     await expect(page.getByTestId("markwisely-open-document")).toBeVisible();
+    expect(await page.getByTestId("markwisely-brand-icon").locator("svg").count()).toBe(1);
+    expect(await page.getByTestId("markwisely-new-document").locator("svg").count()).toBe(1);
+    expect(await page.getByTestId("markwisely-open-document").locator("svg").count()).toBe(1);
     await expect(launchButton.locator(".host-desktop-glyph")).toHaveCSS(
       "background-image",
       /linear-gradient/,

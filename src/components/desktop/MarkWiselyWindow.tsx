@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { FilePlus2, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./MarkWiselyWindow.css";
 import { DesktopAppWindow } from "./DesktopAppWindow";
@@ -8,6 +9,7 @@ import { MarkdownWysiwygEditor } from "../preview/MarkdownWysiwygEditor";
 import { flushPreviewEditor } from "../../lib/previewEditorFlush";
 import { useDesktopStore } from "../../stores/desktopStore";
 import { useMarkWiselyStore } from "../../stores/markWiselyStore";
+import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 
 type Props = { sessionId: string; hostKey: string; sessionTitle?: string | null };
 type View = "start" | "create" | "create-folder" | "open" | "edit";
@@ -190,10 +192,22 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
         </section>
       ) : (
         <section className="markwisely-home" data-testid="markwisely-home">
-          <div className="markwisely-home-heading"><span className="markwisely-brand-mark">M</span><div><h2>MarkWisely</h2><p>{t("markwisely.subtitle")}</p></div></div>
+          <header className="markwisely-home-heading">
+            <span className="markwisely-brand-icon" data-testid="markwisely-brand-icon" aria-hidden="true"><MarkWiselyIcon /></span>
+            <div>
+              <h2>MarkWisely</h2>
+              <p>{t("markwisely.subtitle")}</p>
+            </div>
+          </header>
           <div className="markwisely-home-actions">
-            <button type="button" className="markwisely-primary" data-testid="markwisely-new-document" onClick={() => { setError(null); setView("create"); }}>{t("markwisely.newDocument")}</button>
-            <button type="button" className="markwisely-secondary" data-testid="markwisely-open-document" onClick={() => { setError(null); setView("open"); }}>{t("markwisely.openDocument")}</button>
+            <button type="button" className="markwisely-primary" data-testid="markwisely-new-document" onClick={() => { setError(null); setView("create"); }}>
+              <FilePlus2 aria-hidden="true" />
+              <span>{t("markwisely.newDocument")}</span>
+            </button>
+            <button type="button" className="markwisely-secondary" data-testid="markwisely-open-document" onClick={() => { setError(null); setView("open"); }}>
+              <FolderOpen aria-hidden="true" />
+              <span>{t("markwisely.openDocument")}</span>
+            </button>
           </div>
           {error ? <div className="markwisely-error" role="alert">{error}</div> : null}
           <section className="markwisely-recents" aria-labelledby="markwisely-recents-title">
