@@ -159,6 +159,11 @@ test.describe("UI visual baselines", () => {
     await api.openLocalFsPanel();
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
     await expect(page.getByTestId("host-file-manager-panel")).toBeVisible();
+    const desktopClock = page.locator(".host-desktop-clock");
+    await desktopClock.evaluate((clock) => {
+      clock.style.width = "140px";
+      clock.style.minWidth = "140px";
+    });
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(page).toHaveScreenshot(`local-files-${theme}.png`, {

@@ -114,7 +114,7 @@
 - [x] Add localized metadata columns/compact grid details and em-dash rendering for absent values.
 - [x] Extend E2E directory fixtures and assert Desktop list and grid views display metadata. Local FS panel/actions regression: 5 passed.
 - [x] Rust parser tests (4) and focused Local FS E2E (5) passed; Playwright build also type-checks the frontend.
-- [ ] Commit Task 3 after its scoped tests pass.
+- [x] Commit Task 3 after its scoped tests pass (`d136eb4`).
 
 ### Task 4: Remove remote file actions from Terminal and keep them in Desktop
 
@@ -133,17 +133,18 @@
 - [x] Remove Terminal filesystem path activation/context actions and Terminal upload/drop handling; retain normal command interaction and the blank text-selection menu.
 - [x] Desktop E2E verifies download, preview, send-to-chat, cross-server send, rename, delete, move, and background upload menu.
 - [x] Focused Terminal/drag/Desktop E2E passed (5 tests); expanded Desktop action test passed.
-- [ ] Commit Task 4 after its scoped tests pass.
+- [x] Commit Task 4 after its scoped tests pass (`bd2246f`).
 
 ### Task 5: Full verification
 
 **Files:**
 - Update: `docs/TEST_MATRIX.md` only if the existing feature/test mapping requires a new feature row.
 
-- [ ] Run `node scripts/check-no-agent-hardcoding.mjs`.
-- [ ] Run `./scripts/run-all-tests.sh` and resolve every failure without updating unrelated snapshots to hide product regressions.
-- [ ] Inspect `git diff --check` and verify only this plan, its tests, and planned source files are included.
-- [ ] Do not tag or publish; this request defines 0.0.9 scope but does not authorize a GitHub release.
+- [x] Run `node scripts/check-no-agent-hardcoding.mjs` (7 rules, 95 Python files; PASS).
+- [x] Run `./scripts/run-all-tests.sh`; 260 checks passed, 0 failed, 1 blocked, 502 Python tests passed with 3 environment skips, and all 100 Playwright E2E tests passed. SSH/K8s live integration was skipped because Docker/k3d are unavailable.
+- [x] The full run found the expected local-files visual change from metadata columns plus a variable-width masked clock. Fixed the clock mask width in the E2E harness, confirmed the visual diff, and refreshed only the affected local-files dark/light baselines. Re-ran the focused baseline test without update mode successfully.
+- [x] Inspect `git diff --check` and verify only this plan, its tests, and planned source files are included; unrelated existing untracked handoff artifacts remain untouched.
+- [x] Do not tag or publish; this request defines 0.0.9 scope but does not authorize a GitHub release.
 
 ## Execution Method
 
