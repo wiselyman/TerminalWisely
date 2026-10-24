@@ -92,6 +92,6 @@
 
 ## 完成验证
 
-- [ ] `node scripts/check-no-agent-hardcoding.mjs`
-- [ ] `./scripts/run-all-tests.sh`
-- [ ] Playwright：MarkWisely Dock 打开、首页、Open 对话框与远程 Markdown 文件创建/编辑/保存流程。
+- [x] `node scripts/check-no-agent-hardcoding.mjs` — PASS (7 rules, 95 py files)
+- [x] `./scripts/run-all-tests.sh` — All automated tests PASSED; smoke 260 PASS / 0 FAIL / 1 optional native check BLOCKED; Vitest 578 PASS; Sidecar 502 PASS / 3 skipped; Playwright 104 PASS.
+- [x] Playwright：MarkWisely Dock 打开、首页、Open 对话框与远程 Markdown 文件创建/编辑/保存流程；深浅主题桌面截图基线已更新。
