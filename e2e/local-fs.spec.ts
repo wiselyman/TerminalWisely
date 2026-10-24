@@ -37,6 +37,28 @@ test.describe("Local FS panel", () => {
     );
   });
 
+  test("long metadata wraps inside its icon view card", async ({ page }) => {
+    const panel = page.getByTestId("host-file-manager-panel");
+    await panel.getByRole("button", { name: "Icon view" }).click();
+    const card = panel.locator('[data-path="/var/log/app.log"]');
+    const metadata = card.locator(".local-fs-grid-meta");
+    await metadata.evaluate((element) => {
+      element.textContent = `-rw-r----- · ${"verylonglinuxusername".repeat(5)}:${"verylonglinuxgroupname".repeat(5)} · 4.0 KB · Oct 24, 2024`;
+    });
+
+    const metadataLayout = await metadata.evaluate((element) => {
+      const metadataRect = element.getBoundingClientRect();
+      const cardRect = element.parentElement!.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        fitsInsideCard: metadataRect.left >= cardRect.left && metadataRect.right <= cardRect.right && element.scrollWidth <= element.clientWidth,
+        wrapsLongTokens: style.overflowWrap === "anywhere",
+      };
+    });
+
+    expect(metadataLayout).toEqual({ fitsInsideCard: true, wrapsLongTokens: true });
+  });
+
   test("file actions remain available from Desktop", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     const row = panel.locator('[data-path="/var/log/app.log"]');
