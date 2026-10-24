@@ -341,6 +341,10 @@
   background: linear-gradient(160deg, #c49bff 0%, #6d3fd4 100%);
 }
 
+.host-desktop-glyph.is-markwisely {
+  background: linear-gradient(160deg, #7197f4 0%, #3f62cf 100%);
+}
+
 .host-desktop-dock {
   position: relative;
   align-self: center;

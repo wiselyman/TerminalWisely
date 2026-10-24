@@ -16,6 +16,10 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("markwisely-panel")).toBeVisible();
     await expect(page.getByTestId("markwisely-new-document")).toBeVisible();
     await expect(page.getByTestId("markwisely-open-document")).toBeVisible();
+    await expect(launchButton.locator(".host-desktop-glyph")).toHaveCSS(
+      "background-image",
+      /linear-gradient/,
+    );
   });
 
   test("MarkWisely creates, edits, saves, and reopens a remote Markdown file", async ({ page }) => {
