@@ -2,6 +2,41 @@ import { expect, test } from "@playwright/test";
 import { gotoApp, twE2e } from "./tw-e2e";
 
 test.describe("Host desktop mode", () => {
+  test("titlebar Chat and Desktop controls switch in one click", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+
+    const chatButton = page.getByTestId("ai-engineer-tool");
+    const desktopButton = page.getByTestId("local-fs-tool");
+    const actions = page.locator(".chrome-titlebar-actions");
+    await expect(actions).toHaveCSS("-webkit-app-region", "no-drag");
+
+    const clickAndVerifyHitTarget = async (button: typeof chatButton) => {
+      const hitTargetInsideButton = await button.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const target = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return target != null && el.contains(target);
+      });
+      expect(hitTargetInsideButton).toBe(true);
+      await button.click();
+    };
+
+    await clickAndVerifyHitTarget(chatButton);
+    const chat = page.locator(".ai-engineer-panel:not(.is-home-workspace)");
+    await expect(chat).toBeVisible();
+    await clickAndVerifyHitTarget(desktopButton);
+    await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
+    await expect(chat).toHaveAttribute("aria-hidden", "true");
+    await expect(chat).toHaveAttribute("inert", "");
+    await clickAndVerifyHitTarget(chatButton);
+    await expect(chat).toBeVisible();
+    await expect(page.getByTestId("host-desktop-panel")).toHaveCount(0);
+  });
+
   test("Host tool opens desktop side panel with dock", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);

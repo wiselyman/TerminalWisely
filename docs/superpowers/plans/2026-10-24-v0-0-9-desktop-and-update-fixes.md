@@ -87,12 +87,12 @@
 - Consumes: current `switchToAiEngineerPanel`, `switchWorkspacePanel`, and `closeDesktopRemembering` state transitions.
 - Produces: one pointer activation switches Chat ↔ Desktop once, without a second click and without disabling the titlebar drag region.
 
-- [ ] Add a Playwright regression that clicks Chat and Desktop once in both directions and asserts the destination is visible and the previous panel is closed after each click.
-- [ ] Run the new test and inspect the DOM event target and computed `-webkit-app-region` for both controls; compare against the working titlebar controls.
-- [ ] If the test identifies a hit-target/drag-region issue, make only that target correction; do not add duplicate pointer/click activation.
-- [ ] If browser E2E passes but the Mac mini report remains unreproducible, preserve the current store transitions and document the required native Mac mini verification instead of introducing speculative event handling.
-- [ ] Run the focused desktop E2E and available native desktop check; report clearly if the latter is unavailable on this host.
-- [ ] Commit Task 2 only if a root-cause source change is justified and its scoped tests pass.
+- [x] Add a Playwright regression that clicks Chat and Desktop once in both directions and asserts the destination is visible and the previous panel is closed after each click.
+- [x] Run the new test and inspect the DOM event target and computed `-webkit-app-region` for both controls; compare against the working titlebar controls.
+- [x] The test did not identify a hit-target/drag-region issue, so no speculative event-handler changes were made.
+- [x] Browser E2E passes; Mac mini issue remains unreproducible here. Current store transitions are preserved. Native test script is unavailable on this Mac because it hardcodes `/opt/cursor/artifacts`; the Mac mini still needs a native one-click check.
+- [x] Focused desktop E2E passes; native desktop check was attempted and could not run on this host (script requires `/opt/cursor/artifacts`).
+- [x] Commit the regression contract after its scoped E2E passes; no product source change was justified by current evidence.
 
 ### Task 3: Show Linux file metadata in Desktop
 
