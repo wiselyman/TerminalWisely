@@ -6,7 +6,7 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.0.9](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.9)**
+**Current version: [v0.1.0](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.1.0)**
 
 **Local and remote operations in one window.** Home pairs an interactive local Terminal with local chat; Hosts, Kubernetes, and Databases provide remote workspaces with object-specific chats. Changes wait for approval, and STOP is always there.
 
@@ -23,7 +23,7 @@
 
 | Area | Highlights |
 |------|------------|
-| **Home** | Local interactive Terminal beside local chat; multiple Terminal tabs, with the first tab fixed. Windows uses PowerShell |
+| **Home** | Local interactive Terminal and chat, plus a target-isolated local Desktop with Files, Processes, Browser, Terminal, and MarkWisely. Windows uses PowerShell |
 | **Databases** | Direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show database and schema. Connections can be grouped |
 | **Agent runtimes** | Cursor Agent, Codex, Claude Code on the open host, cluster, or database; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
@@ -35,6 +35,14 @@
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
 | **Insight** | Host CPU, memory, disk I/O, and network on the status bar |
+
+---
+
+## Home Desktop
+
+In Home, use the Desktop control to switch from the local Terminal and chat to the local Desktop. Files, Processes, Browser, Terminal, and MarkWisely operate on this computer; the AI Linux app remains available only in SSH Host Desktop. The Desktop Terminal moves the active Home terminal into its window and returns it without starting another shell. Local Desktop windows, browser tabs, and recent Markdown files have their own state, separate from each SSH host.
+
+Windows Home Terminal remains Windows PowerShell 5.1. Windows packages include Microsoft Coreutils for Windows v2026.9.3 for x64 or ARM64, a preview release. Coreutils commands are available by command name in the app terminal; PowerShell 5.1 does not receive the full PowerShell 7 globbing and pipeline integration. The app adds its bundled command directory and clears conflicting aliases only in that terminal process. It does not change the system PATH, PowerShell profiles, or registry.
 
 ---
 

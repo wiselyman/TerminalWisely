@@ -6,7 +6,7 @@
 
 [English](./README.md) | **中文**
 
-**当前版本：[v0.0.9](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.0.9)**
+**当前版本：[v0.1.0](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.1.0)**
 
 **本机与远程运维，在同一个窗口。** Home 将本机交互式 Terminal 和本机聊天并排显示；主机、Kubernetes、数据库提供远程工作区和按对象隔离的聊天。变更要批准，随时可以 STOP。
 
@@ -23,7 +23,7 @@
 
 | 模块 | 能力 |
 |------|------|
-| **Home** | 本机交互式 Terminal 与本机聊天并排；支持多个 Terminal 页签，第一个固定保留；Windows 使用 PowerShell |
+| **Home** | 本机 Terminal 和聊天，以及独立的本机 Desktop：文件、进程、浏览器、终端和 MarkWisely；Windows 使用 PowerShell |
 | **数据库** | 直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天。表页签标出库和 schema。连接可以分组 |
 | **Agent 运行时** | Cursor Agent / Codex / Claude Code 跟到已打开的主机、集群或数据库；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
@@ -35,6 +35,14 @@
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
 | **可观测** | 状态栏显示 CPU、内存、磁盘读写、网络 |
+
+---
+
+## Home 本机 Desktop
+
+在 Home 点击 Desktop 控件，可从本机 Terminal 和聊天切换到本机 Desktop。文件、进程、浏览器、Terminal 和 MarkWisely 都操作当前这台电脑；AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 会将当前 Home 终端移入窗口，切回后恢复原终端，不会再启动一份 Shell。本机桌面的窗口、浏览器标签和 Markdown 最近文件都与各 SSH 主机分别保存。
+
+Windows Home Terminal 继续使用 Windows PowerShell 5.1。Windows 安装包按 x64 或 ARM64 内置微软维护的 Coreutils for Windows v2026.9.3（Preview）。在应用终端里可直接按命令名调用 Coreutils；PowerShell 5.1 不包含完整的 PowerShell 7 通配符和管道集成。应用只在该终端子进程中调整 PATH 并移除冲突别名，不修改系统 PATH、PowerShell Profile 或注册表。
 
 ---
 

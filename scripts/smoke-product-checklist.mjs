@@ -1979,6 +1979,31 @@ function readStyles() {
   } else {
     fail("ui.host-desktop", "missing host desktop mode wiring");
   }
+  const desktopDock = read("src/components/desktop/DesktopDock.tsx");
+  const desktopIcons = read("src/components/desktop/DesktopIcons.tsx");
+  const desktopTargets = read("src/lib/desktopTarget.ts");
+  const windowsConfig = read("src-tauri/tauri.windows.conf.json");
+  const localTerminal = read("src-tauri/src/local_terminal.rs");
+  const testMatrix = read("docs/TEST_MATRIX.md");
+  if (
+    desktopDock.includes('app.id !== "aiLinux" || isSshDesktopTarget(target)') &&
+    desktopIcons.includes('app.id !== "aiLinux" || isSshDesktopTarget(target)') &&
+    desktopTargets.includes('target.kind === "local" ? "local"') &&
+    read("src/App.tsx").includes('openDesktopTarget({ kind: "local" })') &&
+    testMatrix.includes("Home Local Desktop 工作区")
+  ) {
+    pass("ui.home-local-desktop", "Home apps use an isolated local target; AI Linux remains SSH-only");
+  } else {
+    fail("ui.home-local-desktop", "Local Desktop target, app scope, or test matrix contract is missing");
+  }
+  if (
+    windowsConfig.includes('"resources/windows-coreutils": "windows-coreutils"') &&
+    localTerminal.includes('command.env("PATH", coreutils_child_path')
+  ) {
+    pass("windows.local-coreutils-resource", "Windows bundles target Coreutils for the local PowerShell session");
+  } else {
+    fail("windows.local-coreutils-resource", "Windows Coreutils resource mapping or session PATH wiring is missing");
+  }
 }
 
 {

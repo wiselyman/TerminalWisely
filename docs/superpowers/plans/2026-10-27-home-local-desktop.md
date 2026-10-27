@@ -166,8 +166,8 @@
 - Modify: `docs/TEST_MATRIX.md`, `README.md`, `RELEASE_NOTES.md`, `CHANGELOG.md`（按仓库现状追加 0.1.0 段落）
 - Test: existing CI and full project test suite
 
-- [ ] **Step 1: 写失败/缺失契约测试**：扩展 `scripts/smoke-product-checklist.mjs` 检查 Local Dock 隐藏 AI Linux、Home Desktop toggle 和 Windows resource mapping。
-- [ ] **Step 2: 运行 RED**：`npm run test:smoke`，确认新产品契约尚未登记。
-- [ ] **Step 3: 更新文档**：补上 Local/SSH Desktop 能力矩阵、Windows PowerShell/Coreutils 兼容说明和 Home Desktop 用户路径。
-- [ ] **Step 4: 全量验证**：依次运行 `node scripts/check-no-agent-hardcoding.mjs`、`./scripts/run-all-tests.sh`，再执行 `git diff --check`；Windows E2E/package 由 GitHub Actions 矩阵通过。
-- [ ] **Step 5: 提交**：`docs: document Home local desktop workspace`。
+- [x] **Step 1: 写失败/缺失契约测试**：扩展 `scripts/smoke-product-checklist.mjs` 检查 Local Dock 隐藏 AI Linux、Home Desktop toggle 和 Windows resource mapping。
+- [x] **Step 2: 运行 RED**：`npm run test:smoke`，先确认新产品契约尚未登记，再添加文档矩阵后通过。
+- [x] **Step 3: 更新文档**：补上 Local/SSH Desktop 能力矩阵、Windows PowerShell/Coreutils 兼容说明和 Home Desktop 用户路径；版本元数据升至 0.1.0。
+- [x] **Step 4: 全量验证**：`node scripts/check-no-agent-hardcoding.mjs`、`./scripts/run-all-tests.sh` 和 `git diff --check` 均通过；Windows PowerShell/package 断言等待推送后由 GitHub Actions 矩阵实测。
+- [x] **Step 5: 提交**：`docs: document Home local desktop workspace`。

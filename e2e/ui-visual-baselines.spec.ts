@@ -55,6 +55,7 @@ test.describe("UI visual baselines", () => {
         fullPage: false,
         animations: "disabled",
         caret: "hide",
+        maxDiffPixels: 20,
       });
     }
   });

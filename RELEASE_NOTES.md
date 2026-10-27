@@ -1,4 +1,30 @@
-# TerminalWisely v0.0.9
+# TerminalWisely v0.1.0
+
+## English
+
+TerminalWisely 0.1.0 brings the local Home workspace to Desktop.
+
+### Highlights
+
+- **Home Desktop** — switch between the local Terminal/chat and a local Desktop with Files, Processes, Browser, Terminal, and MarkWisely
+- **One local shell** — Desktop Terminal reuses the selected Home PTY; Local and SSH app state remains isolated
+- **Local apps** — local file operations, process management, browsing, and Markdown editing run against this computer; AI Linux remains SSH-only
+- **Windows Terminal** — bundle Microsoft Coreutils for Windows v2026.9.3 for x64 and ARM64; commands and alias precedence apply only inside TerminalWisely's PowerShell 5.1 child process
+
+## 中文
+
+TerminalWisely 0.1.0 为 Home 增加完整的本机 Desktop 工作区。
+
+### 主要更新
+
+- **Home Desktop** — 在本机 Terminal/聊天与本机桌面间切换；桌面包含文件、进程、浏览器、Terminal 和 MarkWisely
+- **共用本机 Shell** — Desktop Terminal 复用当前 Home PTY；本机状态与各 SSH 主机状态隔离
+- **本机应用** — 文件操作、进程管理、浏览器和 Markdown 编辑都针对当前电脑；AI Linux 仍只用于 SSH
+- **Windows Terminal** — x64 和 ARM64 安装包内置微软 Coreutils for Windows v2026.9.3；命令路径和别名优先级仅作用于 TerminalWisely 启动的 PowerShell 5.1 子进程
+
+---
+
+## TerminalWisely v0.0.9
 
 ## English
 
