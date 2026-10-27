@@ -458,7 +458,7 @@ function App() {
       ? sidebarView === "hosts" && activeTabId === desktopTarget.sessionId
       : desktopTarget?.kind === "local" && homeOpen);
   const desktopTerminalShown =
-    desktopMode && isSshDesktopTarget(desktopTarget) && desktopTerminalOpen && !desktopTerminalMinimized;
+    desktopMode && Boolean(desktopTarget) && desktopTerminalOpen && !desktopTerminalMinimized;
   const desktopAiShown = desktopMode && desktopAiOpen && !desktopAiMinimized;
   const workspacePanelOpen = showAiEngineerPanel && !desktopMode;
 
@@ -704,7 +704,7 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (!browserOpen || !activeTabId) return;
+    if (!browserOpen || !activeTabId || desktopTarget?.kind === "local") return;
     // Panel owns measure→ensure→dock; only rebind session on tab switch.
     const { sessionId, ensureForSession } = useBrowserStore.getState();
     if (sessionId !== activeTabId) {
@@ -1553,8 +1553,8 @@ function App() {
           target={desktopTarget}
         />
       ) : null}
-      {desktopTerminalShown && activeTabId ? (
-        <DesktopTerminalWindow subtitle={activeSessionTitle} />
+      {desktopTerminalShown ? (
+        <DesktopTerminalWindow subtitle={isSshDesktopTarget(desktopTarget) ? activeSessionTitle : "This computer"} />
       ) : null}
       {desktopAiShown && activeTabId ? (
         <DesktopAiWindow subtitle={activeSessionTitle} />
@@ -1591,10 +1591,10 @@ function App() {
           sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle ?? undefined : "This computer"}
         />
       ) : null}
-      {sidebarView === "hosts" && activeTabId && browserOpen ? (
+      {desktopMode && desktopTarget && browserOpen ? (
         <BrowserPanel
-          sessionId={activeTabId}
-          sessionTitle={activeSessionTitle ?? undefined}
+          target={desktopTarget}
+          sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle ?? undefined : "This computer"}
         />
       ) : null}
       {!homeOpen ? (

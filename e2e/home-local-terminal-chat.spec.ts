@@ -123,6 +123,36 @@ test("Home local Desktop target isolation", async ({ page }) => {
   await expect(page.getByTestId("home-local-terminal")).toBeVisible();
 });
 
+test("Home desktop browser and terminal continuity", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  const terminal = page.getByTestId("home-local-terminal");
+  await expect(terminal).toBeVisible();
+  await terminal.evaluate((element) => {
+    (window as Window & { __homeTerminalNode?: Element }).__homeTerminalNode = element;
+  });
+
+  await page.getByTestId("local-fs-tool").click();
+  await page.getByTestId("dock-app-terminal").click();
+  const desktopTerminal = page.getByTestId("desktop-terminal-host");
+  await expect(desktopTerminal).toBeVisible();
+  expect(await desktopTerminal.evaluate((element) =>
+    element.querySelector('[data-testid="home-local-terminal"]') ===
+      (window as Window & { __homeTerminalNode?: Element }).__homeTerminalNode,
+  )).toBe(true);
+  await page.getByTestId("host-terminal-close").click();
+  expect(await page.getByTestId("home-local-terminal").evaluate((element) =>
+    element === (window as Window & { __homeTerminalNode?: Element }).__homeTerminalNode,
+  )).toBe(true);
+
+  await page.getByTestId("dock-app-browser").click();
+  await expect(page.getByTestId("host-browser-panel")).toBeVisible();
+  await page.getByTestId("host-browser-url").fill("https://local.example");
+  await page.getByTestId("host-browser-url").press("Enter");
+  await expect(page.getByTestId("host-browser-url")).toHaveValue("https://local.example");
+});
+
 test("Home Desktop Files performs local file operations", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);

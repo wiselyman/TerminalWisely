@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -6,6 +6,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getAppTheme, subscribeAppTheme, terminalThemeFor } from "../../lib/appTheme";
 import { isTauriRuntime } from "../../lib/isTauri";
+import { getDesktopTerminalHost, subscribeDesktopEmbedHosts } from "../../lib/desktopEmbedHost";
+import { useDesktopStore } from "../../stores/desktopStore";
 import {
   ensureTerminalFontsLoaded,
   getTerminalFontFamily,
@@ -18,11 +20,33 @@ import "@xterm/xterm/css/xterm.css";
 
 type OutputPayload = { id: string; data: string };
 
-export function LocalTerminal() {
+export function LocalTerminal({ active = true }: { active?: boolean }) {
   const { t } = useTranslation("terminal");
+  const slotRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<() => void>(() => {});
+  const desktopHost = useSyncExternalStore(
+    subscribeDesktopEmbedHosts,
+    getDesktopTerminalHost,
+    getDesktopTerminalHost,
+  );
+  const terminalWindow = useDesktopStore((state) => state.apps.terminal);
+  const target = useDesktopStore((state) => state.target);
+  const embedHost = active && target?.kind === "local" && terminalWindow.open && !terminalWindow.minimized
+    ? desktopHost
+    : null;
   const translateRef = useRef(t);
   translateRef.current = t;
+
+  useLayoutEffect(() => {
+    const node = hostRef.current;
+    const parent = embedHost ?? slotRef.current;
+    if (!node || !parent || node.parentElement === parent) return;
+    parent.appendChild(node);
+    requestAnimationFrame(() => {
+      resizeRef.current();
+    });
+  }, [embedHost]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -67,6 +91,7 @@ export function LocalTerminal() {
         // xterm can briefly report a zero-sized cell while Home is mounting.
       }
     };
+    resizeRef.current = sendSize;
     const observer = new ResizeObserver(sendSize);
     observer.observe(host);
     requestAnimationFrame(sendSize);
@@ -120,6 +145,7 @@ export function LocalTerminal() {
     return () => {
       disposed = true;
       observer.disconnect();
+      resizeRef.current = () => {};
       unsubscribeFontSize();
       unsubscribeTheme();
       unlistenOutput?.();
@@ -128,5 +154,9 @@ export function LocalTerminal() {
     };
   }, []);
 
-  return <div className="home-local-terminal" data-testid="home-local-terminal" ref={hostRef} />;
+  return (
+    <div className="home-local-terminal-slot" ref={slotRef}>
+      <div className="home-local-terminal" data-testid="home-local-terminal" ref={hostRef} />
+    </div>
+  );
 }

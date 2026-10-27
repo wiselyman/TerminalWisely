@@ -29,6 +29,7 @@ import {
   subscribeWorkspacePanelWidth,
 } from "../lib/workspacePanelWidth";
 import { isTauriRuntime } from "../lib/isTauri";
+import { desktopTargetKey, type DesktopTarget } from "../lib/desktopTarget";
 
 let browserTraceStart = 0;
 
@@ -110,7 +111,7 @@ async function setBrowserSurfaceVisible(
   }
 }
 
-/** Per-host tab sets — survive panel close until the SSH tab is discarded. */
+/** Per-target tab sets — local and SSH sessions retain independent browser state. */
 const sessionBuckets = new Map<string, BrowserSessionBucket>();
 
 function cloneBucket(bucket: BrowserSessionBucket): BrowserSessionBucket {
@@ -127,16 +128,17 @@ function cloneBucket(bucket: BrowserSessionBucket): BrowserSessionBucket {
   };
 }
 
-function bucketFor(sessionId: string): BrowserSessionBucket {
-  let bucket = sessionBuckets.get(sessionId);
+function bucketFor(targetKey: string): BrowserSessionBucket {
+  let bucket = sessionBuckets.get(targetKey);
   if (!bucket) {
     bucket = createBrowserBucket();
-    sessionBuckets.set(sessionId, bucket);
+    sessionBuckets.set(targetKey, bucket);
   }
   return bucket;
 }
 
 function flushLiveToBucket(state: {
+  targetKey: string | null;
   sessionId: string | null;
   tabs: BrowserTab[];
   activeTabId: string | null;
@@ -147,8 +149,8 @@ function flushLiveToBucket(state: {
   socksPort?: number | null;
   warm?: boolean;
 }) {
-  if (!state.sessionId || !state.activeTabId) return;
-  const prev = sessionBuckets.get(state.sessionId);
+  if (!state.targetKey || !state.activeTabId) return;
+  const prev = sessionBuckets.get(state.targetKey);
   const tabs = state.tabs.map((t) => {
     if (t.id !== state.activeTabId) return { ...t, navStack: [...t.navStack] };
     return {
@@ -158,7 +160,7 @@ function flushLiveToBucket(state: {
       navStack: [...t.navStack],
     };
   });
-  sessionBuckets.set(state.sessionId, {
+  sessionBuckets.set(state.targetKey, {
     tabs,
     activeTabId: state.activeTabId,
     webviewLabel:
@@ -193,15 +195,15 @@ function liveFromBucket(bucket: BrowserSessionBucket) {
 }
 
 function markBucketWarm(
-  sessionId: string,
+  targetKey: string,
   native: {
     webviewLabel: string;
     profileKey: string;
     socksPort: number;
   },
 ) {
-  const bucket = bucketFor(sessionId);
-  sessionBuckets.set(sessionId, {
+  const bucket = bucketFor(targetKey);
+  sessionBuckets.set(targetKey, {
     ...cloneBucket(bucket),
     webviewLabel: native.webviewLabel,
     profileKey: native.profileKey,
@@ -224,6 +226,8 @@ interface BrowserState {
   minimized: boolean;
   width: number;
   sessionId: string | null;
+  target: DesktopTarget | null;
+  targetKey: string | null;
   profileKey: string | null;
   socksPort: number | null;
   webviewLabel: string | null;
@@ -241,6 +245,7 @@ interface BrowserState {
   canGoBack: boolean;
   canGoForward: boolean;
   openPanel: (sessionId: string) => Promise<void>;
+  openForTarget: (target: DesktopTarget) => Promise<void>;
   close: () => Promise<void>;
   minimize: () => Promise<void>;
   restore: () => Promise<void>;
@@ -259,6 +264,7 @@ interface BrowserState {
     sessionId: string,
     bounds?: BrowserDockRect | null,
   ) => Promise<void>;
+  ensureForTarget: (target: DesktopTarget, bounds?: BrowserDockRect | null) => Promise<void>;
   syncBounds: (bounds: BrowserDockRect) => Promise<void>;
   /** Hide or release the native webview without changing dock minimize state. */
   setNativeVisible: (visible: boolean) => void;
@@ -327,6 +333,7 @@ async function ensurePageListener(
       pageUnlisten = await listen<BrowserPagePayload>("host-browser-page", (event) => {
         const payload = event.payload;
         const state = get();
+        if (state.profileKey && payload.profile_key !== state.profileKey) return;
         const tabId = (payload.tab_id || "").trim();
         if (!tabId) return;
         const applied = applyBrowserPageEvent(state.tabs, state.activeTabId, {
@@ -373,6 +380,7 @@ async function ensurePageListener(
       loadUnlisten = await listen<BrowserLoadPayload>("host-browser-load", (event) => {
         const payload = event.payload;
         const state = get();
+        if (state.profileKey && payload.profile_key !== state.profileKey) return;
         if (
           state.webviewLabel &&
           payload.webview_label &&
@@ -421,9 +429,12 @@ async function ensurePageListener(
         url?: string;
       }>("host-browser-popup", (event) => {
         const url = (event.payload.url ?? "").trim();
-        const sessionId = event.payload.session_id ?? "";
+        const sessionId = event.payload.session_id;
         const state = get();
-        if (!url || !sessionId || state.sessionId !== sessionId) return;
+        const belongsToTarget = state.target?.kind === "local"
+          ? !sessionId
+          : state.target?.kind === "ssh" && sessionId === state.target.sessionId;
+        if (!url || !belongsToTarget) return;
         queueBrowserPopup(get, url);
       });
     } catch {
@@ -466,6 +477,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
     minimized: false,
     width: readWorkspacePanelWidth(),
     sessionId: null,
+    target: null,
+    targetKey: null,
     profileKey: null,
     socksPort: null,
     webviewLabel: null,
@@ -524,7 +537,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       try {
         const [history, bookmarks] = await Promise.all([
           invoke<BrowserHistoryEntry[]>("browser_history_list", {
-            request: { profile_key: null },
+            request: { profile_key: profileKey },
           }),
           invoke<BrowserBookmark[]>("browser_bookmarks_list", {
             request: { profile_key: profileKey },
@@ -540,15 +553,19 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       }
     },
 
-    openPanel: async (sessionId) => {
+    openPanel: async (sessionId) => get().openForTarget({ kind: "ssh", sessionId }),
+
+    openForTarget: async (target) => {
       resetBrowserTrace();
       traceBrowser("open");
       const prev = get();
-      if (prev.open && prev.minimized && prev.sessionId === sessionId) {
+      const targetKey = desktopTargetKey(target);
+      const sessionId = target.kind === "ssh" ? target.sessionId : null;
+      if (prev.open && prev.minimized && prev.targetKey === targetKey) {
         await get().restore();
         return;
       }
-      if (prev.sessionId && prev.sessionId !== sessionId) {
+      if (prev.targetKey && prev.targetKey !== targetKey) {
         flushLiveToBucket(prev);
         if (isTauriRuntime() && prev.sessionId) {
           try {
@@ -562,7 +579,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
           await setBrowserSurfaceVisible(prev.webviewLabel, false);
         }
       }
-      const bucket = bucketFor(sessionId);
+      const bucket = bucketFor(targetKey);
       const live = liveFromBucket(bucket);
       // Warm = this SSH tab already has a native webview in Rust — never null out
       // handles just because we visited another host in between.
@@ -573,6 +590,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         error: null,
         docked: false,
         loading: false,
+        target,
+        targetKey,
         sessionId,
         profileKey: live.profileKey,
         socksPort: live.socksPort,
@@ -589,7 +608,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       void get().loadChromeData();
       const bounds = readContentSlotBounds();
       const tabId = get().activeTabId ?? "default";
-      if (warm && isTauriRuntime()) {
+      if (target.kind === "ssh" && warm && isTauriRuntime()) {
         try {
           const result = await invoke<BrowserEnsureResult>(
             "browser_activate_tab",
@@ -611,7 +630,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
             socksPort: result.socks_port,
             docked: Boolean(bounds),
           });
-          markBucketWarm(sessionId, {
+          markBucketWarm(targetKey, {
             webviewLabel: result.webview_label,
             profileKey: result.profile_key,
             socksPort: result.socks_port,
@@ -638,12 +657,12 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         }
       }
       traceBrowser("webview-prepare");
-      await get().ensureForSession(sessionId, bounds);
+      await get().ensureForTarget(target, bounds);
       traceBrowser("webview-ready");
       // ensure may have created a blank webview — reload the warm URL.
-      const target = get().url.trim();
-      if (target && (bucket.warm || (live.tabs.find((t) => t.id === live.activeTabId)?.navStack.length ?? 0) > 0)) {
-        await get().navigate(target);
+      const restoredUrl = get().url.trim();
+      if (restoredUrl && (bucket.warm || (live.tabs.find((t) => t.id === live.activeTabId)?.navStack.length ?? 0) > 0)) {
+        await get().navigate(restoredUrl);
       }
     },
 
@@ -687,6 +706,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       set({
         open: false,
         minimized: false,
+        target: null,
+        targetKey: null,
         sessionId: null,
         profileKey: null,
         socksPort: null,
@@ -730,11 +751,11 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
     },
 
     discardSessionBucket: (sessionId) => {
-      sessionBuckets.delete(sessionId);
+      sessionBuckets.delete(desktopTargetKey({ kind: "ssh", sessionId }));
     },
 
     selectTab: (tabId) => {
-      const { tabs, activeTabId, sessionId } = get();
+      const { tabs, activeTabId, sessionId, target } = get();
       if (tabId === activeTabId) return;
       flushLiveToBucket(get());
       const tab = tabs.find((t) => t.id === tabId);
@@ -747,32 +768,22 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         canGoForward: tabCanGoForward(tab),
       });
       if (sessionId) flushLiveToBucket(get());
-      if (!get().open || get().minimized || !sessionId) return;
+      if (!get().open || get().minimized || !target) return;
       // Activate existing tab webview — do not navigate (preserve page state).
       void (async () => {
         const bounds = readContentSlotBounds();
         if (!isTauriRuntime()) {
-          set({ webviewLabel: get().webviewLabel ?? "host-browser-e2e" });
+          set({ webviewLabel: get().webviewLabel ?? (target.kind === "local" ? "local-browser-e2e" : "host-browser-e2e") });
           return;
         }
         try {
-          const result = await invoke<BrowserEnsureResult>(
-            "browser_activate_tab",
-            {
-              request: {
-                session_id: sessionId,
-                tab_id: tabId,
-                x: bounds?.x,
-                y: bounds?.y,
-                width: bounds?.width,
-                height: bounds?.height,
-              },
-            },
-          );
+          const result = target.kind === "local"
+            ? await invoke<{ webview_label: string; profile_key: string }>("browser_local_activate_tab", { request: { tab_id: tabId, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } })
+            : await invoke<BrowserEnsureResult>("browser_activate_tab", { request: { session_id: target.sessionId, tab_id: tabId, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } });
           set({
             webviewLabel: result.webview_label,
             profileKey: result.profile_key,
-            socksPort: result.socks_port,
+            socksPort: target.kind === "ssh" ? (result as BrowserEnsureResult).socks_port : null,
             docked: Boolean(bounds),
           });
         } catch (err) {
@@ -782,7 +793,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
     },
 
     closeTab: (tabId) => {
-      const { tabs, activeTabId, sessionId } = get();
+      const { tabs, activeTabId, sessionId, target } = get();
       if (tabs.length <= 1) return;
       const nextTabs = tabs.filter((t) => t.id !== tabId);
       let nextActive = activeTabId;
@@ -800,29 +811,19 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         canGoForward: tabCanGoForward(tab),
       });
       if (sessionId) flushLiveToBucket(get());
-      if (sessionId && isTauriRuntime()) {
-        void invoke("browser_close_tab", {
-          request: { session_id: sessionId, tab_id: tabId },
-        }).catch(() => undefined);
+      if (target && isTauriRuntime()) {
+        const command = target.kind === "local" ? "browser_local_close_tab" : "browser_close_tab";
+        const request = target.kind === "local" ? { tab_id: tabId } : { session_id: sessionId, tab_id: tabId };
+        void invoke(command, { request }).catch(() => undefined);
       }
-      if (activeTabId === tabId && get().open && !get().minimized && sessionId) {
+      if (activeTabId === tabId && get().open && !get().minimized && target) {
         void (async () => {
           const bounds = readContentSlotBounds();
           if (!isTauriRuntime()) return;
           try {
-            const result = await invoke<BrowserEnsureResult>(
-              "browser_activate_tab",
-              {
-                request: {
-                  session_id: sessionId,
-                  tab_id: nextActive!,
-                  x: bounds?.x,
-                  y: bounds?.y,
-                  width: bounds?.width,
-                  height: bounds?.height,
-                },
-              },
-            );
+            const result = target.kind === "local"
+              ? await invoke<{ webview_label: string }>("browser_local_activate_tab", { request: { tab_id: nextActive!, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } })
+              : await invoke<BrowserEnsureResult>("browser_activate_tab", { request: { session_id: target.sessionId, tab_id: nextActive!, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } });
             set({ webviewLabel: result.webview_label });
           } catch {
             // ignore
@@ -832,8 +833,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
     },
 
     newTab: (url) => {
-      const sessionId = get().sessionId;
-      if (!sessionId) return;
+      const target = get().target;
+      if (!target) return;
       flushLiveToBucket(get());
       // Blank new tab — do not copy the previous tab's URL (avoids both tabs
       // showing the same title when a late page-load event races).
@@ -855,27 +856,17 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       void (async () => {
         const bounds = readContentSlotBounds();
         if (!isTauriRuntime()) {
-          set({ webviewLabel: get().webviewLabel ?? "host-browser-e2e" });
+          set({ webviewLabel: get().webviewLabel ?? (target.kind === "local" ? "local-browser-e2e" : "host-browser-e2e") });
           return;
         }
         try {
-          const result = await invoke<BrowserEnsureResult>(
-            "browser_activate_tab",
-            {
-              request: {
-                session_id: sessionId,
-                tab_id: tab.id,
-                x: bounds?.x,
-                y: bounds?.y,
-                width: bounds?.width,
-                height: bounds?.height,
-              },
-            },
-          );
+          const result = target.kind === "local"
+            ? await invoke<{ webview_label: string; profile_key: string }>("browser_local_activate_tab", { request: { tab_id: tab.id, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } })
+            : await invoke<BrowserEnsureResult>("browser_activate_tab", { request: { session_id: target.sessionId, tab_id: tab.id, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } });
           set({
             webviewLabel: result.webview_label,
             profileKey: result.profile_key,
-            socksPort: result.socks_port,
+            socksPort: target.kind === "ssh" ? (result as BrowserEnsureResult).socks_port : null,
             docked: Boolean(bounds),
           });
         } catch (err) {
@@ -883,16 +874,20 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         }
       })();
     },
-    ensureForSession: async (sessionId, bounds) => {
-      if (!sessionId) return;
-      if (ensureInFlight && ensureInFlightSession === sessionId && !bounds) {
+    ensureForSession: async (sessionId, bounds) =>
+      get().ensureForTarget({ kind: "ssh", sessionId }, bounds),
+
+    ensureForTarget: async (target, bounds) => {
+      const sessionId = target.kind === "ssh" ? target.sessionId : null;
+      const targetKey = desktopTargetKey(target);
+      if (ensureInFlight && ensureInFlightSession === targetKey && !bounds) {
         await ensureInFlight;
         return;
       }
 
       const run = (async () => {
         const prev = get();
-        if (prev.sessionId && prev.sessionId !== sessionId) {
+        if (prev.targetKey && prev.targetKey !== targetKey) {
           flushLiveToBucket(prev);
           // Keep the other host's SOCKS/webviews alive — only hide.
           if (isTauriRuntime()) {
@@ -905,16 +900,16 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
             }
           }
         }
-        const live = liveFromBucket(bucketFor(sessionId));
+        const live = liveFromBucket(bucketFor(targetKey));
         const tabId = live.activeTabId ?? "default";
-        set({ ensuring: true, error: null, sessionId, ...live });
+        set({ ensuring: true, error: null, target, targetKey, sessionId, ...live });
         try {
           if (!isTauriRuntime()) {
             set({
               ensuring: false,
-              profileKey: `e2e@mock:22`,
-              socksPort: 0,
-              webviewLabel: "host-browser-e2e",
+              profileKey: target.kind === "local" ? "local" : `e2e@mock:22`,
+              socksPort: target.kind === "local" ? null : 0,
+              webviewLabel: target.kind === "local" ? "local-browser-e2e" : "host-browser-e2e",
               docked: true,
             });
             await get().loadChromeData();
@@ -922,9 +917,31 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
           }
           await ensurePageListener(set, get);
           await ensureMainRestoredListener(get);
+          if (target.kind === "local") {
+            const result = await invoke<{ profile_key: string; webview_label: string; created?: boolean }>(
+              "browser_local_ensure",
+              { request: { tab_id: tabId, x: bounds?.x, y: bounds?.y, width: bounds?.width, height: bounds?.height } },
+            );
+            set({
+              ensuring: false,
+              profileKey: result.profile_key,
+              socksPort: null,
+              webviewLabel: result.webview_label,
+              error: null,
+              docked: Boolean(bounds && bounds.width >= 32 && bounds.height >= 32),
+            });
+            markBucketWarm(targetKey, {
+              webviewLabel: result.webview_label,
+              profileKey: result.profile_key,
+              socksPort: 0,
+            });
+            flushLiveToBucket({ ...get(), warm: true });
+            await get().loadChromeData();
+            return;
+          }
           const result = await invoke<BrowserEnsureResult>("browser_ensure", {
             request: {
-              session_id: sessionId,
+              session_id: target.sessionId,
               tab_id: tabId,
               x: bounds?.x,
               y: bounds?.y,
@@ -932,11 +949,10 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
               height: bounds?.height,
             },
           });
-          // Hide siblings; show this tab.
           try {
             await invoke("browser_activate_tab", {
               request: {
-                session_id: sessionId,
+                session_id: target.sessionId,
                 tab_id: tabId,
                 x: bounds?.x,
                 y: bounds?.y,
@@ -950,6 +966,8 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
           set({
             ensuring: false,
             sessionId: result.session_id,
+            target,
+            targetKey,
             profileKey: result.profile_key,
             socksPort: result.socks_port,
             webviewLabel: result.webview_label,
@@ -958,7 +976,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
               bounds && bounds.width >= 32 && bounds.height >= 32,
             ),
           });
-          markBucketWarm(sessionId, {
+          markBucketWarm(targetKey, {
             webviewLabel: result.webview_label,
             profileKey: result.profile_key,
             socksPort: result.socks_port,
@@ -973,9 +991,9 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         }
       })();
 
-      ensureInFlightSession = sessionId;
+      ensureInFlightSession = targetKey;
       ensureInFlight = run.finally(() => {
-        if (ensureInFlightSession === sessionId) {
+        if (ensureInFlightSession === targetKey) {
           ensureInFlight = null;
           ensureInFlightSession = null;
         }
@@ -1017,11 +1035,11 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
       }
       flushLiveToBucket(get());
 
-      const { sessionId, profileKey } = get();
-      if (!sessionId) {
+      const { profileKey, target } = get();
+      if (!target) {
         set({
           loading: false,
-          error: "No SSH session — connect a host first",
+          error: "Choose a desktop target before browsing",
         });
         return;
       }
@@ -1032,7 +1050,7 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
 
       if (!profileKey) {
         const b = readContentSlotBounds();
-        await get().ensureForSession(sessionId, b);
+        await get().ensureForTarget(target, b);
       }
 
       const bounds = readContentSlotBounds();
@@ -1060,21 +1078,35 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
         }
 
         traceBrowser("navigate-issued");
-        await invoke("browser_navigate", {
-          request: {
-            session_id: sessionId,
-            profile_key: get().profileKey ?? "",
-            tab_id: activeId ?? "default",
-            url: withScheme,
-            x: bounds.x,
-            y: bounds.y,
-            width: bounds.width,
-            height: bounds.height,
-          },
-        });
+        if (target.kind === "local") {
+          await invoke("browser_local_navigate", {
+            request: {
+              webview_label: label ?? "",
+              tab_id: activeId ?? "default",
+              url: withScheme,
+              x: bounds.x,
+              y: bounds.y,
+              width: bounds.width,
+              height: bounds.height,
+            },
+          });
+        } else {
+          await invoke("browser_navigate", {
+            request: {
+              session_id: target.sessionId,
+              profile_key: get().profileKey ?? "",
+              tab_id: activeId ?? "default",
+              url: withScheme,
+              x: bounds.x,
+              y: bounds.y,
+              width: bounds.width,
+              height: bounds.height,
+            },
+          });
+        }
         const native = get();
-        if (native.webviewLabel && native.profileKey != null && native.socksPort != null) {
-          markBucketWarm(sessionId, {
+        if (native.webviewLabel && native.profileKey != null && target.kind === "ssh" && native.socksPort != null) {
+          markBucketWarm(desktopTargetKey(target), {
             webviewLabel: native.webviewLabel,
             profileKey: native.profileKey,
             socksPort: native.socksPort,
@@ -1250,9 +1282,9 @@ export const useBrowserStore = create<BrowserState>((set, get) => {
             }
             const next = pendingBounds;
             pendingBounds = null;
-            const { sessionId, webviewLabel } = get();
-            if (sessionId && !webviewLabel) {
-              await get().ensureForSession(sessionId, next);
+            const { webviewLabel } = get();
+            if (get().target && !webviewLabel) {
+              await get().ensureForTarget(get().target!, next);
             }
             if (nativeHeld || get().minimized) break;
             const label = get().webviewLabel;

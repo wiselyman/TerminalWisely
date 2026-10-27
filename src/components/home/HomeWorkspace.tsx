@@ -100,7 +100,7 @@ export function HomeWorkspace({
             data-terminal-id={tab.id}
             aria-hidden={tab.id !== activeTerminalId}
           >
-            <LocalTerminal />
+            <LocalTerminal active={tab.id === activeTerminalId} />
           </div>
         ))}
       </section>

@@ -393,6 +393,78 @@ impl BrowserManager {
             .await
     }
 
+    pub async fn ensure_local_tab(
+        &self,
+        app: &AppHandle,
+        tab_id: &str,
+        initial_bounds: Option<CssRect>,
+    ) -> AppResult<BrowserLocalEnsureResult> {
+        let tab_id = if tab_id.is_empty() { "default" } else { tab_id };
+        let label = tab_webview_label("local-browser", tab_id);
+        let created = app.get_webview(&label).is_none();
+        self.create_child_webview(
+            app,
+            None,
+            &label,
+            tab_id,
+            "local",
+            initial_bounds.map(CssRect::clamped).filter(|rect| rect.is_drawable()),
+            0,
+            None,
+        )
+        .await?;
+        Ok(BrowserLocalEnsureResult {
+            profile_key: "local".into(),
+            webview_label: label,
+            created,
+        })
+    }
+
+    pub async fn activate_local_tab(
+        &self,
+        app: &AppHandle,
+        tab_id: &str,
+        bounds: Option<CssRect>,
+    ) -> AppResult<BrowserLocalEnsureResult> {
+        let result = self.ensure_local_tab(app, tab_id, bounds).await?;
+        for (label, webview) in app.webviews() {
+            if label.starts_with("local-browser-") && label != result.webview_label {
+                let _ = webview.hide();
+            }
+        }
+        wake_browser_surface(app, &result.webview_label, bounds.map(CssRect::clamped));
+        Ok(result)
+    }
+
+    pub async fn navigate_local(
+        &self,
+        app: &AppHandle,
+        tab_id: &str,
+        url: &str,
+        bounds: Option<CssRect>,
+    ) -> AppResult<BrowserLocalEnsureResult> {
+        let result = self.ensure_local_tab(app, tab_id, bounds).await?;
+        let parsed = Url::parse(url).map_err(|e| AppError::msg(format!("bad url: {e}")))?;
+        if parsed.scheme() != "http" && parsed.scheme() != "https" {
+            return Err(AppError::msg("only http(s) URLs are allowed"));
+        }
+        if let Some(rect) = bounds.map(CssRect::clamped) {
+            apply_webview_bounds(app, &result.webview_label, rect)?;
+        }
+        let webview = app
+            .get_webview(&result.webview_label)
+            .ok_or_else(|| AppError::msg("local browser webview missing"))?;
+        webview
+            .navigate(parsed)
+            .map_err(|e| AppError::msg(format!("navigate: {e}")))?;
+        let _ = webview.show();
+        Ok(result)
+    }
+
+    pub fn close_local_tab(&self, app: &AppHandle, tab_id: &str) {
+        close_browser_surface(app, &tab_webview_label("local-browser", tab_id));
+    }
+
     /// Start SOCKS/proxy for the host (if needed) and ensure a tab's child webview exists.
     pub async fn ensure_tab(
         &self,
@@ -455,7 +527,7 @@ impl BrowserManager {
                 drop(guard);
                 self.create_child_webview(
                     app,
-                    session_id,
+                    Some(session_id),
                     &label,
                     tab_id,
                     &profile_key,
@@ -463,7 +535,7 @@ impl BrowserManager {
                         .map(CssRect::clamped)
                         .filter(|r| r.is_drawable()),
                     socks_port,
-                    http_proxy_port,
+                    Some(http_proxy_port),
                 )
                 .await?;
                 let mut guard = self.inner.lock().await;
@@ -505,13 +577,13 @@ impl BrowserManager {
 
         self.create_child_webview(
             app,
-            session_id,
+            Some(session_id),
             &label,
             tab_id,
             &profile_key,
             spawn,
             socks_port,
-            http_proxy_port,
+            Some(http_proxy_port),
         )
         .await?;
 
@@ -584,13 +656,13 @@ impl BrowserManager {
             drop(guard);
             self.create_child_webview(
                 app,
-                session_id,
+                Some(session_id),
                 &label,
                 tab_id,
                 &profile_key,
                 bounds.map(CssRect::clamped).filter(|r| r.is_drawable()),
                 socks_port,
-                http_proxy_port,
+                Some(http_proxy_port),
             )
             .await?;
             created_now = true;
@@ -668,13 +740,13 @@ impl BrowserManager {
     async fn create_child_webview(
         &self,
         app: &AppHandle,
-        session_id: &str,
+        session_id: Option<&str>,
         label: &str,
         tab_id: &str,
         profile_key: &str,
         spawn: Option<CssRect>,
         socks_port: u16,
-        http_proxy_port: u16,
+        http_proxy_port: Option<u16>,
     ) -> AppResult<()> {
         close_browser_surface(app, label);
         tokio::task::yield_now().await;
@@ -710,16 +782,17 @@ impl BrowserManager {
         let init_size = LogicalSize::new(rect.width.max(320.0), rect.height.max(240.0));
 
         let _ = socks_port;
-        // HTTP CONNECT forwarder → SOCKS → SSH. Prefer CONNECT over raw SOCKS5:
-        // WKWebView socks5:// blanked HTTPS origins (baidu) on macOS; CONNECT is
-        // the supported NWProxyConfig path once the SOCKS bridge is full-duplex.
-        let proxy = Url::parse(&format!("http://127.0.0.1:{http_proxy_port}"))
+        // SSH Browser uses HTTP CONNECT → SOCKS → SSH. Local Browser omits this
+        // proxy so navigation uses the machine's normal network route.
+        let proxy = http_proxy_port
+            .map(|port| Url::parse(&format!("http://127.0.0.1:{port}")))
+            .transpose()
             .map_err(|e| AppError::msg(format!("proxy url: {e}")))?;
 
         let app_handle = app.clone();
         let popup_app = app.clone();
         let title_app = app.clone();
-        let popup_session = session_id.to_string();
+        let popup_session = session_id.map(str::to_string);
         let popup_tab = tab_id.to_string();
         let title_tab = tab_id.to_string();
         let emit_label = label.to_string();
@@ -735,7 +808,6 @@ impl BrowserManager {
             ),
         )
         .user_agent(host_browser_user_agent())
-        .proxy_url(proxy)
         .on_page_load(move |webview, payload| {
             let url = display_url_for_bar(&display_map, payload.url());
             match payload.event() {
@@ -823,6 +895,10 @@ impl BrowserManager {
                 },
             );
         });
+
+        if let Some(proxy) = proxy {
+            builder = builder.proxy_url(proxy);
+        }
 
         #[cfg(target_os = "macos")]
         {
@@ -1328,7 +1404,8 @@ pub struct BrowserTitleEvent {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BrowserPopupEvent {
-    pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub source_tab_id: String,
     pub url: String,
 }
@@ -1342,6 +1419,40 @@ pub struct BrowserLoadEvent {
     /// `"started"` | `"finished"`
     pub phase: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserLocalEnsureResult {
+    pub profile_key: String,
+    pub webview_label: String,
+    pub created: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowserLocalRequest {
+    #[serde(default = "default_browser_tab")]
+    pub tab_id: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub x: Option<f64>,
+    #[serde(default)]
+    pub y: Option<f64>,
+    #[serde(default)]
+    pub width: Option<f64>,
+    #[serde(default)]
+    pub height: Option<f64>,
+}
+
+impl BrowserLocalRequest {
+    pub fn bounds(&self) -> Option<CssRect> {
+        match (self.x, self.y, self.width, self.height) {
+            (Some(x), Some(y), Some(width), Some(height)) => Some(CssRect { x, y, width, height }),
+            _ => None,
+        }
+    }
+}
+
+fn default_browser_tab() -> String { "default".into() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserEnsureResult {

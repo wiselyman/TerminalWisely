@@ -232,6 +232,31 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       created: true,
     };
   },
+  browser_local_ensure: () => ({
+    profile_key: "local",
+    webview_label: "local-browser-e2e",
+    created: true,
+  }),
+  browser_local_activate_tab: () => ({
+    profile_key: "local",
+    webview_label: "local-browser-e2e",
+    created: false,
+  }),
+  browser_local_navigate: (args) => {
+    const req = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    const url = String(req.url ?? "");
+    const tabId = String(req.tab_id ?? "default");
+    const label = "local-browser-e2e";
+    void import("./tauriEventMock").then(({ __emitTauriEvent }) => {
+      __emitTauriEvent("host-browser-load", { webview_label: label, profile_key: "local", tab_id: tabId, url, phase: "started" });
+      queueMicrotask(() => {
+        __emitTauriEvent("host-browser-load", { webview_label: label, profile_key: "local", tab_id: tabId, url, phase: "finished" });
+        __emitTauriEvent("host-browser-page", { webview_label: label, profile_key: "local", tab_id: tabId, url, title: url, favicon: "" });
+      });
+    });
+    return null;
+  },
+  browser_local_close_tab: () => null,
   browser_navigate: (args) => {
     const req =
       (args as { request?: Record<string, unknown> }).request ??

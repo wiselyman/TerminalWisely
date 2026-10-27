@@ -196,7 +196,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       rememberActiveTarget();
       // Always park native browser if any session still owns a surface —
       // apps.browser.open can lag behind async close during host tab switches.
-      if (isSshDesktopTarget(target) && (apps.browser.open || useBrowserStore.getState().webviewLabel)) {
+      if (target && (apps.browser.open || useBrowserStore.getState().webviewLabel)) {
         void useBrowserStore.getState().close();
       }
       if (isSshDesktopTarget(target) && apps.files.open) {
@@ -251,7 +251,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       const sessionId = isSshDesktopTarget(target) ? target.sessionId : null;
       // Until their target-aware providers are connected, Local clicks must
       // never fall through to the active SSH session.
-      if (target.kind === "local" && ["browser", "terminal", "aiLinux"].includes(app)) return;
+      if (target.kind === "local" && app === "aiLinux") return;
 
       if (app === "files") {
         const tab = opts?.filesTab ?? get().filesTab;
@@ -311,11 +311,11 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         }),
         focusOrder: bringToFront(get().focusOrder, "browser"),
       });
-      if (sessionId) void useBrowserStore.getState().openPanel(sessionId);
+      void useBrowserStore.getState().openForTarget(target);
     },
 
     minimizeApp: (app) => {
-      if (app === "browser" && isSshDesktopTarget(get().target)) {
+      if (app === "browser" && get().target) {
         void useBrowserStore.getState().minimize();
       }
       set({
@@ -325,7 +325,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
 
     restoreApp: (app) => {
       const target = get().target;
-      if (app === "browser" && isSshDesktopTarget(target)) {
+      if (app === "browser" && target) {
         void useBrowserStore.getState().restore();
       }
       if (app === "aiLinux") {
@@ -348,7 +348,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       } else if (app === "processes") {
         if (isSshDesktopTarget(target)) useTaskManagerStore.getState().close();
       } else if (app === "browser") {
-        if (isSshDesktopTarget(target)) void useBrowserStore.getState().close();
+        if (target) void useBrowserStore.getState().close();
       } else if (app === "aiLinux") {
         if (isSshDesktopTarget(target)) parkDesktopAi();
       }
@@ -408,7 +408,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       const browser = apps.browser;
       if (browser.open) {
         void (async () => {
-          await useBrowserStore.getState().openPanel(sessionId);
+          await useBrowserStore.getState().openForTarget({ kind: "ssh", sessionId });
           if (browser.minimized) {
             await useBrowserStore.getState().minimize();
           }

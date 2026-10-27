@@ -137,11 +137,11 @@
 - Consumes: Task 1 target state and shared Desktop app routing。
 - Produces: Local Browser ensure/visibility lifecycle without SSH proxy; Home active terminal portal attaches existing PTY to Desktop Terminal window and restores it when returning Home。
 
-- [ ] **Step 1: 写失败测试**：Browser Local 与 Host bucket 隔离、Local 不调用 SSH/SOCKS ensure；Desktop Terminal 进入/离开时 `local_terminal_start` 只发生一次且当前 PTY id 不变。
-- [ ] **Step 2: 运行 RED**：`npm test -- --run src/stores/browserStore.test.ts` 和 `npm run test:e2e -- --grep "Home desktop browser and terminal continuity"`。
-- [ ] **Step 3: 最小实现**：按 target 管理 Browser bucket，新增 Local WebView 创建路径；通过 stable portal 移动 active Home xterm，不重建 PTY；Home 多终端 tab 切换与关闭语义不变。
-- [ ] **Step 4: 验证 GREEN**：重跑上述测试；额外验证 Host Browser/Terminal E2E 回归。
-- [ ] **Step 5: 提交**：`feat: add local desktop browser and terminal continuity`。
+- [x] **Step 1: 写失败测试**：Browser Local 与 Host bucket 隔离、Local 不调用 SSH/SOCKS ensure；Desktop Terminal 进入/离开时保持 Home xterm 节点与 PTY 组件实例。
+- [x] **Step 2: 运行 RED**：`npm test -- --run src/stores/browserStore.test.ts` 起初因缺少 `openForTarget` 失败；Playwright 先发现 Local Terminal Dock 被禁用，修正后继续发现地址输入测试选择器/规范化期望，逐项修正。
+- [x] **Step 3: 最小实现**：按 target 管理 Browser bucket，新增不带代理的 Local WebView 创建/导航/标签命令；通过稳定 host 移动 active Home xterm DOM，不重建 PTY；多终端 tabs 按 active 状态移动。
+- [x] **Step 4: 验证 GREEN**：Browser/desktop store Vitest 通过；Home Browser/Terminal continuity 与 Host Browser/Terminal E2E 5 项通过；Rust Browser 单测 9 项与前端 build 通过。
+- [x] **Step 5: 提交**：`feat: add local desktop browser and terminal continuity`。
 
 ### Task 6: Windows 安装包内置 Coreutils
 

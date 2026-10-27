@@ -8,6 +8,7 @@ const activateFind = vi.fn();
 const localFsSetState = vi.fn();
 const taskClose = vi.fn();
 const browserOpenPanel = vi.fn();
+const browserOpenForTarget = vi.fn();
 const browserMinimize = vi.fn();
 const browserRestore = vi.fn();
 const browserClose = vi.fn();
@@ -54,6 +55,7 @@ vi.mock("./browserStore", () => {
     open: false,
     minimized: false,
     openPanel: browserOpenPanel,
+    openForTarget: browserOpenForTarget,
     minimize: browserMinimize,
     restore: browserRestore,
     close: browserClose,
@@ -78,6 +80,7 @@ describe("desktopStore", () => {
     localFsSetState.mockClear();
     taskClose.mockClear();
     browserOpenPanel.mockClear();
+    browserOpenForTarget.mockClear();
     browserMinimize.mockClear();
     browserRestore.mockClear();
     browserClose.mockClear();
@@ -117,7 +120,7 @@ describe("desktopStore", () => {
     useDesktopStore.getState().toggleDockApp("browser");
     expect(useDesktopStore.getState().apps.browser.open).toBe(true);
     expect(useDesktopStore.getState().apps.browser.maximized).toBe(false);
-    expect(browserOpenPanel).toHaveBeenCalledWith("sess-2");
+    expect(browserOpenForTarget).toHaveBeenCalledWith({ kind: "ssh", sessionId: "sess-2" });
   });
 
   it("launches terminal and AI Linux on the same desktop session", async () => {

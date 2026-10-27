@@ -826,6 +826,52 @@ pub async fn browser_ensure(
 }
 
 #[tauri::command]
+pub async fn browser_local_ensure(
+    app: AppHandle,
+    request: crate::browser::BrowserLocalRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<crate::browser::BrowserLocalEnsureResult, String> {
+    browsers
+        .ensure_local_tab(&app, &request.tab_id, request.bounds())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_local_activate_tab(
+    app: AppHandle,
+    request: crate::browser::BrowserLocalRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<crate::browser::BrowserLocalEnsureResult, String> {
+    browsers
+        .activate_local_tab(&app, &request.tab_id, request.bounds())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn browser_local_navigate(
+    app: AppHandle,
+    request: crate::browser::BrowserLocalRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) -> Result<crate::browser::BrowserLocalEnsureResult, String> {
+    let url = request.url.as_deref().ok_or("URL is required")?;
+    browsers
+        .navigate_local(&app, &request.tab_id, url, request.bounds())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn browser_local_close_tab(
+    app: AppHandle,
+    request: crate::browser::BrowserLocalRequest,
+    browsers: State<'_, crate::browser::BrowserManager>,
+) {
+    browsers.close_local_tab(&app, &request.tab_id);
+}
+
+#[tauri::command]
 pub async fn browser_navigate(
     app: AppHandle,
     request: crate::browser::BrowserNavigateRequest,

@@ -20,13 +20,14 @@ import { BrowserDock } from "./BrowserDock";
 import { useDesktopStore } from "../../stores/desktopStore";
 import { DesktopAppWindow } from "../desktop/DesktopAppWindow";
 import { ChatHistoryIcon, HostBrowserIcon } from "../WorkspaceToolIcons";
+import type { DesktopTarget } from "../../lib/desktopTarget";
 
 interface BrowserPanelProps {
-  sessionId: string;
+  target: DesktopTarget;
   sessionTitle?: string;
 }
 
-export function BrowserPanel({ sessionId }: BrowserPanelProps) {
+export function BrowserPanel({ target }: BrowserPanelProps) {
   const { t } = useTranslation("tools");
   const open = useBrowserStore((s) => s.open);
   const minimized = useBrowserStore((s) => s.minimized);
@@ -57,7 +58,7 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
   const clearHistory = useBrowserStore((s) => s.clearHistory);
   const syncBounds = useBrowserStore((s) => s.syncBounds);
   const setNativeVisible = useBrowserStore((s) => s.setNativeVisible);
-  const ensureForSession = useBrowserStore((s) => s.ensureForSession);
+  const ensureForTarget = useBrowserStore((s) => s.ensureForTarget);
   const close = useBrowserStore((s) => s.close);
   const minimize = useBrowserStore((s) => s.minimize);
   const desktopOpen = useDesktopStore((s) => s.open);
@@ -71,6 +72,7 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
 
   const contentRef = useRef<HTMLDivElement>(null);
   const lastNavigated = useRef<string | null>(null);
+  const targetKey = target.kind === "local" ? "local" : `ssh:${target.sessionId}`;
   const bootstrappedSession = useRef<string | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestIndex, setSuggestIndex] = useState(-1);
@@ -133,10 +135,10 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
     const boot = async () => {
       const bounds = readRect();
       if (bounds) {
-        await ensureForSession(sessionId, bounds);
+        await ensureForTarget(target, bounds);
         if (!cancelled) await syncBounds(bounds);
       } else {
-        await ensureForSession(sessionId, null);
+        await ensureForTarget(target, null);
       }
     };
 
@@ -184,7 +186,7 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
       unlistenMoved?.();
       unlistenResized?.();
     };
-  }, [showFloat, sessionId, syncBounds, ensureForSession, desktopOpen, browserDesktopWin.maximized, browserFront, setNativeVisible]);
+  }, [showFloat, targetKey, syncBounds, ensureForTarget, desktopOpen, browserDesktopWin.maximized, browserFront, setNativeVisible]);
 
   useEffect(() => {
     if (!showFloat || !desktopOpen || !browserFront) return;
@@ -203,27 +205,27 @@ export function BrowserPanel({ sessionId }: BrowserPanelProps) {
   useEffect(() => {
     lastNavigated.current = null;
     bootstrappedSession.current = null;
-  }, [sessionId]);
+  }, [targetKey]);
 
   // First dock for a cold host only. Warm restores must activate_tab without
   // re-navigate — reloading 127.0.0.1 tunnels / SPA routes causes white screens.
   useEffect(() => {
-    if (!showFloat || !docked || !webviewLabel || !sessionId) return;
-    if (bootstrappedSession.current === sessionId) return;
+    if (!showFloat || !docked || !webviewLabel) return;
+    if (bootstrappedSession.current === targetKey) return;
     const bucketWarm = useBrowserStore.getState();
     // If this host already had a native page (nav history or warm bucket), skip.
     const active = bucketWarm.tabs.find((t) => t.id === bucketWarm.activeTabId);
     const hasHistory = Boolean(active && active.navStack.length > 0);
-    bootstrappedSession.current = sessionId;
+    bootstrappedSession.current = targetKey;
     if (hasHistory) {
       lastNavigated.current = active?.url ?? bucketWarm.url;
       return;
     }
-    const target = bucketWarm.url.trim();
-    if (!target) return;
-    lastNavigated.current = target;
-    void navigate(target);
-  }, [showFloat, docked, webviewLabel, sessionId, navigate]);
+    const targetUrl = bucketWarm.url.trim();
+    if (!targetUrl) return;
+    lastNavigated.current = targetUrl;
+    void navigate(targetUrl);
+  }, [showFloat, docked, webviewLabel, targetKey, navigate]);
 
   useEffect(() => {
     if (!showFloat) return;
