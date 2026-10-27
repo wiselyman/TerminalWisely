@@ -38,6 +38,19 @@ pub struct LocalPathRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalCreateRequest {
+    pub parent: String,
+    pub name: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalTextWriteRequest {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalRenameRequest {
     pub path: String,
     pub new_name: String,
@@ -96,12 +109,11 @@ pub fn list_local_roots() -> AppResult<Vec<String>> {
     {
         roots.push("/".to_string());
     }
-    roots.sort();
     roots.dedup();
     Ok(roots)
 }
 
-pub fn list_local_directory(path: Option<String>) -> AppResult<ListLocalDirectoryResult> {
+pub fn list_local_directory(path: Option<String>, show_hidden: bool) -> AppResult<ListLocalDirectoryResult> {
     let dir = match path {
         Some(p) => normalize_path(&p)?,
         None => PathBuf::from(default_start_path()?),
@@ -123,7 +135,7 @@ pub fn list_local_directory(path: Option<String>) -> AppResult<ListLocalDirector
         let meta = item.metadata().ok();
         let entry_path = item.path();
         let name = item.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
+        if !show_hidden && name.starts_with('.') {
             continue;
         }
         let kind = match meta.as_ref().map(|m| m.is_dir()) {
@@ -246,4 +258,108 @@ pub fn get_local_path_size(request: LocalPathRequest) -> AppResult<LocalPathSize
         });
     }
     Err(AppError::msg("Unsupported path type"))
+}
+
+pub fn create_local_path(request: LocalCreateRequest) -> AppResult<String> {
+    let name = request.name.trim();
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+        return Err(AppError::msg("Invalid name"));
+    }
+    let parent = normalize_path(&request.parent)?;
+    let parent = parent.canonicalize().map_err(AppError::from)?;
+    if !parent.is_dir() {
+        return Err(AppError::msg("Parent is not a directory"));
+    }
+    let path = parent.join(name);
+    match request.kind.as_str() {
+        "directory" => std::fs::create_dir(&path).map_err(AppError::from)?,
+        "file" => {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .map_err(AppError::from)?;
+        }
+        _ => return Err(AppError::msg("Unsupported entry type")),
+    }
+    Ok(path_to_string(&path))
+}
+
+pub fn read_local_text(request: LocalPathRequest) -> AppResult<String> {
+    let path = normalize_path(&request.path)?.canonicalize().map_err(AppError::from)?;
+    if !path.is_file() {
+        return Err(AppError::msg("Not a file"));
+    }
+    std::fs::read_to_string(path).map_err(|e| AppError::msg(format!("Cannot read text file: {e}")))
+}
+
+pub fn write_local_text(request: LocalTextWriteRequest) -> AppResult<()> {
+    let path = normalize_path(&request.path)?;
+    if !path.is_file() {
+        return Err(AppError::msg("Not a file"));
+    }
+    std::fs::write(path, request.content).map_err(AppError::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let id = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("terminalwisely-{label}-{}-{id}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn creates_reads_writes_renames_moves_and_deletes_local_files() {
+        let root = temp_dir("local-fs-lifecycle");
+        let folder = create_local_path(LocalCreateRequest {
+            parent: path_to_string(&root),
+            name: "资料 folder".into(),
+            kind: "directory".into(),
+        }).unwrap();
+        let file = create_local_path(LocalCreateRequest {
+            parent: folder.clone(),
+            name: "notes.md".into(),
+            kind: "file".into(),
+        }).unwrap();
+        write_local_text(LocalTextWriteRequest {
+            path: file.clone(),
+            content: "本机内容".into(),
+        }).unwrap();
+        assert_eq!(read_local_text(LocalPathRequest { path: file.clone() }).unwrap(), "本机内容");
+
+        let renamed = rename_local_path(LocalRenameRequest {
+            path: file,
+            new_name: "renamed.md".into(),
+        }).unwrap();
+        let destination = root.join("destination");
+        std::fs::create_dir(&destination).unwrap();
+        let moved = move_local_path(LocalMoveRequest {
+            path: renamed,
+            dest_dir: path_to_string(&destination),
+        }).unwrap();
+        assert!(Path::new(&moved).is_file());
+        delete_local_path(LocalPathRequest { path: moved.clone() }).unwrap();
+        assert!(!Path::new(&moved).exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_names_that_escape_the_selected_directory() {
+        let root = temp_dir("local-fs-invalid-name");
+        let result = create_local_path(LocalCreateRequest {
+            parent: path_to_string(&root),
+            name: "../outside.txt".into(),
+            kind: "file".into(),
+        });
+        assert!(result.is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

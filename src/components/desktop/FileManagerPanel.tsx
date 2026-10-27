@@ -1,13 +1,16 @@
 import { useTranslation } from "react-i18next";
 import { LocalFsPanel } from "../LocalFsPanel";
 import { DesktopAppWindow } from "./DesktopAppWindow";
+import { LocalDesktopFileManager } from "./LocalDesktopFileManager";
+import type { DesktopTarget } from "../../lib/desktopTarget";
 
 type Props = {
-  sessionId: string;
+  target: DesktopTarget;
+  sessionId?: string;
   sessionTitle?: string | null;
 };
 
-export function FileManagerPanel({ sessionId, sessionTitle }: Props) {
+export function FileManagerPanel({ target, sessionId, sessionTitle }: Props) {
   const { t } = useTranslation("tools");
 
   return (
@@ -22,11 +25,13 @@ export function FileManagerPanel({ sessionId, sessionTitle }: Props) {
       closeTestId="host-file-manager-close"
       bodyClassName="local-fs-float-body"
     >
-      <LocalFsPanel
-        sessionId={sessionId}
-        sessionTitle={sessionTitle}
-        presentation="embedded"
-      />
+      {target.kind === "local" ? <LocalDesktopFileManager /> : sessionId ? (
+        <LocalFsPanel
+          sessionId={sessionId}
+          sessionTitle={sessionTitle}
+          presentation="embedded"
+        />
+      ) : null}
     </DesktopAppWindow>
   );
 }

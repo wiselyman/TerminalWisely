@@ -49,6 +49,8 @@ let lastEnterDirectory: Record<string, unknown> | null = null;
 let lastPreviewOpen: Record<string, unknown> | null = null;
 let lastPreviewSave: Record<string, unknown> | null = null;
 let createdRemotePaths: string[] = [];
+let localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
+let localFsText = new Map<string, string>([["/tmp/e2e-file.txt", "local test contents"]]);
 let lastAiTerminalExec: Record<string, unknown> | null = null;
 let lastAiLease: Record<string, unknown> | null = null;
 let lastK8sApply: Record<string, unknown> | null = null;
@@ -70,6 +72,8 @@ export function __e2eResetMocks() {
   lastPreviewOpen = null;
   lastPreviewSave = null;
   createdRemotePaths = [];
+  localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
+  localFsText = new Map([["/tmp/e2e-file.txt", "local test contents"]]);
   lastAiTerminalExec = null;
   lastAiLease = null;
   lastK8sApply = null;
@@ -387,7 +391,32 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     start_path: "/home/e2e",
   }),
   list_local_roots: () => e2eLocalRoots,
-  list_local_directory: () => e2eLocalDir,
+  list_local_directory: (args) => {
+    const req = args as { path?: string };
+    const path = req.path || "/tmp";
+    return {
+      path,
+      parent: path === "/" ? null : path === "/tmp" ? "/" : "/tmp",
+      entries: localFsEntries.filter((entry) => entry.path.slice(0, entry.path.lastIndexOf("/")) === path),
+    };
+  },
+  create_local_path: (args) => {
+    const request = (args as { request: { parent: string; name: string; kind: string } }).request;
+    const path = `${request.parent.replace(/\/$/, "")}/${request.name}`;
+    localFsEntries.push({ name: request.name, path, kind: request.kind, size_bytes: 0 });
+    if (request.kind === "file") localFsText.set(path, "");
+    return path;
+  },
+  read_local_text: (args) => {
+    const path = (args as { request: { path: string } }).request.path;
+    if (!localFsText.has(path)) throw new Error("Not a text file");
+    return localFsText.get(path);
+  },
+  write_local_text: (args) => {
+    const request = (args as { request: { path: string; content: string } }).request;
+    localFsText.set(request.path, request.content);
+    return null;
+  },
   list_remote_directory: (args) => {
     const request = (args as { request?: { path?: string } }).request;
     const path = request?.path === "/" ? "/" : request?.path ?? "/home/e2e";
@@ -401,9 +430,31 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       }));
     return { path, parent: path === "/" ? null : "/home", entries: [...e2eRemoteDir, ...createdEntries] };
   },
-  rename_local_path: () => null,
-  move_local_path: () => null,
-  delete_local_path: () => null,
+  rename_local_path: (args) => {
+    const request = (args as { request: { path: string; new_name: string } }).request;
+    const path = request.path;
+    const next = `${path.slice(0, path.lastIndexOf("/"))}/${request.new_name}`;
+    localFsEntries = localFsEntries.map((entry) => entry.path === path ? { ...entry, path: next, name: request.new_name } : entry);
+    const content = localFsText.get(path);
+    if (content != null) { localFsText.delete(path); localFsText.set(next, content); }
+    return next;
+  },
+  move_local_path: (args) => {
+    const request = (args as { request: { path: string; dest_dir: string } }).request;
+    const path = request.path;
+    const name = path.split("/").pop() ?? "";
+    const next = `${request.dest_dir.replace(/\/$/, "")}/${name}`;
+    localFsEntries = localFsEntries.map((entry) => entry.path === path ? { ...entry, path: next } : entry);
+    const content = localFsText.get(path);
+    if (content != null) { localFsText.delete(path); localFsText.set(next, content); }
+    return next;
+  },
+  delete_local_path: (args) => {
+    const path = (args as { request: { path: string } }).request.path;
+    localFsEntries = localFsEntries.filter((entry) => entry.path !== path && !entry.path.startsWith(`${path}/`));
+    localFsText.delete(path);
+    return null;
+  },
   get_local_path_size: () => ({ path: "/tmp", kind: "directory", size_bytes: 1024 }),
   open_local_path: () => null,
   reveal_local_path: () => null,

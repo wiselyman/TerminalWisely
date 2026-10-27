@@ -1566,10 +1566,13 @@ function App() {
           sessionTitle={activeSessionTitle}
         />
       ) : null}
-      {sidebarView === "hosts" && activeTabId && desktopFilesOpen ? (
+      {desktopMode && desktopTarget && desktopFilesOpen && (
+        desktopTarget.kind === "local" || (sidebarView === "hosts" && activeTabId)
+      ) ? (
         <FileManagerPanel
-          sessionId={activeTabId}
-          sessionTitle={activeSessionTitle ?? undefined}
+          target={desktopTarget}
+          sessionId={desktopTarget.kind === "ssh" ? desktopTarget.sessionId : undefined}
+          sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle ?? undefined : undefined}
         />
       ) : null}
       {sidebarView === "hosts" && activeTabId && desktopProcessesOpen ? (

@@ -32,7 +32,7 @@
 
 - `src/lib/desktopTarget.ts`：定义 `DesktopTarget = { kind: "local" } | { kind: "ssh"; sessionId: string }`、稳定键和 provider 路由工具；Local key 固定为内部常量 `local`，SSH key 使用 session id 的命名空间。
 - `src/stores/desktopStore.ts`、`hostWorkspaceMemory.ts`、`workspacePanelSwitch.ts`：Desktop 状态按 target key 快照；Home 与 Host 复用桌面壳和应用窗体；Home Desktop 开关接入既有顶栏模式入口。
-- `src/stores/localFsStore.ts`、`src/components/LocalFsPanel.tsx`、`src-tauri/src/fs_local.rs` 与 Tauri commands：Local/SSH 文件 API 分流；扩展本机创建、读写/预览所需接口。
+- `src/components/desktop/LocalDesktopFileManager.tsx`、`FileManagerPanel.tsx`、`src/lib/localFsApi.ts`、`src-tauri/src/fs_local.rs` 与 Tauri commands：共享 Files 窗口根据明确 target 切换 provider；Local 使用独立本机视图避免 SSH 面板的 session-bound 搜索/传输逻辑，本机与 SSH 文件行为隔离。
 - `src/stores/markWiselyStore.ts`、MarkWisely 窗口/选择器：按 target 保存文档与最近文件；Local 文档使用本机文件接口，SSH 文档继续使用 preview handle。
 - `src/stores/taskManagerStore.ts`、`src-tauri/src/process/local.rs`：本机进程枚举/结束由 Rust provider 提供；SSH 仍使用已有 `list_processes`/`kill_process`。
 - `src/stores/browserStore.ts`、浏览器 Tauri commands：按 target 保存标签；本机 Browser 不建立 SSH SOCKS 通道，SSH Browser 保持现状。
@@ -80,18 +80,19 @@
 ### Task 2: Local Files provider 与本机文件操作
 
 **Files:**
-- Modify: `src-tauri/src/fs_local.rs`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/lib.rs`, `src/stores/localFsStore.ts`, `src/components/LocalFsPanel.tsx`
-- Test: `src-tauri/src/fs_local.rs` unit tests, `src/stores/localFsStore.test.ts`, `e2e/home-local-desktop.spec.ts`
+- Create: `src/components/desktop/LocalDesktopFileManager.tsx`, `src/lib/localFsApi.ts`
+- Modify: `src-tauri/src/fs_local.rs`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/lib.rs`, `src/components/desktop/FileManagerPanel.tsx`, `src/App.tsx`, `src/stores/desktopStore.ts`
+- Test: `src-tauri/src/fs_local.rs` unit tests, `src/lib/localFsApi.test.ts`, `e2e/home-local-terminal-chat.spec.ts`
 
 **Interfaces:**
 - Consumes: Task 1 `DesktopTarget` / `desktopTargetKey`。
-- Produces: Local provider operations for listing roots/directories, create file/folder, read text, write text, rename, move, delete, size and reveal/open; SSH provider continues existing session APIs.
+- Produces: Local provider operations for listing roots/directories, create file/folder, read text, write text, rename, move, delete, size and reveal/open; SSH provider continues existing `LocalFsPanel` and session APIs.
 
-- [ ] **Step 1: 写失败测试**：Rust 临时目录测试本机创建/读写/重命名/移动/删除和非法路径；Vitest 测试 Local 命令不带 `session_id`、SSH 操作仍使用真实 id。
-- [ ] **Step 2: 运行 RED**：`cargo test fs_local::tests --lib` 与 `npm test -- --run src/stores/localFsStore.test.ts`，确认缺失的 Local create/read/write API 与 target routing 失败。
-- [ ] **Step 3: 最小实现**：补齐本机文件操作命令；LocalFsStore 接收 target 并通过 Local/SSH provider 分流，目录快照改为 target key；Local Files 根和 Home 目录展示现有列表/网格视图。
-- [ ] **Step 4: 验证 GREEN**：运行上述 Cargo/Vitest；E2E 新建目录、创建文本文件、重命名、移动、删除并验证 SSH 主机目录无变化。
-- [ ] **Step 5: 提交**：`feat: add local desktop file operations`。
+- [x] **Step 1: 写失败测试**：Rust 临时目录测试本机创建/读写/重命名/移动/删除和非法路径；Vitest 测试 Local 命令不带 `session_id`、SSH 操作仍使用真实 id。
+- [x] **Step 2: 运行 RED**：`cargo test fs_local::tests --lib` 与 `npm test -- --run src/lib/localFsApi.test.ts`，确认缺失的 Local create/read/write API。
+- [x] **Step 3: 最小实现**：补齐本机文件操作命令；共享 Files 窗口根据 target 渲染本机文件视图或原 SSH 面板；Local 当前目录/选择状态独立于 SSH session stores。
+- [x] **Step 4: 验证 GREEN**：运行上述 Cargo/Vitest；E2E 新建目录、创建文本文件、重命名、移动、删除并验证 SSH 主机目录无变化。
+- [x] **Step 5: 提交**：`feat: add local desktop file operations`。
 
 ### Task 3: MarkWisely 支持本机文档与隔离最近文件
 

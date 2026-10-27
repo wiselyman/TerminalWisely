@@ -122,11 +122,11 @@ export const e2eSavedConnection = {
   has_password: true,
 };
 
-export const e2eLocalRoots = [{ path: "/tmp", name: "tmp", kind: "dir" }];
+export const e2eLocalRoots = ["/tmp"];
 
 export const e2eLocalDir = [
-  { name: "e2e-file.txt", path: "/tmp/e2e-file.txt", kind: "file", size: 12 },
-  { name: "e2e-dir", path: "/tmp/e2e-dir", kind: "dir", size: 0 },
+  { name: "e2e-file.txt", path: "/tmp/e2e-file.txt", kind: "file", size_bytes: 12 },
+  { name: "e2e-dir", path: "/tmp/e2e-dir", kind: "directory", size_bytes: 0 },
 ];
 
 export const e2eRemoteDir = [

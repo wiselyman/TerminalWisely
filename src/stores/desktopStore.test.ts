@@ -5,6 +5,7 @@ const localFsClose = vi.fn();
 const activateLocalFs = vi.fn();
 const setActiveTab = vi.fn();
 const activateFind = vi.fn();
+const localFsSetState = vi.fn();
 const taskClose = vi.fn();
 const browserOpenPanel = vi.fn();
 const browserMinimize = vi.fn();
@@ -25,7 +26,7 @@ vi.mock("./localFsStore", () => ({
       activateSession: activateLocalFs,
       setActiveTab,
     }),
-    setState: vi.fn(),
+    setState: localFsSetState,
   },
 }));
 
@@ -74,6 +75,7 @@ describe("desktopStore", () => {
     activateLocalFs.mockClear();
     setActiveTab.mockClear();
     activateFind.mockClear();
+    localFsSetState.mockClear();
     taskClose.mockClear();
     browserOpenPanel.mockClear();
     browserMinimize.mockClear();
@@ -172,5 +174,14 @@ describe("desktopStore", () => {
     useDesktopStore.getState().openDesktopTarget({ kind: "ssh", sessionId: "host-b" });
     expect(useDesktopStore.getState().apps.browser.open).toBe(true);
     expect(useDesktopStore.getState().apps.files.open).toBe(false);
+  });
+
+  it("does not close SSH file state when closing the Local Files window", async () => {
+    const { useDesktopStore } = await import("./desktopStore");
+    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+    useDesktopStore.getState().launchApp("files");
+    useDesktopStore.getState().closeApp("files");
+    expect(useDesktopStore.getState().apps.files.open).toBe(false);
+    expect(localFsSetState).not.toHaveBeenCalled();
   });
 });

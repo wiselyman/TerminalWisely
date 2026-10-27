@@ -251,7 +251,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       const sessionId = isSshDesktopTarget(target) ? target.sessionId : null;
       // Local app providers are connected in subsequent implementation tasks.
       // Until then, never let a Local click fall through to the active SSH session.
-      if (target.kind === "local" && ["files", "processes", "browser", "aiLinux"].includes(app)) return;
+      if (target.kind === "local" && ["processes", "browser", "aiLinux"].includes(app)) return;
 
       if (app === "files") {
         const tab = opts?.filesTab ?? get().filesTab;
@@ -315,7 +315,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     },
 
     minimizeApp: (app) => {
-      if (app === "browser") {
+      if (app === "browser" && isSshDesktopTarget(get().target)) {
         void useBrowserStore.getState().minimize();
       }
       set({
@@ -324,11 +324,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     },
 
     restoreApp: (app) => {
-      if (app === "browser") {
+      const target = get().target;
+      if (app === "browser" && isSshDesktopTarget(target)) {
         void useBrowserStore.getState().restore();
       }
       if (app === "aiLinux") {
-        const sessionId = get().sessionId;
+        const sessionId = isSshDesktopTarget(target) ? target.sessionId : null;
         if (sessionId) bindDesktopAi(sessionId);
       }
       set({
@@ -341,14 +342,15 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     },
 
     closeApp: (app) => {
+      const target = get().target;
       if (app === "files") {
-        useLocalFsStore.setState({ open: false });
+        if (isSshDesktopTarget(target)) useLocalFsStore.setState({ open: false });
       } else if (app === "processes") {
-        useTaskManagerStore.getState().close();
+        if (isSshDesktopTarget(target)) useTaskManagerStore.getState().close();
       } else if (app === "browser") {
-        void useBrowserStore.getState().close();
+        if (isSshDesktopTarget(target)) void useBrowserStore.getState().close();
       } else if (app === "aiLinux") {
-        parkDesktopAi();
+        if (isSshDesktopTarget(target)) parkDesktopAi();
       }
       set({
         apps: patchApp(get().apps, app, {

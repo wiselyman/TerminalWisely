@@ -1385,8 +1385,24 @@ pub fn list_local_roots() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub fn list_local_directory(
     path: Option<String>,
+    show_hidden: Option<bool>,
 ) -> Result<crate::fs_local::ListLocalDirectoryResult, String> {
-    crate::fs_local::list_local_directory(path).map_err(|e| e.to_string())
+    crate::fs_local::list_local_directory(path, show_hidden.unwrap_or(false)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_local_path(request: crate::fs_local::LocalCreateRequest) -> Result<String, String> {
+    crate::fs_local::create_local_path(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_local_text(request: crate::fs_local::LocalPathRequest) -> Result<String, String> {
+    crate::fs_local::read_local_text(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn write_local_text(request: crate::fs_local::LocalTextWriteRequest) -> Result<(), String> {
+    crate::fs_local::write_local_text(request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

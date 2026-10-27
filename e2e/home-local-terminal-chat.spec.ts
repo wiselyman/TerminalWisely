@@ -122,3 +122,51 @@ test("Home local Desktop target isolation", async ({ page }) => {
   await expect(home).toBeVisible();
   await expect(page.getByTestId("home-local-terminal")).toBeVisible();
 });
+
+test("Home Desktop Files performs local file operations", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await page.getByTestId("local-fs-tool").click();
+  await page.getByTestId("dock-app-files").click();
+
+  const files = page.getByTestId("local-desktop-files");
+  await expect(files).toBeVisible();
+  await expect(files.getByTestId("local-file-row").filter({ hasText: "e2e-file.txt" })).toBeVisible();
+
+  await files.getByTestId("local-files-new-folder").click();
+  await files.getByTestId("local-files-action-input").fill("workspace");
+  await files.getByTestId("local-files-action-confirm").click();
+  await expect(files.getByTestId("local-file-row").filter({ hasText: "workspace" })).toBeVisible();
+
+  await files.getByTestId("local-files-new-file").click();
+  await files.getByTestId("local-files-action-input").fill("draft.md");
+  await files.getByTestId("local-files-action-confirm").click();
+  let draft = files.getByTestId("local-file-row").filter({ hasText: "draft.md" });
+  await expect(draft).toBeVisible();
+  await draft.click();
+  await files.getByTestId("local-files-rename").click();
+  await files.getByTestId("local-files-action-input").fill("notes.md");
+  await files.getByTestId("local-files-action-confirm").click();
+  draft = files.getByTestId("local-file-row").filter({ hasText: "notes.md" });
+  await expect(draft).toBeVisible();
+  await draft.dblclick();
+  const editor = files.getByTestId("local-files-editor");
+  await expect(editor).toHaveValue("");
+  await editor.fill("saved locally");
+  await files.getByTestId("local-files-save").click();
+  await expect(files.getByTestId("local-files-save")).toBeDisabled();
+
+  await draft.click();
+  await files.getByTestId("local-files-move").click();
+  await files.getByTestId("local-files-action-input").fill("/tmp/workspace");
+  await files.getByTestId("local-files-action-confirm").click();
+  await expect(files.getByTestId("local-file-row").filter({ hasText: "notes.md" })).toHaveCount(0);
+  await files.getByTestId("local-file-row").filter({ hasText: "workspace" }).dblclick();
+  const moved = files.getByTestId("local-file-row").filter({ hasText: "notes.md" });
+  await expect(moved).toBeVisible();
+  await moved.click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await files.getByTestId("local-files-delete").click();
+  await expect(moved).toHaveCount(0);
+});
