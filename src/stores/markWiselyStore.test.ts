@@ -114,6 +114,33 @@ describe("markWiselyStore", () => {
     );
   });
 
+  it("uses local file commands and keeps local recents separate from SSH", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    invoke.mockImplementation(async (command: string, args: { path?: string; content?: string; parent?: string; name?: string }) => {
+      if (command === "read_local_text") return "# Local note\n";
+      if (command === "create_local_path") return `${args.parent}/${args.name}`;
+      return undefined;
+    });
+
+    await useMarkWiselyStore.getState().openDocument({
+      target: { kind: "local" },
+      hostKey: "local",
+      path: "/Users/test/note.md",
+    });
+    useMarkWiselyStore.getState().setEditorValue("local", "# Edited locally\n");
+    await useMarkWiselyStore.getState().saveDocument("local");
+
+    expect(invoke).toHaveBeenCalledWith("read_local_text", { request: { path: "/Users/test/note.md" } });
+    expect(invoke).toHaveBeenCalledWith("write_local_text", {
+      request: { path: "/Users/test/note.md", content: "# Edited locally\n" },
+    });
+    expect(invoke).not.toHaveBeenCalledWith("preview_open", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("preview_save", expect.anything());
+    expect(useMarkWiselyStore.getState().getRecentFiles("local")).toEqual([
+      expect.objectContaining({ path: "/Users/test/note.md" }),
+    ]);
+  });
+
   it("preserves unsaved editor text when remote save fails", async () => {
     const { useMarkWiselyStore } = await import("./markWiselyStore");
     await useMarkWiselyStore.getState().openDocument({

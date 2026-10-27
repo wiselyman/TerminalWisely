@@ -104,11 +104,11 @@
 - Consumes: Task 1 target model and Task 2 local file read/write/create/list operations。
 - Produces: Target-aware document open/create/save/close and recent-file buckets; Local documents do not allocate SSH preview handles.
 
-- [ ] **Step 1: 写失败测试**：Local 文档新建/打开/保存走本机命令；Local 与每个 SSH host 最近文件隔离；SSH 仍调用 preview handle API。
-- [ ] **Step 2: 运行 RED**：`npm test -- --run src/stores/markWiselyStore.test.ts`，确认 Local 操作仍走 SSH preview API。
-- [ ] **Step 3: 最小实现**：以 target key 管理文档与 recents；按 target 选择本机文件接口或 SSH preview 接口；复用现有文件夹选择器和未保存确认。
-- [ ] **Step 4: 验证 GREEN**：重跑 Vitest；E2E 覆盖本机新建、打开、修改、保存、最近文件重开、未保存关闭确认。
-- [ ] **Step 5: 提交**：`feat: support local markdown workspace`。
+- [x] **Step 1: 写失败测试**：Local 文档新建/打开/保存走本机命令；Local 与每个 SSH host 最近文件隔离；SSH 仍调用 preview handle API。
+- [x] **Step 2: 运行 RED**：`npm test -- --run src/stores/markWiselyStore.test.ts`，确认 Local 操作仍走 SSH preview API。
+- [x] **Step 3: 最小实现**：以 target key 管理文档与 recents；按 target 选择本机文件接口或 SSH preview 接口；复用现有文件夹选择器和未保存确认。
+- [x] **Step 4: 验证 GREEN**：重跑 Vitest；E2E 覆盖本机新建、打开、修改、保存、最近文件重开、未保存关闭确认。
+- [x] **Step 5: 提交**：`feat: support local markdown workspace`。
 
 ### Task 4: 本机 Processes provider
 

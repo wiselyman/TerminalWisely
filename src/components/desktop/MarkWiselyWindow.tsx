@@ -10,12 +10,17 @@ import { flushPreviewEditor } from "../../lib/previewEditorFlush";
 import { useDesktopStore } from "../../stores/desktopStore";
 import { useMarkWiselyStore } from "../../stores/markWiselyStore";
 import { MarkWiselyIcon } from "../WorkspaceToolIcons";
+import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
+import { listLocalRoots } from "../../lib/localFsApi";
 
-type Props = { sessionId: string; hostKey: string; sessionTitle?: string | null };
+type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null };
 type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "edit";
 const EMPTY_RECENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getRecentFiles"]> = [];
 
-export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
+export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: Props) {
+  const activeTarget = target ?? { kind: "ssh" as const, sessionId: sessionId ?? "" };
+  const targetKey = desktopTargetKey(activeTarget);
+  const activeHostKey = activeTarget.kind === "local" ? "local" : hostKey ?? sessionId ?? "";
   const { t } = useTranslation("tools");
   const [view, setView] = useState<View>("start");
   const [parentDir, setParentDir] = useState("/home");
@@ -26,20 +31,31 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
-  const document = useMarkWiselyStore((state) => state.documents[sessionId]);
-  const recents = useMarkWiselyStore((state) => state.recentFiles[hostKey] ?? EMPTY_RECENTS);
+  const document = useMarkWiselyStore((state) => state.documents[targetKey]);
+  const recents = useMarkWiselyStore((state) => state.recentFiles[activeHostKey] ?? EMPTY_RECENTS);
   const openDocument = useMarkWiselyStore((state) => state.openDocument);
   const createDocument = useMarkWiselyStore((state) => state.createDocument);
   const setEditorValue = useMarkWiselyStore((state) => state.setEditorValue);
   const saveDocument = useMarkWiselyStore((state) => state.saveDocument);
   const closeDocument = useMarkWiselyStore((state) => state.closeDocument);
   const dirty = !!document && document.text !== document.savedText;
-  const flushId = useMemo(() => `markwisely-${sessionId}`, [sessionId]);
+  const flushId = useMemo(() => `markwisely-${targetKey}`, [targetKey]);
 
   useEffect(() => {
     let cancelled = false;
     setFolderReady(false);
     setParentDir("");
+    if (activeTarget.kind === "local") {
+      void listLocalRoots().then((roots) => {
+        if (!cancelled) {
+          setParentDir(roots[0] ?? "");
+          setFolderReady(roots.length > 0);
+        }
+      }).catch(() => {
+        if (!cancelled) setFolderReady(true);
+      });
+      return () => { cancelled = true; };
+    }
     void invoke<string>("get_session_cwd", { request: { session_id: sessionId } })
       .then((cwd) => {
         if (!cancelled) {
@@ -54,7 +70,7 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
         }
       });
     return () => { cancelled = true; };
-  }, [sessionId]);
+  }, [activeTarget.kind, sessionId]);
 
   const requestNavigation = useCallback((action: () => void) => {
     if (dirty) {
@@ -62,9 +78,9 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
       setConfirmDiscard(true);
       return;
     }
-    void closeDocument(sessionId);
+    void closeDocument(targetKey);
     action();
-  }, [closeDocument, dirty, sessionId]);
+  }, [closeDocument, dirty, targetKey]);
 
   const handleCloseRequest = useCallback(async () => {
     if (dirty) {
@@ -72,12 +88,12 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
       setConfirmDiscard(true);
       return false;
     }
-    await closeDocument(sessionId);
+    await closeDocument(targetKey);
     return true;
-  }, [closeDocument, dirty, sessionId]);
+  }, [closeDocument, dirty, targetKey]);
 
   const confirmLeave = async () => {
-    await closeDocument(sessionId);
+    await closeDocument(targetKey);
     setConfirmDiscard(false);
     if (pendingAction) {
       const action = pendingAction;
@@ -92,7 +108,7 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await openDocument({ sessionId, hostKey, path });
+      await openDocument({ sessionId, target: activeTarget, hostKey: activeHostKey, path });
       setView("edit");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -108,7 +124,7 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await createDocument({ sessionId, hostKey, path: fullPath, parentDir, name: fileName });
+      await createDocument({ sessionId, target: activeTarget, hostKey: activeHostKey, path: fullPath, parentDir, name: fileName });
       setView("edit");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -119,11 +135,11 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
 
   const save = async () => {
     const latest = flushPreviewEditor(flushId);
-    if (latest !== null) setEditorValue(sessionId, latest);
+    if (latest !== null) setEditorValue(targetKey, latest);
     setBusy(true);
     setError(null);
     try {
-      await saveDocument(sessionId);
+      await saveDocument(targetKey);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -158,11 +174,11 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
           <div className="markwisely-editor">
             <MarkdownWysiwygEditor
               tabId={flushId}
-              sessionId={sessionId}
+              sessionId={document.sessionId ?? undefined}
               filePath={document.path}
               text={document.text}
               editable
-              onChange={(value) => setEditorValue(sessionId, value)}
+              onChange={(value) => setEditorValue(targetKey, value)}
             />
           </div>
         </div>
@@ -205,7 +221,7 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
           <section className="markwisely-recents" aria-labelledby="markwisely-recents-title">
             <h3 id="markwisely-recents-title">{t("markwisely.recentTitle")}</h3>
             {recents.length === 0 ? <p className="markwisely-empty">{t("markwisely.noRecentFiles")}</p> : recents.map((recent) => (
-              <button type="button" key={recent.path} className="markwisely-recent" onClick={() => void openPath(recent.path)} disabled={busy}>
+              <button type="button" key={recent.path} className="markwisely-recent" data-testid="markwisely-recent" onClick={() => void openPath(recent.path)} disabled={busy}>
                 <span className="markwisely-recent-icon" aria-hidden>▤</span><span><strong>{recent.path.split("/").pop()}</strong><small>{recent.path}</small></span>
               </button>
             ))}
@@ -216,7 +232,8 @@ export function MarkWiselyWindow({ sessionId, hostKey, sessionTitle }: Props) {
         <div className="markwisely-open-backdrop" data-testid={view === "open" ? "markwisely-open-backdrop" : "markwisely-folder-backdrop"}>
           <MarkWiselyFilePicker
             key={`${view}:${parentDir}`}
-            sessionId={sessionId}
+            sessionId={activeTarget.kind === "ssh" ? sessionId : undefined}
+            target={activeTarget}
             mode={view === "open" ? "file" : "directory"}
             initialPath={view === "open" ? parentDir : parentDir || undefined}
             onCancel={() => setView(view === "create-folder" ? folderDialogReturnView : "start")}

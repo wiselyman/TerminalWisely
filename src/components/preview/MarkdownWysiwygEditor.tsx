@@ -20,7 +20,7 @@ import i18n from "../../i18n";
 
 export interface MarkdownWysiwygEditorProps {
   tabId: string;
-  sessionId: string;
+  sessionId?: string;
   filePath: string;
   text: string;
   editable: boolean;
@@ -40,7 +40,7 @@ function themeFromApp(theme: AppTheme): "dark" | "classic" {
 
 async function hydrateRemoteImages(
   root: HTMLElement,
-  sessionId: string,
+  sessionId: string | undefined,
   filePath: string,
   blobUrls: string[],
 ): Promise<void> {
@@ -54,6 +54,11 @@ async function hydrateRemoteImages(
     }
     const remote = resolveMarkdownImageSrc(filePath, src);
     if (!remote) {
+      img.dataset.twHydrated = "1";
+      continue;
+    }
+    if (!sessionId) {
+      img.classList.add("preview-md-img-failed");
       img.dataset.twHydrated = "1";
       continue;
     }
@@ -168,6 +173,7 @@ export function MarkdownWysiwygEditor({
                 const remote =
                   dir === "/" ? `/${name}` : dir === "." ? name : `${dir}/${name}`;
                 const buf = new Uint8Array(await file.arrayBuffer());
+                if (!sessionId) throw new Error("Image uploads are not available for local Markdown yet.");
                 await writePreviewRemoteBytes(sessionId, remote, buf);
                 const rel = name;
                 vditorRef.current?.insertValue(`![${name}](${rel})\n`);

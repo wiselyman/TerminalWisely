@@ -170,3 +170,25 @@ test("Home Desktop Files performs local file operations", async ({ page }) => {
   await files.getByTestId("local-files-delete").click();
   await expect(moved).toHaveCount(0);
 });
+
+test("Home MarkWisely creates, saves, and reopens local Markdown", async ({ page }) => {
+  await gotoApp(page);
+  await (await twE2e(page)).openHome();
+  await page.getByTestId("local-fs-tool").click();
+  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("markwisely-new-document").click();
+  await page.getByTestId("markwisely-use-folder").click();
+  await page.getByTestId("markwisely-file-name").fill("local-note.md");
+  await page.getByTestId("markwisely-create-submit").click();
+  await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
+  const editor = page.locator(".vditor-ir");
+  await expect(editor).toBeVisible();
+  await editor.click();
+  await page.keyboard.type("# Local note");
+  await page.getByTestId("markwisely-save").click();
+  await expect(page.getByTestId("markwisely-save")).toBeDisabled();
+  await page.locator(".markwisely-editor-view .markwisely-back").click();
+  await expect(page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" })).toBeVisible();
+  await page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" }).click();
+  await expect(editor).toContainText("Local note");
+});

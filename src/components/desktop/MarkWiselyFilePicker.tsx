@@ -4,16 +4,19 @@ import { useTranslation } from "react-i18next";
 import { LocalFsEntryIcon, LocalFsRefreshIcon, LocalFsUpIcon } from "../LocalFsIcons";
 import { LocalFsPathBreadcrumb } from "../LocalFsPathBreadcrumb";
 import type { ListLocalDirectoryResult } from "../../types";
+import type { DesktopTarget } from "../../lib/desktopTarget";
+import { listLocalDirectory, listLocalRoots } from "../../lib/localFsApi";
 
 type Props = {
-  sessionId: string;
+  sessionId?: string;
+  target?: DesktopTarget;
   mode: "file" | "directory";
   initialPath?: string;
   onSelect: (path: string) => void;
   onCancel: () => void;
 };
 
-export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, onCancel }: Props) {
+export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onSelect, onCancel }: Props) {
   const { t } = useTranslation("tools");
   const [path, setPath] = useState<string | undefined>(initialPath);
   const [result, setResult] = useState<ListLocalDirectoryResult | null>(null);
@@ -25,9 +28,12 @@ export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, o
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void invoke<ListLocalDirectoryResult>("list_remote_directory", {
-      request: { session_id: sessionId, path: path ?? null },
-    }).then((listing) => {
+    const listing = target?.kind === "local"
+      ? (path ? listLocalDirectory(path, false) : listLocalRoots().then((roots) => listLocalDirectory(roots[0], false)))
+      : sessionId
+        ? invoke<ListLocalDirectoryResult>("list_remote_directory", { request: { session_id: sessionId, path: path ?? null } })
+        : Promise.reject(new Error("SSH session is required"));
+    void listing.then((listing) => {
       if (!cancelled) setResult(listing);
     }).catch((cause) => {
       if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
@@ -35,7 +41,7 @@ export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, o
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [path, refreshKey, sessionId]);
+  }, [path, refreshKey, sessionId, target]);
 
   const entries = result?.entries ?? [];
   const visibleEntries = entries.filter((entry) => {
@@ -56,7 +62,7 @@ export function MarkWiselyFilePicker({ sessionId, mode, initialPath, onSelect, o
         <button type="button" className="markwisely-back" onClick={onCancel}>{t("markwisely.cancel")}</button>
         <strong>{mode === "file" ? t("markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>
         {mode === "directory" ? (
-          <button type="button" className="markwisely-primary" disabled={!result || loading || !!error} onClick={() => result && onSelect(result.path)}>
+          <button type="button" className="markwisely-primary" data-testid="markwisely-use-folder" disabled={!result || loading || !!error} onClick={() => result && onSelect(result.path)}>
             {t("markwisely.useFolder")}
           </button>
         ) : null}

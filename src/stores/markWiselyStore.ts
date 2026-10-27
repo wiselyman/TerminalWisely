@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { PreviewOpenResult } from "../types";
+import { desktopTargetKey, type DesktopTarget } from "../lib/desktopTarget";
+import { createLocalPath, readLocalText, writeLocalText } from "../lib/localFsApi";
 
 const RECENTS_KEY = "terminal-wisely.markwisely-recents.v1";
 const MAX_RECENT_FILES = 12;
@@ -11,7 +13,8 @@ export interface MarkWiselyRecentFile {
 }
 
 export interface MarkWiselyDocument {
-  sessionId: string;
+  sessionId: string | null;
+  target: DesktopTarget;
   hostKey: string;
   path: string;
   handleId: string;
@@ -24,7 +27,8 @@ export interface MarkWiselyDocument {
 type RecentFilesByHost = Record<string, MarkWiselyRecentFile[]>;
 
 interface OpenDocumentOptions {
-  sessionId: string;
+  sessionId?: string;
+  target?: DesktopTarget;
   hostKey: string;
   path: string;
 }
@@ -32,6 +36,11 @@ interface OpenDocumentOptions {
 interface CreateDocumentOptions extends OpenDocumentOptions {
   parentDir: string;
   name: string;
+}
+
+function documentKey(options: Pick<OpenDocumentOptions, "sessionId" | "target">): string {
+  if (options.target) return desktopTargetKey(options.target);
+  return options.sessionId ?? "";
 }
 
 interface MarkWiselyState {
@@ -118,44 +127,65 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
   documents: {},
   recentFiles: readRecentFiles(),
 
-  openDocument: async ({ sessionId, hostKey, path }) => {
-    const result = await openRemoteMarkdown({ sessionId, hostKey, path });
-    const previous = get().documents[sessionId];
-    if (previous && previous.handleId !== result.handle_id) {
+  openDocument: async (options) => {
+    const { sessionId, hostKey, path } = options;
+    const target = options.target ?? { kind: "ssh" as const, sessionId: sessionId ?? "" };
+    const key = documentKey(options);
+    let resolvedPath = path;
+    let handleId = "";
+    let text = "";
+    if (target.kind === "local") {
+      text = await readLocalText(path);
+    } else {
+      if (!sessionId) throw new Error("SSH session is required");
+      const result = await openRemoteMarkdown({ sessionId, hostKey, path });
+      resolvedPath = result.resolved_path;
+      handleId = result.handle_id;
+      text = result.text_content ?? "";
+    }
+    const previous = get().documents[key];
+    if (target.kind === "ssh" && previous && previous.handleId !== handleId) {
       void invoke("preview_close", {
         request: { handle_id: previous.handleId },
       }).catch(() => undefined);
     }
-    const text = result.text_content ?? "";
     set((state) => ({
       documents: {
         ...state.documents,
-        [sessionId]: {
-          sessionId,
+        [key]: {
+          sessionId: sessionId ?? null,
+          target,
           hostKey,
-          path: result.resolved_path,
-          handleId: result.handle_id,
+          path: resolvedPath,
+          handleId,
           text,
           savedText: text,
           saving: false,
           error: null,
         },
       },
-      recentFiles: withRecentFile(state.recentFiles, hostKey, result.resolved_path),
+      recentFiles: withRecentFile(state.recentFiles, target.kind === "local" ? "local" : hostKey, resolvedPath),
     }));
   },
 
-  createDocument: async ({ sessionId, hostKey, parentDir, name, path }) => {
-    await invoke("create_path", {
-      request: {
-        session_id: sessionId,
-        parent_dir: parentDir,
-        name,
-        kind: "file",
-        sudo_password: null,
-      },
-    });
-    await get().openDocument({ sessionId, hostKey, path });
+  createDocument: async (options) => {
+    const { sessionId, hostKey, parentDir, name, path } = options;
+    const target = options.target ?? { kind: "ssh" as const, sessionId: sessionId ?? "" };
+    if (target.kind === "local") {
+      await createLocalPath(parentDir, name, "file");
+    } else {
+      if (!sessionId) throw new Error("SSH session is required");
+      await invoke("create_path", {
+        request: {
+          session_id: sessionId,
+          parent_dir: parentDir,
+          name,
+          kind: "file",
+          sudo_password: null,
+        },
+      });
+    }
+    await get().openDocument({ sessionId, ...(options.target ? { target } : {}), hostKey, path });
   },
 
   setEditorValue: (sessionId, value) => {
@@ -182,13 +212,17 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
       },
     }));
     try {
-      await invoke("preview_save", {
-        request: {
-          handle_id: document.handleId,
-          content: savedText,
-          sudo_password: null,
-        },
-      });
+      if (document.target.kind === "local") {
+        await writeLocalText(document.path, savedText);
+      } else {
+        await invoke("preview_save", {
+          request: {
+            handle_id: document.handleId,
+            content: savedText,
+            sudo_password: null,
+          },
+        });
+      }
       set((state) => {
         const current = state.documents[sessionId];
         if (!current) return state;
@@ -223,9 +257,11 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
   closeDocument: async (sessionId) => {
     const document = get().documents[sessionId];
     if (!document) return;
-    await invoke("preview_close", {
-      request: { handle_id: document.handleId },
-    }).catch(() => undefined);
+    if (document.target.kind === "ssh") {
+      await invoke("preview_close", {
+        request: { handle_id: document.handleId },
+      }).catch(() => undefined);
+    }
     set((state) => ({
       documents: { ...state.documents, [sessionId]: null },
     }));

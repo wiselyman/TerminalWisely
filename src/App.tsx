@@ -1559,8 +1559,16 @@ function App() {
       {desktopAiShown && activeTabId ? (
         <DesktopAiWindow subtitle={activeSessionTitle} />
       ) : null}
-      {sidebarView === "hosts" && activeTabId && markWiselyOpen ? (
+      {markWiselyOpen && desktopMode && desktopTarget ? (
         <MarkWiselyWindow
+          target={desktopTarget}
+          sessionId={desktopTarget.kind === "ssh" ? activeTabId ?? undefined : undefined}
+          hostKey={desktopTarget.kind === "ssh" ? activeTabServerId || activeTabId || undefined : undefined}
+          sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle : "This computer"}
+        />
+      ) : sidebarView === "hosts" && activeTabId && markWiselyOpen ? (
+        <MarkWiselyWindow
+          target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId }}
           sessionId={activeTabId}
           hostKey={activeTabServerId || activeTabId}
           sessionTitle={activeSessionTitle}
