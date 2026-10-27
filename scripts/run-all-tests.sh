@@ -44,6 +44,7 @@ run_step() {
 
 section "1/10 Frontend static smoke (功能 wiring)"
 run_step "smoke-product-checklist" node scripts/smoke-product-checklist.mjs
+run_step "windows-coreutils-provisioning" node --test scripts/fetch-windows-coreutils.test.mjs
 
 section "2/10 Frontend unit tests (Vitest)"
 run_step "vitest" npm test -- --run

@@ -90,6 +90,21 @@ jobs:
       - name: Frontend unit tests
         run: npm test -- --run
 
+      - name: Windows Coreutils provisioning tests
+        if: matrix.label == 'windows-x86_64'
+        shell: powershell
+        run: node --test scripts/fetch-windows-coreutils.test.mjs
+
+      - name: Prepare Windows Coreutils x64 bundle
+        if: matrix.label == 'windows-x86_64'
+        shell: powershell
+        run: ./scripts/fetch-windows-coreutils.ps1 -Architecture x64
+
+      - name: Verify PowerShell 5.1 resolves bundled Coreutils without global changes
+        if: matrix.label == 'windows-x86_64'
+        shell: powershell
+        run: ./scripts/test-windows-coreutils-package.ps1 -RequireRunnableBinary
+
       - name: Typecheck and build frontend
         run: npm run build
 

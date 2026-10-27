@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+#[cfg(windows)]
+use tauri::Manager;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
@@ -31,6 +33,21 @@ fn host_platform() -> HostPlatform {
     } else {
         HostPlatform::Unix
     }
+}
+
+fn coreutils_child_path(bin_dir: &Path, parent_path: Option<&str>) -> String {
+    match parent_path.filter(|path| !path.is_empty()) {
+        Some(path) => format!("{};{path}", bin_dir.to_string_lossy()),
+        None => bin_dir.to_string_lossy().into_owned(),
+    }
+}
+
+#[cfg(windows)]
+fn bundled_coreutils_paths(app: &AppHandle) -> Option<(PathBuf, PathBuf)> {
+    let resource_root = app.path().resource_dir().ok()?.join("windows-coreutils");
+    let bin = resource_root.join("bin");
+    let alias_script = resource_root.join("coreutils-aliases.ps1");
+    (bin.join("coreutils.exe").is_file() && alias_script.is_file()).then_some((bin, alias_script))
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -60,6 +77,14 @@ pub fn start(app: AppHandle, cols: u16, rows: u16) -> Result<String> {
     let mut command = CommandBuilder::new(shell);
     if host_platform() == HostPlatform::Windows {
         command.arg("-NoLogo");
+        #[cfg(windows)]
+        if let Some((bin, alias_script)) = bundled_coreutils_paths(&app) {
+            let parent_path = std::env::var("PATH").ok();
+            command.env("PATH", coreutils_child_path(&bin, parent_path.as_deref()));
+            command.arg("-NoExit");
+            command.arg("-File");
+            command.arg(alias_script);
+        }
     }
     let child = pair.slave.spawn_command(command)?;
     drop(pair.slave);
@@ -143,7 +168,7 @@ pub fn stop(id: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{default_shell, HostPlatform};
+    use super::{coreutils_child_path, default_shell, HostPlatform};
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
     use std::io::Read;
     use std::path::Path;
@@ -165,6 +190,28 @@ mod tests {
         assert_eq!(
             default_shell(HostPlatform::Unix, Some("  ")),
             Path::new("/bin/sh")
+        );
+    }
+
+    #[test]
+    fn bundled_coreutils_precedes_parent_path_without_mutating_it() {
+        let parent_path = String::from("C:\\Windows\\System32;C:\\Tools");
+        let original = parent_path.clone();
+        assert_eq!(
+            coreutils_child_path(
+                Path::new("C:\\App\\windows-coreutils\\bin"),
+                Some(&parent_path)
+            ),
+            "C:\\App\\windows-coreutils\\bin;C:\\Windows\\System32;C:\\Tools"
+        );
+        assert_eq!(parent_path, original);
+    }
+
+    #[test]
+    fn bundled_coreutils_path_works_when_parent_path_is_missing() {
+        assert_eq!(
+            coreutils_child_path(Path::new("C:\\App\\bin"), None),
+            "C:\\App\\bin"
         );
     }
 

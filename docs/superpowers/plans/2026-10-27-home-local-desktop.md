@@ -154,9 +154,9 @@
 - Consumes: official Microsoft Coreutils v2026.9.3 x64/ARM64 ZIP assets and asset digest; PowerShell 5.1 remains the shell。
 - Produces: target-specific bundled Coreutils resource directory added to child PowerShell PATH; collision aliases are removed/overridden only in that child session.
 
-- [ ] **Step 1: 写失败测试**：script tests reject unknown architecture, digest mismatch and missing binary/license; Rust environment test confirms Coreutils path precedes existing PATH and parent process environment is unchanged.
-- [ ] **Step 2: 运行 RED**：`node --test scripts/fetch-windows-coreutils.test.mjs` 与 `cargo test local_terminal::tests --lib`。
-- [ ] **Step 3: 最小实现**：按 Windows matrix target 拉取固定版本、验证 GitHub asset digest、解包 binary/NOTICE/license，打包至应用资源；构造 PowerShell 5.1 session-local PATH/alias 启动命令，不调用安装器或写用户配置。
+- [x] **Step 1: 写失败测试**：补 provisioning 脚本测试（架构、SHA-256、二进制与许可证缺失）和 Rust 子进程 PATH 测试；通过缺少 provisioning 脚本及 PATH helper 缺失观察 RED。
+- [x] **Step 2: 运行 RED**：`node --test scripts/fetch-windows-coreutils.test.mjs` 起初因脚本缺失失败；`cargo test local_terminal::tests --lib` 起初因 PATH helper 缺失编译失败。
+- [x] **Step 3: 最小实现**：按 Windows matrix target 拉取固定版本、验证 GitHub asset digest、解包 binary/NOTICE/license，打包至应用资源；构造 PowerShell 5.1 session-local PATH/alias 启动命令，不调用安装器或写用户配置。
 - [ ] **Step 4: 验证 GREEN**：运行定向测试；Windows x64/ARM64 CI 断言安装包资源存在，PowerShell 内 `Get-Command ls` 指向 bundled Coreutils，同时验证 `$PROFILE`、全局 PATH 未修改。
 - [ ] **Step 5: 提交**：`build: bundle Windows Coreutils for local terminal`。
 

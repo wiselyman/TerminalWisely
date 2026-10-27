@@ -39,12 +39,12 @@ jobs:
           # Windows — x86_64
           - platform: windows-latest
             target: windows-x86_64
-            args: --target x86_64-pc-windows-msvc --bundles msi,nsis
+            args: --target x86_64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json --bundles msi,nsis
             rust_targets: x86_64-pc-windows-msvc
           # Windows — ARM64 (MSI does not support ARM64; NSIS only)
           - platform: windows-latest
             target: windows-aarch64
-            args: --target aarch64-pc-windows-msvc --bundles nsis
+            args: --target aarch64-pc-windows-msvc --config src-tauri/tauri.windows.conf.json --bundles nsis
             rust_targets: aarch64-pc-windows-msvc
 
     runs-on: ${{ matrix.platform }}
@@ -93,6 +93,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Test Windows Coreutils provisioning
+        if: startsWith(matrix.target, 'windows-')
+        shell: powershell
+        run: node --test scripts/fetch-windows-coreutils.test.mjs
+
       - name: Fetch embedded Python (non-macOS)
         if: matrix.target != 'macos'
         shell: bash
@@ -105,6 +110,23 @@ jobs:
             *) echo "unknown target ${{ matrix.target }}"; exit 1 ;;
           esac
           bash scripts/fetch-embedded-python.sh "$TRIPLE"
+
+      - name: Fetch bundled Windows Coreutils
+        if: startsWith(matrix.target, 'windows-')
+        shell: powershell
+        run: |
+          $architecture = if ('${{ matrix.target }}' -eq 'windows-aarch64') { 'arm64' } else { 'x64' }
+          ./scripts/fetch-windows-coreutils.ps1 -Architecture $architecture
+
+      - name: Verify Windows Coreutils resources and PowerShell 5.1 integration
+        if: matrix.target == 'windows-x86_64'
+        shell: powershell
+        run: ./scripts/test-windows-coreutils-package.ps1 -RequireRunnableBinary
+
+      - name: Verify Windows ARM64 Coreutils package resources
+        if: matrix.target == 'windows-aarch64'
+        shell: powershell
+        run: ./scripts/test-windows-coreutils-package.ps1
 
       - name: Prepare release body
         id: release_body
