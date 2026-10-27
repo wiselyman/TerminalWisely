@@ -6,6 +6,7 @@ import {
 } from "../lib/workspacePanelWidth";
 import { bindDesktopAi, parkDesktopAi } from "../lib/desktopAiBridge";
 import type { DesktopWindowFrame } from "../lib/desktopWindowFrame";
+import { desktopTargetKey, isSshDesktopTarget, type DesktopTarget } from "../lib/desktopTarget";
 import { useBrowserStore } from "./browserStore";
 import { useFindStore } from "./findStore";
 import { useLocalFsStore } from "./localFsStore";
@@ -71,6 +72,8 @@ function bringToFront(
 
 interface DesktopState {
   open: boolean;
+  target: DesktopTarget | null;
+  /** Compatibility alias for existing SSH-only consumers. */
   sessionId: string | null;
   width: number;
   apps: AppsState;
@@ -82,6 +85,7 @@ interface DesktopState {
   focusOrder: DesktopAppId[];
   /** File manager: "find" focuses path-bar search. */
   filesTab: "files" | "find";
+  openDesktopTarget: (target: DesktopTarget) => void;
   openDesktop: (sessionId: string) => void;
   close: () => void;
   setWidth: (width: number) => void;
@@ -114,12 +118,31 @@ function patchApp(
 }
 
 export const useDesktopStore = create<DesktopState>((set, get) => {
+  const targetSnapshots = new Map<string, {
+    apps: AppsState;
+    frames: Partial<Record<DesktopAppId, DesktopWindowFrame>>;
+    focusOrder: DesktopAppId[];
+    filesTab: "files" | "find";
+  }>();
+
+  const rememberActiveTarget = () => {
+    const state = get();
+    if (!state.target) return;
+    targetSnapshots.set(desktopTargetKey(state.target), {
+      apps: cloneDesktopApps(state.apps),
+      frames: { ...state.frames },
+      focusOrder: [...state.focusOrder],
+      filesTab: state.filesTab,
+    });
+  };
+
   subscribeWorkspacePanelWidth((width) => {
     set({ width });
   });
 
   return {
     open: false,
+    target: null,
     sessionId: null,
     width: readWorkspacePanelWidth(),
     apps: idleApps(),
@@ -134,7 +157,9 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
 
     setFilesTab: (tab) => {
       set({ filesTab: tab });
-      useLocalFsStore.getState().setActiveTab("files");
+      if (isSshDesktopTarget(get().target)) {
+        useLocalFsStore.getState().setActiveTab("files");
+      }
       if (tab === "find") {
         useFindStore.setState((s) => ({
           focusNonce: s.focusNonce + 1,
@@ -142,31 +167,48 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       }
     },
 
-    openDesktop: (sessionId) => {
+    openDesktopTarget: (target) => {
+      const current = get();
+      const key = desktopTargetKey(target);
+      if (current.open && current.target && desktopTargetKey(current.target) === key) return;
+      rememberActiveTarget();
+      const saved = targetSnapshots.get(key);
       set({
         open: true,
-        sessionId,
+        target,
+        sessionId: isSshDesktopTarget(target) ? target.sessionId : null,
+        apps: saved ? cloneDesktopApps(saved.apps) : idleApps(),
+        frames: saved ? { ...saved.frames } : {},
+        focusOrder: saved ? [...saved.focusOrder] : [],
+        filesTab: saved?.filesTab ?? "files",
+        frameRevision: get().frameRevision + 1,
       });
-      useLocalFsStore.getState().activateSession(sessionId);
-      useFindStore.getState().activateSession(sessionId);
+      if (isSshDesktopTarget(target)) {
+        useLocalFsStore.getState().activateSession(target.sessionId);
+        useFindStore.getState().activateSession(target.sessionId);
+      }
     },
 
+    openDesktop: (sessionId) => get().openDesktopTarget({ kind: "ssh", sessionId }),
+
     close: () => {
-      const { apps } = get();
+      const { apps, target } = get();
+      rememberActiveTarget();
       // Always park native browser if any session still owns a surface —
       // apps.browser.open can lag behind async close during host tab switches.
-      if (apps.browser.open || useBrowserStore.getState().webviewLabel) {
+      if (isSshDesktopTarget(target) && (apps.browser.open || useBrowserStore.getState().webviewLabel)) {
         void useBrowserStore.getState().close();
       }
-      if (apps.files.open) {
+      if (isSshDesktopTarget(target) && apps.files.open) {
         useLocalFsStore.getState().close();
       }
-      if (apps.processes.open) {
+      if (isSshDesktopTarget(target) && apps.processes.open) {
         useTaskManagerStore.getState().close();
       }
-      parkDesktopAi();
+      if (isSshDesktopTarget(target)) parkDesktopAi();
       set({
         open: false,
+        target: null,
         sessionId: null,
         apps: idleApps(),
         frames: {},
@@ -204,8 +246,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
     },
 
     launchApp: (app, opts) => {
-      const sessionId = get().sessionId;
-      if (!sessionId) return;
+      const target = get().target;
+      if (!target) return;
+      const sessionId = isSshDesktopTarget(target) ? target.sessionId : null;
+      // Local app providers are connected in subsequent implementation tasks.
+      // Until then, never let a Local click fall through to the active SSH session.
+      if (target.kind === "local" && ["files", "processes", "browser", "aiLinux"].includes(app)) return;
 
       if (app === "files") {
         const tab = opts?.filesTab ?? get().filesTab;
@@ -219,8 +265,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
           }),
           focusOrder: bringToFront(get().focusOrder, "files"),
         });
-        useLocalFsStore.getState().openPanel(sessionId, "files");
-        useFindStore.getState().activateSession(sessionId);
+        if (sessionId) {
+          useLocalFsStore.getState().openPanel(sessionId, "files");
+          useFindStore.getState().activateSession(sessionId);
+        }
         if (focusSearch) {
           useFindStore.setState((s) => ({
             focusNonce: s.focusNonce + 1,
@@ -251,7 +299,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
           }),
           focusOrder: bringToFront(get().focusOrder, app),
         });
-        if (app === "aiLinux") bindDesktopAi(sessionId);
+        if (app === "aiLinux" && sessionId) bindDesktopAi(sessionId);
         return;
       }
 
@@ -263,7 +311,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         }),
         focusOrder: bringToFront(get().focusOrder, "browser"),
       });
-      void useBrowserStore.getState().openPanel(sessionId);
+      if (sessionId) void useBrowserStore.getState().openPanel(sessionId);
     },
 
     minimizeApp: (app) => {

@@ -5,15 +5,16 @@ import { useDesktopStore } from "../../stores/desktopStore";
 import { useHostStatsStore } from "../../stores/hostStatsStore";
 import { DesktopClock, DesktopDock } from "./DesktopDock";
 import { DesktopIcons } from "./DesktopIcons";
+import type { DesktopTarget } from "../../lib/desktopTarget";
 
 type Props = {
-  sessionId: string;
+  target: DesktopTarget;
 };
 
-export function DesktopPanel({ sessionId }: Props) {
+export function DesktopPanel({ target }: Props) {
   const { t } = useTranslation("tools");
   const machineName = useHostStatsStore((state) =>
-    state.activeSessionId === sessionId ? state.snapshot?.hostname : null,
+    target.kind === "ssh" && state.activeSessionId === target.sessionId ? state.snapshot?.hostname : null,
   );
   const hasMaximizedApp = useDesktopStore((s) =>
     Object.values(s.apps).some((app) => app.open && !app.minimized && app.maximized),
@@ -67,8 +68,8 @@ export function DesktopPanel({ sessionId }: Props) {
         data-maximized-app={hasMaximizedApp ? "true" : "false"}
       >
         <div className="host-desktop-menubar">
-          <h2 className="host-desktop-computer" title={machineName || t("desktop.title")}>
-            {machineName || t("desktop.title")}
+          <h2 className="host-desktop-computer" title={machineName || (target.kind === "local" ? t("desktop.localComputer") : t("desktop.title"))}>
+            {machineName || (target.kind === "local" ? t("desktop.localComputer") : t("desktop.title"))}
           </h2>
           <DesktopClock />
         </div>

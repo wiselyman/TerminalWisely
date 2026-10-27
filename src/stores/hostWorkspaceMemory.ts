@@ -156,6 +156,7 @@ function softCloseDesktop() {
   }
   useDesktopStore.setState({
     open: false,
+    target: null,
     sessionId: null,
     apps: idleApps(),
     frames: {},

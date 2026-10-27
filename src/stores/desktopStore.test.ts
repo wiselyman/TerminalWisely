@@ -140,4 +140,37 @@ describe("desktopStore", () => {
     expect(useDesktopStore.getState().apps.browser.open).toBe(false);
     expect(browserOpenPanel).not.toHaveBeenCalled();
   });
+
+  it("restores independent desktop windows for Local and each SSH target", async () => {
+    const { useDesktopStore } = await import("./desktopStore");
+    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+    expect(activateLocalFs).not.toHaveBeenCalled();
+    useDesktopStore.getState().toggleDockApp("markwisely");
+    useDesktopStore.getState().setAppMaximized("markwisely", true);
+
+    useDesktopStore.getState().openDesktopTarget({ kind: "ssh", sessionId: "host-a" });
+    expect(useDesktopStore.getState().apps.files.open).toBe(false);
+    useDesktopStore.getState().toggleDockApp("processes");
+
+    useDesktopStore.getState().openDesktopTarget({ kind: "ssh", sessionId: "host-b" });
+    expect(useDesktopStore.getState().apps.processes.open).toBe(false);
+    useDesktopStore.getState().toggleDockApp("browser");
+
+    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+    expect(useDesktopStore.getState().apps.markwisely).toEqual({
+      open: true,
+      minimized: false,
+      maximized: true,
+    });
+    expect(useDesktopStore.getState().sessionId).toBeNull();
+    expect(useDesktopStore.getState().apps.processes.open).toBe(false);
+
+    useDesktopStore.getState().openDesktopTarget({ kind: "ssh", sessionId: "host-a" });
+    expect(useDesktopStore.getState().apps.processes.open).toBe(true);
+    expect(useDesktopStore.getState().apps.browser.open).toBe(false);
+
+    useDesktopStore.getState().openDesktopTarget({ kind: "ssh", sessionId: "host-b" });
+    expect(useDesktopStore.getState().apps.browser.open).toBe(true);
+    expect(useDesktopStore.getState().apps.files.open).toBe(false);
+  });
 });

@@ -14,6 +14,11 @@
   display: none;
 }
 
+.app-shell.home-space.desktop-mode .host-desktop-panel.find-panel,
+.app-shell.home-space.desktop-mode .host-desktop-panel.local-fs-panel {
+  left: 0;
+}
+
 .desktop-app-float {
   position: absolute;
   display: flex;

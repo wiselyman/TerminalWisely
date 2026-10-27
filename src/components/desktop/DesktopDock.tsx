@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDesktopStore } from "../../stores/desktopStore";
 import { DESKTOP_APPS } from "./desktopApps";
+import { isSshDesktopTarget } from "../../lib/desktopTarget";
 
 type Props = {
   visible?: boolean;
@@ -20,6 +21,7 @@ export function DesktopDock({
 }: Props) {
   const { t } = useTranslation("tools");
   const apps = useDesktopStore((s) => s.apps);
+  const target = useDesktopStore((s) => s.target);
   const toggleDockApp = useDesktopStore((s) => s.toggleDockApp);
 
   return (
@@ -33,7 +35,7 @@ export function DesktopDock({
       onFocus={onFocus}
       onBlur={onBlur}
     >
-      {DESKTOP_APPS.map((app) => {
+      {DESKTOP_APPS.filter((app) => app.id !== "aiLinux" || isSshDesktopTarget(target)).map((app) => {
         const win = apps[app.id];
         const Icon = app.icon;
         const state = !win.open

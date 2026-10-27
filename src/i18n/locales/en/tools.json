@@ -382,6 +382,7 @@
   "aiEngineer.noModels": "No models configured",
   "localFs.railLabel": "Desktop",
   "desktop.title": "Desktop",
+  "desktop.localComputer": "This computer",
   "desktop.panelAria": "Host desktop",
   "desktop.resizeAria": "Resize host desktop panel",
   "desktop.dockAria": "Desktop applications",

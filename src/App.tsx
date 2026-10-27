@@ -71,6 +71,7 @@ import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useLocalFsStore } from "./stores/localFsStore";
 import { useBrowserStore } from "./stores/browserStore";
 import { useDesktopStore } from "./stores/desktopStore";
+import { isSshDesktopTarget } from "./lib/desktopTarget";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
 import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
@@ -432,6 +433,7 @@ function App() {
       }) ||
       aiFiberSessions.length > 0);
   const desktopOpen = useDesktopStore((s) => s.open);
+  const desktopTarget = useDesktopStore((s) => s.target);
   const desktopTerminalOpen = useDesktopStore((s) => s.apps.terminal.open);
   const desktopTerminalMinimized = useDesktopStore(
     (s) => s.apps.terminal.minimized,
@@ -452,9 +454,11 @@ function App() {
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
   const workspacePanelWidth = useDesktopStore((s) => s.width);
   const desktopMode =
-    sidebarView === "hosts" && activeTabId != null && desktopOpen;
+    desktopOpen && (isSshDesktopTarget(desktopTarget)
+      ? sidebarView === "hosts" && activeTabId === desktopTarget.sessionId
+      : desktopTarget?.kind === "local" && homeOpen);
   const desktopTerminalShown =
-    desktopMode && desktopTerminalOpen && !desktopTerminalMinimized;
+    desktopMode && isSshDesktopTarget(desktopTarget) && desktopTerminalOpen && !desktopTerminalMinimized;
   const desktopAiShown = desktopMode && desktopAiOpen && !desktopAiMinimized;
   const workspacePanelOpen = showAiEngineerPanel && !desktopMode;
 
@@ -1413,11 +1417,20 @@ function App() {
                     }
                   }}
                 />
-                {sidebarView === "hosts" ? (
+                {homeOpen || sidebarView === "hosts" ? (
                 <LocalFsTool
-                  active={desktopOpen}
-                  disabled={!activeTabReady}
+                  active={desktopMode}
+                  disabled={!homeOpen && !activeTabReady}
                   onClick={() => {
+                    if (homeOpen) {
+                      const desk = useDesktopStore.getState();
+                      if (desk.open && desk.target?.kind === "local") {
+                        desk.close();
+                      } else {
+                        desk.openDesktopTarget({ kind: "local" });
+                      }
+                      return;
+                    }
                     if (!activeTabId) return;
                     if (useDesktopStore.getState().open) {
                       closeDesktopRemembering();
@@ -1535,9 +1548,9 @@ function App() {
             );
           })
         : null}
-      {sidebarView === "hosts" && activeTabId && desktopOpen ? (
+      {desktopMode && desktopTarget ? (
         <DesktopPanel
-          sessionId={activeTabId}
+          target={desktopTarget}
         />
       ) : null}
       {desktopTerminalShown && activeTabId ? (

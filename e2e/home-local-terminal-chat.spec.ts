@@ -104,3 +104,21 @@ test("Home plus adds an independent local Terminal tab instead of starting SSH",
   await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
   await expect(page.getByTestId("home-terminal-tab")).toHaveAttribute("data-terminal-id", "home-terminal-1");
 });
+
+test("Home local Desktop target isolation", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+
+  const home = page.getByTestId("home-local-chat");
+  await expect(page.getByTestId("local-fs-tool")).toBeVisible();
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
+  await expect(page.getByTestId("desktop-icon-aiLinux")).toHaveCount(0);
+  await expect(page.getByTestId("home-local-terminal")).toBeVisible();
+
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("host-desktop-panel")).toHaveCount(0);
+  await expect(home).toBeVisible();
+  await expect(page.getByTestId("home-local-terminal")).toBeVisible();
+});

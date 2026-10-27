@@ -382,6 +382,7 @@
   "aiEngineer.noModels": "未配置模型",
   "localFs.railLabel": "桌面",
   "desktop.title": "桌面",
+  "desktop.localComputer": "本机",
   "desktop.panelAria": "主机桌面",
   "desktop.resizeAria": "调整主机桌面宽度",
   "desktop.dockAria": "桌面应用",
