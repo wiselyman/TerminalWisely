@@ -105,6 +105,14 @@ jobs:
         shell: powershell
         run: ./scripts/test-windows-coreutils-package.ps1 -RequireRunnableBinary
 
+      - name: Prepare Windows Coreutils ARM64 bundle
+        if: matrix.label == 'windows-x86_64'
+        shell: powershell
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'windows-coreutils-arm64'
+          ./scripts/fetch-windows-coreutils.ps1 -Architecture arm64 -Destination $destination
+          ./scripts/test-windows-coreutils-package.ps1 -ResourceRoot $destination
+
       - name: Typecheck and build frontend
         run: npm run build
 

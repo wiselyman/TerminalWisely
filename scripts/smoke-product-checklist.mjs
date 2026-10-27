@@ -1984,6 +1984,7 @@ function readStyles() {
   const desktopTargets = read("src/lib/desktopTarget.ts");
   const windowsConfig = read("src-tauri/tauri.windows.conf.json");
   const localTerminal = read("src-tauri/src/local_terminal.rs");
+  const ciWorkflow = read(".github/workflows/ci.yml");
   const testMatrix = read("docs/TEST_MATRIX.md");
   if (
     desktopDock.includes('app.id !== "aiLinux" || isSshDesktopTarget(target)') &&
@@ -2003,6 +2004,15 @@ function readStyles() {
     pass("windows.local-coreutils-resource", "Windows bundles target Coreutils for the local PowerShell session");
   } else {
     fail("windows.local-coreutils-resource", "Windows Coreutils resource mapping or session PATH wiring is missing");
+  }
+  if (
+    ciWorkflow.includes("Prepare Windows Coreutils ARM64 bundle") &&
+    ciWorkflow.includes("fetch-windows-coreutils.ps1 -Architecture arm64") &&
+    ciWorkflow.includes("test-windows-coreutils-package.ps1 -ResourceRoot")
+  ) {
+    pass("windows.local-coreutils-arm64-ci", "Windows CI prepares and validates ARM64 Coreutils resources");
+  } else {
+    fail("windows.local-coreutils-arm64-ci", "Windows ARM64 Coreutils resource smoke is missing from CI");
   }
 }
 
