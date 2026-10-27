@@ -34,7 +34,7 @@ function Get-VerifiedArchive([string] $Path, [string] $ExpectedSha256, [string] 
 
 function Get-RequiredFile([string] $Path, [string] $Description) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        throw "Missing required $Description: $Path"
+        throw "Missing required ${Description}: $Path"
     }
     return (Resolve-Path -LiteralPath $Path).Path
 }

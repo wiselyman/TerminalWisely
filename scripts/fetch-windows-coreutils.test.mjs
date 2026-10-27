@@ -16,6 +16,12 @@ test('Coreutils provisioning script pins the official architecture assets and di
   assert.match(source, /e01a35c1856991e313564f02b540c6079274f0ecb3be22de764edd5341eabfaa/i);
 });
 
+test('PowerShell interpolated variables before punctuation use braced names', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(script, 'utf8');
+  assert.match(source, /Missing required \$\{Description\}: \$Path/);
+});
+
 test('Coreutils provisioning rejects an unsupported architecture', { skip: !isWindows }, () => {
   const result = invoke(['-Architecture', 'ia64', '-Destination', os.tmpdir()]);
   assert.notEqual(result.status, 0);

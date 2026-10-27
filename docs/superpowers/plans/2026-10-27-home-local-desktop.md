@@ -157,8 +157,8 @@
 - [x] **Step 1: 写失败测试**：补 provisioning 脚本测试（架构、SHA-256、二进制与许可证缺失）和 Rust 子进程 PATH 测试；通过缺少 provisioning 脚本及 PATH helper 缺失观察 RED。
 - [x] **Step 2: 运行 RED**：`node --test scripts/fetch-windows-coreutils.test.mjs` 起初因脚本缺失失败；`cargo test local_terminal::tests --lib` 起初因 PATH helper 缺失编译失败。
 - [x] **Step 3: 最小实现**：按 Windows matrix target 拉取固定版本、验证 GitHub asset digest、解包 binary/NOTICE/license，打包至应用资源；构造 PowerShell 5.1 session-local PATH/alias 启动命令，不调用安装器或写用户配置。
-- [ ] **Step 4: 验证 GREEN**：运行定向测试；Windows x64/ARM64 CI 断言安装包资源存在，PowerShell 内 `Get-Command ls` 指向 bundled Coreutils，同时验证 `$PROFILE`、全局 PATH 未修改。
-- [ ] **Step 5: 提交**：`build: bundle Windows Coreutils for local terminal`。
+- [ ] **Step 4: 验证 GREEN**：运行定向测试；Windows x64/ARM64 CI 断言安装包资源存在，PowerShell 内 `Get-Command ls` 指向 bundled Coreutils，同时验证 `$PROFILE`、全局 PATH 未修改。首次 Windows CI 发现 PowerShell 5.1 将 `"$Description: ..."` 解析为无效变量引用；已按失败日志补回归断言并改为 `${Description}`，等待下一轮 Windows CI 验证。
+- [x] **Step 5: 提交**：`build: bundle Windows Coreutils for local terminal` (`3dfb42f0`)。
 
 ### Task 7: 全量回归、测试矩阵和用户文档
 
@@ -169,5 +169,5 @@
 - [x] **Step 1: 写失败/缺失契约测试**：扩展 `scripts/smoke-product-checklist.mjs` 检查 Local Dock 隐藏 AI Linux、Home Desktop toggle 和 Windows resource mapping。
 - [x] **Step 2: 运行 RED**：`npm run test:smoke`，先确认新产品契约尚未登记，再添加文档矩阵后通过。
 - [x] **Step 3: 更新文档**：补上 Local/SSH Desktop 能力矩阵、Windows PowerShell/Coreutils 兼容说明和 Home Desktop 用户路径；版本元数据升至 0.1.0。
-- [x] **Step 4: 全量验证**：`node scripts/check-no-agent-hardcoding.mjs`、`./scripts/run-all-tests.sh` 和 `git diff --check` 均通过；Windows PowerShell/package 断言等待推送后由 GitHub Actions 矩阵实测。
+- [ ] **Step 4: 全量验证**：`node scripts/check-no-agent-hardcoding.mjs`、`./scripts/run-all-tests.sh` 和 `git diff --check` 均通过；待 Windows PowerShell/package 断言由 GitHub Actions 矩阵实测后勾选。
 - [x] **Step 5: 提交**：`docs: document Home local desktop workspace`。
