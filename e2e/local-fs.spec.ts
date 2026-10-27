@@ -26,10 +26,17 @@ test.describe("Local FS panel", () => {
     await expect(panel.getByText("Group")).toBeVisible();
     await expect(panel.getByText("Modified")).toBeVisible();
     const row = panel.locator('[data-path="/var/log/app.log"]');
+    const expectedModified = new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(1_729_700_000_125));
     await expect(row).toContainText("-rw-r-----");
     await expect(row).toContainText("ubuntu");
     await expect(row).toContainText("adm");
-    await expect(row).toContainText("Oct 24, 2024");
+    await expect(row).toContainText(expectedModified);
 
     await panel.getByRole("button", { name: "Icon view" }).click();
     const card = panel.locator('[data-path="/var/log/app.log"]');
@@ -38,7 +45,7 @@ test.describe("Local FS panel", () => {
     await expect(card).not.toContainText("-rw-r-----");
     await expect(card).not.toContainText("ubuntu");
     await expect(card).not.toContainText("4.0 KB");
-    await expect(card).not.toContainText("Oct 24, 2024");
+    await expect(card).not.toContainText(expectedModified);
   });
 
   test("file actions remain available from Desktop", async ({ page }) => {
