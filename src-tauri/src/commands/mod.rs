@@ -1090,6 +1090,16 @@ pub async fn list_processes(
 }
 
 #[tauri::command]
+pub fn list_local_processes() -> Result<ProcessListResult, String> {
+    crate::process::list_local_processes().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn kill_local_process(pid: u32, force: bool) -> Result<(), String> {
+    crate::process::kill_local_process(pid, force).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_systemd_units(
     request: crate::types::ListSystemdUnitsRequest,
     sessions: State<'_, SessionManager>,

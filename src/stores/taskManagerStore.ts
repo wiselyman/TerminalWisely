@@ -8,6 +8,7 @@ import { useFindStore } from "./findStore";
 import { useHostStatsStore } from "./hostStatsStore";
 import { useSessionStore } from "./sessionStore";
 import { useToastStore } from "./toastStore";
+import { desktopTargetKey, type DesktopTarget } from "../lib/desktopTarget";
 import {
   readWorkspacePanelWidth,
   setWorkspacePanelWidth,
@@ -21,7 +22,7 @@ const KILLED_TOMBSTONE_MS = 20_000;
 type ProcessListMode = "full" | "basic" | "ports";
 type ProcessRefreshMode = "basic" | "ports" | "full";
 
-let processFetchSeq = 0;
+const processFetchSeq = new Map<string, number>();
 let portsFetchInflight = 0;
 const processCache = new Map<string, ProcessEntry[]>();
 const killedProcessTombstones = new Map<string, Map<number, number>>();
@@ -118,7 +119,24 @@ function refreshProcessMetrics(
   );
 }
 
-async function listProcesses(sessionId: string, mode: ProcessListMode) {
+type ProcessTarget = string | DesktopTarget;
+
+function processBucketKey(target: ProcessTarget): string {
+  if (typeof target === "string") return `ssh:${target}`;
+  return desktopTargetKey(target);
+}
+
+function processSessionId(target: ProcessTarget): string | null {
+  if (typeof target === "string") return target;
+  return target.kind === "ssh" ? target.sessionId : null;
+}
+
+async function listProcesses(target: ProcessTarget, mode: ProcessListMode) {
+  if (typeof target !== "string" && target.kind === "local") {
+    return invoke<ProcessListResult>("list_local_processes");
+  }
+  const sessionId = processSessionId(target);
+  if (!sessionId) throw new Error("SSH session is required");
   return invoke<ProcessListResult>("list_processes", {
     request: { session_id: sessionId, mode },
   });
@@ -137,6 +155,7 @@ function friendlyProcessError(err: unknown): string {
 }
 
 interface TaskManagerState {
+  targetKey: string | null;
   open: boolean;
   width: number;
   processes: ProcessEntry[];
@@ -154,17 +173,18 @@ interface TaskManagerState {
   toggleOpen: () => void;
   close: () => void;
   fetchProcesses: (
-    sessionId: string,
+    target: ProcessTarget,
     options?: {
       initial?: boolean;
       kind?: SessionKind;
       refresh?: ProcessRefreshMode;
     },
   ) => Promise<void>;
-  killProcess: (sessionId: string, pid: number, name: string, force?: boolean) => Promise<void>;
+  killProcess: (target: ProcessTarget, pid: number, name: string, force?: boolean) => Promise<void>;
 }
 
 export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
+  targetKey: null,
   open: false,
   width: readWorkspacePanelWidth(),
   processes: [],
@@ -212,18 +232,22 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
   close: () =>
     set({
       open: false,
+      targetKey: null,
       filterQuery: "",
       error: null,
       portsLoading: false,
       syncing: false,
     }),
 
-  fetchProcesses: async (sessionId, options) => {
+  fetchProcesses: async (target, options) => {
+    const bucketKey = processBucketKey(target);
+    const sessionId = processSessionId(target);
+    const isLocal = sessionId === null;
     const isFirstPaint = options?.initial === true;
     const refreshMode = options?.refresh;
     const isBackgroundRefresh = refreshMode != null;
 
-    if (useSessionStore.getState().disconnectedSessionIds.has(sessionId)) {
+    if (sessionId && useSessionStore.getState().disconnectedSessionIds.has(sessionId)) {
       if (isFirstPaint) {
         set({
           loading: false,
@@ -243,25 +267,26 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
     }
 
     if (isFirstPaint) {
-      processFetchSeq += 1;
-      const cached = processCache.get(sessionId);
+      processFetchSeq.set(bucketKey, (processFetchSeq.get(bucketKey) ?? 0) + 1);
+      const cached = processCache.get(bucketKey);
       if (cached?.length) {
         set({
-          processes: publishProcesses(sessionId, cached),
+          targetKey: bucketKey,
+          processes: publishProcesses(bucketKey, cached),
           loading: false,
           syncing: true,
           error: null,
           portsLoading: false,
         });
       } else {
-        set({ loading: true, syncing: false, error: null, portsLoading: false, processes: [] });
+        set({ targetKey: bucketKey, loading: true, syncing: false, error: null, portsLoading: false, processes: [] });
       }
     } else if (isBackgroundRefresh) {
       set({ syncing: true });
     }
 
-    const seq = processFetchSeq;
-    const isStale = () => seq !== processFetchSeq;
+    const seq = processFetchSeq.get(bucketKey) ?? 0;
+    const isStale = () => seq !== (processFetchSeq.get(bucketKey) ?? 0);
 
     const finishSync = (patch: Partial<TaskManagerState> = {}) => {
       set({ syncing: false, ...patch });
@@ -281,9 +306,10 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
       if (isFirstPaint) {
         const finishBasic = async (basic: ProcessListResult) => {
           if (isStale()) return;
-          const processes = publishProcesses(sessionId, basic.processes);
-          cacheProcesses(sessionId, processes);
+          const processes = publishProcesses(bucketKey, basic.processes);
+          cacheProcesses(bucketKey, processes);
           set({
+            targetKey: bucketKey,
             processes,
             loading: false,
             syncing: true,
@@ -292,14 +318,19 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
             portsLoading: true,
           });
 
+          if (isLocal) {
+            finishSync({ portsLoading: false, processes, lastUpdated: Date.now() });
+            return;
+          }
+
           try {
-            const ports = await listProcesses(sessionId, "ports");
+            const ports = await listProcesses(target, "ports");
             if (isStale()) return;
             const merged = publishProcesses(
-              sessionId,
+              bucketKey,
               mergeProcessPorts(processes, ports.processes),
             );
-            cacheProcesses(sessionId, merged);
+            cacheProcesses(bucketKey, merged);
             finishSync({
               processes: merged,
               portsLoading: false,
@@ -312,7 +343,7 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
           }
         };
 
-        void listProcesses(sessionId, "basic")
+        void listProcesses(target, "basic")
           .then((basic) => void finishBasic(basic))
           .catch((err) => fail(err));
         return;
@@ -320,10 +351,10 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
 
       if (refreshMode === "basic") {
         try {
-          const result = await listProcesses(sessionId, "basic");
+          const result = await listProcesses(target, "basic");
           if (isStale()) return;
-          const processes = refreshProcessMetrics(sessionId, get().processes, result.processes);
-          cacheProcesses(sessionId, processes);
+          const processes = refreshProcessMetrics(bucketKey, get().processes, result.processes);
+          cacheProcesses(bucketKey, processes);
           finishSync({
             processes,
             error: null,
@@ -339,13 +370,13 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
         portsFetchInflight += 1;
         set({ portsLoading: true });
         try {
-          const ports = await listProcesses(sessionId, "ports");
+          const ports = await listProcesses(target, "ports");
           if (isStale()) return;
           const processes = publishProcesses(
-            sessionId,
+            bucketKey,
             mergeProcessPorts(get().processes, ports.processes),
           );
-          cacheProcesses(sessionId, processes);
+          cacheProcesses(bucketKey, processes);
           finishSync({
             processes,
             portsLoading: false,
@@ -367,11 +398,11 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
         if (!get().loading) {
           set({ portsLoading: true });
         }
-        const result = await listProcesses(sessionId, "full");
+          const result = await listProcesses(target, "full");
         if (isStale()) return;
 
-        const processes = publishProcesses(sessionId, result.processes);
-        cacheProcesses(sessionId, processes);
+        const processes = publishProcesses(bucketKey, result.processes);
+        cacheProcesses(bucketKey, processes);
         finishSync({
           processes,
           loading: false,
@@ -386,22 +417,28 @@ export const useTaskManagerStore = create<TaskManagerState>((set, get) => ({
     }
   },
 
-  killProcess: async (sessionId, pid, name, force = false) => {
-    markKilled(sessionId, pid);
+  killProcess: async (target, pid, name, force = false) => {
+    const bucketKey = processBucketKey(target);
+    const sessionId = processSessionId(target);
+    markKilled(bucketKey, pid);
     set((state) => ({
       processes: state.processes.filter((process) => process.pid !== pid),
     }));
 
     try {
-      await invoke("kill_process", {
-        request: { session_id: sessionId, pid, force },
-      });
+      if (sessionId) {
+        await invoke("kill_process", {
+          request: { session_id: sessionId, pid, force },
+        });
+      } else {
+        await invoke("kill_local_process", { pid, force });
+      }
       useToastStore
         .getState()
         .pushToast(i18n.t("tools:taskManager.killedToast", { name, pid }), true);
     } catch (err) {
-      unmarkKilled(sessionId, pid);
-      void get().fetchProcesses(sessionId, { refresh: "full" });
+      unmarkKilled(bucketKey, pid);
+      void get().fetchProcesses(target, { refresh: "full" });
       useToastStore.getState().pushToast(formatAppError(err), false);
     }
   },

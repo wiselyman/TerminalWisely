@@ -50,6 +50,7 @@ let lastPreviewOpen: Record<string, unknown> | null = null;
 let lastPreviewSave: Record<string, unknown> | null = null;
 let createdRemotePaths: string[] = [];
 let localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
+let localProcesses = [{ pid: 42001, name: "e2e-worker", command: "worker --local", cpu_percent: 1.2, memory_bytes: 2048, ports: [] as number[] }];
 let localFsText = new Map<string, string>([["/tmp/e2e-file.txt", "local test contents"]]);
 let lastAiTerminalExec: Record<string, unknown> | null = null;
 let lastAiLease: Record<string, unknown> | null = null;
@@ -73,6 +74,7 @@ export function __e2eResetMocks() {
   lastPreviewSave = null;
   createdRemotePaths = [];
   localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
+  localProcesses = [{ pid: 42001, name: "e2e-worker", command: "worker --local", cpu_percent: 1.2, memory_bytes: 2048, ports: [] }];
   localFsText = new Map([["/tmp/e2e-file.txt", "local test contents"]]);
   lastAiTerminalExec = null;
   lastAiLease = null;
@@ -399,6 +401,12 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       parent: path === "/" ? null : path === "/tmp" ? "/" : "/tmp",
       entries: localFsEntries.filter((entry) => entry.path.slice(0, entry.path.lastIndexOf("/")) === path),
     };
+  },
+  list_local_processes: () => ({ processes: localProcesses }),
+  kill_local_process: (args) => {
+    const request = args as { pid: number };
+    localProcesses = localProcesses.filter((process) => process.pid !== request.pid);
+    return null;
   },
   create_local_path: (args) => {
     const request = (args as { request: { parent: string; name: string; kind: string } }).request;

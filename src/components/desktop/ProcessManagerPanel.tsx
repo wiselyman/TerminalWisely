@@ -1,12 +1,14 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useTaskManagerStore } from "../../stores/taskManagerStore";
 import type { ProcessEntry } from "../../types";
 import { TaskManagerTable } from "../TaskManagerTable";
 import { DesktopAppWindow } from "./DesktopAppWindow";
+import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
 
 type Props = {
-  sessionId: string;
+  target: DesktopTarget;
+  sessionId?: string;
   sessionTitle?: string | null;
 };
 
@@ -23,11 +25,12 @@ function matchesFilter(process: ProcessEntry, query: string) {
   return false;
 }
 
-export function ProcessManagerPanel({ sessionId, sessionTitle }: Props) {
+export function ProcessManagerPanel({ target, sessionTitle }: Props) {
   const { t } = useTranslation(["tools", "common"]);
 
   const {
     processes,
+    targetKey,
     loading,
     syncing,
     portsLoading,
@@ -39,11 +42,21 @@ export function ProcessManagerPanel({ sessionId, sessionTitle }: Props) {
     sortDirection,
     setSort,
     killProcess,
+    fetchProcesses,
   } = useTaskManagerStore();
 
+  useEffect(() => {
+    if (target.kind !== "local") return;
+    void fetchProcesses(target, { initial: true });
+    const timer = window.setInterval(() => void fetchProcesses(target, { refresh: "basic" }), 3000);
+    return () => window.clearInterval(timer);
+  }, [fetchProcesses, target]);
+
+  const targetProcesses = targetKey === desktopTargetKey(target) ? processes : [];
+
   const filteredProcesses = useMemo(
-    () => processes.filter((process) => matchesFilter(process, filterQuery)),
-    [filterQuery, processes],
+    () => targetProcesses.filter((process) => matchesFilter(process, filterQuery)),
+    [filterQuery, targetProcesses],
   );
 
   const lastUpdatedLabel = lastUpdated
@@ -88,7 +101,7 @@ export function ProcessManagerPanel({ sessionId, sessionTitle }: Props) {
         sortDirection={sortDirection}
         onSort={setSort}
         onKill={(process) =>
-          void killProcess(sessionId, process.pid, process.name)
+          void killProcess(target, process.pid, process.name)
         }
       />
     </DesktopAppWindow>

@@ -1583,10 +1583,12 @@ function App() {
           sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle ?? undefined : undefined}
         />
       ) : null}
-      {sidebarView === "hosts" && activeTabId && desktopProcessesOpen ? (
+      {desktopMode && desktopTarget && desktopProcessesOpen && (
+        desktopTarget.kind === "local" || (sidebarView === "hosts" && activeTabId)
+      ) ? (
         <ProcessManagerPanel
-          sessionId={activeTabId}
-          sessionTitle={activeSessionTitle ?? undefined}
+          target={desktopTarget}
+          sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle ?? undefined : "This computer"}
         />
       ) : null}
       {sidebarView === "hosts" && activeTabId && browserOpen ? (

@@ -192,3 +192,16 @@ test("Home MarkWisely creates, saves, and reopens local Markdown", async ({ page
   await page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" }).click();
   await expect(editor).toContainText("Local note");
 });
+
+test("Home Desktop Processes lists and stops a local process", async ({ page }) => {
+  await gotoApp(page);
+  await (await twE2e(page)).openHome();
+  await page.getByTestId("local-fs-tool").click();
+  await page.getByTestId("dock-app-processes").click();
+  const panel = page.getByTestId("host-process-manager-panel");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("e2e-worker", { exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: /end process.*e2e-worker|结束进程.*e2e-worker/i }).click();
+  await panel.getByRole("button", { name: /confirm end|确认结束/i }).click();
+  await expect(panel.getByText("e2e-worker", { exact: true })).toHaveCount(0);
+});

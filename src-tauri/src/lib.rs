@@ -322,6 +322,8 @@ pub fn run() {
             commands::open_preview_path,
             commands::open_preview_handle,
             commands::list_processes,
+            commands::list_local_processes,
+            commands::kill_local_process,
             commands::list_systemd_units,
             commands::list_passwd_accounts,
             commands::complete_path,

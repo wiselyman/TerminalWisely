@@ -251,7 +251,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       const sessionId = isSshDesktopTarget(target) ? target.sessionId : null;
       // Until their target-aware providers are connected, Local clicks must
       // never fall through to the active SSH session.
-      if (target.kind === "local" && ["processes", "browser", "terminal", "aiLinux"].includes(app)) return;
+      if (target.kind === "local" && ["browser", "terminal", "aiLinux"].includes(app)) return;
 
       if (app === "files") {
         const tab = opts?.filesTab ?? get().filesTab;

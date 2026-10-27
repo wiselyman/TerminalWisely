@@ -121,11 +121,11 @@
 - Consumes: Task 1 `DesktopTarget`。
 - Produces: Local process list and kill commands mapped to existing `ProcessEntry` fields; SSH remains on `list_processes` / `kill_process`。
 
-- [ ] **Step 1: 写失败测试**：用受控子进程证明 Local list 返回 PID/name/command/resource metrics，kill 只结束该 PID；不存在/已退出 PID 返回错误且不影响其他进程。Store Local/SSH routing 单测验证 command/payload。
-- [ ] **Step 2: 运行 RED**：`cargo test process::local::tests --lib` 与 `npm test -- --run src/stores/taskManagerStore.test.ts`。
-- [ ] **Step 3: 最小实现**：基于已存在的 `sysinfo` 提供跨平台本机列表/结束；Store 的缓存/tombstone 按 target key 分桶，面板的筛选、排序、刷新与确认 UI 共用。
-- [ ] **Step 4: 验证 GREEN**：重跑 Cargo/Vitest；Playwright 验证 Home 本机进程列表与结束，Host 进程仍调用 SSH command。
-- [ ] **Step 5: 提交**：`feat: manage local desktop processes`。
+- [x] **Step 1: 写失败测试**：用受控子进程证明 Local list 返回 PID/name/command/resource metrics，kill 只结束该 PID；不存在/已退出 PID 返回错误且不影响其他进程。Store Local/SSH routing 单测验证 command/payload。
+- [x] **Step 2: 运行 RED**：`cargo test process::local::tests --lib` 与 `npm test -- --run src/stores/taskManagerStore.test.ts`。
+- [x] **Step 3: 最小实现**：基于已存在的 `sysinfo` 提供跨平台本机列表/结束；Store 的缓存/tombstone 按 target key 分桶，面板的筛选、排序、刷新与确认 UI 共用。
+- [x] **Step 4: 验证 GREEN**：重跑 Cargo/Vitest；Playwright 验证 Home 本机进程列表与结束，Host 进程仍调用 SSH command。
+- [x] **Step 5: 提交**：`feat: manage local desktop processes`。
 
 ### Task 5: Local Browser 与 Home PTY 移入 Desktop Terminal
 
