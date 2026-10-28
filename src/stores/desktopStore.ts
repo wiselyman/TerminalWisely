@@ -17,6 +17,7 @@ export type DesktopAppId =
   | "processes"
   | "browser"
   | "terminal"
+  | "aiLocal"
   | "aiLinux"
   | "markwisely";
 
@@ -41,6 +42,7 @@ function idleApps(): AppsState {
     processes: idleApp(),
     browser: idleApp(),
     terminal: idleApp(),
+    aiLocal: idleApp(),
     aiLinux: idleApp(),
     markwisely: idleApp(),
   };
@@ -251,7 +253,10 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
       const sessionId = isSshDesktopTarget(target) ? target.sessionId : null;
       // Until their target-aware providers are connected, Local clicks must
       // never fall through to the active SSH session.
-      if (target.kind === "local" && app === "aiLinux") return;
+      if (
+        (target.kind === "local" && app === "aiLinux") ||
+        (isSshDesktopTarget(target) && app === "aiLocal")
+      ) return;
 
       if (app === "files") {
         const tab = opts?.filesTab ?? get().filesTab;
@@ -290,7 +295,12 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         return;
       }
 
-      if (app === "terminal" || app === "aiLinux" || app === "markwisely") {
+      if (
+        app === "terminal" ||
+        app === "aiLocal" ||
+        app === "aiLinux" ||
+        app === "markwisely"
+      ) {
         set({
           apps: patchApp(get().apps, app, {
             open: true,

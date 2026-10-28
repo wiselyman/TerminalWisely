@@ -109,6 +109,7 @@ function cloneDesktopUi(
       processes: copy(apps.processes),
       browser: copy(apps.browser),
       terminal: copy(apps.terminal),
+      aiLocal: copy(apps.aiLocal),
       aiLinux: copy(apps.aiLinux),
       markwisely: copy(apps.markwisely),
     },
@@ -124,6 +125,7 @@ function idleApps(): Record<DesktopAppId, DesktopAppWindow> {
     processes: { open: false, minimized: false, maximized: false },
     browser: { open: false, minimized: false, maximized: false },
     terminal: { open: false, minimized: false, maximized: false },
+    aiLocal: { open: false, minimized: false, maximized: false },
     aiLinux: { open: false, minimized: false, maximized: false },
     markwisely: { open: false, minimized: false, maximized: false },
   };

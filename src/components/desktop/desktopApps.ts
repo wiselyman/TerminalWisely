@@ -7,6 +7,7 @@ import {
   TerminalAppIcon,
 } from "../WorkspaceToolIcons";
 import type { DesktopAppId } from "../../stores/desktopStore";
+import { isSshDesktopTarget, type DesktopTarget } from "../../lib/desktopTarget";
 
 export const DESKTOP_APPS: {
   id: DesktopAppId;
@@ -39,6 +40,12 @@ export const DESKTOP_APPS: {
     testId: "dock-app-terminal",
   },
   {
+    id: "aiLocal",
+    icon: AiEngineerIcon,
+    labelKey: "desktop.appAiLocal",
+    testId: "dock-app-ai-local",
+  },
+  {
     id: "aiLinux",
     icon: AiEngineerIcon,
     labelKey: "desktop.appAiLinux",
@@ -51,3 +58,11 @@ export const DESKTOP_APPS: {
     testId: "dock-app-markwisely",
   },
 ];
+
+export function getDesktopAppsForTarget(target: DesktopTarget | null) {
+  return DESKTOP_APPS.filter((app) => {
+    if (app.id === "aiLocal") return target?.kind === "local";
+    if (app.id === "aiLinux") return isSshDesktopTarget(target);
+    return true;
+  });
+}

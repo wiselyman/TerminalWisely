@@ -136,6 +136,21 @@ describe("desktopStore", () => {
     expect(useDesktopStore.getState().apps.terminal.open).toBe(false);
   });
 
+  it("launches AI Local only for Home Desktop", async () => {
+    const { useDesktopStore } = await import("./desktopStore");
+    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+    useDesktopStore.getState().toggleDockApp("aiLocal");
+    expect(useDesktopStore.getState().apps.aiLocal.open).toBe(true);
+    expect(useDesktopStore.getState().apps.aiLinux.open).toBe(false);
+
+    useDesktopStore.getState().openDesktop("host-ai");
+    expect(useDesktopStore.getState().apps.aiLocal.open).toBe(false);
+    useDesktopStore.getState().toggleDockApp("aiLocal");
+    expect(useDesktopStore.getState().apps.aiLocal.open).toBe(false);
+    useDesktopStore.getState().toggleDockApp("aiLinux");
+    expect(useDesktopStore.getState().apps.aiLinux.open).toBe(true);
+  });
+
   it("launches MarkWisely instead of falling through to Browser", async () => {
     const { useDesktopStore } = await import("./desktopStore");
     useDesktopStore.getState().openDesktop("sess-markdown");

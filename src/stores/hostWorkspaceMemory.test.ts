@@ -10,10 +10,11 @@ const panel = {
     processes: { open: false, minimized: false, maximized: false },
     browser: { open: false, minimized: false, maximized: false },
     terminal: { open: false, minimized: false, maximized: false },
+    aiLocal: { open: false, minimized: false, maximized: false },
     aiLinux: { open: false, minimized: false, maximized: false },
     markwisely: { open: false, minimized: false, maximized: false },
   },
-  focusOrder: [] as Array<"files" | "processes" | "browser" | "terminal" | "aiLinux" | "markwisely">,
+  focusOrder: [] as Array<"files" | "processes" | "browser" | "terminal" | "aiLocal" | "aiLinux" | "markwisely">,
   filesTab: "files" as "files" | "find",
   frames: {} as Record<string, { x: number; y: number; width: number; height: number }>,
 };
@@ -160,6 +161,7 @@ describe("hostWorkspaceMemory", () => {
       processes: { open: false, minimized: false, maximized: false },
       browser: { open: false, minimized: false, maximized: false },
       terminal: { open: false, minimized: false, maximized: false },
+      aiLocal: { open: false, minimized: false, maximized: false },
       aiLinux: { open: false, minimized: false, maximized: false },
       markwisely: { open: false, minimized: false, maximized: false },
     };

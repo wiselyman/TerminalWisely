@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useDesktopStore, type DesktopAppId } from "../../stores/desktopStore";
-import { DESKTOP_APPS } from "./desktopApps";
-import { isSshDesktopTarget } from "../../lib/desktopTarget";
+import { getDesktopAppsForTarget } from "./desktopApps";
 
 export function DesktopIcons() {
   const { t } = useTranslation("tools");
@@ -15,7 +14,7 @@ export function DesktopIcons() {
       data-testid="host-desktop-empty"
       aria-label={t("desktop.iconsAria")}
     >
-      {DESKTOP_APPS.filter((app) => app.id !== "aiLinux" || isSshDesktopTarget(target)).map((app) => {
+      {getDesktopAppsForTarget(target).map((app) => {
         const Icon = app.icon;
         const open = apps[app.id].open && !apps[app.id].minimized;
         return (
