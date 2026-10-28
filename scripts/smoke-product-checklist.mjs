@@ -1981,21 +1981,29 @@ function readStyles() {
   }
   const desktopDock = read("src/components/desktop/DesktopDock.tsx");
   const desktopIcons = read("src/components/desktop/DesktopIcons.tsx");
+  const desktopApps = read("src/components/desktop/desktopApps.ts");
   const desktopTargets = read("src/lib/desktopTarget.ts");
   const windowsConfig = read("src-tauri/tauri.windows.conf.json");
   const localTerminal = read("src-tauri/src/local_terminal.rs");
   const ciWorkflow = read(".github/workflows/ci.yml");
   const testMatrix = read("docs/TEST_MATRIX.md");
   if (
-    desktopDock.includes('app.id !== "aiLinux" || isSshDesktopTarget(target)') &&
-    desktopIcons.includes('app.id !== "aiLinux" || isSshDesktopTarget(target)') &&
+    desktopDock.includes("getDesktopAppsForTarget(target)") &&
+    desktopIcons.includes("getDesktopAppsForTarget(target)") &&
+    desktopApps.includes('id: "aiLocal"') &&
+    desktopApps.includes('id: "aiLinux"') &&
+    desktopApps.includes('if (app.id === "aiLocal") return target?.kind === "local"') &&
+    desktopApps.includes('if (app.id === "aiLinux") return isSshDesktopTarget(target)') &&
     desktopTargets.includes('target.kind === "local" ? "local"') &&
+    read("src/App.tsx").includes('target="local"') &&
+    read("src/components/aiEngineer/AiEngineerPanel.tsx").includes('desktopTarget?.kind === "local"') &&
     read("src/App.tsx").includes('openDesktopTarget({ kind: "local" })') &&
+    read("src/i18n/locales/en/tools.json").includes('"desktop.appAiLocal": "AI Local"') &&
     testMatrix.includes("Home Local Desktop 工作区")
   ) {
-    pass("ui.home-local-desktop", "Home apps use an isolated local target; AI Linux remains SSH-only");
+    pass("ui.home-local-desktop", "Home Desktop names the local chat AI Local and keeps AI Linux SSH-only");
   } else {
-    fail("ui.home-local-desktop", "Local Desktop target, app scope, or test matrix contract is missing");
+    fail("ui.home-local-desktop", "Local AI app naming/routing, SSH AI scope, or test matrix contract is missing");
   }
   if (
     windowsConfig.includes('"resources/windows-coreutils": "windows-coreutils"') &&

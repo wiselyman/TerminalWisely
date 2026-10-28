@@ -21,6 +21,7 @@
 - `desktopApps.ts` selects `aiLocal` or `aiLinux` from the explicit `DesktopTarget`; `desktopStore.ts` owns separate per-target app state.
 - `AiEngineerPanel.tsx` owns the existing chat instance and portals it into `DesktopAiWindow.tsx` only when Home's local AI app is open. `App.tsx` composes the Home and SSH desktop routes.
 - `smoke-product-checklist.mjs`, `README.md`, and `docs/TEST_MATRIX.md` record the public contract. No Windows shell or backend behavior changes in this task.
+- The screenshot baseline masks the dynamic Desktop clock using fixed bounds so locale-dependent date text does not make unrelated screenshots flaky.
 
 ## 设计
 
@@ -80,7 +81,7 @@
 - [x] **Step 2: Run the targeted E2E and confirm RED** because Home Desktop currently has no AI Local entry/window.
 - [x] **Step 3: Implement target-aware window hosting and visibility** while retaining the existing `LOCAL_CHAT_SESSION` component instance.
 - [x] **Step 4: Run the focused Playwright test and confirm GREEN.**
-- [ ] **Step 5: Commit** `feat: open Home chat as AI Local desktop app`.
+- [x] **Step 5: Commit** `feat: open Home chat as AI Local desktop app`.
 
 ### Task 3: Product contract and documentation
 
@@ -95,5 +96,5 @@
 - [x] **Step 1: Add a failing smoke contract** for Local AI visibility/name and SSH-only AI Linux.
 - [x] **Step 2: Run `npm run test:smoke` and confirm RED.**
 - [x] **Step 3: Update the product contract and documentation** to match the implemented app split.
-- [ ] **Step 4: Run smoke, hardcoding ban, and `./scripts/run-all-tests.sh`; confirm GREEN.**
+- [x] **Step 4: Run smoke, hardcoding ban, and `./scripts/run-all-tests.sh`; confirm GREEN.**
 - [ ] **Step 5: Commit** `docs: describe Home AI Local desktop app`.
