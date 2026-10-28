@@ -557,6 +557,10 @@
   background: linear-gradient(160deg, #c49bff 0%, #6d3fd4 100%);
 }
 
+.host-desktop-glyph.is-aiLocal {
+  background: linear-gradient(160deg, #8b8df8 0%, #5142c8 100%);
+}
+
 .host-desktop-glyph.is-markwisely {
   background: linear-gradient(160deg, #7197f4 0%, #3f62cf 100%);
 }

@@ -57,8 +57,8 @@
 - Consumes: existing `.host-desktop-glyph` and `is-aiLocal` class emitted by `DesktopDock`.
 - Produces: the AI Local icon tile has a non-transparent saturated background, while other app tile styling is unchanged.
 
-- [ ] **Step 1: Write a failing Playwright test** that opens Home Desktop and checks the AI Local Dock glyph has a visible background image/color rather than a transparent tile.
-- [ ] **Step 2: Run the focused test and confirm RED** because `.is-aiLocal` currently has no tile background rule.
-- [ ] **Step 3: Add a dedicated AI Local gradient** in `desktop.css`, using sufficient contrast for the existing white chat glyph.
-- [ ] **Step 4: Run the focused Home Desktop test and confirm GREEN.**
-- [ ] **Step 5: Commit** `fix: improve AI Local dock icon contrast`.
+- [x] **Step 1: Write a failing Playwright test** that opens Home Desktop and checks the AI Local Dock glyph has a visible background image/color rather than a transparent tile.
+- [x] **Step 2: Run the focused test and confirm RED** because `.is-aiLocal` currently has no tile background rule.
+- [x] **Step 3: Add a dedicated AI Local gradient** in `desktop.css`, using sufficient contrast for the existing white chat glyph.
+- [x] **Step 4: Run the focused Home Desktop test and confirm GREEN.**
+- [x] **Step 5: Commit** `fix: improve AI Local dock icon contrast`.
