@@ -61,6 +61,12 @@ export const DESKTOP_APPS: {
 
 export function getDesktopAppsForTarget(target: DesktopTarget | null) {
   return DESKTOP_APPS.filter((app) => {
+    if (
+      target?.kind === "local" &&
+      (app.id === "files" || app.id === "processes" || app.id === "browser")
+    ) {
+      return false;
+    }
     if (app.id === "aiLocal") return target?.kind === "local";
     if (app.id === "aiLinux") return isSshDesktopTarget(target);
     return true;
