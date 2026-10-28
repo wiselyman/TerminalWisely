@@ -123,6 +123,36 @@ test("Home local Desktop target isolation", async ({ page }) => {
   await expect(page.getByTestId("home-local-terminal")).toBeVisible();
 });
 
+test("Home titlebar Chat returns from Local Desktop to the existing chat", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+
+  await page.getByTestId("ai-engineer-tool").click();
+  const composer = page.getByTestId("home-local-chat").getByTestId("ai-engineer-composer").locator("textarea");
+  await composer.fill("keep this Home chat draft");
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
+
+  await page.getByTestId("ai-engineer-tool").click();
+
+  await expect(page.getByTestId("host-desktop-panel")).toHaveCount(0);
+  await expect(page.getByTestId("home-local-terminal")).toBeVisible();
+  await expect(page.getByTestId("home-local-chat")).toBeVisible();
+  await expect(composer).toHaveValue("keep this Home chat draft");
+});
+
+test("AI Local Dock glyph has a visible tile background", async ({ page }) => {
+  await gotoApp(page);
+  await (await twE2e(page)).openHome();
+  await page.getByTestId("local-fs-tool").click();
+
+  const glyph = page.getByTestId("dock-app-ai-local").locator(".host-desktop-glyph");
+  await expect(glyph).toBeVisible();
+  await expect.poll(() => glyph.evaluate((element) => getComputedStyle(element).backgroundImage))
+    .not.toBe("none");
+});
+
 test("Home Desktop opens the existing local chat as AI Local", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);

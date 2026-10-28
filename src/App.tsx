@@ -1391,6 +1391,11 @@ function App() {
                   }
                   onClick={() => {
                     if (homeOpen) {
+                      if (desktopMode && desktopTarget?.kind === "local") {
+                        useDesktopStore.getState().close();
+                        useManagedEntityStore.getState().setHomeChatOpen(true);
+                        return;
+                      }
                       toggleHomeChat();
                       return;
                     }
