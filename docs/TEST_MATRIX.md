@@ -236,7 +236,7 @@
 | Shell script dump → act（粘贴 find/lsof 不当 truncated 续写） | `test_thinking_sanitize` + `test_stream_loop` | — | smoke | — | — |
 | 括号截断续写（路径+容量 `(12G)` 不当作句号） | `test_thinking_sanitize` ends_without… | — | smoke | — | — |
 | 截断续写越界（补句号后甩第二套总结 / 假应答 → 截断丢弃） | `test_thinking_sanitize` overshoot | loop trim | — | — | ✓ |
-| 聊天滚动（长表格流式：table-layout fixed；半截 table 行补齐；触控板微 wheel 不弃贴底；settle 8s；streaming assistant 强制 follow） | `chatScroll.test` + `stabilizeStreamingMarkdown.test` + Playwright `ai-chat-scroll-maximize` | — | smoke `ai.chat-scroll-final` | ✓ | — |
+| 聊天滚动（长表格流式：table-layout fixed；半截 table 行补齐；触控板微 wheel 不弃贴底；settle 8s；streaming assistant 强制 follow） | `chatScroll.test` + `stabilizeStreamingMarkdown.test` + Playwright `ai-chat-scroll-maximize`（含新一轮从历史中段开始） | — | smoke `ai.chat-scroll-final` | ✓ | — |
 | 切换模型不甩滚动（async saveSettings 期间延长 chrome lock；resize RO 让路） | `chatScroll.test` + Playwright selecting model | — | smoke | ✓ | — |
 | 流式出字不卡顿（delta/tool 输出 rAF 合并；流式不写磁盘；落盘在 message/tool/结束） | `streamDeltaCoalesce.test` | — | smoke | — | — |
 | 只读探测 filter 无匹配（exit 1 + 空 stderr + 有 stdout → soft-ok，不标失败、不瞎重试） | `readProbeOutcome.test` + `test_read_probe_outcome` | — | smoke | — | — |

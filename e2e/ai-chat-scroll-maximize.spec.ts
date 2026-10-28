@@ -421,6 +421,39 @@ test.describe("AI composer chrome keeps chat scroll", () => {
     ).toHaveCount(1);
   });
 
+  test("a new response re-pins after reading mid-history between runs", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.resetMocks();
+    await api.openSshTab();
+    await api.openAiChatForSsh();
+    await expect(page.getByTestId("ai-engineer-composer")).toBeVisible({
+      timeout: 20_000,
+    });
+
+    await api.simulateStreamingAssistantGrow({ reset: true, seedRows: 30 });
+    await page.waitForTimeout(80);
+    await api.finishSimulatedAiRun();
+    await page.waitForTimeout(80);
+
+    const scroller = page.locator(
+      ".ai-engineer-panel:not(.ai-engineer-panel-parked) .ai-engineer-messages",
+    );
+    const mid = await scroller.evaluate((el) => {
+      el.dispatchEvent(new WheelEvent("wheel", { deltaY: -80, bubbles: true }));
+      el.scrollTop = Math.floor((el.scrollHeight - el.clientHeight) / 2);
+      el.dispatchEvent(new Event("scroll", { bubbles: true }));
+      return el.scrollTop;
+    });
+    expect(mid).toBeGreaterThan(100);
+
+    // A new run must take over following even when the user read the previous
+    // answer from the middle. Check on the first rendered stream frame.
+    await api.simulateStreamingAssistantGrow({ reset: true, seedRows: 30 });
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    expect(await api.getAiChatScrollDist()).toBeLessThanOrEqual(120);
+  });
+
   test("mid yank without wheel re-pins on further stream growth", async ({
     page,
   }) => {

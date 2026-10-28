@@ -54,6 +54,7 @@ export interface TwE2eApi {
   openAiChatForSsh: () => Promise<void>;
   /** Mark the live AI run as busy (no sidecar stream) for host-switch tests. */
   simulateAiBusy: () => void;
+  finishSimulatedAiRun: () => void;
   /**
    * Grow a streaming assistant bubble (seed tall history first). Used to verify
    * stick-to-bottom pins before paint during token growth.
@@ -276,6 +277,16 @@ async function clearAiModelConfig() {
   });
 }
 
+function finishSimulatedAiRun() {
+  useAiEngineerStore.setState({
+    busy: false,
+    modelPhase: "idle",
+    messages: useAiEngineerStore.getState().messages.map((message) =>
+      message.kind === "assistant" ? { ...message, streaming: false } : message,
+    ),
+  });
+}
+
 function simulateAiBusy() {
   // Busy without a visible streaming bubble so the footer busy-phase line shows
   // (shouldShowChatBusyLine hides when streaming assistant text is visible).
@@ -489,6 +500,7 @@ export function runE2eBootstrap(): void {
     openAiChatForSsh,
     clearAiModelConfig,
     simulateAiBusy,
+    finishSimulatedAiRun,
     simulateStreamingAssistantGrow,
     getAiBusy,
     getAiChatScrollDist,
