@@ -440,6 +440,8 @@ function App() {
   );
   const desktopAiOpen = useDesktopStore((s) => s.apps.aiLinux.open);
   const desktopAiMinimized = useDesktopStore((s) => s.apps.aiLinux.minimized);
+  const desktopAiLocalOpen = useDesktopStore((s) => s.apps.aiLocal.open);
+  const desktopAiLocalMinimized = useDesktopStore((s) => s.apps.aiLocal.minimized);
   const desktopFilesOpen = useDesktopStore((s) => s.apps.files.open);
   const markWiselyOpen = useDesktopStore((s) => s.apps.markwisely.open);
   const desktopFilesMinimized = useDesktopStore((s) => s.apps.files.minimized);
@@ -460,6 +462,11 @@ function App() {
   const desktopTerminalShown =
     desktopMode && Boolean(desktopTarget) && desktopTerminalOpen && !desktopTerminalMinimized;
   const desktopAiShown = desktopMode && desktopAiOpen && !desktopAiMinimized;
+  const desktopAiLocalShown =
+    desktopMode &&
+    desktopTarget?.kind === "local" &&
+    desktopAiLocalOpen &&
+    !desktopAiLocalMinimized;
   const workspacePanelOpen = showAiEngineerPanel && !desktopMode;
 
   const sidebarWidth = sidebarCollapsed
@@ -1480,7 +1487,7 @@ function App() {
                   <HomeWorkspace
                     terminalTabs={homeTerminalTabs}
                     activeTerminalId={activeHomeTerminalId}
-                    chatOpen={homeChatOpen}
+                    chatOpen={homeChatOpen && !desktopMode}
                   />
                 ) : null}
                 {showK8sWorkbench ? <K8sWorkbench /> : null}
@@ -1557,7 +1564,10 @@ function App() {
         <DesktopTerminalWindow subtitle={isSshDesktopTarget(desktopTarget) ? activeSessionTitle : "This computer"} />
       ) : null}
       {desktopAiShown && activeTabId ? (
-        <DesktopAiWindow subtitle={activeSessionTitle} />
+        <DesktopAiWindow target="ssh" subtitle={activeSessionTitle} />
+      ) : null}
+      {desktopAiLocalShown ? (
+        <DesktopAiWindow target="local" subtitle={t("desktop.localComputer", { ns: "tools" })} />
       ) : null}
       {markWiselyOpen && desktopMode && desktopTarget ? (
         <MarkWiselyWindow

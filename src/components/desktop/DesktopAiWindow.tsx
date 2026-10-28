@@ -4,26 +4,28 @@ import { setDesktopAiHost } from "../../lib/desktopEmbedHost";
 import { DesktopAppWindow } from "./DesktopAppWindow";
 
 type Props = {
+  target: "local" | "ssh";
   subtitle?: string | null;
 };
 
-/** Hosts the existing AI Linux chat. Does not start a second conversation. */
-export function DesktopAiWindow({ subtitle }: Props) {
+/** Hosts an existing local or SSH chat without starting another conversation. */
+export function DesktopAiWindow({ target, subtitle }: Props) {
   const { t } = useTranslation("tools");
+  const local = target === "local";
   const setHost = useCallback((el: HTMLDivElement | null) => {
     setDesktopAiHost(el);
   }, []);
 
   return (
     <DesktopAppWindow
-      appId="aiLinux"
-      title={t("desktop.appAiLinux")}
+      appId={local ? "aiLocal" : "aiLinux"}
+      title={t(local ? "desktop.appAiLocal" : "desktop.appAiLinux")}
       subtitle={subtitle}
-      panelTestId="host-ai-linux-panel"
-      floatTestId="host-ai-linux-float"
-      minimizeTestId="host-ai-linux-minimize"
-      maximizeTestId="host-ai-linux-maximize"
-      closeTestId="host-ai-linux-close"
+      panelTestId={local ? "home-ai-local-panel" : "host-ai-linux-panel"}
+      floatTestId={local ? "home-ai-local-float" : "host-ai-linux-float"}
+      minimizeTestId={local ? "home-ai-local-minimize" : "host-ai-linux-minimize"}
+      maximizeTestId={local ? "home-ai-local-maximize" : "host-ai-linux-maximize"}
+      closeTestId={local ? "home-ai-local-close" : "host-ai-linux-close"}
       bodyClassName="desktop-embed-body"
     >
       <div

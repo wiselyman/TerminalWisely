@@ -1024,6 +1024,8 @@ export function AiEngineerPanel({
   const desktopOpen = useDesktopStore((s) => s.open);
   const desktopSessionId = useDesktopStore((s) => s.sessionId);
   const desktopAi = useDesktopStore((s) => s.apps.aiLinux);
+  const desktopTarget = useDesktopStore((s) => s.target);
+  const desktopAiLocal = useDesktopStore((s) => s.apps.aiLocal);
   const aiHost = useSyncExternalStore(
     subscribeDesktopEmbedHosts,
     getDesktopAiHost,
@@ -1035,8 +1037,20 @@ export function AiEngineerPanel({
     desktopAi.open &&
     !desktopAi.minimized;
   const embedHere = wantDesktopEmbed && aiHost != null;
+  const wantLocalDesktopEmbed =
+    homePlacement &&
+    desktopOpen &&
+    desktopTarget?.kind === "local" &&
+    desktopAiLocal.open &&
+    !desktopAiLocal.minimized;
+  const embedLocal = wantLocalDesktopEmbed && aiHost != null;
+  const desktopEmbed = embedHere || embedLocal;
   const sideOpen = open && !desktopOpen && !homePlacement;
-  const shown = homePlacement ? surfaceActive : sideOpen || embedHere;
+  const shown = homePlacement
+    ? desktopOpen && desktopTarget?.kind === "local"
+      ? embedLocal
+      : surfaceActive
+    : sideOpen || embedHere;
   const panelScope = panelFiberChatScopeKey(sessionId, serverId);
   const width = useAiEngineerStore((s) => s.width);
   const setWidth = useAiEngineerStore((s) => s.setWidth);
@@ -2505,7 +2519,9 @@ export function AiEngineerPanel({
   };
 
   const panelTitle =
-    engineerMode === "k8s"
+    homePlacement
+      ? t("desktop.appAiLocal")
+      : engineerMode === "k8s"
       ? t("aiEngineer.k8sTitle")
       : t("aiEngineer.linuxTitle");
   const emptyHint = homePlacement
@@ -2530,8 +2546,8 @@ export function AiEngineerPanel({
       ) : null}
       <aside
         ref={panelRef}
-        className={`ai-engineer-panel find-panel${shown ? "" : " ai-engineer-panel-parked"}${embedHere ? " is-desktop-embed" : ""}${homePlacement ? " is-home-workspace" : ""}`}
-        style={embedHere || homePlacement ? undefined : { width }}
+        className={`ai-engineer-panel find-panel${shown ? "" : " ai-engineer-panel-parked"}${desktopEmbed ? " is-desktop-embed" : ""}${homePlacement && !embedLocal ? " is-home-workspace" : ""}`}
+        style={desktopEmbed || homePlacement ? undefined : { width }}
         data-testid="ai-engineer-panel"
         aria-label={panelTitle}
         aria-hidden={!shown}
@@ -4406,7 +4422,7 @@ export function AiEngineerPanel({
         : null}
     </>
   );
-  if (embedHere && aiHost) {
+  if (desktopEmbed && aiHost) {
     return createPortal(panelTree, aiHost);
   }
   return panelTree;

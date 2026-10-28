@@ -393,6 +393,7 @@
   "desktop.appProcesses": "Processes",
   "desktop.appBrowser": "Browser",
   "desktop.appTerminal": "Terminal",
+  "desktop.appAiLocal": "AI Local",
   "desktop.appAiLinux": "AI Linux",
   "desktop.appMarkWisely": "MarkWisely",
   "markwisely.subtitle": "Markdown files on this SSH host",

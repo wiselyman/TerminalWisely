@@ -123,6 +123,32 @@ test("Home local Desktop target isolation", async ({ page }) => {
   await expect(page.getByTestId("home-local-terminal")).toBeVisible();
 });
 
+test("Home Desktop opens the existing local chat as AI Local", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  const sshCallsBefore = await api.getCreateSshCallCount();
+
+  await page.getByTestId("ai-engineer-tool").click();
+  const homeComposer = page.getByTestId("ai-engineer-composer").locator("textarea");
+  await expect(homeComposer).toBeVisible();
+  await homeComposer.fill("draft from Home chat");
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("desktop-icon-aiLocal")).toBeVisible();
+  await expect(page.getByTestId("desktop-icon-aiLinux")).toHaveCount(0);
+  await expect(page.getByTestId("host-ai-linux-float")).toHaveCount(0);
+  await page.getByTestId("dock-app-ai-local").click();
+
+  const aiLocal = page.getByTestId("home-ai-local-float");
+  await expect(aiLocal).toBeVisible();
+  await expect(aiLocal.getByTestId("ai-engineer-composer").locator("textarea")).toHaveValue("draft from Home chat");
+  expect(await api.getCreateSshCallCount()).toBe(sshCallsBefore);
+  await page.getByTestId("home-ai-local-close").click();
+  await expect(aiLocal).toHaveCount(0);
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("home-local-chat").getByTestId("ai-engineer-composer").locator("textarea")).toHaveValue("draft from Home chat");
+});
+
 test("Home desktop browser and terminal continuity", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);

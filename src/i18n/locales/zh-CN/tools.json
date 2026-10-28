@@ -393,6 +393,7 @@
   "desktop.appProcesses": "进程管理器",
   "desktop.appBrowser": "浏览器",
   "desktop.appTerminal": "终端",
+  "desktop.appAiLocal": "本机 AI",
   "desktop.appAiLinux": "AI Linux",
   "desktop.appMarkWisely": "MarkWisely",
   "markwisely.subtitle": "此 SSH 主机上的 Markdown 文件",
