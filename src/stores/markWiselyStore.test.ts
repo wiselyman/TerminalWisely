@@ -83,6 +83,42 @@ describe("markWiselyStore", () => {
     });
   });
 
+  it("serializes overlapping saves and writes edits made during an active save", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      hostKey: "server-a",
+      path: "/home/e2e/note.md",
+    });
+    let releaseFirstSave!: () => void;
+    const written: string[] = [];
+    invoke.mockImplementation(async (command: string, args: { request?: Record<string, unknown> }) => {
+      if (command === "preview_save") {
+        const content = String(args.request?.content ?? "");
+        written.push(content);
+        if (written.length === 1) {
+          await new Promise<void>((resolve) => { releaseFirstSave = resolve; });
+        }
+      }
+      return undefined;
+    });
+
+    useMarkWiselyStore.getState().setEditorValue("session-a", "# First edit\n");
+    const firstSave = useMarkWiselyStore.getState().saveDocument("session-a");
+    await vi.waitFor(() => expect(releaseFirstSave).toBeTypeOf("function"));
+    useMarkWiselyStore.getState().setEditorValue("session-a", "# Latest edit\n");
+    const overlappingSave = useMarkWiselyStore.getState().saveDocument("session-a");
+    releaseFirstSave();
+    await Promise.all([firstSave, overlappingSave]);
+
+    expect(written).toEqual(["# First edit\n", "# Latest edit\n"]);
+    expect(useMarkWiselyStore.getState().getDocument("session-a")).toMatchObject({
+      text: "# Latest edit\n",
+      savedText: "# Latest edit\n",
+      saving: false,
+    });
+  });
+
   it("creates a remote file before opening it in the editor", async () => {
     const { useMarkWiselyStore } = await import("./markWiselyStore");
     await useMarkWiselyStore.getState().createDocument({

@@ -81,11 +81,8 @@ test.describe("Host desktop mode", () => {
     await editor.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("# Saved from MarkWisely");
-    await expect(page.getByTestId("markwisely-save")).toBeEnabled();
-    await page.getByTestId("markwisely-save").click();
     await expect(panel.getByRole("status")).toContainText(/Saved|已保存/);
-    const saved = await api.getLastPreviewSave();
-    expect(saved?.content).toContain("Saved from MarkWisely");
+    await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("Saved from MarkWisely");
 
     await panel.getByRole("button", { name: /All files|全部文件/i }).click();
     const recent = panel.getByRole("button", { name: /draft\.md/ });
@@ -94,7 +91,43 @@ test.describe("Host desktop mode", () => {
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
   });
 
-  test("MarkWisely picker filters non-Markdown files and keeps a dirty document when canceling discard", async ({ page }) => {
+  test("MarkWisely editor resizes after maximizing and restoring its window", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-markwisely").click();
+    const panel = page.getByTestId("markwisely-panel");
+    await page.getByTestId("markwisely-new-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
+    await page.getByTestId("markwisely-file-name").fill("resize-check.md");
+    await page.getByTestId("markwisely-create-submit").click();
+    const editor = panel.locator(".vditor-ir");
+    await expect(editor).toBeVisible({ timeout: 30_000 });
+
+    const eastResize = page.getByTestId("desktop-window-resize-e");
+    const resizeBox = await eastResize.boundingBox();
+    expect(resizeBox).toBeTruthy();
+    await page.mouse.move(resizeBox!.x + resizeBox!.width / 2, resizeBox!.y + resizeBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resizeBox!.x + resizeBox!.width / 2 - 480, resizeBox!.y + resizeBox!.height / 2);
+    await page.mouse.up();
+    await expect.poll(async () => (await panel.boundingBox())?.width ?? 0).toBeLessThan(700);
+
+    await page.getByTestId("markwisely-maximize").click();
+    await expect(panel).toHaveAttribute("data-maximized", "true");
+    await page.getByTestId("markwisely-maximize").click();
+    await expect(panel).toHaveAttribute("data-maximized", "false");
+
+    await expect.poll(async () => {
+      const editorBox = await editor.boundingBox();
+      const contentBox = await panel.locator(".markwisely-editor").boundingBox();
+      return editorBox && contentBox ? editorBox.width / contentBox.width : 0;
+    }).toBeGreaterThan(0.95);
+  });
+
+  test("MarkWisely picker filters non-Markdown files and autosaves before leaving a document", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
@@ -128,11 +161,10 @@ test.describe("Host desktop mode", () => {
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("unsaved draft");
     await panel.getByRole("button", { name: /All files|全部文件/i }).click();
-    const dialog = panel.getByRole("alertdialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: /Keep editing|继续编辑/i }).click();
-    await expect(panel.getByTestId("markwisely-editor-view")).toBeVisible();
-    await expect(editor).toContainText("unsaved draft");
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
+    expect((await api.getLastPreviewSave())?.content).toContain("unsaved draft");
+    await panel.getByRole("button", { name: /note\.md/ }).click();
+    await expect(panel.locator(".vditor-ir")).toContainText("unsaved draft");
   });
 
   test("titlebar Chat and Desktop controls switch in one click", async ({ page }) => {

@@ -607,6 +607,8 @@ body.preview-float-resizing {
 .preview-markdown-wysiwyg {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   height: 100%;
@@ -615,11 +617,23 @@ body.preview-float-resizing {
 
 .preview-markdown-wysiwyg-host {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   height: 100%;
 }
 
+.preview-markdown-wysiwyg-host .vditor-content,
+.preview-markdown-wysiwyg-host .vditor-ir,
+.preview-markdown-wysiwyg-host .vditor-ir .vditor-reset {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}
+
 .preview-markdown-wysiwyg-host .vditor {
+  width: 100% !important;
+  min-width: 0;
   border: none;
   border-radius: 0;
   height: 100% !important;

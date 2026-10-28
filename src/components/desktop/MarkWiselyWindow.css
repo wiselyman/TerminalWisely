@@ -1,5 +1,6 @@
 .markwisely-window-body {
   position: relative;
+  min-width: 0;
   background: var(--tw-bg);
 }
 
@@ -306,6 +307,8 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -336,6 +339,8 @@
 
 .markwisely-editor {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }

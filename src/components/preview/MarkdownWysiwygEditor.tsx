@@ -98,6 +98,9 @@ export function MarkdownWysiwygEditor({
     if (!el) return;
     let cancelled = false;
     let observer: MutationObserver | null = null;
+    let sizeObserver: ResizeObserver | null = null;
+    let resizeFrame = 0;
+    let resizeListener: (() => void) | null = null;
     setInitError(null);
 
     const appTheme = getAppTheme();
@@ -191,6 +194,30 @@ export function MarkdownWysiwygEditor({
           if (cancelled) return;
           if (!editable) vditor.disabled();
           scheduleHydrate();
+          const scheduleResize = () => {
+            if (resizeFrame) cancelAnimationFrame(resizeFrame);
+            resizeFrame = requestAnimationFrame(() => {
+              resizeFrame = 0;
+              try {
+                const width = `${el.clientWidth}px`;
+                for (const node of el.querySelectorAll<HTMLElement>(
+                  ".vditor-content, .vditor-ir, .vditor-ir .vditor-reset",
+                )) {
+                  node.style.width = width;
+                  node.style.minWidth = "0";
+                }
+              } catch {
+                /* The editor may be tearing down while its container resizes. */
+              }
+            });
+          };
+          if (typeof ResizeObserver !== "undefined") {
+            sizeObserver = new ResizeObserver(scheduleResize);
+            sizeObserver.observe(el);
+          }
+          resizeListener = scheduleResize;
+          window.addEventListener("resize", resizeListener);
+          scheduleResize();
           observer = new MutationObserver(() => scheduleHydrate());
           observer.observe(el, { childList: true, subtree: true });
         },
@@ -221,6 +248,9 @@ export function MarkdownWysiwygEditor({
     return () => {
       cancelled = true;
       observer?.disconnect();
+      sizeObserver?.disconnect();
+      if (resizeListener) window.removeEventListener("resize", resizeListener);
+      if (resizeFrame) cancelAnimationFrame(resizeFrame);
       unsubTheme();
       unregisterPreviewEditorFlush(tabId);
       try {

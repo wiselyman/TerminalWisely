@@ -7,7 +7,6 @@ import { DesktopAppWindow } from "./DesktopAppWindow";
 import { MarkWiselyFilePicker } from "./MarkWiselyFilePicker";
 import { MarkdownWysiwygEditor } from "../preview/MarkdownWysiwygEditor";
 import { flushPreviewEditor } from "../../lib/previewEditorFlush";
-import { useDesktopStore } from "../../stores/desktopStore";
 import { useMarkWiselyStore } from "../../stores/markWiselyStore";
 import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
@@ -28,8 +27,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [name, setName] = useState("未命名.md");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
   const document = useMarkWiselyStore((state) => state.documents[targetKey]);
   const recents = useMarkWiselyStore((state) => state.recentFiles[activeHostKey] ?? EMPTY_RECENTS);
@@ -40,6 +37,30 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const closeDocument = useMarkWiselyStore((state) => state.closeDocument);
   const dirty = !!document && document.text !== document.savedText;
   const flushId = useMemo(() => `markwisely-${targetKey}`, [targetKey]);
+
+  const save = useCallback(async () => {
+    const latest = flushPreviewEditor(flushId);
+    if (latest !== null) setEditorValue(targetKey, latest);
+    const current = useMarkWiselyStore.getState().getDocument(targetKey);
+    if (!current || current.text === current.savedText) return true;
+    setBusy(true);
+    setError(null);
+    try {
+      await saveDocument(targetKey);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [flushId, saveDocument, setEditorValue, targetKey]);
+
+  useEffect(() => {
+    if (view !== "edit" || !dirty) return;
+    const timer = window.setTimeout(() => void save(), 700);
+    return () => window.clearTimeout(timer);
+  }, [dirty, document?.text, save, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,37 +93,17 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     return () => { cancelled = true; };
   }, [activeTarget.kind, sessionId]);
 
-  const requestNavigation = useCallback((action: () => void) => {
-    if (dirty) {
-      setPendingAction(() => action);
-      setConfirmDiscard(true);
-      return;
-    }
-    void closeDocument(targetKey);
+  const requestNavigation = useCallback(async (action: () => void) => {
+    if (dirty && !(await save())) return;
+    await closeDocument(targetKey);
     action();
-  }, [closeDocument, dirty, targetKey]);
+  }, [closeDocument, dirty, save, targetKey]);
 
   const handleCloseRequest = useCallback(async () => {
-    if (dirty) {
-      setPendingAction(null);
-      setConfirmDiscard(true);
-      return false;
-    }
+    if (dirty && !(await save())) return false;
     await closeDocument(targetKey);
     return true;
-  }, [closeDocument, dirty, targetKey]);
-
-  const confirmLeave = async () => {
-    await closeDocument(targetKey);
-    setConfirmDiscard(false);
-    if (pendingAction) {
-      const action = pendingAction;
-      setPendingAction(null);
-      action();
-    } else {
-      useDesktopStore.getState().closeApp("markwisely");
-    }
-  };
+  }, [closeDocument, dirty, save, targetKey]);
 
   const openPath = async (path: string) => {
     setBusy(true);
@@ -133,20 +134,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     }
   };
 
-  const save = async () => {
-    const latest = flushPreviewEditor(flushId);
-    if (latest !== null) setEditorValue(targetKey, latest);
-    setBusy(true);
-    setError(null);
-    try {
-      await saveDocument(targetKey);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <DesktopAppWindow
       appId="markwisely"
@@ -163,7 +150,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
       {view === "edit" && document ? (
         <div className="markwisely-editor-view" data-testid="markwisely-editor-view">
           <header className="markwisely-toolbar">
-            <button type="button" className="markwisely-back" onClick={() => requestNavigation(() => setView("start"))}>{t("markwisely.allDocuments")}</button>
+            <button type="button" className="markwisely-back" onClick={() => void requestNavigation(() => setView("start"))}>{t("markwisely.allDocuments")}</button>
             <strong className="markwisely-current-file" title={document.path}>{document.path.split("/").pop()}</strong>
             <span className={`markwisely-save-state${dirty ? " is-dirty" : ""}`} role="status">
               {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}
@@ -178,7 +165,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
               filePath={document.path}
               text={document.text}
               editable
-              onChange={(value) => setEditorValue(targetKey, value)}
+              onChange={(value) => { setError(null); setEditorValue(targetKey, value); }}
             />
           </div>
         </div>
@@ -247,14 +234,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
               }
             }}
           />
-        </div>
-      ) : null}
-      {confirmDiscard ? (
-        <div className="markwisely-confirm-backdrop">
-          <section className="markwisely-confirm" role="alertdialog" aria-modal="true" aria-labelledby="markwisely-confirm-title">
-            <h2 id="markwisely-confirm-title">{t("markwisely.discardTitle")}</h2><p>{t("markwisely.discardMessage")}</p>
-            <div className="markwisely-form-actions"><button type="button" className="markwisely-back" onClick={() => { setConfirmDiscard(false); setPendingAction(null); }}>{t("markwisely.keepEditing")}</button><button type="button" className="markwisely-danger" data-testid="markwisely-discard" onClick={() => void confirmLeave()}>{t("markwisely.discard")}</button></div>
-          </section>
         </div>
       ) : null}
     </DesktopAppWindow>

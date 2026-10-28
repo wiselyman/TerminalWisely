@@ -6,6 +6,7 @@ import { createLocalPath, readLocalText, writeLocalText } from "../lib/localFsAp
 
 const RECENTS_KEY = "terminal-wisely.markwisely-recents.v1";
 const MAX_RECENT_FILES = 12;
+const activeSaves = new Map<string, Promise<void>>();
 
 export interface MarkWiselyRecentFile {
   path: string;
@@ -201,57 +202,80 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
     });
   },
 
-  saveDocument: async (sessionId) => {
-    const document = get().documents[sessionId];
-    if (!document || document.saving) return;
-    const savedText = document.text;
-    set((state) => ({
-      documents: {
-        ...state.documents,
-        [sessionId]: { ...document, saving: true, error: null },
-      },
-    }));
-    try {
-      if (document.target.kind === "local") {
-        await writeLocalText(document.path, savedText);
-      } else {
-        await invoke("preview_save", {
-          request: {
-            handle_id: document.handleId,
-            content: savedText,
-            sudo_password: null,
-          },
-        });
-      }
+  saveDocument: (sessionId) => {
+    const active = activeSaves.get(sessionId);
+    if (active) return active;
+    const initial = get().documents[sessionId];
+    if (!initial) return Promise.resolve();
+
+    const save = (async () => {
       set((state) => {
         const current = state.documents[sessionId];
         if (!current) return state;
         return {
           documents: {
             ...state.documents,
-            [sessionId]: {
-              ...current,
-              savedText,
-              saving: false,
-              error: null,
+            [sessionId]: { ...current, saving: true, error: null },
+          },
+        };
+      });
+      try {
+        while (true) {
+          const current = get().documents[sessionId];
+          if (!current || current.text === current.savedText) break;
+          const savedText = current.text;
+          if (current.target.kind === "local") {
+            await writeLocalText(current.path, savedText);
+          } else {
+            await invoke("preview_save", {
+              request: {
+                handle_id: current.handleId,
+                content: savedText,
+                sudo_password: null,
+              },
+            });
+          }
+          set((state) => {
+            const latest = state.documents[sessionId];
+            if (!latest) return state;
+            return {
+              documents: {
+                ...state.documents,
+                [sessionId]: { ...latest, savedText, error: null },
+              },
+            };
+          });
+        }
+        set((state) => {
+          const current = state.documents[sessionId];
+          if (!current) return state;
+          return {
+            documents: {
+              ...state.documents,
+              [sessionId]: { ...current, saving: false },
             },
-          },
-        };
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      set((state) => {
-        const current = state.documents[sessionId];
-        if (!current) return state;
-        return {
-          documents: {
-            ...state.documents,
-            [sessionId]: { ...current, saving: false, error: message },
-          },
-        };
-      });
-      throw error;
-    }
+          };
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set((state) => {
+          const current = state.documents[sessionId];
+          if (!current) return state;
+          return {
+            documents: {
+              ...state.documents,
+              [sessionId]: { ...current, saving: false, error: message },
+            },
+          };
+        });
+        throw error;
+      }
+    })();
+    activeSaves.set(sessionId, save);
+    void save.finally(() => {
+      if (activeSaves.get(sessionId) === save) activeSaves.delete(sessionId);
+    }).catch(() => undefined);
+    return save;
   },
 
   closeDocument: async (sessionId) => {
