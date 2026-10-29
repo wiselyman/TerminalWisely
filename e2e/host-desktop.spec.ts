@@ -117,7 +117,10 @@ test.describe("Host desktop mode", () => {
 
     await page.getByTestId("markwisely-maximize").click();
     await expect(panel).toHaveAttribute("data-maximized", "true");
-    await page.getByTestId("markwisely-maximize").click();
+    const appChrome = page.getByTestId("desktop-maximized-app-controls");
+    await expect(appChrome.getByTestId("desktop-app-window-title")).toHaveText("MarkWisely");
+    await expect(panel.locator(".desktop-app-window-head")).toHaveCount(0);
+    await appChrome.getByTestId("markwisely-maximize").click();
     await expect(panel).toHaveAttribute("data-maximized", "false");
 
     await expect.poll(async () => {
@@ -279,7 +282,13 @@ test.describe("Host desktop mode", () => {
     const app = page.getByTestId("host-file-manager-panel");
     await page.getByTestId("host-file-manager-maximize").click();
     await expect(app).toHaveAttribute("data-maximized", "true");
-    await expect(app.getByTestId("desktop-app-window-title")).toBeVisible();
+    const appChrome = page.getByTestId("desktop-maximized-app-controls");
+    await expect(appChrome).toBeVisible();
+    await expect(appChrome.getByTestId("desktop-app-window-title")).toBeVisible();
+    await expect(app.locator(".desktop-app-window-head")).toHaveCount(0);
+    await expect(appChrome.getByTestId("host-file-manager-minimize")).toBeVisible();
+    await expect(appChrome.getByTestId("host-file-manager-maximize")).toBeVisible();
+    await expect(appChrome.getByTestId("host-file-manager-close")).toBeVisible();
 
     const stage = page.locator(".host-desktop-stage");
     const stageBox = await stage.boundingBox();
@@ -316,20 +325,23 @@ test.describe("Host desktop mode", () => {
     await dock.getByTestId("dock-app-files").focus();
     await expect(dock).toHaveAttribute("data-visible", "true");
 
-    await page.getByTestId("host-file-manager-maximize").click();
+    await appChrome.getByTestId("host-file-manager-maximize").click();
     await expect(app).toHaveAttribute("data-maximized", "false");
+    await expect(appChrome).toHaveCount(0);
     await expect(dock).toHaveAttribute("data-visible", "true");
 
     await page.getByTestId("host-file-manager-maximize").click();
     await expect(dock).toHaveAttribute("data-visible", "false");
-    await page.getByTestId("host-file-manager-minimize").click();
+    await page.getByTestId("desktop-maximized-app-controls").getByTestId("host-file-manager-minimize").click();
     await expect(app).toHaveCount(0);
     await expect(dock).toHaveAttribute("data-visible", "true");
 
     await dock.getByTestId("dock-app-files").click();
     await expect(app).toHaveAttribute("data-maximized", "false");
     await expect(dock).toHaveAttribute("data-visible", "true");
-    await page.getByTestId("host-file-manager-close").click();
+    await page.getByTestId("host-file-manager-maximize").click();
+    await expect(appChrome).toBeVisible();
+    await appChrome.getByTestId("host-file-manager-close").click();
     await expect(app).toHaveCount(0);
     await expect(dock).toHaveAttribute("data-visible", "true");
   });

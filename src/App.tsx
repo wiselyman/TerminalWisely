@@ -26,6 +26,7 @@ import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
 import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
 import { LOCAL_CHAT_SESSION } from "./lib/aiEngineer/localTarget";
+import { setDesktopChromeHost } from "./lib/desktopChromeHost";
 import { DbWorkbench } from "./components/db/DbWorkbench";
 import { EngineMark } from "./components/db/DbIcons";
 import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
@@ -1378,6 +1379,11 @@ function App() {
           />
 
               <div className="chrome-titlebar-actions">
+                <div
+                  ref={setDesktopChromeHost}
+                  className="chrome-maximized-app-slot"
+                  data-testid="desktop-maximized-app-controls-slot"
+                />
                 <AiEngineerTool
                   active={homeOpen ? homeChatOpen : showAiEngineerPanel}
                   disabled={

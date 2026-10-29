@@ -11,6 +11,10 @@ import {
   subscribeDesktopSurfaceHost,
 } from "../../lib/desktopSurfaceHost";
 import {
+  getDesktopChromeHost,
+  subscribeDesktopChromeHost,
+} from "../../lib/desktopChromeHost";
+import {
   centerDesktopFrame,
   DESKTOP_RESIZE_EDGES,
   moveDesktopFrame,
@@ -81,6 +85,11 @@ export function DesktopAppWindow({
     getDesktopSurfaceHost,
     getDesktopSurfaceHost,
   );
+  const chromeHost = useSyncExternalStore(
+    subscribeDesktopChromeHost,
+    getDesktopChromeHost,
+    getDesktopChromeHost,
+  );
 
   useLayoutEffect(() => {
     if (!surface || !win.open || win.minimized || win.maximized || frame) return;
@@ -112,6 +121,69 @@ export function DesktopAppWindow({
 
   const AppIcon = DESKTOP_APPS.find((app) => app.id === appId)?.icon;
   const mark = leading ?? (AppIcon ? <AppIcon /> : null);
+  const header = (
+    <header
+      className={`preview-panel-head desktop-app-window-head is-compact${
+        maximized ? " is-maximized" : ""
+      }`}
+      onPointerDown={onDragStart}
+    >
+      {mark ? (
+        <span
+          className="desktop-app-window-leading"
+          data-testid="desktop-app-window-leading"
+          aria-hidden
+        >
+          {mark}
+        </span>
+      ) : null}
+      {maximized ? (
+        <span
+          className="desktop-app-window-maximized-title"
+          data-testid="desktop-app-window-title"
+        >
+          {title}
+        </span>
+      ) : (
+        <div className="desktop-app-window-title-wrap is-spacer" aria-hidden />
+      )}
+      <div className="preview-panel-actions desktop-app-window-actions">
+        <button
+          type="button"
+          className="preview-toolbar-icon"
+          data-testid={minimizeTestId}
+          title={t("desktop.minimizeToDock")}
+          aria-label={t("common:minimize")}
+          onClick={() => minimizeApp(appId)}
+        >
+          <PreviewMinimizeIcon />
+        </button>
+        <button
+          type="button"
+          className="preview-toolbar-icon"
+          data-testid={maximizeTestId}
+          title={t(maximized ? "desktop.restore" : "desktop.maximize")}
+          aria-label={t(maximized ? "desktop.restore" : "desktop.maximize")}
+          onClick={() => setAppMaximized(appId, !maximized)}
+        >
+          {maximized ? <PreviewRestoreIcon /> : <PreviewMaximizeIcon />}
+        </button>
+        <button
+          type="button"
+          className="preview-toolbar-icon"
+          data-testid={closeTestId}
+          title={t("common:close")}
+          aria-label={t("common:close")}
+          onClick={async () => {
+            if (onCloseRequest && !(await onCloseRequest())) return;
+            closeApp(appId);
+          }}
+        >
+          <PreviewCloseIcon />
+        </button>
+      </div>
+    </header>
+  );
 
   const trackPointer = (
     event: ReactPointerEvent,
@@ -134,14 +206,14 @@ export function DesktopAppWindow({
     window.addEventListener("pointerup", up);
   };
 
-  const onDragStart = (event: ReactPointerEvent) => {
+  function onDragStart(event: ReactPointerEvent) {
     if (maximized || !liveFrame) return;
     if ((event.target as HTMLElement).closest("button")) return;
     const start = liveFrame;
     trackPointer(event, (dx, dy, bounds) => {
       setAppFrame(appId, moveDesktopFrame(start, dx, dy, bounds));
     });
-  };
+  }
 
   const onResizeStart = (edge: DesktopResizeEdge, event: ReactPointerEvent) => {
     if (maximized || !liveFrame) return;
@@ -151,117 +223,66 @@ export function DesktopAppWindow({
     });
   };
 
-  return createPortal(
-    <div
-      className={`desktop-app-float${maximized ? " is-maximized" : ""}`}
-      data-testid={floatTestId}
-      style={
-        maximized || !liveFrame
-          ? { zIndex: desktopAppFloatZ(zIndex) }
-          : {
-              zIndex: desktopAppFloatZ(zIndex),
-              left: liveFrame.x,
-              top: liveFrame.y,
-              width: liveFrame.width,
-              height: liveFrame.height,
-            }
-      }
-      onMouseDown={() => focusApp(appId)}
-    >
-      <div
-        className={`preview-float-window desktop-app-window${
-          maximized ? " maximized" : ""
-        }`}
-        role="dialog"
-        aria-label={title}
-        data-testid={panelTestId}
-        data-maximized={maximized ? "true" : "false"}
-        data-chrome={maximized ? "standalone-title" : "icon-title"}
-      >
-        <header
-          className={`preview-panel-head desktop-app-window-head is-compact${
-            maximized ? " is-maximized" : ""
-          }`}
-          onPointerDown={onDragStart}
-        >
-          {mark ? (
-            <span
-              className="desktop-app-window-leading"
-              data-testid="desktop-app-window-leading"
-              aria-hidden
-            >
-              {mark}
-            </span>
-          ) : null}
-          {maximized ? (
-            <span
-              className="desktop-app-window-maximized-title"
-              data-testid="desktop-app-window-title"
-            >
-              {title}
-            </span>
-          ) : null}
-          <div
-            className="desktop-app-window-title-wrap is-spacer"
-            aria-hidden
-          />
-          <div className="preview-panel-actions desktop-app-window-actions">
-            <button
-              type="button"
-              className="preview-toolbar-icon"
-              data-testid={minimizeTestId}
-              title={t("desktop.minimizeToDock")}
-              aria-label={t("common:minimize")}
-              onClick={() => minimizeApp(appId)}
-            >
-              <PreviewMinimizeIcon />
-            </button>
-            <button
-              type="button"
-              className="preview-toolbar-icon"
-              data-testid={maximizeTestId}
-              title={
-                maximized ? t("desktop.restore") : t("desktop.maximize")
-              }
-              aria-label={
-                maximized ? t("desktop.restore") : t("desktop.maximize")
-              }
-              onClick={() => setAppMaximized(appId, !maximized)}
-            >
-              {maximized ? <PreviewRestoreIcon /> : <PreviewMaximizeIcon />}
-            </button>
-            <button
-              type="button"
-              className="preview-toolbar-icon"
-              data-testid={closeTestId}
-              title={t("common:close")}
-              aria-label={t("common:close")}
-              onClick={async () => {
-                if (onCloseRequest && !(await onCloseRequest())) return;
-                closeApp(appId);
-              }}
-            >
-              <PreviewCloseIcon />
-            </button>
-          </div>
-        </header>
+  return (
+    <>
+      {createPortal(
         <div
-          className={`desktop-app-window-body ${bodyClassName ?? ""}`.trim()}
+          className={`desktop-app-float${maximized ? " is-maximized" : ""}`}
+          data-testid={floatTestId}
+          style={
+            maximized || !liveFrame
+              ? { zIndex: desktopAppFloatZ(zIndex) }
+              : {
+                  zIndex: desktopAppFloatZ(zIndex),
+                  left: liveFrame.x,
+                  top: liveFrame.y,
+                  width: liveFrame.width,
+                  height: liveFrame.height,
+                }
+          }
+          onMouseDown={() => focusApp(appId)}
         >
-          {children}
-        </div>
-      </div>
-      {maximized
-        ? null
-        : DESKTOP_RESIZE_EDGES.map((edge) => (
+          <div
+            className={`preview-float-window desktop-app-window${
+              maximized ? " maximized" : ""
+            }`}
+            role="dialog"
+            aria-label={title}
+            data-testid={panelTestId}
+            data-maximized={maximized ? "true" : "false"}
+            data-chrome={maximized ? "promoted-titlebar" : "icon-title"}
+          >
+            {maximized ? null : header}
             <div
-              key={edge}
-              className={`desktop-app-resize desktop-app-resize-${edge}`}
-              data-testid={`desktop-window-resize-${edge}`}
-              onPointerDown={(event) => onResizeStart(edge, event)}
-            />
-          ))}
-    </div>,
-    surface,
+              className={`desktop-app-window-body ${bodyClassName ?? ""}`.trim()}
+            >
+              {children}
+            </div>
+          </div>
+          {maximized
+            ? null
+            : DESKTOP_RESIZE_EDGES.map((edge) => (
+                <div
+                  key={edge}
+                  className={`desktop-app-resize desktop-app-resize-${edge}`}
+                  data-testid={`desktop-window-resize-${edge}`}
+                  onPointerDown={(event) => onResizeStart(edge, event)}
+                />
+              ))}
+        </div>,
+        surface,
+      )}
+      {maximized && chromeHost
+        ? createPortal(
+            <div
+              className="chrome-maximized-app-controls"
+              data-testid="desktop-maximized-app-controls"
+            >
+              {header}
+            </div>,
+            chromeHost,
+          )
+        : null}
+    </>
   );
 }

@@ -581,6 +581,28 @@ body,
   margin: 0 4px 0 0;
 }
 
+.chrome-maximized-app-slot:empty {
+  display: none;
+}
+
+.chrome-maximized-app-controls {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 100%;
+  margin-right: 4px;
+  padding-right: 5px;
+  border-right: 1px solid var(--tw-border);
+}
+
+.chrome-maximized-app-controls .desktop-app-window-head.is-maximized {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 2px 0 4px;
+  border: 0;
+  background: transparent;
+}
+
 .chrome-titlebar-actions .workspace-tool-btn {
   width: var(--chrome-control-size);
   height: var(--chrome-control-size);
