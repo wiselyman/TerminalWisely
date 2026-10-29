@@ -23,6 +23,12 @@ export function writeLocalText(path: string, content: string): Promise<void> {
   return invoke("write_local_text", { request: { path, content } });
 }
 
+export function writeLocalBytes(path: string, content: Uint8Array): Promise<void> {
+  let binary = "";
+  for (const byte of content) binary += String.fromCharCode(byte);
+  return invoke("write_local_bytes", { request: { path, base64: btoa(binary) } });
+}
+
 export function renameLocalPath(path: string, newName: string): Promise<string> {
   return invoke("rename_local_path", { request: { path, new_name: newName } });
 }

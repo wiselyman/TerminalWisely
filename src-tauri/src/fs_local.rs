@@ -51,6 +51,12 @@ pub struct LocalTextWriteRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalBytesWriteRequest {
+    pub path: String,
+    pub base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalRenameRequest {
     pub path: String,
     pub new_name: String,
@@ -301,6 +307,19 @@ pub fn write_local_text(request: LocalTextWriteRequest) -> AppResult<()> {
     std::fs::write(path, request.content).map_err(AppError::from)
 }
 
+pub fn write_local_bytes(request: LocalBytesWriteRequest) -> AppResult<()> {
+    use base64::Engine;
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(request.base64)
+        .map_err(|e| AppError::msg(format!("Invalid binary file data: {e}")))?;
+    let path = normalize_path(&request.path)?;
+    if !path.is_file() {
+        return Err(AppError::msg("Not a file"));
+    }
+    std::fs::write(path, bytes).map_err(AppError::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +379,32 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn writes_binary_export_bytes_and_rejects_invalid_input() {
+        let root = temp_dir("local-fs-binary-export");
+        let file = create_local_path(LocalCreateRequest {
+            parent: path_to_string(&root),
+            name: "export.docx".into(),
+            kind: "file".into(),
+        }).unwrap();
+
+        write_local_bytes(LocalBytesWriteRequest {
+            path: file.clone(),
+            base64: "AQL/".into(),
+        }).unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), vec![1, 2, 255]);
+        assert!(write_local_bytes(LocalBytesWriteRequest {
+            path: file.clone(),
+            base64: "not base64!".into(),
+        }).is_err());
+        assert!(write_local_bytes(LocalBytesWriteRequest {
+            path: path_to_string(&root.join("missing.docx")),
+            base64: "AQ==".into(),
+        }).is_err());
+
         std::fs::remove_dir_all(root).unwrap();
     }
 }

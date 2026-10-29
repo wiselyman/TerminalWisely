@@ -287,6 +287,7 @@ pub fn run() {
             commands::create_local_path,
             commands::read_local_text,
             commands::write_local_text,
+            commands::write_local_bytes,
             commands::list_remote_directory,
             commands::rename_local_path,
             commands::move_local_path,

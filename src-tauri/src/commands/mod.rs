@@ -1462,6 +1462,11 @@ pub fn write_local_text(request: crate::fs_local::LocalTextWriteRequest) -> Resu
 }
 
 #[tauri::command]
+pub fn write_local_bytes(request: crate::fs_local::LocalBytesWriteRequest) -> Result<(), String> {
+    crate::fs_local::write_local_bytes(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn list_remote_directory(
     request: crate::fs_remote::ListRemoteDirectoryRequest,
     sessions: State<'_, SessionManager>,
