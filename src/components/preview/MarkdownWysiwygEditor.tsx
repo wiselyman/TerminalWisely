@@ -25,6 +25,12 @@ export interface MarkdownWysiwygEditorProps {
   text: string;
   editable: boolean;
   onChange?: (value: string) => void;
+  toolbarActions?: Array<{
+    id: string;
+    label: string;
+    icon: string;
+    onClick: () => void;
+  }>;
 }
 
 /** Self-hosted assets copied to public/vditor by vite.vditor.ts */
@@ -82,6 +88,7 @@ export function MarkdownWysiwygEditor({
   text,
   editable,
   onChange,
+  toolbarActions,
 }: MarkdownWysiwygEditorProps) {
   const { t } = useTranslation("preview");
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -89,9 +96,11 @@ export function MarkdownWysiwygEditor({
   const blobUrlsRef = useRef<string[]>([]);
   const textRef = useRef(text);
   const onChangeRef = useRef(onChange);
+  const toolbarActionsRef = useRef(toolbarActions);
   const [initError, setInitError] = useState<string | null>(null);
   textRef.current = text;
   onChangeRef.current = onChange;
+  toolbarActionsRef.current = toolbarActions;
 
   useEffect(() => {
     const el = hostRef.current;
@@ -139,6 +148,18 @@ export function MarkdownWysiwygEditor({
               : { current: "light" },
         },
         toolbar: [
+          ...(toolbarActions ?? []).filter((action) => action.id === "open" || action.id === "open-folder").map((action) => ({
+            name: `markwisely-${action.id}`,
+            icon: action.icon,
+            tip: action.label,
+            tipPosition: "s",
+            className: `markwisely-toolbar-action markwisely-toolbar-${action.id}`,
+            click: (event: Event) => {
+              event.preventDefault();
+              toolbarActionsRef.current?.find((item) => item.id === action.id)?.onClick();
+            },
+          })),
+          ...(toolbarActions?.length ? ["|"] : []),
           "headings",
           "bold",
           "italic",
@@ -164,6 +185,17 @@ export function MarkdownWysiwygEditor({
           "undo",
           "redo",
           "fullscreen",
+          ...(toolbarActions ?? []).filter((action) => action.id === "save" || action.id === "save-as" || action.id === "export").map((action) => ({
+            name: `markwisely-${action.id}`,
+            icon: action.icon,
+            tip: action.label,
+            tipPosition: "s",
+            className: `markwisely-toolbar-action markwisely-toolbar-${action.id}`,
+            click: (event: Event) => {
+              event.preventDefault();
+              toolbarActionsRef.current?.find((item) => item.id === action.id)?.onClick();
+            },
+          })),
         ],
         upload: {
           accept: "image/*",
