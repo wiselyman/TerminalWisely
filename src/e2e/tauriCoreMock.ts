@@ -48,6 +48,8 @@ let lastCreateSshRequest: Record<string, unknown> | null = null;
 let lastEnterDirectory: Record<string, unknown> | null = null;
 let lastPreviewOpen: Record<string, unknown> | null = null;
 let lastPreviewSave: Record<string, unknown> | null = null;
+let previewPathsByHandle = new Map<string, string>();
+let previewMarkdownByPath = new Map<string, string>();
 let lastLocalBytesWrite: Record<string, unknown> | null = null;
 let nextDialogSaveResult: string | null | undefined;
 let failNextLocalWrite = false;
@@ -75,6 +77,8 @@ export function __e2eResetMocks() {
   lastEnterDirectory = null;
   lastPreviewOpen = null;
   lastPreviewSave = null;
+  previewPathsByHandle = new Map();
+  previewMarkdownByPath = new Map();
   lastLocalBytesWrite = null;
   nextDialogSaveResult = undefined;
   failNextLocalWrite = false;
@@ -549,8 +553,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase()
       : "";
     const isMd = extension === "md" || extension === "markdown";
+    const handleId = `preview-${previewHandleSeq}`;
+    previewPathsByHandle.set(handleId, path);
     return {
-      handle_id: `preview-${previewHandleSeq}`,
+      handle_id: handleId,
       kind: isMd ? "markdown" : "text",
       session_id: String(req.session_id ?? "e2e-ssh-session"),
       resolved_path: path,
@@ -560,7 +566,7 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       truncated: false,
       editable: true,
       text_content: isMd
-        ? "# E2E Markdown\n\nUNIQUE_WYSIWYG_MARKER_42\n"
+        ? previewMarkdownByPath.get(path) ?? "# E2E Markdown\n\nUNIQUE_WYSIWYG_MARKER_42\n"
         : "e2e text content\n",
       local_cache_path: null,
       uses_sudo: false,
@@ -569,6 +575,9 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   preview_close: () => null,
   preview_save: (args) => {
     lastPreviewSave = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
+    const request = lastPreviewSave;
+    const path = previewPathsByHandle.get(String(request.handle_id ?? ""));
+    if (path && typeof request.content === "string") previewMarkdownByPath.set(path, request.content);
     return null;
   },
   preview_read_bytes: () => ({

@@ -115,7 +115,7 @@ test.describe("Host desktop mode", () => {
     const recent = panel.getByRole("button", { name: /draft\.md/ });
     await expect(recent).toBeVisible();
     await recent.click();
-    await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
+    await expect(panel.locator(".vditor-ir")).toContainText("Saved from MarkWisely", { timeout: 30_000 });
   });
 
   test("MarkWisely export offers styled HTML, PDF, and Word outputs", async ({ page }) => {
@@ -213,6 +213,7 @@ test.describe("Host desktop mode", () => {
     await editor.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("UNSAVED_EXPORT_CONTENT");
+    await expect(editor).toContainText("UNSAVED_EXPORT_CONTENT");
 
     const exportButton = toolbar.locator(".markwisely-toolbar-export button");
     await exportButton.click();
@@ -240,24 +241,41 @@ test.describe("Host desktop mode", () => {
     await exportButton.click();
     await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "Word (.docx)" }).click();
     await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.docx" })).toBeVisible();
+    await expect(editor).toContainText("UNSAVED_EXPORT_CONTENT");
     const binaryExport = await api.getLastLocalBytesWrite();
     expect(binaryExport).toMatchObject({ path: "/tmp/markwisely-toolbar-export.docx" });
     expect(binaryExport?.base64).toMatch(/^UEsDB/);
 
     await exportButton.click();
+    await api.setNextDialogSaveResult(null);
     await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "PDF" }).click();
-    const pdfPreview = panel.getByTestId("markwisely-pdf-preview");
-    await expect(pdfPreview).toBeVisible();
-    const printFrame = panel.getByTestId("markwisely-pdf-print-frame");
-    await expect(printFrame).toBeAttached();
-    await expect.poll(async () => printFrame.getAttribute("srcdoc")).toContain("UNSAVED_EXPORT_CONTENT");
-    const printPage = await printFrame.contentFrame();
-    await expect(printPage!.locator(".document-title")).toHaveText("toolbar-copy.md");
+    await expect(exportMenu).toHaveCount(0);
+    await expect.poll(() => api.getLastLocalBytesWrite()).toMatchObject({ path: "/tmp/markwisely-toolbar-export.docx" });
+
+    await exportButton.click();
+    await api.setNextDialogSaveResult("/tmp/markwisely-toolbar-export.pdf");
+    await api.failNextLocalWrite();
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "PDF" }).click();
+    await expect(page.getByTestId("statusbar-toast-err").filter({ hasText: "Document export failed" })).toBeVisible();
+    await expect(editor).toContainText("UNSAVED_EXPORT_CONTENT");
+
+    await exportButton.click();
+    await api.setNextDialogSaveResult("/tmp/markwisely-toolbar-export.pdf");
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "PDF" }).click();
+    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.pdf" })).toBeVisible();
+    const pdfExport = await api.getLastLocalBytesWrite();
+    expect(pdfExport).toMatchObject({ path: "/tmp/markwisely-toolbar-export.pdf" });
+    expect(pdfExport?.base64).toMatch(/^JVBERi0/);
+    await expect(panel.getByTestId("markwisely-pdf-preview")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => (window as Window & { __e2ePrintCalls?: number }).__e2ePrintCalls ?? 0)).toBe(0);
-    await pdfPreview.getByTestId("markwisely-pdf-print").click();
-    await expect.poll(() => page.evaluate(() => (window as Window & { __e2ePrintCalls?: number }).__e2ePrintCalls ?? 0)).toBe(1);
-    await pdfPreview.getByTestId("markwisely-pdf-close").click();
-    await expect(pdfPreview).toHaveCount(0);
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdfBytes = Uint8Array.from(Buffer.from(String(pdfExport?.base64), "base64"));
+    const pdfDocument = await getDocument({ data: pdfBytes, useWorkerFetch: false }).promise;
+    const pdfText = (await (await pdfDocument.getPage(1)).getTextContent()).items
+      .flatMap((item) => "str" in item ? [item.str] : [])
+      .join(" ");
+    expect(pdfText).toContain("UNSAVED_EXPORT_CONTENT");
+    expect(pdfText).toContain("MarkWisely");
     await expect(panel.locator(".vditor-ir")).toBeVisible();
   });
 

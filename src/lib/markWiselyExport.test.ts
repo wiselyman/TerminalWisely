@@ -3,7 +3,6 @@ import {
   createMarkdownDocx,
   parseMarkdownExport,
   renderMarkdownHtml,
-  renderMarkdownPrintHtml,
 } from "./markWiselyExport";
 
 describe("MarkWisely export renderers", () => {
@@ -48,16 +47,6 @@ describe("MarkWisely export renderers", () => {
     expect(html).toContain("<h1>标题</h1>");
     expect(html).toContain("<strong>重点</strong>");
     expect(html).not.toContain("<script>alert(1)</script>");
-  });
-
-  it("renders safe, print-ready HTML with CJK fonts and page-break styles", () => {
-    const html = renderMarkdownPrintHtml("# 标题\n\n正文 **重点**", "会议记录");
-
-    expect(html).toContain("@page");
-    expect(html).toContain("break-inside: avoid");
-    expect(html).toContain("Noto Sans CJK SC");
-    expect(html).toContain("<h1>标题</h1>");
-    expect(html).toContain("<strong>重点</strong>");
   });
 
   it("creates a DOCX archive", async () => {

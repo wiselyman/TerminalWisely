@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -13,7 +13,8 @@ import { useMarkWiselyStore } from "../../stores/markWiselyStore";
 import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
 import { createLocalPath, listLocalDirectory, listLocalRoots, parentLocalPath, writeLocalBytes, writeLocalText } from "../../lib/localFsApi";
-import { createMarkdownDocx, renderMarkdownHtml, renderMarkdownPrintHtml } from "../../lib/markWiselyExport";
+import { createMarkdownDocx, renderMarkdownHtml } from "../../lib/markWiselyExport";
+import { createMarkdownPdf } from "../../lib/markWiselyPdf";
 import { useToastStore } from "../../stores/toastStore";
 
 type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null };
@@ -44,8 +45,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [printDocument, setPrintDocument] = useState<{ html: string; title: string } | null>(null);
-  const printFrameRef = useRef<HTMLIFrameElement>(null);
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
   const [filePickerReturnView, setFilePickerReturnView] = useState<"start" | "edit">("start");
   const document = useMarkWiselyStore((state) => state.documents[targetKey]);
@@ -195,16 +194,13 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     const content = latest ?? current?.text;
     if (content == null || !current) return;
     setError(null);
-    if (format === "pdf") {
-      const title = current.path.split(/[\\/]/).pop() || "document.md";
-      setPrintDocument({ html: renderMarkdownPrintHtml(content, title), title });
-      return;
-    }
     setBusy(true);
     try {
       const stem = (current.path.split(/[\\/]/).pop() || "document.md").replace(/\.(md|markdown)$/i, "");
-      const extension = format === "html" ? "html" : "docx";
-      const filterName = format === "html" ? t("markwisely.htmlFiles") : t("markwisely.wordFiles");
+      const extension = format === "html" ? "html" : format === "pdf" ? "pdf" : "docx";
+      const filterName = format === "html"
+        ? t("markwisely.htmlFiles")
+        : format === "pdf" ? t("markwisely.pdfFiles") : t("markwisely.wordFiles");
       const path = await showSaveDialog({
         title: t("markwisely.exportTitle"),
         defaultPath: `${stem}.${extension}`,
@@ -219,6 +215,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
         await createLocalPath(parent, fileName, "file");
       }
       if (format === "html") await writeLocalText(path, renderMarkdownHtml(content, current.path.split(/[\\/]/).pop() || fileName));
+      else if (format === "pdf") await writeLocalBytes(path, await createMarkdownPdf(content, current.path.split(/[\\/]/).pop() || fileName));
       else await writeLocalBytes(path, await createMarkdownDocx(content, current.path.split(/[\\/]/).pop() || fileName));
       useToastStore.getState().pushToast(t("markwisely.exported", { path }), true);
     } catch (cause) {
@@ -273,40 +270,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
               <button type="button" onClick={() => void exportDocument("pdf")} disabled={busy}>PDF</button>
               <button type="button" onClick={() => void exportDocument("word")} disabled={busy}>{t("markwisely.exportWord")}</button>
             </div>
-          ) : null}
-          {printDocument ? (
-            <section className="markwisely-pdf-preview" data-testid="markwisely-pdf-preview" aria-label={t("markwisely.pdfPreviewTitle")}>
-              <header className="markwisely-pdf-preview-toolbar">
-                <strong>{t("markwisely.pdfPreviewTitle")}</strong>
-                <div>
-                  <button
-                    type="button"
-                    data-testid="markwisely-pdf-print"
-                    onClick={() => {
-                      try {
-                        printFrameRef.current?.contentWindow?.focus();
-                        printFrameRef.current?.contentWindow?.print();
-                      } catch (cause) {
-                        setError(cause instanceof Error ? cause.message : String(cause));
-                        useToastStore.getState().pushToast(t("markwisely.exportFailed"), false);
-                      }
-                    }}
-                  >
-                    {t("markwisely.pdfPrint")}
-                  </button>
-                  <button type="button" data-testid="markwisely-pdf-close" onClick={() => setPrintDocument(null)}>
-                    {t("markwisely.pdfClose")}
-                  </button>
-                </div>
-              </header>
-              <iframe
-                ref={printFrameRef}
-                title={printDocument.title}
-                data-testid="markwisely-pdf-print-frame"
-                className="markwisely-pdf-print-frame"
-                srcDoc={printDocument.html}
-              />
-            </section>
           ) : null}
           <span className={`markwisely-save-state${dirty ? " is-dirty" : ""}`} role="status" data-testid="markwisely-save-status">
             {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}

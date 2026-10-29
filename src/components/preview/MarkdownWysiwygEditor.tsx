@@ -97,6 +97,7 @@ export function MarkdownWysiwygEditor({
   const textRef = useRef(text);
   const onChangeRef = useRef(onChange);
   const toolbarActionsRef = useRef(toolbarActions);
+  const editorGenerationRef = useRef(0);
   const [initError, setInitError] = useState<string | null>(null);
   textRef.current = text;
   onChangeRef.current = onChange;
@@ -110,6 +111,10 @@ export function MarkdownWysiwygEditor({
     let sizeObserver: ResizeObserver | null = null;
     let resizeFrame = 0;
     let resizeListener: (() => void) | null = null;
+    const editorGeneration = ++editorGenerationRef.current;
+    const publishChange = (value: string) => {
+      if (editorGenerationRef.current === editorGeneration) onChangeRef.current?.(value);
+    };
     setInitError(null);
 
     const appTheme = getAppTheme();
@@ -156,6 +161,7 @@ export function MarkdownWysiwygEditor({
             className: `markwisely-toolbar-action markwisely-toolbar-${action.id}`,
             click: (event: Event) => {
               event.preventDefault();
+              if (editorGenerationRef.current !== editorGeneration) return;
               toolbarActionsRef.current?.find((item) => item.id === action.id)?.onClick();
             },
           })),
@@ -202,7 +208,7 @@ export function MarkdownWysiwygEditor({
                 const rel = name;
                 vditorRef.current?.insertValue(`![${name}](${rel})\n`);
               }
-              onChangeRef.current?.(vditorRef.current?.getValue() ?? "");
+              publishChange(vditorRef.current?.getValue() ?? "");
               scheduleHydrate();
             })().catch((err) => {
               const msg = err instanceof Error ? err.message : String(err);
@@ -256,10 +262,10 @@ export function MarkdownWysiwygEditor({
           observer.observe(el, { childList: true, subtree: true });
         },
         input: (value: string) => {
-          onChangeRef.current?.(value);
+          publishChange(value);
         },
         blur: (value: string) => {
-          onChangeRef.current?.(value);
+          publishChange(value);
         },
       });
       vditorRef.current = vditor;
@@ -281,6 +287,7 @@ export function MarkdownWysiwygEditor({
 
     return () => {
       cancelled = true;
+      if (editorGenerationRef.current === editorGeneration) editorGenerationRef.current += 1;
       observer?.disconnect();
       sizeObserver?.disconnect();
       if (resizeListener) window.removeEventListener("resize", resizeListener);

@@ -206,24 +206,15 @@ function renderBlocks(blocks: ExportBlock[]): string {
   }).join("\n");
 }
 
-function htmlDocument(markdown: string, title: string, print: boolean): string {
-  const pageStyle = print ? "@page{size:A4;margin:22mm 19mm;}" : "";
-  const printStyle = print ? `
-    @media print { body { max-width: none; } h1,h2,h3,h4,h5,h6 { break-after: avoid-page; } p,blockquote,pre,table,figure { break-inside: avoid-page; } tr { break-inside: avoid; } a { color: inherit; text-decoration: underline; } }
-  ` : "";
+function htmlDocument(markdown: string, title: string): string {
   return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; font-src data: https:;"><title>${escapeHtml(title)}</title><style>
-${pageStyle}
-*{box-sizing:border-box}body{max-width:880px;margin:0 auto;padding:56px 64px;color:#1f2937;background:#fff;font-family:${bodyFont};font-size:11pt;line-height:1.75;overflow-wrap:anywhere}.document-title{margin:0 0 2.2em;padding-bottom:.7em;border-bottom:1px solid #d9e0e8;color:#172033;font-size:25pt;line-height:1.25}h1,h2,h3,h4,h5,h6{margin:1.5em 0 .6em;color:#172033;line-height:1.35}h1{font-size:22pt}h2{font-size:17pt}h3{font-size:14pt}p{margin:.6em 0 1em}ul,ol{padding-left:1.8em;margin:.5em 0 1.2em}li{padding-left:.3em;margin:.25em 0}blockquote{margin:1.2em 0;padding:.4em 1.1em;border-left:3px solid #4b7bec;background:#f5f8fc;color:#526174}pre{margin:1em 0;padding:1em 1.15em;border:1px solid #e1e7ee;border-radius:7px;background:#f6f8fa;color:#253044;font:9.5pt/1.55 ${codeFont};white-space:pre-wrap;overflow-wrap:anywhere}code{padding:.12em .34em;border-radius:4px;background:#f1f4f8;font-family:${codeFont};font-size:.92em}pre code{padding:0;background:transparent;font-size:inherit}table{width:100%;margin:1.1em 0;border-collapse:collapse;font-size:10pt}th,td{padding:.58em .72em;border:1px solid #d7dee7;text-align:left;vertical-align:top}th{background:#f1f5f9;color:#263347;font-weight:650}tr:nth-child(even) td{background:#fafbfd}a{color:#245fc7;text-decoration:none}hr{height:1px;margin:1.8em 0;border:0;background:#dce3eb}.export-content> :first-child{margin-top:0}${printStyle}
+*{box-sizing:border-box}body{max-width:880px;margin:0 auto;padding:56px 64px;color:#1f2937;background:#fff;font-family:${bodyFont};font-size:11pt;line-height:1.75;overflow-wrap:anywhere}.document-title{margin:0 0 2.2em;padding-bottom:.7em;border-bottom:1px solid #d9e0e8;color:#172033;font-size:25pt;line-height:1.25}h1,h2,h3,h4,h5,h6{margin:1.5em 0 .6em;color:#172033;line-height:1.35}h1{font-size:22pt}h2{font-size:17pt}h3{font-size:14pt}p{margin:.6em 0 1em}ul,ol{padding-left:1.8em;margin:.5em 0 1.2em}li{padding-left:.3em;margin:.25em 0}blockquote{margin:1.2em 0;padding:.4em 1.1em;border-left:3px solid #4b7bec;background:#f5f8fc;color:#526174}pre{margin:1em 0;padding:1em 1.15em;border:1px solid #e1e7ee;border-radius:7px;background:#f6f8fa;color:#253044;font:9.5pt/1.55 ${codeFont};white-space:pre-wrap;overflow-wrap:anywhere}code{padding:.12em .34em;border-radius:4px;background:#f1f4f8;font-family:${codeFont};font-size:.92em}pre code{padding:0;background:transparent;font-size:inherit}table{width:100%;margin:1.1em 0;border-collapse:collapse;font-size:10pt}th,td{padding:.58em .72em;border:1px solid #d7dee7;text-align:left;vertical-align:top}th{background:#f1f5f9;color:#263347;font-weight:650}tr:nth-child(even) td{background:#fafbfd}a{color:#245fc7;text-decoration:none}hr{height:1px;margin:1.8em 0;border:0;background:#dce3eb}.export-content> :first-child{margin-top:0}
 </style></head><body><header><h1 class="document-title">${escapeHtml(title)}</h1></header><main class="export-content">${renderBlocks(parseMarkdownExport(markdown))}</main></body></html>`;
 }
 
 export function renderMarkdownHtml(markdown: string, title: string): string {
-  return htmlDocument(markdown, title, false);
-}
-
-export function renderMarkdownPrintHtml(markdown: string, title: string): string {
-  return htmlDocument(markdown, title, true);
+  return htmlDocument(markdown, title);
 }
 
 const wordFonts = { ascii: "Aptos", hAnsi: "Aptos", eastAsia: "Microsoft YaHei", cs: "Aptos" };
