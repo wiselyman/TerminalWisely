@@ -150,6 +150,111 @@ describe("markWiselyStore", () => {
     );
   });
 
+  it("copies the current editor buffer to a new SSH path and switches only after the copy is opened", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      target: { kind: "ssh", sessionId: "session-a" },
+      hostKey: "server-a",
+      path: "/home/e2e/source.md",
+    });
+    useMarkWiselyStore.getState().setEditorValue("ssh:session-a", "# Latest copy\n");
+    invoke.mockImplementation(async (command: string, args: { request?: Record<string, unknown> }) => {
+      if (command === "preview_open") {
+        const path = String(args.request?.path ?? "");
+        return path.endsWith("copy.md")
+          ? { ...opened(path, "preview-copy-handle"), text_content: "" }
+          : opened(path);
+      }
+      return undefined;
+    });
+
+    await (useMarkWiselyStore.getState() as unknown as {
+      saveAsDocument: (options: { key: string; parentDir: string; name: string }) => Promise<void>;
+    }).saveAsDocument({ key: "ssh:session-a", parentDir: "/home/e2e/archive", name: "copy.md" });
+
+    expect(invoke).toHaveBeenCalledWith("create_path", {
+      request: {
+        session_id: "session-a",
+        parent_dir: "/home/e2e/archive",
+        name: "copy.md",
+        kind: "file",
+        sudo_password: null,
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("preview_save", {
+      request: {
+        handle_id: "preview-copy-handle",
+        content: "# Latest copy\n",
+        sudo_password: null,
+      },
+    });
+    expect(useMarkWiselyStore.getState().getDocument("ssh:session-a")).toMatchObject({
+      path: "/home/e2e/archive/copy.md",
+      text: "# Latest copy\n",
+      savedText: "# Latest copy\n",
+      target: { kind: "ssh", sessionId: "session-a" },
+    });
+    expect(useMarkWiselyStore.getState().getRecentFiles("server-a").map((file) => file.path)).toEqual([
+      "/home/e2e/archive/copy.md",
+      "/home/e2e/source.md",
+    ]);
+  });
+
+  it("routes Save As for a local document only through local file commands", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    invoke.mockImplementation(async (command: string, args: { request?: Record<string, unknown> }) => {
+      if (command === "read_local_text") return "# Local source\n";
+      return undefined;
+    });
+    await useMarkWiselyStore.getState().openDocument({
+      target: { kind: "local" },
+      hostKey: "local",
+      path: "/Users/test/source.md",
+    });
+    useMarkWiselyStore.getState().setEditorValue("local", "# Local copy\n");
+
+    await (useMarkWiselyStore.getState() as unknown as {
+      saveAsDocument: (options: { key: string; parentDir: string; name: string }) => Promise<void>;
+    }).saveAsDocument({ key: "local", parentDir: "/Users/test/archive", name: "copy.md" });
+
+    expect(invoke).toHaveBeenCalledWith("create_local_path", {
+      request: { parent: "/Users/test/archive", name: "copy.md", kind: "file" },
+    });
+    expect(invoke).toHaveBeenCalledWith("write_local_text", {
+      request: { path: "/Users/test/archive/copy.md", content: "# Local copy\n" },
+    });
+    expect(invoke).not.toHaveBeenCalledWith("preview_open", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("preview_save", expect.anything());
+    expect(useMarkWiselyStore.getState().getDocument("local")).toMatchObject({
+      path: "/Users/test/archive/copy.md",
+      text: "# Local copy\n",
+      savedText: "# Local copy\n",
+      target: { kind: "local" },
+    });
+  });
+
+  it("keeps the source document open when creating a Save As copy fails", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      target: { kind: "ssh", sessionId: "session-a" },
+      hostKey: "server-a",
+      path: "/home/e2e/source.md",
+    });
+    invoke.mockRejectedValueOnce(new Error("copy create failed"));
+
+    await expect((useMarkWiselyStore.getState() as unknown as {
+      saveAsDocument: (options: { key: string; parentDir: string; name: string }) => Promise<void>;
+    }).saveAsDocument({ key: "ssh:session-a", parentDir: "/home/e2e/archive", name: "copy.md" })).rejects.toThrow("copy create failed");
+
+    expect(useMarkWiselyStore.getState().getDocument("ssh:session-a")).toMatchObject({
+      path: "/home/e2e/source.md",
+      text: "# Note\n",
+      savedText: "# Note\n",
+    });
+  });
+
   it("uses local file commands and keeps local recents separate from SSH", async () => {
     const { useMarkWiselyStore } = await import("./markWiselyStore");
     invoke.mockImplementation(async (command: string, args: { path?: string; content?: string; parent?: string; name?: string }) => {

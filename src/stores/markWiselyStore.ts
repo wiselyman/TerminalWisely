@@ -39,6 +39,12 @@ interface CreateDocumentOptions extends OpenDocumentOptions {
   name: string;
 }
 
+interface SaveAsDocumentOptions {
+  key: string;
+  parentDir: string;
+  name: string;
+}
+
 function documentKey(options: Pick<OpenDocumentOptions, "sessionId" | "target">): string {
   if (options.target) return desktopTargetKey(options.target);
   return options.sessionId ?? "";
@@ -49,6 +55,7 @@ interface MarkWiselyState {
   recentFiles: RecentFilesByHost;
   openDocument: (options: OpenDocumentOptions) => Promise<void>;
   createDocument: (options: CreateDocumentOptions) => Promise<void>;
+  saveAsDocument: (options: SaveAsDocumentOptions) => Promise<void>;
   setEditorValue: (sessionId: string, value: string) => void;
   saveDocument: (sessionId: string) => Promise<void>;
   closeDocument: (sessionId: string) => Promise<void>;
@@ -187,6 +194,86 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
       });
     }
     await get().openDocument({ sessionId, ...(options.target ? { target } : {}), hostKey, path });
+  },
+
+  saveAsDocument: async ({ key, parentDir, name }) => {
+    const source = get().documents[key];
+    if (!source) throw new Error("No Markdown document is open");
+    const separator = parentDir.includes("\\") ? "\\" : "/";
+    const normalizedParent = parentDir.replace(/[/\\]+$/, "");
+    const path = `${normalizedParent}${normalizedParent ? separator : ""}${name}`;
+    const content = source.text;
+
+    if (source.target.kind === "local") {
+      await createLocalPath(parentDir, name, "file");
+      try {
+        await writeLocalText(path, content);
+      } catch (error) {
+        await invoke("delete_local_path", { request: { path } }).catch(() => undefined);
+        throw error;
+      }
+      set((state) => ({
+        documents: {
+          ...state.documents,
+          [key]: { ...source, path, handleId: "", text: content, savedText: content, saving: false, error: null },
+        },
+        recentFiles: withRecentFile(state.recentFiles, "local", path),
+      }));
+      return;
+    }
+
+    const sessionId = source.sessionId;
+    if (!sessionId) throw new Error("SSH session is required");
+    await invoke("create_path", {
+      request: {
+        session_id: sessionId,
+        parent_dir: parentDir,
+        name,
+        kind: "file",
+        sudo_password: null,
+      },
+    });
+    let copiedHandleId: string | null = null;
+    try {
+      const opened = await openRemoteMarkdown({
+        sessionId,
+        hostKey: source.hostKey,
+        path,
+      });
+      copiedHandleId = opened.handle_id;
+      await invoke("preview_save", {
+        request: {
+          handle_id: opened.handle_id,
+          content,
+          sudo_password: null,
+        },
+      });
+    } catch (error) {
+      if (copiedHandleId) {
+        await invoke("preview_close", { request: { handle_id: copiedHandleId } }).catch(() => undefined);
+      }
+      await invoke("delete_path", {
+        request: { session_id: sessionId, path, sudo_password: null },
+      }).catch(() => undefined);
+      throw error;
+    }
+
+    const copiedDocument: MarkWiselyDocument = {
+      ...source,
+      path,
+      handleId: copiedHandleId ?? "",
+      text: content,
+      savedText: content,
+      saving: false,
+      error: null,
+    };
+    set((state) => ({
+      documents: { ...state.documents, [key]: copiedDocument },
+      recentFiles: withRecentFile(state.recentFiles, source.hostKey, path),
+    }));
+    if (source.handleId && source.handleId !== copiedHandleId) {
+      void invoke("preview_close", { request: { handle_id: source.handleId } }).catch(() => undefined);
+    }
   },
 
   setEditorValue: (sessionId, value) => {
