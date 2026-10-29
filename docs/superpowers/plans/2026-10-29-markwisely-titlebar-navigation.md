@@ -77,7 +77,7 @@
 - [x] Run the focused tests and observe failure before implementation: the editor button was present; the promoted header lacked its drag marker.
 - [x] Remove only the editor All files button and reset the view after successful close/save; retain picker and form navigation controls.
 - [x] Run the focused remote/local tests and verify autosave-before-close still works; all three passed.
-- [ ] Commit this task independently.
+- [x] Commit this task independently (`facca50f`).
 
 ### Task 3: Repository verification
 
@@ -87,7 +87,7 @@
 - Verify: `e2e/host-desktop.spec.ts`
 - Verify: `e2e/home-local-terminal-chat.spec.ts`
 
-- [ ] Run `node scripts/check-no-agent-hardcoding.mjs`.
-- [ ] Run `./scripts/run-all-tests.sh` and require every stage to pass.
-- [ ] Review only this task's diff; keep existing untracked files unstaged.
+- [x] Run `node scripts/check-no-agent-hardcoding.mjs` (PASS).
+- [x] Run `./scripts/run-all-tests.sh` and require every stage to pass (10/10 stages; 592 Vitest, 115 Playwright, 502 sidecar, Rust checks).
+- [x] Review only this task's diff; keep existing untracked files unstaged.
 - [ ] Commit verification state and push `main` only after all checks pass.
