@@ -118,6 +118,63 @@ test.describe("Host desktop mode", () => {
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
   });
 
+  test("MarkWisely exposes file actions in the editor formatting toolbar", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("markwisely-new-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
+    await page.getByTestId("markwisely-file-name").fill("toolbar-actions.md");
+    await page.getByTestId("markwisely-create-submit").click();
+
+    const panel = page.getByTestId("markwisely-panel");
+    const toolbar = panel.locator(".vditor-toolbar");
+    await expect(toolbar).toBeVisible({ timeout: 30_000 });
+    for (const action of ["open", "open-folder", "save", "save-as", "export"]) {
+      await expect(toolbar.locator(`.markwisely-toolbar-${action} button`)).toBeVisible();
+    }
+    await expect(panel.locator(".vditor-toolbar")).toHaveCount(1);
+    const toolbarBox = await toolbar.boundingBox();
+    const leftActionBox = await toolbar.locator(".markwisely-toolbar-open").boundingBox();
+    const rightActionBox = await toolbar.locator(".markwisely-toolbar-save").boundingBox();
+    expect(toolbarBox && leftActionBox ? leftActionBox.x - toolbarBox.x : Infinity).toBeLessThan(40);
+    expect(toolbarBox && rightActionBox ? rightActionBox.x - toolbarBox.x : 0).toBeGreaterThan((toolbarBox?.width ?? 0) * 0.5);
+
+    await toolbar.locator(".markwisely-toolbar-open button").click();
+    const openDialog = page.getByRole("dialog", { name: "Open Markdown file" });
+    await expect(openDialog).toBeVisible();
+    await openDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(panel.locator(".vditor-ir")).toBeVisible();
+
+    await toolbar.locator(".markwisely-toolbar-open-folder button").click();
+    const folderDialog = page.getByRole("dialog", { name: "Choose folder" });
+    await expect(folderDialog).toBeVisible();
+    await folderDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(panel.locator(".vditor-ir")).toBeVisible();
+
+    const editor = panel.locator('.vditor-ir [contenteditable="true"]').first();
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("TOOLBAR_SAVE_AS_CONTENT");
+    await toolbar.locator(".markwisely-toolbar-save button").click();
+    await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("TOOLBAR_SAVE_AS_CONTENT");
+
+    await toolbar.locator(".markwisely-toolbar-save-as button").click();
+    const saveAsFolder = page.getByRole("dialog", { name: "Choose folder" });
+    await expect(saveAsFolder).toBeVisible();
+    await saveAsFolder.getByRole("button", { name: "Use this folder" }).click();
+    await expect(page.getByTestId("markwisely-create-view")).toBeVisible();
+    await page.getByTestId("markwisely-file-name").fill("toolbar-copy.md");
+    await page.getByTestId("markwisely-save-as-submit").click();
+    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("toolbar-copy.md");
+    await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("TOOLBAR_SAVE_AS_CONTENT");
+
+    await toolbar.locator(".markwisely-toolbar-export button").click();
+    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.md" })).toBeVisible();
+  });
+
   test("MarkWisely editor resizes after maximizing and restoring its window", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);

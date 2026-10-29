@@ -369,6 +369,7 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   insert_terminal_command: () => null,
   insert_local_paths_command: () => null,
   get_session_cwd: () => "/home/e2e",
+  "plugin:dialog|save": () => "/tmp/markwisely-toolbar-export.md",
   probe_remote_path: (args) => {
     const path = String((args as { path?: string }).path ?? "");
     if (path.endsWith("/") || path.includes("bin")) return "directory";

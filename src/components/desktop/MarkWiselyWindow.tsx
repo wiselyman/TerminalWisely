@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
 import { FilePlus2, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./MarkWiselyWindow.css";
@@ -10,11 +11,20 @@ import { flushPreviewEditor } from "../../lib/previewEditorFlush";
 import { useMarkWiselyStore } from "../../stores/markWiselyStore";
 import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
-import { listLocalRoots } from "../../lib/localFsApi";
+import { createLocalPath, listLocalDirectory, listLocalRoots, parentLocalPath, writeLocalText } from "../../lib/localFsApi";
+import { useToastStore } from "../../stores/toastStore";
 
 type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null };
-type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "edit";
+type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "save-as-folder" | "save-as" | "edit";
 const EMPTY_RECENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getRecentFiles"]> = [];
+
+const toolbarIcons: Record<string, string> = {
+  open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>',
+  "open-folder": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>',
+  "save-as": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8M12 15h6M15 12v6"/></svg>',
+  export: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>',
+};
 
 export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: Props) {
   const activeTarget = target ?? { kind: "ssh" as const, sessionId: sessionId ?? "" };
@@ -28,10 +38,12 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
+  const [filePickerReturnView, setFilePickerReturnView] = useState<"start" | "edit">("start");
   const document = useMarkWiselyStore((state) => state.documents[targetKey]);
   const recents = useMarkWiselyStore((state) => state.recentFiles[activeHostKey] ?? EMPTY_RECENTS);
   const openDocument = useMarkWiselyStore((state) => state.openDocument);
   const createDocument = useMarkWiselyStore((state) => state.createDocument);
+  const saveAsDocument = useMarkWiselyStore((state) => state.saveAsDocument);
   const setEditorValue = useMarkWiselyStore((state) => state.setEditorValue);
   const saveDocument = useMarkWiselyStore((state) => state.saveDocument);
   const closeDocument = useMarkWiselyStore((state) => state.closeDocument);
@@ -129,6 +141,72 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     }
   };
 
+  const openMarkdownPicker = async (from: "file" | "folder") => {
+    if (dirty && !(await save())) return;
+    setError(null);
+    setFilePickerReturnView(view === "edit" ? "edit" : "start");
+    setView(from === "file" ? "open" : "open-folder");
+  };
+
+  const beginSaveAs = () => {
+    const latest = flushPreviewEditor(flushId);
+    if (latest !== null) setEditorValue(targetKey, latest);
+    if (!document) return;
+    const separator = document.path.includes("\\") ? "\\" : "/";
+    const parts = document.path.split(/[\\/]/);
+    const fileName = parts.pop() || "未命名.md";
+    const currentParent = parts.join(separator) || separator;
+    setParentDir(currentParent);
+    setName(fileName);
+    setError(null);
+    setView("save-as-folder");
+  };
+
+  const createSaveAs = async () => {
+    const latest = flushPreviewEditor(flushId);
+    if (latest !== null) setEditorValue(targetKey, latest);
+    const fileName = name.trim();
+    if (!fileName) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await saveAsDocument({ key: targetKey, parentDir, name: fileName });
+      setView("edit");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportMarkdown = async () => {
+    const latest = flushPreviewEditor(flushId);
+    const current = useMarkWiselyStore.getState().getDocument(targetKey);
+    const content = latest ?? current?.text;
+    if (content == null || !current) return;
+    setError(null);
+    try {
+      const path = await showSaveDialog({
+        title: t("markwisely.exportTitle"),
+        defaultPath: current.path.split(/[\\/]/).pop() || "export.md",
+        filters: [{ name: t("markwisely.markdownFiles"), extensions: ["md", "markdown"] }],
+      });
+      if (!path) return;
+      const parent = parentLocalPath(path);
+      const fileName = path.split(/[\\/]/).pop();
+      if (!fileName) throw new Error(t("markwisely.exportFailed"));
+      const directory = await listLocalDirectory(parent);
+      if (!directory.entries.some((entry) => entry.path === path)) {
+        await createLocalPath(parent, fileName, "file");
+      }
+      await writeLocalText(path, content);
+      useToastStore.getState().pushToast(t("markwisely.exported", { path }), true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      useToastStore.getState().pushToast(t("markwisely.exportFailed"), false);
+    }
+  };
+
   return (
     <DesktopAppWindow
       appId="markwisely"
@@ -157,6 +235,13 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
               filePath={document.path}
               text={document.text}
               editable
+              toolbarActions={[
+                { id: "open", label: t("markwisely.toolbarOpen"), icon: toolbarIcons.open, onClick: () => void openMarkdownPicker("file") },
+                { id: "open-folder", label: t("markwisely.toolbarOpenFolder"), icon: toolbarIcons["open-folder"], onClick: () => void openMarkdownPicker("folder") },
+                { id: "save", label: t("markwisely.toolbarSave"), icon: toolbarIcons.save, onClick: () => void save() },
+                { id: "save-as", label: t("markwisely.toolbarSaveAs"), icon: toolbarIcons["save-as"], onClick: beginSaveAs },
+                { id: "export", label: t("markwisely.toolbarExport"), icon: toolbarIcons.export, onClick: () => void exportMarkdown() },
+              ]}
               onChange={(value) => { setError(null); setEditorValue(targetKey, value); }}
             />
           </div>
@@ -164,23 +249,23 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
             {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}
           </span>
         </div>
-      ) : view === "create" ? (
+      ) : view === "create" || view === "save-as" ? (
         <section className="markwisely-form-view" data-testid="markwisely-create-view">
-          <button type="button" className="markwisely-back" onClick={() => setView("start")}>{t("markwisely.back")}</button>
-          <h2>{t("markwisely.newTitle")}</h2>
+          <button type="button" className="markwisely-back" onClick={() => setView(view === "save-as" ? "edit" : "start")}>{t("markwisely.back")}</button>
+          <h2>{t(view === "save-as" ? "markwisely.saveAsTitle" : "markwisely.newTitle")}</h2>
           <label>{t("markwisely.folderLabel")}
-            <div className="markwisely-folder-row"><input aria-label={t("markwisely.folderLabel")} value={parentDir} onChange={(event) => setParentDir(event.target.value)} /><button type="button" onClick={() => { setFolderDialogReturnView("create"); setView("create-folder"); }} aria-label={t("markwisely.chooseFolder")}><FolderOpen aria-hidden="true" /></button></div>
+            <div className="markwisely-folder-row"><input aria-label={t("markwisely.folderLabel")} value={parentDir} onChange={(event) => setParentDir(event.target.value)} /><button type="button" onClick={() => { if (view === "save-as") setView("save-as-folder"); else { setFolderDialogReturnView("create"); setView("create-folder"); } }} aria-label={t("markwisely.chooseFolder")}><FolderOpen aria-hidden="true" /></button></div>
           </label>
           <label>{t("markwisely.fileNameLabel")}<input data-testid="markwisely-file-name" value={name} onChange={(event) => setName(event.target.value)} /></label>
           {error ? <div className="markwisely-error" role="alert">{error}</div> : null}
-          <div className="markwisely-form-actions"><button type="button" className="markwisely-back" onClick={() => setView("start")}>{t("markwisely.cancel")}</button><button type="button" className="markwisely-primary" data-testid="markwisely-create-submit" disabled={busy || !folderReady || !parentDir.trim() || !name.trim()} onClick={() => void createFile()}>{busy ? t("markwisely.creating") : t("markwisely.create")}</button></div>
+          <div className="markwisely-form-actions"><button type="button" className="markwisely-back" onClick={() => setView(view === "save-as" ? "edit" : "start")}>{t("markwisely.cancel")}</button><button type="button" className="markwisely-primary" data-testid={view === "save-as" ? "markwisely-save-as-submit" : "markwisely-create-submit"} disabled={busy || !folderReady || !parentDir.trim() || !name.trim()} onClick={() => void (view === "save-as" ? createSaveAs() : createFile())}>{busy ? t("markwisely.creating") : t(view === "save-as" ? "markwisely.saveAs" : "markwisely.create")}</button></div>
         </section>
       ) : (
         <section
           className="markwisely-home"
           data-testid="markwisely-home"
-          aria-hidden={view === "open" || view === "open-folder" || view === "create-folder"}
-          inert={view === "open" || view === "open-folder" || view === "create-folder" ? true : undefined}
+          aria-hidden={view !== "start"}
+          inert={view !== "start" ? true : undefined}
         >
           <header className="markwisely-home-heading">
             <span className="markwisely-brand-icon" data-testid="markwisely-brand-icon" aria-hidden="true"><MarkWiselyIcon /></span>
@@ -210,7 +295,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
           </section>
         </section>
       )}
-      {view === "create-folder" || view === "open-folder" || view === "open" ? (
+      {view === "create-folder" || view === "open-folder" || view === "open" || view === "save-as-folder" ? (
         <div className="markwisely-open-backdrop" data-testid={view === "open" ? "markwisely-open-backdrop" : "markwisely-folder-backdrop"}>
           <MarkWiselyFilePicker
             key={`${view}:${parentDir}`}
@@ -218,11 +303,12 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
             target={activeTarget}
             mode={view === "open" ? "file" : "directory"}
             initialPath={view === "open" ? parentDir : parentDir || undefined}
-            onCancel={() => setView(view === "create-folder" ? folderDialogReturnView : "start")}
+            onCancel={() => setView(view === "create-folder" ? folderDialogReturnView : view === "save-as-folder" ? "edit" : filePickerReturnView)}
             onSelect={(path) => {
-              if (view === "create-folder" || view === "open-folder") {
+              if (view === "create-folder" || view === "open-folder" || view === "save-as-folder") {
                 setParentDir(path);
                 if (view === "create-folder") setView("create");
+                else if (view === "save-as-folder") setView("save-as");
                 else setView("open");
               } else {
                 void openPath(path);
