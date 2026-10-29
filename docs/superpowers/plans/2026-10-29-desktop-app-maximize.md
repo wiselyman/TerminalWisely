@@ -8,13 +8,15 @@
 - 最小化会将窗口隐藏到 Dock；关闭会关闭对应应用。
 - MarkWisely 关闭前仍调用现有保存/关闭检查；Local 与各 SSH Desktop 状态继续隔离。
 - Dock 在最大化时仍按当前底边呼出逻辑工作。
+- Desktop 应用最大化时，Desktop 内显示机器名和时间的蓝色菜单栏隐藏；应用内容从 TerminalWisely 主标题栏下方开始。
 
 ## 架构
 
 - `src/lib/desktopChromeHost.ts`：提供主标题栏按钮区的 portal host，供最大化应用把原有控件移入外层窗口 chrome。
 - `src/App.tsx`：在最上层标题栏提供空的应用标题/控件挂载槽。
 - `src/components/desktop/DesktopAppWindow.tsx`：最大化时将名称和原有最小化、恢复、关闭控件 portal 到主标题栏；Desktop surface 内隐藏应用自己的窗口标题栏，让内容从 menubar 下方铺满。保留同一 close handler。
-- `src/styles/desktop.css` 与 `src/App.css`：定义主标题栏中的应用控件外观及最大化内容区域布局；浮窗态仍使用 app-in-app 标题栏。
+- `src/components/desktop/DesktopPanel.tsx`：根据当前 Desktop 目标是否有最大化应用，隐藏机器名/时钟菜单栏。
+- `src/styles/desktop.css` 与 `src/App.css`：定义主标题栏中的应用控件外观及最大化内容区域布局；最大化时无 Desktop 蓝色菜单栏，浮窗态仍使用 app-in-app 标题栏。
 - `src/stores/desktopStore.ts`：最小化清除最大化标记，保留 frame；从 Dock 恢复为浮窗。
 - `src/stores/desktopStore.test.ts`、`e2e/host-desktop.spec.ts`：覆盖状态与真实控件层级。
 
@@ -26,9 +28,10 @@
 - 点击主标题栏的最小化按钮：应用进入 Dock；从 Dock 打开时回到浮窗态。
 - 点击主标题栏的关闭按钮：执行应用原有关闭路径，包括 MarkWisely 的保存检查。
 - 标题栏挂载槽无可见空内容；此改动不更改应用正文、菜单栏、Dock 或外层系统窗口控件。
+- 应用最大化时隐藏 Desktop 机器名/时间栏；恢复为浮窗时重新显示。
 
 ## 任务
 
-1. 先增加 Store 和 Playwright 失败用例：最大化后 app chrome 位于主标题栏且内层标题栏隐藏；恢复/最小化/Dock 恢复执行正确；最大化前 frame 保留；关闭仍通过原有 handler。运行对应测试并确认失败。
-2. 接入主标题栏 portal host，移动最大化控件，并调整标题栏与内容区样式。
+1. 先增加 Store 和 Playwright 失败用例：最大化后 app chrome 位于主标题栏且内层标题栏隐藏，Desktop 机器名/时间栏也隐藏；恢复/最小化/Dock 恢复执行正确；最大化前 frame 保留；关闭仍通过原有 handler。运行对应测试并确认失败。
+2. 接入主标题栏 portal host，移动最大化控件，最大化时隐藏 Desktop 菜单栏，并调整标题栏与内容区样式。
 3. 运行对应单测、Playwright 与硬编码禁检；固定 Desktop 时钟截图用例的遮罩尺寸，避免日期变化造成基线误报；再运行全量测试。

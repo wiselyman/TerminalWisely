@@ -67,12 +67,25 @@ export function DesktopPanel({ target }: Props) {
         className={`host-desktop-stage${hasMaximizedApp ? " has-maximized-app" : ""}`}
         data-maximized-app={hasMaximizedApp ? "true" : "false"}
       >
-        <div className="host-desktop-menubar">
-          <h2 className="host-desktop-computer" title={machineName || (target.kind === "local" ? t("desktop.localComputer") : t("desktop.title"))}>
-            {machineName || (target.kind === "local" ? t("desktop.localComputer") : t("desktop.title"))}
-          </h2>
-          <DesktopClock />
-        </div>
+        {hasMaximizedApp ? null : (
+          <div className="host-desktop-menubar">
+            <h2
+              className="host-desktop-computer"
+              title={
+                machineName ||
+                (target.kind === "local"
+                  ? t("desktop.localComputer")
+                  : t("desktop.title"))
+              }
+            >
+              {machineName ||
+                (target.kind === "local"
+                  ? t("desktop.localComputer")
+                  : t("desktop.title"))}
+            </h2>
+            <DesktopClock />
+          </div>
+        )}
         <div
           ref={bindSurface}
           className="host-desktop-surface"

@@ -282,6 +282,7 @@ test.describe("Host desktop mode", () => {
     const app = page.getByTestId("host-file-manager-panel");
     await page.getByTestId("host-file-manager-maximize").click();
     await expect(app).toHaveAttribute("data-maximized", "true");
+    await expect(page.locator(".host-desktop-menubar")).toHaveCount(0);
     const appChrome = page.getByTestId("desktop-maximized-app-controls");
     await expect(appChrome).toBeVisible();
     await expect(appChrome.getByTestId("desktop-app-window-title")).toBeVisible();
@@ -327,6 +328,7 @@ test.describe("Host desktop mode", () => {
 
     await appChrome.getByTestId("host-file-manager-maximize").click();
     await expect(app).toHaveAttribute("data-maximized", "false");
+    await expect(page.locator(".host-desktop-menubar")).toBeVisible();
     await expect(appChrome).toHaveCount(0);
     await expect(dock).toHaveAttribute("data-visible", "true");
 
