@@ -361,10 +361,6 @@
   flex: 0 0 auto;
 }
 
-.markwisely-editor .vditor-toolbar .markwisely-toolbar-save {
-  margin-left: auto;
-}
-
 .markwisely-editor .vditor-toolbar .markwisely-toolbar-action button {
   display: grid;
   width: 32px;
@@ -375,12 +371,6 @@
 .markwisely-editor .vditor-toolbar .markwisely-toolbar-action svg {
   width: 17px;
   height: 17px;
-}
-
-@media (max-width: 620px) {
-  .markwisely-editor .vditor-toolbar .markwisely-toolbar-save {
-    margin-left: 0;
-  }
 }
 
 .markwisely-picker {

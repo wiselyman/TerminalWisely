@@ -148,7 +148,7 @@ export function MarkdownWysiwygEditor({
               : { current: "light" },
         },
         toolbar: [
-          ...(toolbarActions ?? []).filter((action) => action.id === "open" || action.id === "open-folder").map((action) => ({
+          ...(toolbarActions ?? []).map((action) => ({
             name: `markwisely-${action.id}`,
             icon: action.icon,
             tip: action.label,
@@ -185,17 +185,6 @@ export function MarkdownWysiwygEditor({
           "undo",
           "redo",
           "fullscreen",
-          ...(toolbarActions ?? []).filter((action) => action.id === "save" || action.id === "save-as" || action.id === "export").map((action) => ({
-            name: `markwisely-${action.id}`,
-            icon: action.icon,
-            tip: action.label,
-            tipPosition: "s",
-            className: `markwisely-toolbar-action markwisely-toolbar-${action.id}`,
-            click: (event: Event) => {
-              event.preventDefault();
-              toolbarActionsRef.current?.find((item) => item.id === action.id)?.onClick();
-            },
-          })),
         ],
         upload: {
           accept: "image/*",

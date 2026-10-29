@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
-import { FilePlus2, FolderOpen } from "lucide-react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { FileDown, FilePlus2, FileText, FolderOpen, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "./MarkWiselyWindow.css";
 import { DesktopAppWindow } from "./DesktopAppWindow";
@@ -18,12 +19,16 @@ type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; ses
 type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "save-as-folder" | "save-as" | "edit";
 const EMPTY_RECENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getRecentFiles"]> = [];
 
-const toolbarIcons: Record<string, string> = {
-  open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>',
-  "open-folder": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
-  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>',
-  "save-as": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8M12 15h6M15 12v6"/></svg>',
-  export: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>',
+const toolbarIcon = (Icon: typeof FileText) => renderToStaticMarkup(
+  <Icon aria-hidden="true" size={17} strokeWidth={2} />,
+);
+
+const toolbarIcons = {
+  open: toolbarIcon(FileText),
+  "open-folder": toolbarIcon(FolderOpen),
+  save: toolbarIcon(Save),
+  "save-as": toolbarIcon(FilePlus2),
+  export: toolbarIcon(FileDown),
 };
 
 export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: Props) {
