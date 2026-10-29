@@ -235,7 +235,11 @@ test("Home MarkWisely creates, saves, and reopens local Markdown", async ({ page
   await page.keyboard.type("# Local note");
   await expect(page.getByTestId("markwisely-save")).toHaveCount(0);
   await expect(page.getByTestId("markwisely-save-status")).toHaveText(/Saved|已保存/, { timeout: 10_000 });
-  await page.locator(".markwisely-editor-view .markwisely-back").click();
+  await expect(page.getByRole("button", { name: /All files|全部文件/i })).toHaveCount(0);
+  await page.getByTestId("markwisely-close").click();
+  await expect(page.getByTestId("markwisely-panel")).toHaveCount(0);
+  await page.getByTestId("dock-app-markwisely").click();
+  await expect(page.getByTestId("markwisely-home")).toBeVisible();
   await expect(page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" })).toBeVisible();
   await page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" }).click();
   await expect(editor).toContainText("Local note");

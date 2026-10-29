@@ -106,7 +106,12 @@ test.describe("Host desktop mode", () => {
     await appChrome.getByTestId("markwisely-maximize").click();
     await expect(panel).toHaveAttribute("data-maximized", "false");
 
-    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    await expect(panel.getByRole("button", { name: /All files|全部文件/i })).toHaveCount(0);
+    await panel.getByTestId("markwisely-close").click();
+    const dockApp = page.getByTestId("dock-app-markwisely");
+    await expect(panel).toHaveCount(0);
+    await dockApp.click();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
     const recent = panel.getByRole("button", { name: /draft\.md/ });
     await expect(recent).toBeVisible();
     await recent.click();
@@ -204,7 +209,11 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("markwisely-file-name").fill("note.md");
     await page.getByTestId("markwisely-create-submit").click();
     await expect(panel.locator(".vditor-ir")).toBeVisible({ timeout: 30_000 });
-    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    await expect(panel.getByRole("button", { name: /All files|全部文件/i })).toHaveCount(0);
+    await panel.getByTestId("markwisely-close").click();
+    await expect(panel).toHaveCount(0);
+    await page.getByTestId("dock-app-markwisely").click();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await page.getByTestId("markwisely-open-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await expect(page.getByTestId("markwisely-file-entry")).toContainText("note.md");
@@ -212,7 +221,9 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("markwisely-file-entry").click();
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
 
-    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    await panel.getByTestId("markwisely-close").click();
+    await expect(panel).toHaveCount(0);
+    await page.getByTestId("dock-app-markwisely").click();
     await page.getByTestId("markwisely-new-document").click();
     const chooseNextFolder = page.getByRole("dialog", { name: "Choose folder" });
     await expect(chooseNextFolder.getByTestId("local-fs-crumb-e2e")).toHaveAttribute("title", "/home/e2e");
@@ -224,7 +235,9 @@ test.describe("Host desktop mode", () => {
     await editor.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("unsaved draft");
-    await panel.getByRole("button", { name: /All files|全部文件/i }).click();
+    await panel.getByTestId("markwisely-close").click();
+    await expect(panel).toHaveCount(0);
+    await page.getByTestId("dock-app-markwisely").click();
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     expect((await api.getLastPreviewSave())?.content).toContain("unsaved draft");
     await panel.getByRole("button", { name: /note\.md/ }).click();

@@ -61,7 +61,7 @@
 - [x] Add a failing assertion that the maximized `.desktop-app-window-head` has the Tauri drag-region marker, then run the focused MarkWisely maximize E2E and observe failure (`data-tauri-drag-region` was null).
 - [x] Add the drag-region attribute to the shared header only for maximized mode.
 - [x] Re-run the focused test; the promoted header marker is present and maximize/restore controls remain clickable.
-- [ ] Commit this task independently.
+- [x] Commit this task independently (`34e3fbba`).
 
 ### Task 2: Remove All files and preserve navigation through close/reopen
 
@@ -73,10 +73,10 @@
 **Interfaces:**
 - A successful `handleCloseRequest` closes the current document and resets the view to `start`; a failed save returns false and leaves the editor open.
 
-- [ ] Update remote and local MarkWisely E2E flows to assert the editor has no All files button, close/reopen to the start screen, and reopen a recent file.
-- [ ] Run the focused tests and observe failure before implementation.
-- [ ] Remove only the editor All files button and reset the view after successful close/save; retain picker and form navigation controls.
-- [ ] Run the focused remote/local tests and verify autosave-before-close still works.
+- [x] Update remote and local MarkWisely E2E flows to assert the editor has no All files button, close/reopen to the start screen, and reopen a recent file.
+- [x] Run the focused tests and observe failure before implementation: the editor button was present; the promoted header lacked its drag marker.
+- [x] Remove only the editor All files button and reset the view after successful close/save; retain picker and form navigation controls.
+- [x] Run the focused remote/local tests and verify autosave-before-close still works; all three passed.
 - [ ] Commit this task independently.
 
 ### Task 3: Repository verification

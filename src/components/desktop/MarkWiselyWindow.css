@@ -313,22 +313,6 @@
   min-height: 0;
 }
 
-.markwisely-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--tw-border);
-}
-
-.markwisely-current-file {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .markwisely-save-state {
   position: absolute;
   right: 12px;

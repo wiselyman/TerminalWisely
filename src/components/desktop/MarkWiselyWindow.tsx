@@ -93,15 +93,10 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     return () => { cancelled = true; };
   }, [activeTarget.kind, sessionId]);
 
-  const requestNavigation = useCallback(async (action: () => void) => {
-    if (dirty && !(await save())) return;
-    await closeDocument(targetKey);
-    action();
-  }, [closeDocument, dirty, save, targetKey]);
-
   const handleCloseRequest = useCallback(async () => {
     if (dirty && !(await save())) return false;
     await closeDocument(targetKey);
+    setView("start");
     return true;
   }, [closeDocument, dirty, save, targetKey]);
 
@@ -154,9 +149,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     >
       {view === "edit" && document ? (
         <div className="markwisely-editor-view" data-testid="markwisely-editor-view">
-          <header className="markwisely-toolbar">
-            <button type="button" className="markwisely-back" onClick={() => void requestNavigation(() => setView("start"))}>{t("markwisely.allDocuments")}</button>
-          </header>
           {error || document.error ? <div className="markwisely-error" role="alert">{error ?? document.error}</div> : null}
           <div className="markwisely-editor">
             <MarkdownWysiwygEditor
