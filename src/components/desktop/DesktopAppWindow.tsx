@@ -176,10 +176,12 @@ export function DesktopAppWindow({
         aria-label={title}
         data-testid={panelTestId}
         data-maximized={maximized ? "true" : "false"}
-        data-chrome="icon-title"
+        data-chrome={maximized ? "standalone-title" : "icon-title"}
       >
         <header
-          className="preview-panel-head desktop-app-window-head is-compact"
+          className={`preview-panel-head desktop-app-window-head is-compact${
+            maximized ? " is-maximized" : ""
+          }`}
           onPointerDown={onDragStart}
         >
           {mark ? (
@@ -189,6 +191,14 @@ export function DesktopAppWindow({
               aria-hidden
             >
               {mark}
+            </span>
+          ) : null}
+          {maximized ? (
+            <span
+              className="desktop-app-window-maximized-title"
+              data-testid="desktop-app-window-title"
+            >
+              {title}
             </span>
           ) : null}
           <div

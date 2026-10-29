@@ -329,7 +329,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         void useBrowserStore.getState().minimize();
       }
       set({
-        apps: patchApp(get().apps, app, { minimized: true }),
+        apps: patchApp(get().apps, app, { minimized: true, maximized: false }),
       });
     },
 

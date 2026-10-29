@@ -98,16 +98,18 @@ describe("desktopStore", () => {
     expect(useDesktopStore.getState().filesTab).toBe("find");
     expect(openPanel).toHaveBeenCalledWith("sess-1", "files");
 
+    const originalFrame = { x: 32, y: 48, width: 640, height: 420 };
+    useDesktopStore.getState().setAppFrame("files", originalFrame);
     useDesktopStore.getState().setAppMaximized("files", true);
     expect(useDesktopStore.getState().apps.files.maximized).toBe(true);
-    useDesktopStore.getState().setAppMaximized("files", false);
-    expect(useDesktopStore.getState().apps.files.maximized).toBe(false);
-
     useDesktopStore.getState().minimizeApp("files");
     expect(useDesktopStore.getState().apps.files.minimized).toBe(true);
+    expect(useDesktopStore.getState().apps.files.maximized).toBe(false);
 
     useDesktopStore.getState().toggleDockApp("files");
     expect(useDesktopStore.getState().apps.files.minimized).toBe(false);
+    expect(useDesktopStore.getState().apps.files.maximized).toBe(false);
+    expect(useDesktopStore.getState().frames.files).toEqual(originalFrame);
   });
 
   it("launch processes and browser via dock toggle", async () => {

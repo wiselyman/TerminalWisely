@@ -165,6 +165,8 @@ test.describe("UI visual baselines", () => {
     await desktopClock.evaluate((clock) => {
       clock.style.width = "140px";
       clock.style.minWidth = "140px";
+      clock.style.flex = "0 0 140px";
+      clock.style.height = "30px";
     });
     for (const theme of themes) {
       await setTheme(page, theme);

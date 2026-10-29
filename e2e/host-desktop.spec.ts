@@ -279,6 +279,7 @@ test.describe("Host desktop mode", () => {
     const app = page.getByTestId("host-file-manager-panel");
     await page.getByTestId("host-file-manager-maximize").click();
     await expect(app).toHaveAttribute("data-maximized", "true");
+    await expect(app.getByTestId("desktop-app-window-title")).toBeVisible();
 
     const stage = page.locator(".host-desktop-stage");
     const stageBox = await stage.boundingBox();
@@ -326,8 +327,8 @@ test.describe("Host desktop mode", () => {
     await expect(dock).toHaveAttribute("data-visible", "true");
 
     await dock.getByTestId("dock-app-files").click();
-    await expect(app).toHaveAttribute("data-maximized", "true");
-    await expect(dock).toHaveAttribute("data-visible", "false");
+    await expect(app).toHaveAttribute("data-maximized", "false");
+    await expect(dock).toHaveAttribute("data-visible", "true");
     await page.getByTestId("host-file-manager-close").click();
     await expect(app).toHaveCount(0);
     await expect(dock).toHaveAttribute("data-visible", "true");

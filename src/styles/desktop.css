@@ -693,6 +693,23 @@
   min-height: 28px;
 }
 
+.desktop-app-window-head.is-compact.is-maximized {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 10px;
+  gap: 8px;
+}
+
+.desktop-app-window-maximized-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tw-fg);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .desktop-app-window-head.is-compact .desktop-app-window-title-wrap.is-spacer {
   flex: 1;
   min-width: 0;
