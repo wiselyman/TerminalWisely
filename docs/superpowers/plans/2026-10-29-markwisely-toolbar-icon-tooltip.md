@@ -32,5 +32,5 @@
 ## 任务
 
 - [x] 扩展 Playwright 回归，验证文件图标透明填充/描边及每个按钮悬浮显示名称；先运行观察失败。
-- [ ] 局部覆盖 Vditor SVG 样式并确认 tooltip 标签可见。
-- [ ] 运行 MarkWisely 相关 Playwright、硬编码禁检和全量测试。
+- [x] 局部覆盖 Vditor SVG 样式并确认 tooltip 标签可见。
+- [x] 运行 MarkWisely 相关 Playwright、硬编码禁检和全量测试。
