@@ -277,6 +277,7 @@ export function DesktopAppWindow({
             <div
               className="chrome-maximized-app-controls"
               data-testid="desktop-maximized-app-controls"
+              data-tauri-drag-region=""
             >
               {header}
             </div>,

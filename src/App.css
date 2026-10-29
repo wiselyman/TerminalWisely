@@ -393,6 +393,63 @@ body,
   overflow: hidden;
 }
 
+/* A maximized Desktop app temporarily owns the app chrome, while the native
+   host-window controls and macOS traffic-light reservation stay in place. */
+.app-shell.desktop-app-chrome-mode .chrome-sidebar-slot {
+  width: auto;
+  border-right: 0;
+  background: var(--tab-strip-bg);
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-sidebar-controls,
+.app-shell.desktop-app-chrome-mode .chrome-titlebar-main > .tab-bar,
+.app-shell.desktop-app-chrome-mode .chrome-titlebar-main > .chrome-new-session,
+.app-shell.desktop-app-chrome-mode .chrome-titlebar-main > .chrome-titlebar-drag,
+.app-shell.desktop-app-chrome-mode .chrome-titlebar-actions > :not(.chrome-maximized-app-slot) {
+  display: none;
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-titlebar-main {
+  display: contents;
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-titlebar-actions {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+  margin: 0;
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-maximized-app-slot:not(:empty) {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-maximized-app-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-maximized-app-controls .desktop-app-window-head.is-maximized {
+  width: 100%;
+  min-height: var(--chrome-titlebar-height);
+  height: var(--chrome-titlebar-height);
+  padding: 0 10px;
+}
+
+.app-shell.desktop-app-chrome-mode .chrome-maximized-app-controls .preview-panel-actions,
+.app-shell.desktop-app-chrome-mode .chrome-maximized-app-controls button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* Titlebar left slot matches sidebar column so the divider lines up. */
 .chrome-sidebar-slot {
   display: flex;

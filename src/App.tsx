@@ -456,6 +456,11 @@ function App() {
   const fetchHostStats = useHostStatsStore((s) => s.fetchStats);
   const resetHostStats = useHostStatsStore((s) => s.resetForSession);
   const workspacePanelWidth = useDesktopStore((s) => s.width);
+  const desktopHasMaximizedApp = useDesktopStore((s) =>
+    Object.values(s.apps).some(
+      (app) => app.open && !app.minimized && app.maximized,
+    ),
+  );
   const desktopMode =
     desktopOpen && (isSshDesktopTarget(desktopTarget)
       ? sidebarView === "hosts" && activeTabId === desktopTarget.sessionId
@@ -469,6 +474,7 @@ function App() {
     desktopAiLocalOpen &&
     !desktopAiLocalMinimized;
   const workspacePanelOpen = showAiEngineerPanel && !desktopMode;
+  const desktopAppChromeMode = desktopMode && desktopHasMaximizedApp;
 
   const sidebarWidth = sidebarCollapsed
     ? SIDEBAR_COLLAPSED_WIDTH
@@ -876,7 +882,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${platformClass} ${homeOpen ? "home-space " : ""}${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""}${homeOpen ? "" : " has-host-stats-statusbar"}`}
+      className={`app-shell ${platformClass} ${homeOpen ? "home-space " : ""}${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""}${desktopAppChromeMode ? " desktop-app-chrome-mode" : ""}${homeOpen ? "" : " has-host-stats-statusbar"}`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,

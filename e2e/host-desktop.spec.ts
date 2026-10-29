@@ -117,11 +117,23 @@ test.describe("Host desktop mode", () => {
 
     await page.getByTestId("markwisely-maximize").click();
     await expect(panel).toHaveAttribute("data-maximized", "true");
+    await expect(page.locator(".app-shell")).toHaveClass(/desktop-app-chrome-mode/);
+    await expect(page.getByTestId("sidebar-view-home")).toBeHidden();
+    await expect(page.locator(".tab-bar")).toBeHidden();
+    await expect(page.getByTestId("chrome-new-session")).toBeHidden();
+    await expect(page.getByTestId("ai-engineer-tool")).toBeHidden();
+    await expect(page.getByTestId("local-fs-tool")).toBeHidden();
+    await expect(page.getByTestId("theme-switcher-trigger")).toBeHidden();
+    await expect(page.getByTestId("locale-switcher-trigger")).toBeHidden();
     const appChrome = page.getByTestId("desktop-maximized-app-controls");
+    await expect(appChrome).toBeVisible();
     await expect(appChrome.getByTestId("desktop-app-window-title")).toHaveText("MarkWisely");
     await expect(panel.locator(".desktop-app-window-head")).toHaveCount(0);
     await appChrome.getByTestId("markwisely-maximize").click();
     await expect(panel).toHaveAttribute("data-maximized", "false");
+    await expect(page.locator(".app-shell")).not.toHaveClass(/desktop-app-chrome-mode/);
+    await expect(page.getByTestId("sidebar-view-home")).toBeVisible();
+    await expect(page.locator(".tab-bar")).toBeVisible();
 
     await expect.poll(async () => {
       const editorBox = await editor.boundingBox();
