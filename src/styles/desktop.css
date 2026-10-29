@@ -693,6 +693,24 @@
   min-height: 28px;
 }
 
+.desktop-app-window-head.has-centered-title {
+  position: relative;
+}
+
+.desktop-app-window-centered-title {
+  position: absolute;
+  left: 50%;
+  max-width: min(48%, 640px);
+  overflow: hidden;
+  color: var(--tw-fg);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 .desktop-app-window-maximized-title {
   min-width: 0;
   overflow: hidden;

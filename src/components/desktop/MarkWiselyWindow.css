@@ -304,6 +304,7 @@
 .markwisely-form-actions { justify-content: flex-end; margin-top: 6px; }
 
 .markwisely-editor-view {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -329,10 +330,19 @@
 }
 
 .markwisely-save-state {
-  margin-left: auto;
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 4px 8px;
+  border: 1px solid var(--tw-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tw-surface) 92%, transparent);
   color: var(--tw-fg-muted);
   font-size: 0.78rem;
   white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
 }
 
 .markwisely-save-state.is-dirty { color: var(--tw-warning, #b7791f); }

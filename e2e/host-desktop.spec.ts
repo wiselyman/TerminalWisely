@@ -76,13 +76,34 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("markwisely-file-name").fill("draft.md");
     await page.getByTestId("markwisely-create-submit").click();
     await expect(panel.locator(".vditor-ir")).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("draft.md");
+    expect(await panel.getByTestId("markwisely-save").count()).toBe(0);
+    const floatingFilenameBox = await panel.getByTestId("markwisely-current-file").boundingBox();
+    const floatingChromeBox = await panel.locator(".desktop-app-window-head").boundingBox();
+    expect(floatingFilenameBox && floatingChromeBox ? Math.abs((floatingFilenameBox.x + floatingFilenameBox.width / 2) - (floatingChromeBox.x + floatingChromeBox.width / 2)) : Infinity).toBeLessThan(8);
 
     const editor = panel.locator('.vditor-ir [contenteditable="true"]').first();
     await editor.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("# Saved from MarkWisely");
-    await expect(panel.getByRole("status")).toContainText(/Saved|已保存/);
+    const saveStatus = panel.getByTestId("markwisely-save-status");
+    await expect(saveStatus).toContainText(/Saved|已保存/);
+    const statusBox = await saveStatus.boundingBox();
+    const editorViewBox = await panel.locator(".markwisely-editor-view").boundingBox();
+    expect(statusBox && editorViewBox ? statusBox.x + statusBox.width : 0).toBeGreaterThan(editorViewBox ? editorViewBox.x + editorViewBox.width - 180 : Infinity);
+    expect(statusBox && editorViewBox ? statusBox.y + statusBox.height : 0).toBeGreaterThan(editorViewBox ? editorViewBox.y + editorViewBox.height - 80 : Infinity);
     await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("Saved from MarkWisely");
+
+    await page.getByTestId("markwisely-maximize").click();
+    const appChrome = page.getByTestId("desktop-maximized-app-controls");
+    await expect(appChrome).toBeVisible();
+    const maximizedFilename = appChrome.getByTestId("markwisely-current-file");
+    await expect(maximizedFilename).toHaveText("draft.md");
+    const maximizedTitleBox = await maximizedFilename.boundingBox();
+    const appChromeBox = await appChrome.boundingBox();
+    expect(maximizedTitleBox && appChromeBox ? Math.abs((maximizedTitleBox.x + maximizedTitleBox.width / 2) - (appChromeBox.x + appChromeBox.width / 2)) : Infinity).toBeLessThan(8);
+    await appChrome.getByTestId("markwisely-maximize").click();
+    await expect(panel).toHaveAttribute("data-maximized", "false");
 
     await panel.getByRole("button", { name: /All files|全部文件/i }).click();
     const recent = panel.getByRole("button", { name: /draft\.md/ });

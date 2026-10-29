@@ -138,6 +138,11 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     <DesktopAppWindow
       appId="markwisely"
       title={t("desktop.appMarkWisely")}
+      centerTitle={view === "edit" && document ? (
+        <span data-testid="markwisely-current-file" title={document.path}>
+          {document.path.split("/").pop()}
+        </span>
+      ) : undefined}
       subtitle={sessionTitle}
       panelTestId="markwisely-panel"
       floatTestId="markwisely-float"
@@ -151,11 +156,6 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
         <div className="markwisely-editor-view" data-testid="markwisely-editor-view">
           <header className="markwisely-toolbar">
             <button type="button" className="markwisely-back" onClick={() => void requestNavigation(() => setView("start"))}>{t("markwisely.allDocuments")}</button>
-            <strong className="markwisely-current-file" title={document.path}>{document.path.split("/").pop()}</strong>
-            <span className={`markwisely-save-state${dirty ? " is-dirty" : ""}`} role="status">
-              {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}
-            </span>
-            <button type="button" className="markwisely-primary" data-testid="markwisely-save" disabled={!dirty || busy} onClick={() => void save()}>{t("markwisely.save")}</button>
           </header>
           {error || document.error ? <div className="markwisely-error" role="alert">{error ?? document.error}</div> : null}
           <div className="markwisely-editor">
@@ -168,6 +168,9 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
               onChange={(value) => { setError(null); setEditorValue(targetKey, value); }}
             />
           </div>
+          <span className={`markwisely-save-state${dirty ? " is-dirty" : ""}`} role="status" data-testid="markwisely-save-status">
+            {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}
+          </span>
         </div>
       ) : view === "create" ? (
         <section className="markwisely-form-view" data-testid="markwisely-create-view">

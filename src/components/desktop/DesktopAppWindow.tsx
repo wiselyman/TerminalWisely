@@ -38,6 +38,7 @@ import { desktopAppFloatZ } from "../../lib/floatStacking";
 type Props = {
   appId: DesktopAppId;
   title: string;
+  centerTitle?: ReactNode;
   subtitle?: string | null;
   /** Optional leading mark (e.g. Host Browser globe). */
   leading?: ReactNode;
@@ -61,6 +62,7 @@ function surfaceBounds(surface: HTMLElement) {
 export function DesktopAppWindow({
   appId,
   title,
+  centerTitle,
   leading,
   panelTestId,
   floatTestId,
@@ -125,7 +127,7 @@ export function DesktopAppWindow({
     <header
       className={`preview-panel-head desktop-app-window-head is-compact${
         maximized ? " is-maximized" : ""
-      }`}
+      }${centerTitle ? " has-centered-title" : ""}`}
       onPointerDown={onDragStart}
     >
       {mark ? (
@@ -147,6 +149,9 @@ export function DesktopAppWindow({
       ) : (
         <div className="desktop-app-window-title-wrap is-spacer" aria-hidden />
       )}
+      {centerTitle ? (
+        <div className="desktop-app-window-centered-title">{centerTitle}</div>
+      ) : null}
       <div className="preview-panel-actions desktop-app-window-actions">
         <button
           type="button"
