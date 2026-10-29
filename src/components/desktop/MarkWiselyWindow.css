@@ -346,15 +346,62 @@
 
 .markwisely-export-menu button:disabled { opacity: .55; cursor: wait; }
 
+.markwisely-pdf-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--tw-surface-1, #f4f6f9);
+}
+
+.markwisely-pdf-preview-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--tw-border);
+  background: var(--tw-surface, #fff);
+  color: var(--tw-fg);
+}
+
+.markwisely-pdf-preview-toolbar > div {
+  display: flex;
+  gap: 8px;
+}
+
+.markwisely-pdf-preview-toolbar button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--tw-border);
+  border-radius: 7px;
+  background: var(--tw-surface, #fff);
+  color: var(--tw-fg);
+  cursor: pointer;
+}
+
+.markwisely-pdf-preview-toolbar button:first-child {
+  border-color: var(--tw-accent);
+  background: var(--tw-accent);
+  color: #fff;
+}
+
+.markwisely-pdf-preview-toolbar button:focus-visible {
+  outline: 2px solid var(--tw-accent);
+  outline-offset: 2px;
+}
+
 .markwisely-pdf-print-frame {
-  position: fixed;
-  top: 0;
-  left: -10000px;
-  width: 100vw;
-  height: 100vh;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
   border: 0;
-  opacity: 0;
-  pointer-events: none;
+  background: #fff;
 }
 
 .markwisely-save-state {

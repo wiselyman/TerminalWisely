@@ -119,6 +119,11 @@ test.describe("Host desktop mode", () => {
   });
 
   test("MarkWisely export offers styled HTML, PDF, and Word outputs", async ({ page }) => {
+    await page.addInitScript(() => {
+      const root = window.top as Window & { __e2ePrintCalls?: number };
+      root.__e2ePrintCalls ??= 0;
+      window.print = () => { root.__e2ePrintCalls = (root.__e2ePrintCalls ?? 0) + 1; };
+    });
     await gotoApp(page);
     const api = await twE2e(page);
     await page.getByRole("tab", { name: /Hosts|主机/i }).click();
@@ -241,11 +246,19 @@ test.describe("Host desktop mode", () => {
 
     await exportButton.click();
     await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "PDF" }).click();
+    const pdfPreview = panel.getByTestId("markwisely-pdf-preview");
+    await expect(pdfPreview).toBeVisible();
     const printFrame = panel.getByTestId("markwisely-pdf-print-frame");
     await expect(printFrame).toBeAttached();
     await expect.poll(async () => printFrame.getAttribute("srcdoc")).toContain("UNSAVED_EXPORT_CONTENT");
     const printPage = await printFrame.contentFrame();
     await expect(printPage!.locator(".document-title")).toHaveText("toolbar-copy.md");
+    await expect.poll(() => page.evaluate(() => (window as Window & { __e2ePrintCalls?: number }).__e2ePrintCalls ?? 0)).toBe(0);
+    await pdfPreview.getByTestId("markwisely-pdf-print").click();
+    await expect.poll(() => page.evaluate(() => (window as Window & { __e2ePrintCalls?: number }).__e2ePrintCalls ?? 0)).toBe(1);
+    await pdfPreview.getByTestId("markwisely-pdf-close").click();
+    await expect(pdfPreview).toHaveCount(0);
+    await expect(panel.locator(".vditor-ir")).toBeVisible();
   });
 
   test("MarkWisely editor resizes after maximizing and restoring its window", async ({ page }) => {

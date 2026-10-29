@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -45,6 +45,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [error, setError] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [printDocument, setPrintDocument] = useState<{ html: string; title: string } | null>(null);
+  const printFrameRef = useRef<HTMLIFrameElement>(null);
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
   const [filePickerReturnView, setFilePickerReturnView] = useState<"start" | "edit">("start");
   const document = useMarkWiselyStore((state) => state.documents[targetKey]);
@@ -274,23 +275,38 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
             </div>
           ) : null}
           {printDocument ? (
-            <iframe
-              key={printDocument.title}
-              title={printDocument.title}
-              data-testid="markwisely-pdf-print-frame"
-              className="markwisely-pdf-print-frame"
-              srcDoc={printDocument.html}
-              onLoad={(event) => {
-                try {
-                  const frame = event.currentTarget;
-                  frame.contentWindow?.focus();
-                  frame.contentWindow?.print();
-                } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : String(cause));
-                  useToastStore.getState().pushToast(t("markwisely.exportFailed"), false);
-                }
-              }}
-            />
+            <section className="markwisely-pdf-preview" data-testid="markwisely-pdf-preview" aria-label={t("markwisely.pdfPreviewTitle")}>
+              <header className="markwisely-pdf-preview-toolbar">
+                <strong>{t("markwisely.pdfPreviewTitle")}</strong>
+                <div>
+                  <button
+                    type="button"
+                    data-testid="markwisely-pdf-print"
+                    onClick={() => {
+                      try {
+                        printFrameRef.current?.contentWindow?.focus();
+                        printFrameRef.current?.contentWindow?.print();
+                      } catch (cause) {
+                        setError(cause instanceof Error ? cause.message : String(cause));
+                        useToastStore.getState().pushToast(t("markwisely.exportFailed"), false);
+                      }
+                    }}
+                  >
+                    {t("markwisely.pdfPrint")}
+                  </button>
+                  <button type="button" data-testid="markwisely-pdf-close" onClick={() => setPrintDocument(null)}>
+                    {t("markwisely.pdfClose")}
+                  </button>
+                </div>
+              </header>
+              <iframe
+                ref={printFrameRef}
+                title={printDocument.title}
+                data-testid="markwisely-pdf-print-frame"
+                className="markwisely-pdf-print-frame"
+                srcDoc={printDocument.html}
+              />
+            </section>
           ) : null}
           <span className={`markwisely-save-state${dirty ? " is-dirty" : ""}`} role="status" data-testid="markwisely-save-status">
             {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}
