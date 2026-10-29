@@ -97,6 +97,7 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("markwisely-maximize").click();
     const appChrome = page.getByTestId("desktop-maximized-app-controls");
     await expect(appChrome).toBeVisible();
+    await expect(appChrome.locator(".desktop-app-window-head")).toHaveAttribute("data-tauri-drag-region", "");
     const maximizedFilename = appChrome.getByTestId("markwisely-current-file");
     await expect(maximizedFilename).toHaveText("draft.md");
     const maximizedTitleBox = await maximizedFilename.boundingBox();

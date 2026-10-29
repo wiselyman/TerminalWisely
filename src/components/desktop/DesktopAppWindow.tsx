@@ -128,6 +128,7 @@ export function DesktopAppWindow({
       className={`preview-panel-head desktop-app-window-head is-compact${
         maximized ? " is-maximized" : ""
       }${centerTitle ? " has-centered-title" : ""}`}
+      data-tauri-drag-region={maximized ? "" : undefined}
       onPointerDown={onDragStart}
     >
       {mark ? (
