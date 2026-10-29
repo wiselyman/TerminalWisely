@@ -136,14 +136,27 @@ test.describe("Host desktop mode", () => {
       await expect(toolbar.locator(`.markwisely-toolbar-${action} button`)).toBeVisible();
     }
     await expect(panel.locator(".vditor-toolbar")).toHaveCount(1);
-    for (const [action, icon] of [
-      ["open", "file-text"],
-      ["open-folder", "folder-open"],
-      ["save", "save"],
-      ["save-as", "file-plus2"],
-      ["export", "file-down"],
+    for (const [action, icon, label] of [
+      ["open", "file-text", "Open Markdown"],
+      ["open-folder", "folder-open", "Open Folder"],
+      ["save", "save", "Save"],
+      ["save-as", "file-plus2", "Save As"],
+      ["export", "file-down", "Export Markdown"],
     ]) {
-      await expect(toolbar.locator(`.markwisely-toolbar-${action} svg.lucide-${icon}`)).toBeVisible();
+      const button = toolbar.locator(`.markwisely-toolbar-${action} button`);
+      const svg = button.locator(`svg.lucide-${icon}`);
+      await expect(svg).toBeVisible();
+      await expect(button).toHaveAttribute("aria-label", label);
+      const svgStyle = await svg.evaluate((element) => ({
+        fill: getComputedStyle(element).fill,
+        stroke: getComputedStyle(element).stroke,
+        strokeWidth: getComputedStyle(element).strokeWidth,
+      }));
+      expect(svgStyle.fill).toBe("none");
+      expect(svgStyle.strokeWidth).toBe("2px");
+      expect(svgStyle.stroke).not.toBe("none");
+      await button.hover();
+      await expect.poll(() => button.evaluate((element) => getComputedStyle(element, "::after").content)).toBe(`"${label}"`);
     }
     const actionOrder = await toolbar.locator(".markwisely-toolbar-action").evaluateAll((elements) =>
       elements.map((element) => Array.from(element.classList).find((className) => className.startsWith("markwisely-toolbar-") && className !== "markwisely-toolbar-action")),
