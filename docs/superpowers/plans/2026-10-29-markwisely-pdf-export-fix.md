@@ -42,13 +42,13 @@
 - [x] **Step 2: Run** `npm run test:e2e -- --grep 'MarkWisely export'`; confirm it fails because the current iframe is offscreen and prints automatically on load, with no visible preview controls.
 - [x] **Step 3: Implement** a visible preview overlay with localized “Print / Save as PDF” and “Back to editor” controls. Only the print control calls `contentWindow.print()`; remove the load callback print invocation. Keep the print document CSS unchanged.
 - [x] **Step 4: Run** `npm run test:e2e -- --grep 'MarkWisely export'` and `npm run build`; confirm visible preview, explicit print call, and close behavior pass.
-- [ ] **Step 5: Commit** the UI, localization, and E2E changes as one task commit.
+- [x] **Step 5: Commit** the UI, localization, and E2E changes as one task commit (`f295a900`).
 
 ### Task 2: Coverage record and full verification
 
 **Files:**
 - Modify: `docs/TEST_MATRIX.md`
 
-- [ ] **Step 1: Update** the MarkWisely row to record explicit PDF preview/print behavior and local export destination semantics.
-- [ ] **Step 2: Run** `node scripts/check-no-agent-hardcoding.mjs` and `./scripts/run-all-tests.sh`; confirm all automated suites pass.
+- [x] **Step 1: Update** the MarkWisely row to record explicit PDF preview/print behavior and local export destination semantics.
+- [x] **Step 2: Run** `node scripts/check-no-agent-hardcoding.mjs` and `./scripts/run-all-tests.sh`; confirm all automated suites pass.
 - [ ] **Step 3: Commit** the matrix update, then push the completed commits to `origin main` per repository policy.
