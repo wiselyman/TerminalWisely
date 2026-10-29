@@ -93,6 +93,6 @@
 - Verify: `e2e/host-desktop.spec.ts`
 
 - [x] **Step 1:** Run `node scripts/check-no-agent-hardcoding.mjs`; PASS.
-- [ ] **Step 2:** Run `./scripts/run-all-tests.sh`; expect the complete suite to pass.
-- [ ] **Step 3:** Review the final diff and ensure pre-existing untracked files are not staged.
-- [ ] **Step 4:** Commit the implementation on `main` and push to `origin main` only after all checks pass.
+- [x] **Step 2:** Run `./scripts/run-all-tests.sh`; all 10 stages passed, including 115 Playwright tests.
+- [x] **Step 3:** Review the final diff and ensure pre-existing untracked files are not staged.
+- [x] **Step 4:** Commit the implementation on `main` and push to `origin main` only after all checks pass.
