@@ -118,7 +118,7 @@ test.describe("Host desktop mode", () => {
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
   });
 
-  test("MarkWisely exposes file actions in the editor formatting toolbar", async ({ page }) => {
+  test("MarkWisely export offers styled HTML, PDF, and Word outputs", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);
     await page.getByRole("tab", { name: /Hosts|主机/i }).click();
@@ -141,7 +141,7 @@ test.describe("Host desktop mode", () => {
       ["open-folder", "folder-open", "Open Folder"],
       ["save", "save", "Save"],
       ["save-as", "file-plus2", "Save As"],
-      ["export", "file-down", "Export Markdown"],
+      ["export", "file-down", "Export"],
     ]) {
       const button = toolbar.locator(`.markwisely-toolbar-${action} button`);
       const svg = button.locator(`svg.lucide-${icon}`);
@@ -205,8 +205,47 @@ test.describe("Host desktop mode", () => {
     await expect(panel.getByTestId("markwisely-current-file")).toHaveText("toolbar-copy.md");
     await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("TOOLBAR_SAVE_AS_CONTENT");
 
-    await toolbar.locator(".markwisely-toolbar-export button").click();
-    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.md" })).toBeVisible();
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("UNSAVED_EXPORT_CONTENT");
+
+    const exportButton = toolbar.locator(".markwisely-toolbar-export button");
+    await exportButton.click();
+    const exportMenu = panel.getByTestId("markwisely-export-menu");
+    await expect(exportMenu).toBeVisible();
+    await expect(exportMenu.getByRole("button")).toHaveText(["HTML", "PDF", "Word (.docx)"]);
+    await expect(exportMenu.getByRole("button", { name: /markdown/i })).toHaveCount(0);
+
+    await api.setNextDialogSaveResult(null);
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "HTML" }).click();
+    await expect(exportMenu).toHaveCount(0);
+    await expect.poll(() => api.getLocalText("/tmp/markwisely-toolbar-export.html")).toBeNull();
+
+    await api.failNextLocalWrite();
+    await exportButton.click();
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "HTML" }).click();
+    await expect(page.getByTestId("statusbar-toast-err").filter({ hasText: "Document export failed" })).toBeVisible();
+
+    await exportButton.click();
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "HTML" }).click();
+    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.html" })).toBeVisible();
+    await expect.poll(() => api.getLocalText("/tmp/markwisely-toolbar-export.html")).toContain("UNSAVED_EXPORT_CONTENT");
+    await expect(exportMenu).toHaveCount(0);
+
+    await exportButton.click();
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "Word (.docx)" }).click();
+    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.docx" })).toBeVisible();
+    const binaryExport = await api.getLastLocalBytesWrite();
+    expect(binaryExport).toMatchObject({ path: "/tmp/markwisely-toolbar-export.docx" });
+    expect(binaryExport?.base64).toMatch(/^UEsDB/);
+
+    await exportButton.click();
+    await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "PDF" }).click();
+    const printFrame = panel.getByTestId("markwisely-pdf-print-frame");
+    await expect(printFrame).toBeAttached();
+    await expect.poll(async () => printFrame.getAttribute("srcdoc")).toContain("UNSAVED_EXPORT_CONTENT");
+    const printPage = await printFrame.contentFrame();
+    await expect(printPage!.locator(".document-title")).toHaveText("toolbar-copy.md");
   });
 
   test("MarkWisely editor resizes after maximizing and restoring its window", async ({ page }) => {

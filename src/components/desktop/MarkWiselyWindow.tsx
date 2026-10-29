@@ -12,7 +12,8 @@ import { flushPreviewEditor } from "../../lib/previewEditorFlush";
 import { useMarkWiselyStore } from "../../stores/markWiselyStore";
 import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
-import { createLocalPath, listLocalDirectory, listLocalRoots, parentLocalPath, writeLocalText } from "../../lib/localFsApi";
+import { createLocalPath, listLocalDirectory, listLocalRoots, parentLocalPath, writeLocalBytes, writeLocalText } from "../../lib/localFsApi";
+import { createMarkdownDocx, renderMarkdownHtml, renderMarkdownPrintHtml } from "../../lib/markWiselyExport";
 import { useToastStore } from "../../stores/toastStore";
 
 type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null };
@@ -42,6 +43,8 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [name, setName] = useState("未命名.md");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [printDocument, setPrintDocument] = useState<{ html: string; title: string } | null>(null);
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
   const [filePickerReturnView, setFilePickerReturnView] = useState<"start" | "edit">("start");
   const document = useMarkWiselyStore((state) => state.documents[targetKey]);
@@ -184,17 +187,27 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     }
   };
 
-  const exportMarkdown = async () => {
+  const exportDocument = async (format: "html" | "word" | "pdf") => {
+    setExportMenuOpen(false);
     const latest = flushPreviewEditor(flushId);
     const current = useMarkWiselyStore.getState().getDocument(targetKey);
     const content = latest ?? current?.text;
     if (content == null || !current) return;
     setError(null);
+    if (format === "pdf") {
+      const title = current.path.split(/[\\/]/).pop() || "document.md";
+      setPrintDocument({ html: renderMarkdownPrintHtml(content, title), title });
+      return;
+    }
+    setBusy(true);
     try {
+      const stem = (current.path.split(/[\\/]/).pop() || "document.md").replace(/\.(md|markdown)$/i, "");
+      const extension = format === "html" ? "html" : "docx";
+      const filterName = format === "html" ? t("markwisely.htmlFiles") : t("markwisely.wordFiles");
       const path = await showSaveDialog({
         title: t("markwisely.exportTitle"),
-        defaultPath: current.path.split(/[\\/]/).pop() || "export.md",
-        filters: [{ name: t("markwisely.markdownFiles"), extensions: ["md", "markdown"] }],
+        defaultPath: `${stem}.${extension}`,
+        filters: [{ name: filterName, extensions: [extension] }],
       });
       if (!path) return;
       const parent = parentLocalPath(path);
@@ -204,11 +217,14 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
       if (!directory.entries.some((entry) => entry.path === path)) {
         await createLocalPath(parent, fileName, "file");
       }
-      await writeLocalText(path, content);
+      if (format === "html") await writeLocalText(path, renderMarkdownHtml(content, current.path.split(/[\\/]/).pop() || fileName));
+      else await writeLocalBytes(path, await createMarkdownDocx(content, current.path.split(/[\\/]/).pop() || fileName));
       useToastStore.getState().pushToast(t("markwisely.exported", { path }), true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       useToastStore.getState().pushToast(t("markwisely.exportFailed"), false);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -245,11 +261,37 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
                 { id: "open-folder", label: t("markwisely.toolbarOpenFolder"), icon: toolbarIcons["open-folder"], onClick: () => void openMarkdownPicker("folder") },
                 { id: "save", label: t("markwisely.toolbarSave"), icon: toolbarIcons.save, onClick: () => void save() },
                 { id: "save-as", label: t("markwisely.toolbarSaveAs"), icon: toolbarIcons["save-as"], onClick: beginSaveAs },
-                { id: "export", label: t("markwisely.toolbarExport"), icon: toolbarIcons.export, onClick: () => void exportMarkdown() },
+                { id: "export", label: t("markwisely.toolbarExport"), icon: toolbarIcons.export, onClick: () => setExportMenuOpen((open) => !open) },
               ]}
               onChange={(value) => { setError(null); setEditorValue(targetKey, value); }}
             />
           </div>
+          {exportMenuOpen ? (
+            <div className="markwisely-export-menu" role="group" aria-label={t("markwisely.exportTitle")} data-testid="markwisely-export-menu">
+              <button type="button" onClick={() => void exportDocument("html")} disabled={busy}>HTML</button>
+              <button type="button" onClick={() => void exportDocument("pdf")} disabled={busy}>PDF</button>
+              <button type="button" onClick={() => void exportDocument("word")} disabled={busy}>{t("markwisely.exportWord")}</button>
+            </div>
+          ) : null}
+          {printDocument ? (
+            <iframe
+              key={printDocument.title}
+              title={printDocument.title}
+              data-testid="markwisely-pdf-print-frame"
+              className="markwisely-pdf-print-frame"
+              srcDoc={printDocument.html}
+              onLoad={(event) => {
+                try {
+                  const frame = event.currentTarget;
+                  frame.contentWindow?.focus();
+                  frame.contentWindow?.print();
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : String(cause));
+                  useToastStore.getState().pushToast(t("markwisely.exportFailed"), false);
+                }
+              }}
+            />
+          ) : null}
           <span className={`markwisely-save-state${dirty ? " is-dirty" : ""}`} role="status" data-testid="markwisely-save-status">
             {document.saving || busy ? t("markwisely.saving") : dirty ? t("markwisely.unsaved") : t("markwisely.saved")}
           </span>

@@ -65,6 +65,10 @@ function wrapApi(page: Page): TwE2eApi {
       call("getLastEnterDirectory") as Promise<Record<string, unknown> | null>,
     getLastPreviewOpen: () => call("getLastPreviewOpen") as Promise<Record<string, unknown> | null>,
     getLastPreviewSave: () => call("getLastPreviewSave") as Promise<Record<string, unknown> | null>,
+    getLastLocalBytesWrite: () => call("getLastLocalBytesWrite") as Promise<Record<string, unknown> | null>,
+    setNextDialogSaveResult: (path) => call("setNextDialogSaveResult", path),
+    failNextLocalWrite: () => call("failNextLocalWrite"),
+    getLocalText: (path) => call("getLocalText", path) as Promise<string | null>,
     getLastAiTerminalExec: () =>
       call("getLastAiTerminalExec") as Promise<Record<string, unknown> | null>,
     getLastAiLease: () => call("getLastAiLease") as Promise<Record<string, unknown> | null>,

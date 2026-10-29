@@ -48,6 +48,9 @@ let lastCreateSshRequest: Record<string, unknown> | null = null;
 let lastEnterDirectory: Record<string, unknown> | null = null;
 let lastPreviewOpen: Record<string, unknown> | null = null;
 let lastPreviewSave: Record<string, unknown> | null = null;
+let lastLocalBytesWrite: Record<string, unknown> | null = null;
+let nextDialogSaveResult: string | null | undefined;
+let failNextLocalWrite = false;
 let createdRemotePaths: string[] = [];
 let localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
 let localProcesses = [{ pid: 42001, name: "e2e-worker", command: "worker --local", cpu_percent: 1.2, memory_bytes: 2048, ports: [] as number[] }];
@@ -72,6 +75,9 @@ export function __e2eResetMocks() {
   lastEnterDirectory = null;
   lastPreviewOpen = null;
   lastPreviewSave = null;
+  lastLocalBytesWrite = null;
+  nextDialogSaveResult = undefined;
+  failNextLocalWrite = false;
   createdRemotePaths = [];
   localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
   localProcesses = [{ pid: 42001, name: "e2e-worker", command: "worker --local", cpu_percent: 1.2, memory_bytes: 2048, ports: [] }];
@@ -113,6 +119,22 @@ export function __e2eLastPreviewOpen() {
 
 export function __e2eLastPreviewSave() {
   return lastPreviewSave;
+}
+
+export function __e2eLastLocalBytesWrite() {
+  return lastLocalBytesWrite;
+}
+
+export function __e2eSetNextDialogSaveResult(path: string | null) {
+  nextDialogSaveResult = path;
+}
+
+export function __e2eFailNextLocalWrite() {
+  failNextLocalWrite = true;
+}
+
+export function __e2eLocalText(path: string) {
+  return localFsText.get(path) ?? null;
 }
 
 export function __e2eLastAiTerminalExec() {
@@ -369,7 +391,17 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   insert_terminal_command: () => null,
   insert_local_paths_command: () => null,
   get_session_cwd: () => "/home/e2e",
-  "plugin:dialog|save": () => "/tmp/markwisely-toolbar-export.md",
+  "plugin:dialog|save": (args) => {
+    if (nextDialogSaveResult !== undefined) {
+      const result = nextDialogSaveResult;
+      nextDialogSaveResult = undefined;
+      return result;
+    }
+    const options = (args as { options?: Record<string, unknown> }).options ?? args as Record<string, unknown>;
+    const defaultPath = String(options.defaultPath ?? "export.html");
+    const extension = defaultPath.split(".").pop() || "html";
+    return `/tmp/markwisely-toolbar-export.${extension}`;
+  },
   probe_remote_path: (args) => {
     const path = String((args as { path?: string }).path ?? "");
     if (path.endsWith("/") || path.includes("bin")) return "directory";
@@ -448,7 +480,14 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   },
   write_local_text: (args) => {
     const request = (args as { request: { path: string; content: string } }).request;
+    if (failNextLocalWrite) { failNextLocalWrite = false; throw new Error("Mock local write failed"); }
     localFsText.set(request.path, request.content);
+    return null;
+  },
+  write_local_bytes: (args) => {
+    const request = (args as { request: { path: string; base64: string } }).request;
+    if (failNextLocalWrite) { failNextLocalWrite = false; throw new Error("Mock local write failed"); }
+    lastLocalBytesWrite = request;
     return null;
   },
   list_remote_directory: (args) => {

@@ -79,6 +79,7 @@
 - Modify: `src/i18n/locales/en/tools.json`
 - Modify: `src/i18n/locales/zh-CN/tools.json`
 - Modify: `src/e2e/tauriCoreMock.ts`
+- Modify: `src/e2eBootstrap.ts`, `e2e/tw-e2e.ts` (expose export test controls)
 - Modify: `e2e/host-desktop.spec.ts`
 
 **Interfaces:**

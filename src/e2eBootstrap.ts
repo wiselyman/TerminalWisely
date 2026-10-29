@@ -15,6 +15,10 @@ import {
   __e2eLastK8sDelete,
   __e2eLastPreviewOpen,
   __e2eLastPreviewSave,
+  __e2eLastLocalBytesWrite,
+  __e2eSetNextDialogSaveResult,
+  __e2eFailNextLocalWrite,
+  __e2eLocalText,
   __e2eLastUploadRequest,
   __e2eResetMocks,
   __e2eResetUploadRequest,
@@ -82,6 +86,10 @@ export interface TwE2eApi {
   getLastEnterDirectory: () => Record<string, unknown> | null;
   getLastPreviewOpen: () => Record<string, unknown> | null;
   getLastPreviewSave: () => Record<string, unknown> | null;
+  getLastLocalBytesWrite: () => Record<string, unknown> | null;
+  setNextDialogSaveResult: (path: string | null) => void;
+  failNextLocalWrite: () => void;
+  getLocalText: (path: string) => string | null;
   getLastAiTerminalExec: () => Record<string, unknown> | null;
   getLastAiLease: () => Record<string, unknown> | null;
   getLastK8sApply: () => Record<string, unknown> | null;
@@ -521,6 +529,10 @@ export function runE2eBootstrap(): void {
     getLastEnterDirectory: __e2eLastEnterDirectory,
     getLastPreviewOpen: __e2eLastPreviewOpen,
     getLastPreviewSave: __e2eLastPreviewSave,
+    getLastLocalBytesWrite: __e2eLastLocalBytesWrite,
+    setNextDialogSaveResult: __e2eSetNextDialogSaveResult,
+    failNextLocalWrite: __e2eFailNextLocalWrite,
+    getLocalText: __e2eLocalText,
     getLastAiTerminalExec: __e2eLastAiTerminalExec,
     getLastAiLease: __e2eLastAiLease,
     getLastK8sApply: __e2eLastK8sApply,
