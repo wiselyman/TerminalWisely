@@ -136,11 +136,32 @@ test.describe("Host desktop mode", () => {
       await expect(toolbar.locator(`.markwisely-toolbar-${action} button`)).toBeVisible();
     }
     await expect(panel.locator(".vditor-toolbar")).toHaveCount(1);
+    for (const [action, icon] of [
+      ["open", "file-text"],
+      ["open-folder", "folder-open"],
+      ["save", "save"],
+      ["save-as", "file-plus2"],
+      ["export", "file-down"],
+    ]) {
+      await expect(toolbar.locator(`.markwisely-toolbar-${action} svg.lucide-${icon}`)).toBeVisible();
+    }
+    const actionOrder = await toolbar.locator(".markwisely-toolbar-action").evaluateAll((elements) =>
+      elements.map((element) => Array.from(element.classList).find((className) => className.startsWith("markwisely-toolbar-") && className !== "markwisely-toolbar-action")),
+    );
+    expect(actionOrder).toEqual([
+      "markwisely-toolbar-open",
+      "markwisely-toolbar-open-folder",
+      "markwisely-toolbar-save",
+      "markwisely-toolbar-save-as",
+      "markwisely-toolbar-export",
+    ]);
     const toolbarBox = await toolbar.boundingBox();
     const leftActionBox = await toolbar.locator(".markwisely-toolbar-open").boundingBox();
-    const rightActionBox = await toolbar.locator(".markwisely-toolbar-save").boundingBox();
     expect(toolbarBox && leftActionBox ? leftActionBox.x - toolbarBox.x : Infinity).toBeLessThan(40);
-    expect(toolbarBox && rightActionBox ? rightActionBox.x - toolbarBox.x : 0).toBeGreaterThan((toolbarBox?.width ?? 0) * 0.5);
+    for (const action of await toolbar.locator(".markwisely-toolbar-action").all()) {
+      const actionBox = await action.boundingBox();
+      expect(toolbarBox && actionBox ? actionBox.x - toolbarBox.x : Infinity).toBeLessThan((toolbarBox?.width ?? 0) * 0.5);
+    }
 
     await toolbar.locator(".markwisely-toolbar-open button").click();
     const openDialog = page.getByRole("dialog", { name: "Open Markdown file" });
