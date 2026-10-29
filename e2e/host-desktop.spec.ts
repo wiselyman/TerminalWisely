@@ -157,10 +157,37 @@ test.describe("Host desktop mode", () => {
     await expect(page.locator(".tab-bar")).toBeVisible();
 
     await expect.poll(async () => {
-      const editorBox = await editor.boundingBox();
+      const editorBox = await panel.locator('.vditor-ir [contenteditable="true"]').first().boundingBox();
       const contentBox = await panel.locator(".markwisely-editor").boundingBox();
       return editorBox && contentBox ? editorBox.width / contentBox.width : 0;
-    }).toBeGreaterThan(0.95);
+    }).toBeGreaterThan(0.8);
+    await expect.poll(async () => {
+      const sizes = await page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="markwisely-panel"]');
+        const content = panel?.querySelector(".vditor-content");
+        const host = panel?.querySelector(".markwisely-editor");
+        return content && host ? content.getBoundingClientRect().width - host.getBoundingClientRect().width : Infinity;
+      });
+      return sizes;
+    }).toBeLessThanOrEqual(2);
+    const restoredSizes = await page.evaluate(() => {
+      const panel = document.querySelector('[data-testid="markwisely-panel"]');
+      const rect = (selector: string) => {
+        const node = panel?.querySelector(selector);
+        return node ? node.getBoundingClientRect().width : 0;
+      };
+      return {
+        editor: rect('.vditor-ir [contenteditable="true"]'),
+        host: rect(".markwisely-editor"),
+        wrapper: rect(".preview-markdown-wysiwyg"),
+        vditor: rect(".vditor"),
+        content: rect(".vditor-content"),
+      };
+    });
+    expect(restoredSizes.host).toBeGreaterThan(300);
+    expect(restoredSizes.editor).toBeGreaterThanOrEqual(restoredSizes.host * 0.8);
+    expect(restoredSizes.editor).toBeGreaterThan(240);
+    expect(restoredSizes.content).toBeLessThanOrEqual(restoredSizes.host + 2);
   });
 
   test("MarkWisely picker filters non-Markdown files and autosaves before leaving a document", async ({ page }) => {

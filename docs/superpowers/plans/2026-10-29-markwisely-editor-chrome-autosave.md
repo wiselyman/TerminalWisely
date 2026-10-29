@@ -78,10 +78,10 @@
 **Interfaces:**
 - Shared editor wrapper continues accepting the same props; its internal resize observer updates Vditor layout to match the editor host's current content width.
 
-- [ ] **Step 1: Strengthen the resize E2E** to capture editor host, Vditor root, and editable surface widths after narrow resize, maximize, and restore; assert the editable width is at least 80% of the host and at least 240 CSS pixels when the host is at least 300 CSS pixels.
-- [ ] **Step 2: Run** the focused resize E2E and inspect measured widths to reproduce the stale-layout behavior before changing production code.
-- [ ] **Step 3: Implement** resize observation/measurement against the actual available content width and schedule Vditor reflow after visibility/layout transitions; keep width constraints fluid rather than pinning stale narrow widths.
-- [ ] **Step 4: Run** the focused resize E2E; it passed and the file-preview visual baseline remained unchanged.
+- [x] **Step 1: Strengthen the resize E2E** to capture editor host, Vditor root, and editable surface widths after narrow resize, maximize, and restore; assert the editable width is at least 80% of the host and at least 240 CSS pixels when the host is at least 300 CSS pixels.
+- [x] **Step 2: Run** the focused resize E2E and inspect measured widths to reproduce the stale-layout behavior before changing production code. Before the fix, the content stayed at 1036px while its host had shrunk to 558px.
+- [x] **Step 3: Implement** resize observation/measurement against the actual available content width and schedule Vditor reflow after visibility/layout transitions; keep width constraints fluid rather than pinning stale narrow widths.
+- [x] **Step 4: Run** the focused resize E2E; it passed and the file-preview visual baseline remained unchanged.
 
 ### Task 3: Repository verification
 

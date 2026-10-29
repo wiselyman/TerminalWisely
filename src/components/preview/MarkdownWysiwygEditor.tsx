@@ -194,12 +194,12 @@ export function MarkdownWysiwygEditor({
           if (cancelled) return;
           if (!editable) vditor.disabled();
           scheduleHydrate();
-          const scheduleResize = () => {
+          const scheduleResize = (availableWidth?: number) => {
             if (resizeFrame) cancelAnimationFrame(resizeFrame);
             resizeFrame = requestAnimationFrame(() => {
               resizeFrame = 0;
               try {
-                const width = `${el.clientWidth}px`;
+                const width = `${Math.max(0, Math.floor(availableWidth ?? el.clientWidth))}px`;
                 for (const node of el.querySelectorAll<HTMLElement>(
                   ".vditor-content, .vditor-ir, .vditor-ir .vditor-reset",
                 )) {
@@ -212,10 +212,23 @@ export function MarkdownWysiwygEditor({
             });
           };
           if (typeof ResizeObserver !== "undefined") {
-            sizeObserver = new ResizeObserver(scheduleResize);
+            let skipInitialResizeObserver = true;
+            sizeObserver = new ResizeObserver((entries) => {
+              if (skipInitialResizeObserver) {
+                skipInitialResizeObserver = false;
+                return;
+              }
+              const parentEntry = entries.find((entry) => entry.target === el.parentElement);
+              const parentWidth = parentEntry?.contentRect.width ?? el.parentElement?.clientWidth ?? el.clientWidth;
+              scheduleResize(parentWidth);
+            });
             sizeObserver.observe(el);
+            if (el.parentElement) sizeObserver.observe(el.parentElement);
           }
-          resizeListener = scheduleResize;
+          resizeListener = () => {
+            const width = el.parentElement?.getBoundingClientRect().width ?? el.clientWidth;
+            scheduleResize(width);
+          };
           window.addEventListener("resize", resizeListener);
           scheduleResize();
           observer = new MutationObserver(() => scheduleHydrate());
