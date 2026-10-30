@@ -127,6 +127,14 @@ export function MarkdownWysiwygEditor({
         blobUrlsRef.current,
       );
     };
+    const syncToolbarTitles = () => {
+      for (const button of el.querySelectorAll<HTMLButtonElement>(
+        ".markwisely-toolbar-action button[aria-label]",
+      )) {
+        const label = button.getAttribute("aria-label");
+        if (label && button.title !== label) button.title = label;
+      }
+    };
 
     try {
       const vditor = new Vditor(el, {
@@ -258,8 +266,12 @@ export function MarkdownWysiwygEditor({
           };
           window.addEventListener("resize", resizeListener);
           scheduleResize();
-          observer = new MutationObserver(() => scheduleHydrate());
+          observer = new MutationObserver(() => {
+            scheduleHydrate();
+            syncToolbarTitles();
+          });
           observer.observe(el, { childList: true, subtree: true });
+          syncToolbarTitles();
         },
         input: (value: string) => {
           publishChange(value);
