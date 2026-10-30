@@ -105,7 +105,7 @@
 |------|:----:|:----:|:----:|:---:|:----:|
 | Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` | — | smoke `ui.host-desktop` | **✓** `host-desktop` | ✓ |
 | Dock → 文件管理器浮窗（含检索） | — | — | smoke | **✓** `local-fs` | ✓ |
-| Dock → MarkWisely（远程 Markdown 新建/打开/编辑/自动保存/最近文件；HTML/PDF/Word 高质量直接导出到本机；最大化恢复布局） | `markWiselyStore.test`, `markWiselyExport.test`, `markWiselyPdf.test`, `localFsApi.test` | SSH `preview_open` / `preview_save` / `create_path`; 本机 HTML/PDF/DOCX 文件写入 | `host-desktop` 导出菜单、本机保存框、PDF 可解析与文本提取 | **✓** `host-desktop` | ✓ |
+| Dock → MarkWisely（远程 Markdown 新建/打开/编辑/自动保存/最近文件；HTML/PDF/Word 高质量直接导出到本机并强制匹配实际文件扩展名；最大化恢复布局） | `markWiselyStore.test`, `markWiselyExport.test`, `markWiselyExportPath.test`, `markWiselyPdf.test`, `localFsApi.test` | SSH `preview_open` / `preview_save` / `create_path`; 本机 HTML/PDF/DOCX 文件写入 | `host-desktop` 导出菜单、本机保存框、错误扩展名校正、PDF 可解析与文本提取 | **✓** `host-desktop` | ✓ |
 | Dock → 进程管理器浮窗 | — | — | smoke | **✓** `local-fs-actions` | ✓ |
 | Host 左树+右内容（列表/网格）；内容区文件夹单击选中、双击进入 | `localFsTree` + `openDirectory` + `resolveContentsPrimaryClickAction` | — | smoke | — | ✓ |
 | Host 树新建/拖移/剪贴板/多选 | `localFsOps` + Rust `fs_path_tests` | create/copy/move | smoke menu | — | ✓ |

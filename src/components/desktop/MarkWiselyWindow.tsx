@@ -14,6 +14,7 @@ import { MarkWiselyIcon } from "../WorkspaceToolIcons";
 import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
 import { createLocalPath, listLocalDirectory, listLocalRoots, parentLocalPath, writeLocalBytes, writeLocalText } from "../../lib/localFsApi";
 import { createMarkdownDocx, renderMarkdownHtml } from "../../lib/markWiselyExport";
+import { normalizeMarkWiselyExportPath } from "../../lib/markWiselyExportPath";
 import { createMarkdownPdf } from "../../lib/markWiselyPdf";
 import { useToastStore } from "../../stores/toastStore";
 
@@ -201,12 +202,13 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
       const filterName = format === "html"
         ? t("markwisely.htmlFiles")
         : format === "pdf" ? t("markwisely.pdfFiles") : t("markwisely.wordFiles");
-      const path = await showSaveDialog({
+      const selectedPath = await showSaveDialog({
         title: t("markwisely.exportTitle"),
         defaultPath: `${stem}.${extension}`,
         filters: [{ name: filterName, extensions: [extension] }],
       });
-      if (!path) return;
+      if (!selectedPath) return;
+      const path = normalizeMarkWiselyExportPath(selectedPath, extension);
       const parent = parentLocalPath(path);
       const fileName = path.split(/[\\/]/).pop();
       if (!fileName) throw new Error(t("markwisely.exportFailed"));

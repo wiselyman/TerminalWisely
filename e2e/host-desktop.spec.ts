@@ -260,11 +260,11 @@ test.describe("Host desktop mode", () => {
     await expect(editor).toContainText("UNSAVED_EXPORT_CONTENT");
 
     await exportButton.click();
-    await api.setNextDialogSaveResult("/tmp/markwisely-toolbar-export.pdf");
+    await api.setNextDialogSaveResult("/tmp/latest.json");
     await panel.getByTestId("markwisely-export-menu").getByRole("button", { name: "PDF" }).click();
-    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/markwisely-toolbar-export.pdf" })).toBeVisible();
+    await expect(page.getByTestId("statusbar-toast-ok").filter({ hasText: "/tmp/latest.pdf" })).toBeVisible();
     const pdfExport = await api.getLastLocalBytesWrite();
-    expect(pdfExport).toMatchObject({ path: "/tmp/markwisely-toolbar-export.pdf" });
+    expect(pdfExport).toMatchObject({ path: "/tmp/latest.pdf" });
     expect(pdfExport?.base64).toMatch(/^JVBERi0/);
     await expect(panel.getByTestId("markwisely-pdf-preview")).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => (window as Window & { __e2ePrintCalls?: number }).__e2ePrintCalls ?? 0)).toBe(0);
