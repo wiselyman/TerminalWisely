@@ -448,7 +448,42 @@
   min-height: 34px;
 }
 
-.markwisely-picker-head .markwisely-primary { margin-left: auto; }
+.markwisely-picker-head .markwisely-picker-icon-button-primary { margin-left: auto; }
+
+.markwisely-picker-icon-button {
+  display: inline-grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--tw-border);
+  border-radius: 9px;
+  background: var(--tw-surface, var(--tw-bg));
+  color: var(--tw-fg);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.markwisely-picker-icon-button:hover:not(:disabled) {
+  border-color: var(--tw-accent);
+  background: var(--tw-accent-soft, color-mix(in srgb, var(--tw-accent) 9%, var(--tw-bg)));
+}
+
+.markwisely-picker-icon-button-primary {
+  border-color: var(--tw-accent);
+  background: var(--tw-accent);
+  color: var(--tw-on-accent, #fff);
+}
+
+.markwisely-picker-icon-button-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tw-accent) 88%, #000);
+}
+
+.markwisely-picker-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
 
 .markwisely-picker-toolbar {
   flex: 0 0 auto;

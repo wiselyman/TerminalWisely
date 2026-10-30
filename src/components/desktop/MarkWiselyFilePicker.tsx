@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { FolderCheck, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LocalFsEntryIcon, LocalFsRefreshIcon, LocalFsUpIcon } from "../LocalFsIcons";
 import { LocalFsPathBreadcrumb } from "../LocalFsPathBreadcrumb";
@@ -59,11 +60,27 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
       aria-label={t(mode === "file" ? "markwisely.openTitle" : "markwisely.chooseFolder")}
     >
       <header className="markwisely-picker-head">
-        <button type="button" className="markwisely-back" onClick={onCancel}>{t("markwisely.cancel")}</button>
+        <button
+          type="button"
+          className="markwisely-picker-icon-button"
+          aria-label={t("markwisely.cancel")}
+          title={t("markwisely.cancel")}
+          onClick={onCancel}
+        >
+          <X aria-hidden="true" size={18} />
+        </button>
         <strong>{mode === "file" ? t("markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>
         {mode === "directory" ? (
-          <button type="button" className="markwisely-primary" data-testid="markwisely-use-folder" disabled={!result || loading || !!error} onClick={() => result && onSelect(result.path)}>
-            {t("markwisely.useFolder")}
+          <button
+            type="button"
+            className="markwisely-picker-icon-button markwisely-picker-icon-button-primary"
+            data-testid="markwisely-use-folder"
+            aria-label={t("markwisely.useFolder")}
+            title={t("markwisely.useFolder")}
+            disabled={!result || loading || !!error}
+            onClick={() => result && onSelect(result.path)}
+          >
+            <FolderCheck aria-hidden="true" size={19} />
           </button>
         ) : null}
       </header>

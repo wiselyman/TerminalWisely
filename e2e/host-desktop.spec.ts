@@ -32,6 +32,14 @@ test.describe("Host desktop mode", () => {
     await expect(newFolderDialog.getByTestId("local-fs-path-breadcrumb")).toBeVisible();
     await expect(newFolderDialog.locator(".local-fs-list-header")).toBeVisible();
     await expect(newFolderDialog.getByTestId("markwisely-folder-entry").first().locator("svg.local-fs-entry-icon.is-folder")).toBeVisible();
+    const cancelFolderButton = newFolderDialog.getByRole("button", { name: "Cancel" });
+    await expect(cancelFolderButton).toHaveAttribute("title", "Cancel");
+    await expect(cancelFolderButton.locator("svg.lucide-x")).toBeVisible();
+    await expect(cancelFolderButton).toHaveText("");
+    const useFolderButton = newFolderDialog.getByRole("button", { name: "Use this folder" });
+    await expect(useFolderButton).toHaveAttribute("title", "Use this folder");
+    await expect(useFolderButton.locator("svg.lucide-folder-check")).toBeVisible();
+    await expect(useFolderButton).toHaveText("");
     await newFolderDialog.getByTestId("markwisely-folder-entry").filter({ hasText: "logs" }).click();
     await newFolderDialog.getByTestId("local-fs-crumb-e2e").click();
     await expect(newFolderDialog.getByTestId("local-fs-crumb-e2e")).toHaveAttribute("title", "/home/e2e");
