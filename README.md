@@ -6,7 +6,7 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: [v0.1.0](https://github.com/wiselyman/TerminalWisely/releases/tag/v0.1.0)**
+**Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
 **Local and remote operations in one window.** Home pairs an interactive local Terminal with local chat; Hosts, Kubernetes, and Databases provide remote workspaces with object-specific chats. Changes wait for approval, and STOP is always there.
 
@@ -23,7 +23,7 @@
 
 | Area | Highlights |
 |------|------------|
-| **Home** | Local interactive Terminal and chat, plus a target-isolated local Desktop with Files, Processes, Browser, Terminal, and MarkWisely. Windows uses PowerShell |
+| **Home** | Local interactive Terminal and chat, plus a target-isolated Desktop with Terminal, AI Local, and MarkWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
 | **Databases** | Direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show database and schema. Connections can be grouped |
 | **Agent runtimes** | Cursor Agent, Codex, Claude Code on the open host, cluster, or database; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
@@ -40,7 +40,7 @@
 
 ## Home Desktop
 
-In Home, use the Desktop control to switch from the local Terminal and chat to the local Desktop. Files, Processes, Browser, Terminal, AI Local, and MarkWisely operate on this computer. AI Local opens the existing Home chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal moves the active Home terminal into its window and returns it without starting another shell. Local Desktop windows, browser tabs, and recent Markdown files have their own state, separate from each SSH host.
+In Home, use the Desktop control to switch from the local Terminal and chat to the local Desktop. Its Dock contains Terminal, AI Local, and MarkWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing Home chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal moves the active Home terminal into its window and returns it without starting another shell. Local Desktop windows and recent Markdown files have their own state, separate from each SSH host.
 
 Windows Home Terminal remains Windows PowerShell 5.1. Windows packages include Microsoft Coreutils for Windows v2026.9.3 for x64 or ARM64, a preview release. Coreutils commands are available by command name in the app terminal; PowerShell 5.1 does not receive the full PowerShell 7 globbing and pipeline integration. The app adds its bundled command directory and clears conflicting aliases only in that terminal process. It does not change the system PATH, PowerShell profiles, or registry.
 

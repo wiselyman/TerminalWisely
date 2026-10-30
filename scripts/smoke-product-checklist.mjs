@@ -2058,6 +2058,30 @@ pass(
   "pytest hard_gates + approval_cancel + e2e/ai-engineer-approval.spec.ts",
 );
 pass("automated.k8s-workbench-live", "k3d + Rust k8s live_integration + k8s-actions E2E");
+
+// --- Release documentation must only claim a published version and shipped UI ---
+{
+  for (const [file, latestLabel] of [["README.md", "Latest release"], ["README.zh-CN.md", "最新版本"]]) {
+    const markdown = read(file);
+    const latestReleaseUrl = "https://github.com/wiselyman/TerminalWisely/releases/latest";
+    const headerLine = markdown.split("\n").find((line) => line.includes(latestLabel)) ?? "";
+    if (headerLine.includes(latestReleaseUrl) && !/releases\/tag\/v\d/.test(headerLine)) {
+      pass(`docs.${file}.latest-release`, `${latestLabel} points to GitHub's dynamic latest release`);
+    } else {
+      fail(`docs.${file}.latest-release`, `${latestLabel} must use the dynamic releases/latest URL`);
+    }
+
+    const start = markdown.indexOf(file === "README.md" ? "## Home Desktop" : "## Home 本机 Desktop");
+    const end = markdown.indexOf("\n---", start);
+    const homeSection = start >= 0 ? markdown.slice(start, end >= 0 ? end : undefined) : "";
+    const dockApps = file === "README.md"
+      ? homeSection.includes("Terminal, AI Local, and MarkWisely") && !/Desktop[^\n]*(Files, Processes, Browser)/.test(homeSection)
+      : homeSection.includes("Terminal、AI Local 和 MarkWisely") && !/桌面[^\n]*(文件、进程、浏览器)/.test(homeSection);
+    if (dockApps) pass(`docs.${file}.home-desktop-apps`, "Home Desktop app list matches the shipped UI");
+    else fail(`docs.${file}.home-desktop-apps`, "Home Desktop must describe Terminal, AI Local, and MarkWisely only");
+  }
+}
+
 blocked(
   "manual.ui-click-header-tools",
   "Native Tauri titlebar hit-test; optional npm run test:e2e:desktop with DISPLAY",

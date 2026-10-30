@@ -1,20 +1,20 @@
 # Changelog
 
-## [0.1.0] - 2026-10-27
+## [0.1.0] - 2026-10-30
 
 Add a local Desktop workspace to Home, sharing the existing Home PTY and isolating Local state from each SSH host.
 
-- Add Local Files, Processes, Browser, Terminal, and MarkWisely to Home Desktop; AI Linux stays SSH-only
-- Reuse and restore the selected Home Terminal when switching into and out of Desktop
-- Add an unproxied local Browser profile and target-specific application state
+- Add Terminal, AI Local, and MarkWisely to Home Desktop; local files, browser, and process management remain native computer apps, and AI Linux stays SSH-only
+- Reuse and restore the selected Home Terminal and existing Home chat when switching into and out of Desktop
+- Keep Local and SSH Desktop state isolated
 - Bundle Microsoft Coreutils for Windows v2026.9.3 x64/ARM64; only the app's PowerShell child process gets its command path and alias changes
 - Keep PowerShell profiles, system PATH, and registry unchanged
 
 Home 增加本机 Desktop，复用 Home PTY，并将 Local 状态与各 SSH 主机隔离。
 
-- Home Desktop 提供本机文件、进程、浏览器、Terminal 和 MarkWisely；AI Linux 仍仅用于 SSH
-- 切换 Desktop 时复用并恢复当前 Home Terminal
-- 新增无 SSH 代理的本机 Browser，并按目标隔离应用状态
+- Home Desktop 提供 Terminal、AI Local 和 MarkWisely；本机文件、浏览器与进程管理使用电脑自带的应用，AI Linux 仍仅用于 SSH
+- 切换 Desktop 时复用并恢复当前 Home Terminal 和现有 Home 聊天
+- 本机与 SSH Desktop 状态相互隔离
 - Windows x64/ARM64 内置微软 Coreutils for Windows v2026.9.3；命令路径和别名更改仅限应用启动的 PowerShell 子进程
 - 不修改 PowerShell Profile、系统 PATH 或注册表
 
