@@ -46,6 +46,8 @@ test.describe("Host desktop mode", () => {
     await expect(cancelFolderButton.locator("svg.lucide-x")).toBeVisible();
     await expect(cancelFolderButton).toHaveText("");
     const useFolderButton = newFolderDialog.getByRole("button", { name: "Use this folder" });
+    await expect(newFolderDialog.locator(".markwisely-picker-head").getByTestId("markwisely-use-folder")).toHaveCount(0);
+    await expect(newFolderDialog.locator(".local-fs-tool-group").getByTestId("markwisely-use-folder")).toBeVisible();
     await expect(useFolderButton).toHaveAttribute("title", "Use this folder");
     await expect(useFolderButton.locator("svg.lucide-folder-check")).toBeVisible();
     await expect(useFolderButton).toHaveText("");

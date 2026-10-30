@@ -70,19 +70,6 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
           <X aria-hidden="true" size={18} />
         </button>
         <strong>{mode === "file" ? t("markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>
-        {mode === "directory" ? (
-          <button
-            type="button"
-            className="markwisely-picker-icon-button markwisely-picker-icon-button-primary"
-            data-testid="markwisely-use-folder"
-            aria-label={t("markwisely.useFolder")}
-            title={t("markwisely.useFolder")}
-            disabled={!result || loading || !!error}
-            onClick={() => result && onSelect(result.path)}
-          >
-            <FolderCheck aria-hidden="true" size={19} />
-          </button>
-        ) : null}
       </header>
       <div className="local-fs-toolbar markwisely-picker-toolbar">
         <div className="local-fs-tool-group">
@@ -106,6 +93,19 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
           >
             <LocalFsRefreshIcon />
           </button>
+          {mode === "directory" ? (
+            <button
+              type="button"
+              className="local-fs-tool-btn markwisely-picker-confirm"
+              data-testid="markwisely-use-folder"
+              aria-label={t("markwisely.useFolder")}
+              title={t("markwisely.useFolder")}
+              disabled={!result || loading || !!error}
+              onClick={() => result && onSelect(result.path)}
+            >
+              <FolderCheck aria-hidden="true" size={18} />
+            </button>
+          ) : null}
         </div>
         <div className="local-fs-address-bar">
           <LocalFsPathBreadcrumb

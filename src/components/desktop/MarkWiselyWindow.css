@@ -467,11 +467,6 @@
   white-space: nowrap;
 }
 
-.markwisely-picker-head .markwisely-picker-icon-button-primary {
-  grid-column: 3;
-  margin-left: 0;
-}
-
 .markwisely-picker-icon-button {
   display: inline-grid;
   box-sizing: border-box;
@@ -493,16 +488,6 @@
   background: var(--tw-accent-soft, color-mix(in srgb, var(--tw-accent) 9%, var(--tw-bg)));
 }
 
-.markwisely-picker-icon-button-primary {
-  border-color: var(--tw-accent);
-  background: var(--tw-accent);
-  color: var(--tw-on-accent, #fff);
-}
-
-.markwisely-picker-icon-button-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--tw-accent) 88%, #000);
-}
-
 .markwisely-picker-icon-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -512,6 +497,21 @@
   flex: 0 0 auto;
   padding: 6px 0;
   background: transparent;
+}
+
+.markwisely-picker-confirm {
+  margin-left: 2px;
+  color: var(--tw-accent);
+}
+
+.markwisely-picker-confirm:hover:not(:disabled) {
+  background: var(--tw-accent-soft, color-mix(in srgb, var(--tw-accent) 9%, var(--tw-bg)));
+  color: var(--tw-accent);
+}
+
+.markwisely-picker-confirm:focus-visible {
+  outline: 2px solid var(--tw-accent);
+  outline-offset: 2px;
 }
 
 .markwisely-picker-contents {
