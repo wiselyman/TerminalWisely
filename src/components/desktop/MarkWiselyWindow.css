@@ -442,23 +442,46 @@
 }
 
 .markwisely-picker-head {
-  display: flex;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
   align-items: center;
-  gap: 12px;
-  min-height: 34px;
+  gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  margin: -20px -20px 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--tw-border);
 }
 
-.markwisely-picker-head .markwisely-picker-icon-button-primary { margin-left: auto; }
+.markwisely-picker-head strong {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tw-fg);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markwisely-picker-head .markwisely-picker-icon-button-primary {
+  grid-column: 3;
+  margin-left: 0;
+}
 
 .markwisely-picker-icon-button {
   display: inline-grid;
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
+  box-sizing: border-box;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   padding: 0;
   border: 1px solid var(--tw-border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--tw-surface, var(--tw-bg));
   color: var(--tw-fg);
   cursor: pointer;

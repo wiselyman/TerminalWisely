@@ -27,6 +27,15 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("markwisely-new-document").click();
     const newFolderDialog = page.getByRole("dialog", { name: "Choose folder" });
     await expect(newFolderDialog).toBeVisible();
+    const assertCenteredPickerTitle = async (dialog: typeof newFolderDialog) => {
+      const header = dialog.locator(".markwisely-picker-head");
+      const title = header.locator("strong");
+      const headerBox = await header.boundingBox();
+      const titleBox = await title.boundingBox();
+      expect(headerBox?.height ?? Infinity).toBeLessThanOrEqual(40);
+      expect(Math.abs((titleBox?.x ?? 0) + (titleBox?.width ?? 0) / 2 - ((headerBox?.x ?? 0) + (headerBox?.width ?? 0) / 2))).toBeLessThanOrEqual(1);
+    };
+    await assertCenteredPickerTitle(newFolderDialog);
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await expect(newFolderDialog.locator(".local-fs-toolbar")).toBeVisible();
     await expect(newFolderDialog.getByTestId("local-fs-path-breadcrumb")).toBeVisible();
@@ -62,6 +71,7 @@ test.describe("Host desktop mode", () => {
     await chooseOpenFolderDialog.getByRole("button", { name: "Use this folder" }).click();
     const openDialog = page.getByRole("dialog", { name: "Open Markdown file" });
     expect(await openDialog.count()).toBe(1);
+    await assertCenteredPickerTitle(openDialog);
     await expect(openDialog.getByTestId("local-fs-crumb-logs")).toHaveAttribute("title", "/home/e2e/logs");
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await expect(openDialog).toHaveAttribute("aria-modal", "true");
