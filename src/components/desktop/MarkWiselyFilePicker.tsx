@@ -93,19 +93,6 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
           >
             <LocalFsRefreshIcon />
           </button>
-          {mode === "directory" ? (
-            <button
-              type="button"
-              className="local-fs-tool-btn markwisely-picker-confirm"
-              data-testid="markwisely-use-folder"
-              aria-label={t("markwisely.useFolder")}
-              title={t("markwisely.useFolder")}
-              disabled={!result || loading || !!error}
-              onClick={() => result && onSelect(result.path)}
-            >
-              <FolderCheck aria-hidden="true" size={18} />
-            </button>
-          ) : null}
         </div>
         <div className="local-fs-address-bar">
           <LocalFsPathBreadcrumb
@@ -115,6 +102,19 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
             onEdit={() => undefined}
           />
         </div>
+        {mode === "directory" ? (
+          <button
+            type="button"
+            className="local-fs-tool-btn markwisely-picker-confirm"
+            data-testid="markwisely-use-folder"
+            aria-label={t("markwisely.useFolder")}
+            title={t("markwisely.useFolder")}
+            disabled={!result || loading || !!error}
+            onClick={() => result && onSelect(result.path)}
+          >
+            <FolderCheck aria-hidden="true" size={18} />
+          </button>
+        ) : null}
       </div>
       {error ? <div className="markwisely-error" role="alert">{error}</div> : null}
       <div className="local-fs-contents local-fs-contents-list markwisely-picker-contents">
