@@ -149,6 +149,34 @@ test("Home titlebar Chat returns from Local Desktop to the existing chat", async
   await expect(composer).toHaveValue("keep this Home chat draft");
 });
 
+test("Home Terminal tab switches directly from Desktop back to the selected local Terminal", async ({ page }) => {
+  await gotoApp(page);
+  await (await twE2e(page)).openHome();
+
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
+
+  await page.getByTestId("home-terminal-tab").click();
+
+  await expect(page.getByTestId("home-terminal-tab")).toHaveClass(/active/);
+  await expect(page.getByTestId("host-desktop-panel")).toHaveCount(0);
+  await expect(page.getByTestId("home-work-chat")).toBeHidden();
+  await expect(page.getByTestId("home-local-terminal")).toBeVisible();
+});
+
+test("Home Desktop shows the complete MarkWisely icon label", async ({ page }) => {
+  await gotoApp(page);
+  await (await twE2e(page)).openHome();
+  await page.getByTestId("local-fs-tool").click();
+
+  const label = page.getByTestId("desktop-icon-markwisely").locator(".host-desktop-icon-label");
+  await expect(label).toHaveText("MarkWisely");
+  await expect.poll(() => label.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return style.whiteSpace === "normal" && element.scrollWidth <= element.clientWidth;
+  })).toBe(true);
+});
+
 test("AI Local Dock glyph has a visible tile background", async ({ page }) => {
   await gotoApp(page);
   await (await twE2e(page)).openHome();

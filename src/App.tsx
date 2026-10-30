@@ -1191,7 +1191,14 @@ function App() {
                     className={`tab${active ? " active" : ""}`}
                     data-testid="home-terminal-tab"
                     data-terminal-id={tab.id}
-                    onClick={() => setActiveHomeTerminalId(tab.id)}
+                    onClick={() => {
+                      setActiveHomeTerminalId(tab.id);
+                      useManagedEntityStore.getState().setHomeChatOpen(false);
+                      const desktop = useDesktopStore.getState();
+                      if (desktop.open && desktop.target?.kind === "local") {
+                        desktop.close();
+                      }
+                    }}
                   >
                     {active ? (
                       <>
