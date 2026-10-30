@@ -160,6 +160,7 @@ test.describe("Host desktop mode", () => {
       const svg = button.locator(`svg.lucide-${icon}`);
       await expect(svg).toBeVisible();
       await expect(button).toHaveAttribute("aria-label", label);
+      await expect(button).toHaveAttribute("title", label);
       const svgStyle = await svg.evaluate((element) => ({
         fill: getComputedStyle(element).fill,
         stroke: getComputedStyle(element).stroke,
