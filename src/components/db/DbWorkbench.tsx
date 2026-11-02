@@ -43,6 +43,7 @@ import {
   GRID_PAGE_SIZE,
   OFFERED_ENGINES,
   buildObjectTree,
+  hasSafeRowIdentity,
   cellUpdateSql,
   connectionMatchesFilter,
   createTableSql,
@@ -179,7 +180,7 @@ const GROUP_LABEL: Record<TableGroup, "dbFields" | "dbIndexes" | "dbForeignKeys"
   trigger: "dbTriggers",
 };
 
-type ObjectCacheEntry = { rows: unknown[][]; error: string; structureError: string };
+type ObjectCacheEntry = { rows: unknown[][]; error: string; structureError: string; truncated: boolean };
 
 type KeyView = { name: string; type: string; ttl: string; value: string; error: string };
 type TableView = {
@@ -504,7 +505,7 @@ export function DbWorkbench({
       if (searchResult.status === "rejected") {
         setObjectCache((current) => ({
           ...current,
-          [database]: { rows: [], error: String(searchResult.reason), structureError: "" },
+          [database]: { rows: [], error: String(searchResult.reason), structureError: "", truncated: true },
         }));
         return;
       }
@@ -520,7 +521,7 @@ export function DbWorkbench({
           merged = merged.concat(extra.rows);
         }
       }
-      setObjectCache((current) => ({ ...current, [database]: { rows: merged, error: "", structureError } }));
+      setObjectCache((current) => ({ ...current, [database]: { rows: merged, error: "", structureError, truncated: rows.truncated } }));
     });
   }
 
@@ -2667,18 +2668,20 @@ export function DbWorkbench({
                     </td>
                   </tr>
                 ) : null}
-                {(tableView ? result.rows : pageWindow(filterGridRows(result.rows, gridFilter), gridPage).rows).map((row, index) => (
+                {(tableView ? result.rows : pageWindow(filterGridRows(result.rows, gridFilter), gridPage).rows).map((row, index) => {
+                  const rowIdentitySafe = !!tableView && !!active?.database && hasSafeRowIdentity(tableView.columns, result.columns, row, objectCache[active.database]?.truncated ?? true);
+                  return (
                   <tr key={index}>
                     {row.map((cell, cellIndex) => {
                       const editable =
-                        dataTarget != null && selected != null && engineFamily(selected.engine) === "sql";
+                        dataTarget != null && selected != null && engineFamily(selected.engine) === "sql" && rowIdentitySafe;
                       const editing =
                         editable &&
                         editingCell?.row === index &&
                         editingCell?.col === cellIndex;
                       if (!editable) {
                         return (
-                          <td key={cellIndex}>
+                          <td key={cellIndex} title={dataTarget && !rowIdentitySafe ? t("dbRowNeedsPrimaryKey") : undefined}>
                             {cell == null ? (
                               <span className="db-cell-null-value">{t("dbCellNull")}</span>
                             ) : (
@@ -2833,6 +2836,8 @@ export function DbWorkbench({
                           type="button"
                           className="db-row-delete"
                           data-testid="db-row-delete"
+                          disabled={!rowIdentitySafe}
+                          title={!rowIdentitySafe ? t("dbRowNeedsPrimaryKey") : t("dbDeleteRow")}
                           onClick={() => {
                             const names =
                               tableView.columns.length > 0
@@ -2857,7 +2862,7 @@ export function DbWorkbench({
                       </td>
                     ) : null}
                   </tr>
-                ))}
+                ); })}
               </tbody>
             </table>
             <div className="db-grid-toolbar-bottom">

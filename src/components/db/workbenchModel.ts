@@ -157,6 +157,14 @@ export type ObjectColumn = {
   key: boolean;
 };
 
+export function hasSafeRowIdentity(columns: ObjectColumn[], resultColumns: string[], row: unknown[], catalogTruncated: boolean): boolean {
+  const keys = columns.filter((column) => column.key);
+  return !catalogTruncated && keys.length > 0 && keys.every((column) => {
+    const index = resultColumns.indexOf(column.name);
+    return index >= 0 && row[index] != null;
+  });
+}
+
 export type TableGroup =
   | "field"
   | "index"
@@ -570,7 +578,7 @@ function rowWhere(engine: string, columns: string[], values: unknown[]): string 
       const value = values[index];
       return value == null
         ? `${quoteIdent(engine, name)} IS NULL`
-        : `${quoteIdent(engine, name)} = ${sqlLiteral(value)}`;
+        : `${quoteIdent(engine, name)} = ${typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : sqlLiteral(value)}`;
     })
     .join(" AND ");
 }

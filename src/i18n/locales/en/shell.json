@@ -135,6 +135,7 @@
   "dbFilterOp_is_not_null": "is not null",
   "dbInsert": "Insert",
   "dbDeleteRow": "Delete",
+  "dbRowNeedsPrimaryKey": "A complete primary key is required to edit or delete rows",
   "dbCreateTable": "Create table",
   "dbDropTable": "Drop table",
   "dbTruncate": "Truncate",

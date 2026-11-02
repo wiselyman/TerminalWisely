@@ -3,6 +3,7 @@ import {
   ENGINE_PORTS,
   OFFERED_ENGINES,
   buildObjectTree,
+  hasSafeRowIdentity,
   cellUpdateSql,
   connectionMatchesFilter,
   createTableSql,
@@ -81,6 +82,17 @@ import {
 } from "./workbenchModel";
 
 describe("database workbench model", () => {
+  it("requires complete untruncated primary-key metadata before row edits", () => {
+    const columns = [{ name: "a", type: "int", key: true }, { name: "b", type: "int", key: true }];
+    expect(hasSafeRowIdentity([], ["a"], [1], false)).toBe(false);
+    expect(hasSafeRowIdentity(columns, ["a"], [1], false)).toBe(false);
+    expect(hasSafeRowIdentity(columns, ["a", "b"], [1, 2], true)).toBe(false);
+    expect(hasSafeRowIdentity(columns, ["a", "b"], [1, null], false)).toBe(false);
+    expect(hasSafeRowIdentity(columns, ["a", "b"], [1, 2], false)).toBe(true);
+  });
+  it("preserves numeric-looking text when identifying a row", () => {
+    expect(rowDeleteSql("mysql", "shop", "orders", ["id"], ["001"])).toBe("DELETE FROM `shop`.`orders` WHERE `id` = '001'");
+  });
   it("groups schema, tables, views, and routines", () => {
     const tree = buildObjectTree(
       [
@@ -333,7 +345,7 @@ describe("database workbench model", () => {
     expect(filterGridRows(rows, "bet")).toEqual([["2", "beta"]]);
     expect(pageWindow([1, 2, 3], 2, 2)).toEqual({ rows: [3], page: 2, pages: 2 });
     expect(cellUpdateSql("postgres", "public", "orders", ["id", "name"], ["1", "alpha"], 1, "beta")).toBe(
-      `UPDATE "public"."orders" SET "name" = 'beta' WHERE "id" = 1 AND "name" = 'alpha'`,
+      `UPDATE "public"."orders" SET "name" = 'beta' WHERE "id" = '1' AND "name" = 'alpha'`,
     );
     expect(cellUpdateSql("redis", "0", "user:1", ["value"], ["a"], 0, "b")).toBeNull();
   });

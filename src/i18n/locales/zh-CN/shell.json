@@ -135,6 +135,7 @@
   "dbFilterOp_is_not_null": "不为空",
   "dbInsert": "新增",
   "dbDeleteRow": "删除",
+  "dbRowNeedsPrimaryKey": "需要完整主键才能编辑或删除行",
   "dbCreateTable": "建表",
   "dbDropTable": "删表",
   "dbTruncate": "截断",

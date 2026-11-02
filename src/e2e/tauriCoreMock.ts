@@ -876,12 +876,12 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
         : engine === "mongodb"
           ? [["", "orders", "", "", "COLLECTION"]]
           : [
-              ["public", e2eDbTableName, "id", "integer", "BASE TABLE"],
-              ["public", e2eDbTableName, "start_time", "time(6)", "BASE TABLE"],
+              ["public", e2eDbTableName, "id", "integer", "BASE TABLE", match?.name === "navicat" ? "" : "PRI"],
+              ["public", e2eDbTableName, "start_time", "time(6)", "BASE TABLE", ""],
             ];
     return {
       kind: "rows",
-      columns: ["table_schema", "table_name", "column_name", "data_type", "table_type"],
+      columns: ["table_schema", "table_name", "column_name", "data_type", "table_type", "key"],
       rows,
       truncated: false,
       risk: "",

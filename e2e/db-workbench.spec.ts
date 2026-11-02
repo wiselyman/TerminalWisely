@@ -520,19 +520,13 @@ test.describe("Database workbench", () => {
     await expect(page.getByTestId("db-object-menu-drop")).toHaveText("Drop table");
     await page.getByTestId("db-object-menu-open").click();
     await expect(page.getByTestId("db-results")).toBeVisible();
+    await expect(page.getByTestId("db-row-delete").first()).toBeDisabled();
     await expect(page.getByTestId("db-empty-table")).toHaveCount(0);
     await expect(page.getByTestId("db-truncate-table")).toHaveCount(0);
     // Navicat-like grid: plain cells; no in-cell NULL shortcut that spams UPDATE approval
     await expect(page.getByTestId("db-results").locator(".db-data-grid .db-cell-null")).toHaveCount(0);
     await expect(page.getByTestId("db-results").locator(".db-data-grid input")).toHaveCount(0);
-    const cell = page.getByTestId("db-cell-display");
-    await expect(cell).toHaveClass(/db-cell-editable/);
-    const border = await cell.evaluate((node) => getComputedStyle(node).borderRightWidth);
-    expect(Number.parseFloat(border)).toBeGreaterThan(0);
-    await cell.dblclick();
-    await expect(page.getByTestId("db-cell-null")).toHaveCount(0);
-    await expect(page.getByTestId("db-cell-input")).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("db-cell-display")).toHaveCount(0);
     await expect(page.getByTestId("ai-engineer-approval-card")).toHaveCount(0);
 
     await page.getByTestId("db-tree-object-orders").click({ button: "right" });
