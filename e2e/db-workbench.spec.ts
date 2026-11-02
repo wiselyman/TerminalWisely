@@ -415,7 +415,7 @@ test.describe("Database workbench", () => {
     await seededValue.fill("abc");
     await page.getByTestId("db-filter-apply").click();
     await expect(editor).toHaveValue(/WHERE/);
-    await expect(editor).toHaveValue(/"id"\s*=\s*'abc'|"id"\s*=\s*abc/i);
+    await expect(editor).toHaveValue(/"id"\s*=\s*E'abc'/i);
     await page.getByTestId("db-filter-toggle").click();
     await expect(page.getByTestId("db-filter-sort-pane")).toHaveCount(0);
     await page.getByTestId("db-filter-toggle").click();

@@ -257,6 +257,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn generated_string_expressions_preserve_risk_classification() {
+        for (dialect, sql, expected) in [
+            ("mysql", "UPDATE `shop`.`orders` SET `name` = CONVERT(X'785c2779' USING utf8mb4) WHERE `id` = 1", "write"),
+            ("mysql", "SELECT * FROM `shop`.`orders` WHERE `name` LIKE CONVERT(X'256125' USING utf8mb4) ESCAPE '!' LIMIT 100", "read"),
+            ("postgres", "UPDATE \"public\".\"orders\" SET \"name\" = E'a\\\\b' WHERE \"id\" = E'1'", "write"),
+        ] {
+            assert_eq!(statement_count(sql, dialect), Some(1));
+            assert_eq!(classify_sql(sql, dialect), expected, "{sql}");
+        }
+    }
+
+    #[test]
     fn maintain_statements_are_single_and_need_approval_class() {
         for (dialect, sql) in [
             ("postgres", r#"VACUUM "public"."orders""#),

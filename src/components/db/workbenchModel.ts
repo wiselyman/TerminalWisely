@@ -425,7 +425,7 @@ export function csvInsertBatches(
     const tuples = rows.slice(start, start + batchSize).map((record) => {
       const values = used.map((item) => {
         const cell = record[item.source ?? -1];
-        return sqlLiteral(cell === undefined || cell === "" ? null : cell);
+        return engineSqlLiteral(engine, cell === undefined || cell === "" ? null : cell);
       });
       return `(${values.join(", ")})`;
     });
@@ -447,12 +447,26 @@ export function pageWindow<T>(rows: T[], page: number, size = GRID_PAGE_SIZE): {
   return { rows: rows.slice(start, start + size), page: current, pages };
 }
 
+export function sqlTextLiteral(engine: string, value: string): string {
+  if (engine === "mysql" || engine === "mariadb") {
+    const hex = Array.from(new TextEncoder().encode(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `CONVERT(X'${hex}' USING utf8mb4)`;
+  }
+  const escaped = value.replace(/'/g, "''");
+  if (engine === "postgres") return `E'${escaped.replace(/\\/g, "\\\\")}'`;
+  return `${engine === "sqlserver" ? "N" : ""}'${escaped}'`;
+}
+
 export function sqlLiteral(value: unknown): string {
   if (value == null) return "NULL";
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
   if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value)) return value;
   return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function engineSqlLiteral(engine: string, value: unknown): string {
+  return typeof value === "string" ? sqlTextLiteral(engine, value) : sqlLiteral(value);
 }
 
 /** Pull a readable message out of Tauri invoke rejections and plain errors. */
@@ -502,7 +516,7 @@ export function cellUpdateSql(
   if (engineFamily(engine) !== "sql") return null;
   const column = columns[columnIndex];
   if (!column || sameCellValue(original[columnIndex], next)) return null;
-  const assignments = `${quoteIdent(engine, column)} = ${sqlLiteral(next)}`;
+  const assignments = `${quoteIdent(engine, column)} = ${engineSqlLiteral(engine, next)}`;
   const where = rowWhere(engine, columns, original);
   if (!where) return null;
   return `UPDATE ${quoteIdent(engine, schema)}.${quoteIdent(engine, table)} SET ${assignments} WHERE ${where}`;
@@ -578,32 +592,32 @@ function rowWhere(engine: string, columns: string[], values: unknown[]): string 
       const value = values[index];
       return value == null
         ? `${quoteIdent(engine, name)} IS NULL`
-        : `${quoteIdent(engine, name)} = ${typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : sqlLiteral(value)}`;
+        : `${quoteIdent(engine, name)} = ${engineSqlLiteral(engine, value)}`;
     })
     .join(" AND ");
 }
 
 function escapeLikeBody(needle: string): string {
-  return needle.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_").replace(/'/g, "''");
+  return needle.replace(/!/g, "!!").replace(/%/g, "!%").replace(/_/g, "!_");
 }
 
-function likeLiteral(needle: string): string {
-  return `'%${escapeLikeBody(needle)}%' ESCAPE '\\'`;
+function likeLiteral(engine: string, needle: string): string {
+  return `${sqlTextLiteral(engine, `%${escapeLikeBody(needle)}%`)} ESCAPE '!'`;
 }
 
-function likePrefixLiteral(needle: string): string {
-  return `'${escapeLikeBody(needle)}%' ESCAPE '\\'`;
+function likePrefixLiteral(engine: string, needle: string): string {
+  return `${sqlTextLiteral(engine, `${escapeLikeBody(needle)}%`)} ESCAPE '!'`;
 }
 
-function likeSuffixLiteral(needle: string): string {
-  return `'%${escapeLikeBody(needle)}' ESCAPE '\\'`;
+function likeSuffixLiteral(engine: string, needle: string): string {
+  return `${sqlTextLiteral(engine, `%${escapeLikeBody(needle)}`)} ESCAPE '!'`;
 }
 
 function filterWhere(engine: string, columns: string[], filter: string): string {
   const needle = filter.trim();
   const names = columns.filter((name) => name.trim());
   if (!needle || names.length === 0) return "";
-  const pattern = likeLiteral(needle);
+  const pattern = likeLiteral(engine, needle);
   return ` WHERE ${names.map((name) => `${quoteIdent(engine, name)} LIKE ${pattern}`).join(" OR ")}`;
 }
 
@@ -611,23 +625,23 @@ function filterRulePredicate(engine: string, column: string, op: FilterOp, value
   const ident = quoteIdent(engine, column);
   switch (op) {
     case "eq":
-      return `${ident} = ${sqlLiteral(value)}`;
+      return `${ident} = ${engineSqlLiteral(engine, value)}`;
     case "ne":
-      return `${ident} <> ${sqlLiteral(value)}`;
+      return `${ident} <> ${engineSqlLiteral(engine, value)}`;
     case "lt":
-      return `${ident} < ${sqlLiteral(value)}`;
+      return `${ident} < ${engineSqlLiteral(engine, value)}`;
     case "lte":
-      return `${ident} <= ${sqlLiteral(value)}`;
+      return `${ident} <= ${engineSqlLiteral(engine, value)}`;
     case "gt":
-      return `${ident} > ${sqlLiteral(value)}`;
+      return `${ident} > ${engineSqlLiteral(engine, value)}`;
     case "gte":
-      return `${ident} >= ${sqlLiteral(value)}`;
+      return `${ident} >= ${engineSqlLiteral(engine, value)}`;
     case "contains":
-      return `${ident} LIKE ${likeLiteral(value)}`;
+      return `${ident} LIKE ${likeLiteral(engine, value)}`;
     case "begin":
-      return `${ident} LIKE ${likePrefixLiteral(value)}`;
+      return `${ident} LIKE ${likePrefixLiteral(engine, value)}`;
     case "end":
-      return `${ident} LIKE ${likeSuffixLiteral(value)}`;
+      return `${ident} LIKE ${likeSuffixLiteral(engine, value)}`;
     case "is_null":
       return `${ident} IS NULL`;
     case "is_not_null":
@@ -712,7 +726,7 @@ export function rowInsertSql(
 ): string | null {
   if (engineFamily(engine) !== "sql" || columns.length === 0 || columns.length !== values.length) return null;
   const names = columns.map((name) => quoteIdent(engine, name)).join(", ");
-  const literals = values.map((value) => sqlLiteral(value)).join(", ");
+  const literals = values.map((value) => engineSqlLiteral(engine, value)).join(", ");
   return `INSERT INTO ${quoteIdent(engine, schema)}.${quoteIdent(engine, table)} (${names}) VALUES (${literals})`;
 }
 
@@ -781,9 +795,9 @@ export function definitionSql(engine: string, kind: ObjectKind, schema: string, 
   }
   if (engine === "postgres" && (kind === "view" || kind === "materialized_view")) {
     const regclass = `${quoteIdent(engine, schema)}.${quoteIdent(engine, name)}`;
-    return `SELECT pg_get_viewdef(${sqlLiteral(regclass)}::regclass, true)`;
+    return `SELECT pg_get_viewdef(${engineSqlLiteral(engine, regclass)}::regclass, true)`;
   }
-  if (engine === "sqlite") return `SELECT sql FROM sqlite_master WHERE name = ${sqlLiteral(name)}`;
+  if (engine === "sqlite") return `SELECT sql FROM sqlite_master WHERE name = ${engineSqlLiteral(engine, name)}`;
   return null;
 }
 
@@ -882,7 +896,7 @@ export function csvInsertSql(
   if (data.length === 0) return null;
   const names = columns.map((name) => quoteIdent(engine, name)).join(", ");
   const tuples = data.map((record) => {
-    const values = columns.map((_, index) => sqlLiteral(record[index] === undefined || record[index] === "" ? null : record[index]));
+    const values = columns.map((_, index) => engineSqlLiteral(engine, record[index] === undefined || record[index] === "" ? null : record[index]));
     return `(${values.join(", ")})`;
   });
   return `INSERT INTO ${quoteIdent(engine, schema)}.${quoteIdent(engine, table)} (${names}) VALUES ${tuples.join(", ")}`;

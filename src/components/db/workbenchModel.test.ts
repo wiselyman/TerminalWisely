@@ -3,6 +3,7 @@ import {
   ENGINE_PORTS,
   OFFERED_ENGINES,
   buildObjectTree,
+  sqlTextLiteral,
   hasSafeRowIdentity,
   cellUpdateSql,
   connectionMatchesFilter,
@@ -82,6 +83,16 @@ import {
 } from "./workbenchModel";
 
 describe("database workbench model", () => {
+  it("encodes text independently of database backslash modes", () => {
+    expect(sqlTextLiteral("mysql", "中\\'a")).toBe("CONVERT(X'e4b8ad5c2761' USING utf8mb4)");
+    expect(sqlTextLiteral("postgres", "中\\'a")).toBe("E'中\\\\''a'");
+    expect(sqlTextLiteral("sqlserver", "中'a")).toBe("N'中''a'");
+    expect(cellUpdateSql("mysql", "shop", "orders", ["id", "name"], [1, "a\\'b"], 1, "x\\'y")).toBe("UPDATE `shop`.`orders` SET `name` = CONVERT(X'785c2779' USING utf8mb4) WHERE `id` = 1 AND `name` = CONVERT(X'615c2762' USING utf8mb4)");
+    expect(tableViewSql("mysql", "shop", "orders", ["name"], null, "asc", "a\\%", 1)).toContain("LIKE CONVERT(X'25615c212525' USING utf8mb4) ESCAPE '!'");
+    expect(csvInsertBatches("mysql", "shop", "orders", [{ column: "name", source: 0 }], [["中\\'a"]])).toEqual([
+      "INSERT INTO `shop`.`orders` (`name`) VALUES (CONVERT(X'e4b8ad5c2761' USING utf8mb4))",
+    ]);
+  });
   it("requires complete untruncated primary-key metadata before row edits", () => {
     const columns = [{ name: "a", type: "int", key: true }, { name: "b", type: "int", key: true }];
     expect(hasSafeRowIdentity([], ["a"], [1], false)).toBe(false);
@@ -91,7 +102,7 @@ describe("database workbench model", () => {
     expect(hasSafeRowIdentity(columns, ["a", "b"], [1, 2], false)).toBe(true);
   });
   it("preserves numeric-looking text when identifying a row", () => {
-    expect(rowDeleteSql("mysql", "shop", "orders", ["id"], ["001"])).toBe("DELETE FROM `shop`.`orders` WHERE `id` = '001'");
+    expect(rowDeleteSql("mysql", "shop", "orders", ["id"], ["001"])).toBe("DELETE FROM `shop`.`orders` WHERE `id` = CONVERT(X'303031' USING utf8mb4)");
   });
   it("groups schema, tables, views, and routines", () => {
     const tree = buildObjectTree(
@@ -345,19 +356,19 @@ describe("database workbench model", () => {
     expect(filterGridRows(rows, "bet")).toEqual([["2", "beta"]]);
     expect(pageWindow([1, 2, 3], 2, 2)).toEqual({ rows: [3], page: 2, pages: 2 });
     expect(cellUpdateSql("postgres", "public", "orders", ["id", "name"], ["1", "alpha"], 1, "beta")).toBe(
-      `UPDATE "public"."orders" SET "name" = 'beta' WHERE "id" = '1' AND "name" = 'alpha'`,
+      `UPDATE "public"."orders" SET "name" = E'beta' WHERE "id" = E'1' AND "name" = E'alpha'`,
     );
     expect(cellUpdateSql("redis", "0", "user:1", ["value"], ["a"], 0, "b")).toBeNull();
   });
 
   it("builds a paged table select and insert or delete statements", () => {
     expect(tableViewSql("postgres", "public", "orders", ["id", "name"], "name", "desc", "a'; DROP", 2)).toBe(
-      `SELECT * FROM "public"."orders" WHERE "id" LIKE '%a''; DROP%' ESCAPE '\\' OR "name" LIKE '%a''; DROP%' ESCAPE '\\' ORDER BY "name" DESC LIMIT 100 OFFSET 100`,
+      `SELECT * FROM "public"."orders" WHERE "id" LIKE E'%a''; DROP%' ESCAPE '!' OR "name" LIKE E'%a''; DROP%' ESCAPE '!' ORDER BY "name" DESC LIMIT 100 OFFSET 100`,
     );
     expect(tableViewSql("mysql", "shop", "orders", ["id"], "missing", "asc", "", 1)).toBe(
       "SELECT * FROM `shop`.`orders` LIMIT 100 OFFSET 0",
     );
-    expect(tableViewSql("postgres", "public", "orders", ["id"], "id", "asc", "100%", 1)).toContain("LIKE '%100\\%%'");
+    expect(tableViewSql("postgres", "public", "orders", ["id"], "id", "asc", "100%", 1)).toContain("LIKE E'%100!%%'");
     const browse = tableViewSql("postgres", "public", "orders", ["id"], null, "asc", "", 1);
     expect(sqlDiffersFromTableBrowse(browse ?? "", browse)).toBe(false);
     expect(sqlDiffersFromTableBrowse(`  ${browse}  `, browse)).toBe(false);
@@ -386,13 +397,13 @@ describe("database workbench model", () => {
       { id: "4", enabled: true, column: "gone", op: "is_null", value: "", join: "and" },
     ];
     expect(filterRulesToWhere("postgres", ["id", "name"], rules)).toBe(
-      ` WHERE "name" LIKE '%ab\\%%' ESCAPE '\\' OR "id" = 1`,
+      ` WHERE "name" LIKE E'%ab!%%' ESCAPE '!' OR "id" = E'1'`,
     );
     expect(filterRulesToWhere("postgres", ["id"], [{ id: "a", enabled: true, column: "id", op: "is_not_null", value: "", join: "and" }])).toBe(
       ` WHERE "id" IS NOT NULL`,
     );
     expect(filterRulesToWhere("mysql", ["n"], [{ id: "a", enabled: true, column: "n", op: "begin", value: "x", join: "and" }])).toBe(
-      " WHERE `n` LIKE 'x%' ESCAPE '\\'",
+      " WHERE `n` LIKE CONVERT(X'7825' USING utf8mb4) ESCAPE '!'",
     );
     const sorts: SortRule[] = [
       { id: "s1", column: "name", dir: "asc" },
@@ -408,13 +419,13 @@ describe("database workbench model", () => {
           { id: "s2", column: "id", dir: "asc" },
         ],
       }),
-    ).toBe(`SELECT * FROM "public"."orders" WHERE "id" > 0 ORDER BY "name" DESC, "id" ASC LIMIT 100 OFFSET 0`);
+    ).toBe(`SELECT * FROM "public"."orders" WHERE "id" > E'0' ORDER BY "name" DESC, "id" ASC LIMIT 100 OFFSET 0`);
   });
 
   it("builds definition, create, drop, and truncate as one statement", () => {
     expect(definitionSql("mysql", "table", "shop", "orders")).toBe("SHOW CREATE TABLE `shop`.`orders`");
     expect(definitionSql("postgres", "view", "public", "order_view")).toBe(
-      `SELECT pg_get_viewdef('"public"."order_view"'::regclass, true)`,
+      `SELECT pg_get_viewdef(E'"public"."order_view"'::regclass, true)`,
     );
     expect(definitionSql("sqlite", "table", "main", "orders")).toBe("SELECT sql FROM sqlite_master WHERE name = 'orders'");
     expect(
@@ -490,7 +501,7 @@ describe("database workbench model", () => {
     expect(renameObjectSql("postgres", "public", "orders", "bad-name")).toBeNull();
     expect(
       cellUpdateSql("postgres", "public", "orders", ["id", "label"], [1, ""], 1, null),
-    ).toBe(`UPDATE "public"."orders" SET "label" = NULL WHERE "id" = 1 AND "label" = ''`);
+    ).toBe(`UPDATE "public"."orders" SET "label" = NULL WHERE "id" = 1 AND "label" = E''`);
     expect(
       cellUpdateSql("postgres", "public", "orders", ["id", "label"], [1, null], 1, null),
     ).toBeNull();
@@ -499,7 +510,7 @@ describe("database workbench model", () => {
   it("exports csv and turns an import into one insert", () => {
     expect(rowsToCsv(["id", "name"], [[1, 'a"b']])).toBe('id,name\n1,"a""b"');
     expect(csvInsertSql("postgres", "public", "orders", ["id", "name"], "id,name\n1,alpha\n2,beta")).toBe(
-      `INSERT INTO "public"."orders" ("id", "name") VALUES (1, 'alpha'), (2, 'beta')`,
+      `INSERT INTO "public"."orders" ("id", "name") VALUES (E'1', E'alpha'), (E'2', E'beta')`,
     );
     expect(csvInsertSql("postgres", "public", "orders", ["id"], "")).toBeNull();
   });
@@ -516,8 +527,8 @@ describe("database workbench model", () => {
     const skipped = preview!.mapping.map((item) => (item.column === "name" ? { ...item, source: null } : item));
     const batches = csvInsertBatches("postgres", "public", "orders", skipped, preview!.rows, 1);
     expect(batches).toEqual([
-      `INSERT INTO "public"."orders" ("id") VALUES (1)`,
-      `INSERT INTO "public"."orders" ("id") VALUES (2)`,
+      `INSERT INTO "public"."orders" ("id") VALUES (E'1')`,
+      `INSERT INTO "public"."orders" ("id") VALUES (E'2')`,
     ]);
   });
 
