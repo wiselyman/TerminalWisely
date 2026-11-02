@@ -1442,45 +1442,51 @@ export function DbWorkbench({
     const collected: unknown[][] = [];
     let truncated = false;
     let page = 1;
-    while (collected.length < EXPORT_ROW_BUDGET) {
-      const sql = tableViewSql(
-        selected.engine,
-        tableView.schema,
-        tableView.table,
-        tableView.columns.map((column) => column.name),
-        tableView.sortColumn,
-        tableView.sortDir,
-        tableView.filter,
-        page,
-        tableSqlOptions(tableView),
-      );
-      if (!sql) break;
-      const op = crypto.randomUUID();
-      operationId.current = op;
-      setBusy(true);
-      const response = await dbQuery({
-        connectionId: selected.id,
-        sql,
-        rowLimit: GRID_PAGE_SIZE,
-        database: activeDatabase.current,
-        operationId: op,
-      });
-      if (requestSeq.current !== seq) {
+    try {
+      while (collected.length <= EXPORT_ROW_BUDGET) {
+        const sql = tableViewSql(
+          selected.engine,
+          tableView.schema,
+          tableView.table,
+          tableView.columns.map((column) => column.name),
+          tableView.sortColumn,
+          tableView.sortDir,
+          tableView.filter,
+          page,
+          tableSqlOptions(tableView),
+        );
+        if (!sql) break;
+        const op = crypto.randomUUID();
+        operationId.current = op;
+        setBusy(true);
+        const response = await dbQuery({
+          connectionId: selected.id,
+          sql,
+          rowLimit: GRID_PAGE_SIZE,
+          database: activeDatabase.current,
+          operationId: op,
+        });
+        if (requestSeq.current !== seq) {
+          setBusy(false);
+          return;
+        }
         setBusy(false);
-        return;
+        if (response.kind !== "rows") break;
+        collected.push(...response.rows);
+        truncated = response.truncated;
+        if (response.truncated || response.rows.length < GRID_PAGE_SIZE) break;
+        page += 1;
       }
-      setBusy(false);
-      if (response.kind !== "rows") break;
-      collected.push(...response.rows);
-      truncated = response.truncated;
-      if (response.truncated || response.rows.length < GRID_PAGE_SIZE) break;
-      page += 1;
+      if (requestSeq.current !== seq) return;
+      const rows = collected.slice(0, EXPORT_ROW_BUDGET);
+      if (collected.length > EXPORT_ROW_BUDGET) truncated = true;
+      downloadCsv(tableView.table, current.columns, rows);
+      setExportNote(truncated ? t("dbExportTruncated") : t("dbExportFilteredNote"));
+    } catch (err) {
+      if (requestSeq.current === seq) replaceActive({ error: String(err) });
+    } finally {
+      if (requestSeq.current === seq) setBusy(false);
     }
-    if (requestSeq.current !== seq) return;
-    const rows = collected.slice(0, EXPORT_ROW_BUDGET);
-    if (collected.length > EXPORT_ROW_BUDGET) truncated = true;
-    downloadCsv(tableView.table, current.columns, rows);
-    setExportNote(truncated ? t("dbExportTruncated") : t("dbExportFilteredNote"));
   }
 
   async function importCsv(file: File) {

@@ -973,6 +973,13 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       };
     }
     const tableOpen = /^\s*select\b/i.test(sql) && /from/i.test(sql) && !/select\s+empty/i.test(sql.trim());
+    const fixture = e2eDbConnections.find((item) => item.id === connectionId);
+    if (tableOpen && (fixture?.name === "export-500" || fixture?.name === "export-501")) {
+      const total = fixture.name === "export-500" ? 500 : 501;
+      const offset = Number(sql.match(/OFFSET\s+(\d+)/i)?.[1] ?? 0);
+      const count = Math.max(0, Math.min(100, total - offset));
+      return { kind: "rows", columns: ["id", "start_time"], rows: Array.from({ length: count }, (_, i) => [String(offset + i), "12:00:00"]), truncated: false, risk: "", connection_id: connectionId, revision: 1, operation: "query", sql };
+    }
     const mongoFind = /\.find\s*\(/i.test(sql);
     return {
       kind: "rows",

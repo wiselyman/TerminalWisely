@@ -1,7 +1,33 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { gotoApp } from "./tw-e2e";
 
 test.describe("Database workbench", () => {
+  for (const total of [500, 501]) {
+    test(`filtered CSV reports whether ${total} rows exceed the limit`, async ({ page }) => {
+      await gotoApp(page);
+      await page.getByTestId("sidebar-view-db").click();
+      await page.getByTestId("db-connection-new").click();
+      await page.getByTestId("db-connection-name").fill(`export-${total}`);
+      await page.getByTestId("db-connection-host").fill("db.internal");
+      await page.getByTestId("db-connection-database").fill("app");
+      await page.getByTestId("db-connection-user").fill("app");
+      await page.getByTestId("db-connection-save").click();
+      await expect(page.getByTestId("db-connect-loading")).toHaveCount(0);
+      await page.locator(".db-connection-row").filter({ hasText: `export-${total}` }).locator(".saved-item-main").click();
+      await page.getByTestId("db-tree-database-app").click();
+      await page.getByTestId("db-tree-schema-public").click();
+      await page.getByTestId("db-tree-kind-table").click();
+      await page.getByRole("button", { name: "orders" }).dblclick();
+      await page.getByTestId("db-tools-menu").click();
+      const download = page.waitForEvent("download");
+      await page.getByTestId("db-export-filtered").click();
+      const csv = await readFile(await (await download).path(), "utf8");
+      expect(csv.trimEnd().split(/\r?\n/)).toHaveLength(501);
+      if (total === 501) await expect(page.getByTestId("db-export-note")).toContainText("not the full result", { timeout: 3000 });
+      else await expect(page.getByTestId("db-export-note")).toContainText("Exported the filtered results");
+    });
+  }
   test("direct connection, query, approval, and status pages", async ({ page }) => {
     await gotoApp(page);
     await page.getByTestId("sidebar-view-db").click();
