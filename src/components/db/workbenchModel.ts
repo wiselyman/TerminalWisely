@@ -682,6 +682,10 @@ export function tableViewSql(
         ? ` ORDER BY ${quoteIdent(engine, sortColumn)} ${sortDir === "desc" ? "DESC" : "ASC"}`
         : "";
   const offset = (Math.max(1, page) - 1) * GRID_PAGE_SIZE;
+  if (engine === "sqlserver" || engine === "oracle") {
+    const vendorOrder = engine === "sqlserver" && !order ? " ORDER BY (SELECT NULL)" : order;
+    return `${base}${where}${vendorOrder} OFFSET ${offset} ROWS FETCH NEXT ${GRID_PAGE_SIZE} ROWS ONLY`;
+  }
   return `${base}${where}${order} LIMIT ${GRID_PAGE_SIZE} OFFSET ${offset}`;
 }
 

@@ -360,6 +360,12 @@ describe("database workbench model", () => {
     expect(rowInsertSql("redis", "0", "user:1", ["value"], ["a"])).toBeNull();
   });
 
+  it("uses vendor pagination for SQL Server and Oracle", () => {
+    expect(tableViewSql("sqlserver", "dbo", "orders", ["id"], null, "asc", "", 1)).toBe("SELECT * FROM [dbo].[orders] ORDER BY (SELECT NULL) OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY");
+    expect(tableViewSql("sqlserver", "dbo", "orders", ["id"], "id", "desc", "", 2)).toBe("SELECT * FROM [dbo].[orders] ORDER BY [id] DESC OFFSET 100 ROWS FETCH NEXT 100 ROWS ONLY");
+    expect(tableViewSql("oracle", "HR", "ORDERS", ["ID"], "ID", "asc", "", 2)).toBe('SELECT * FROM "HR"."ORDERS" ORDER BY "ID" ASC OFFSET 100 ROWS FETCH NEXT 100 ROWS ONLY');
+  });
+
   it("builds Navicat-style filter and multi-column sort clauses", () => {
     const rules: FilterRule[] = [
       { id: "1", enabled: true, column: "name", op: "contains", value: "ab%", join: "and" },
