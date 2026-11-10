@@ -51,7 +51,14 @@ let lastPreviewSave: Record<string, unknown> | null = null;
 let previewPathsByHandle = new Map<string, string>();
 let previewMarkdownByPath = new Map<string, string>();
 let lastLocalBytesWrite: Record<string, unknown> | null = null;
+let lastRemoteBytesWrite: Record<string, unknown> | null = null;
+let localReadDelayMs = 0;
 let nextDialogSaveResult: string | null | undefined;
+let nextDialogOpenResult: string | null | undefined;
+let nextDialogAskResult: boolean | undefined;
+let pandocInputFormats: string[] = [];
+let pandocOutputFormats: string[] = [];
+let lastPandocImport: Record<string, unknown> | null = null;
 let failNextLocalWrite = false;
 let createdRemotePaths: string[] = [];
 let localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
@@ -80,7 +87,14 @@ export function __e2eResetMocks() {
   previewPathsByHandle = new Map();
   previewMarkdownByPath = new Map();
   lastLocalBytesWrite = null;
+  lastRemoteBytesWrite = null;
+  localReadDelayMs = 0;
   nextDialogSaveResult = undefined;
+  nextDialogOpenResult = undefined;
+  nextDialogAskResult = undefined;
+  pandocInputFormats = [];
+  pandocOutputFormats = [];
+  lastPandocImport = null;
   failNextLocalWrite = false;
   createdRemotePaths = [];
   localFsEntries = e2eLocalDir.map((entry) => ({ ...entry }));
@@ -129,8 +143,25 @@ export function __e2eLastLocalBytesWrite() {
   return lastLocalBytesWrite;
 }
 
+export function __e2eLastRemoteBytesWrite() {
+  return lastRemoteBytesWrite;
+}
+
 export function __e2eSetNextDialogSaveResult(path: string | null) {
   nextDialogSaveResult = path;
+}
+
+export function __e2eSetNextDialogOpenResult(path: string | null) {
+  nextDialogOpenResult = path;
+}
+
+export function __e2eSetPandocFormats(input: string[], output: string[]) {
+  pandocInputFormats = input;
+  pandocOutputFormats = output;
+}
+
+export function __e2eLastPandocImport() {
+  return lastPandocImport;
 }
 
 export function __e2eFailNextLocalWrite() {
@@ -139,6 +170,18 @@ export function __e2eFailNextLocalWrite() {
 
 export function __e2eLocalText(path: string) {
   return localFsText.get(path) ?? null;
+}
+
+export function __e2eSeedLocalText(path: string, text: string) {
+  localFsText.set(path, text);
+  const name = path.split(/[\\/]/).pop() ?? path;
+  if (!localFsEntries.some((entry) => entry.path === path)) {
+    localFsEntries.push({ name, path, kind: "file", size_bytes: text.length });
+  }
+}
+
+export function __e2eSetLocalReadDelay(milliseconds: number) {
+  localReadDelayMs = Math.max(0, milliseconds);
 }
 
 export function __e2eLastAiTerminalExec() {
@@ -406,6 +449,24 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     const extension = defaultPath.split(".").pop() || "html";
     return `/tmp/markwisely-toolbar-export.${extension}`;
   },
+  "plugin:dialog|open": () => {
+    const result = nextDialogOpenResult ?? null;
+    nextDialogOpenResult = undefined;
+    return result;
+  },
+  "plugin:dialog|message": () => {
+    const result = nextDialogAskResult ?? "Yes";
+    nextDialogAskResult = undefined;
+    return result;
+  },
+  markdown_pandoc_formats: () => pandocOutputFormats,
+  markdown_pandoc_input_formats: () => pandocInputFormats,
+  markdown_pandoc_import_file: (args) => {
+    lastPandocImport = args as Record<string, unknown>;
+    return "# Imported from Word\n\nConverted using the E2E Pandoc adapter.";
+  },
+  markdown_pandoc_cancel: () => true,
+  markdown_pandoc_convert: () => "# Pandoc export fixture",
   probe_remote_path: (args) => {
     const path = String((args as { path?: string }).path ?? "");
     if (path.endsWith("/") || path.includes("bin")) return "directory";
@@ -477,8 +538,9 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     if (request.kind === "file") localFsText.set(path, "");
     return path;
   },
-  read_local_text: (args) => {
+  read_local_text: async (args) => {
     const path = (args as { request: { path: string } }).request.path;
+    if (localReadDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, localReadDelayMs));
     if (!localFsText.has(path)) throw new Error("Not a text file");
     return localFsText.get(path);
   },
@@ -584,7 +646,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     base64: "",
     mime_hint: "application/octet-stream",
   }),
-  preview_write_bytes: () => null,
+  preview_write_bytes: (args) => {
+    lastRemoteBytesWrite = (args as { request: Record<string, unknown> }).request;
+    return null;
+  },
   probe_path: () => "file",
   open_preview_path: () => null,
   open_preview_handle: () => null,

@@ -39,9 +39,15 @@ type Props = {
   appId: DesktopAppId;
   title: string;
   centerTitle?: ReactNode;
+  /** Optional full-width row displayed directly below the app titlebar. */
+  headerTabs?: ReactNode;
   subtitle?: string | null;
   /** Optional leading mark (e.g. Host Browser globe). */
   leading?: ReactNode;
+  /** Optional app-specific controls rendered immediately before window controls. */
+  headerActions?: ReactNode;
+  /** Optional app-specific controls rendered before the centered title. */
+  headerLeadingActions?: ReactNode;
   /** Hide title/subtitle text; aria-label still uses `title`. */
   hideTitleText?: boolean;
   panelTestId: string;
@@ -63,7 +69,10 @@ export function DesktopAppWindow({
   appId,
   title,
   centerTitle,
+  headerTabs,
   leading,
+  headerActions,
+  headerLeadingActions,
   panelTestId,
   floatTestId,
   minimizeTestId,
@@ -127,7 +136,7 @@ export function DesktopAppWindow({
     <header
       className={`preview-panel-head desktop-app-window-head is-compact${
         maximized ? " is-maximized" : ""
-      }${centerTitle ? " has-centered-title" : ""}`}
+      }${centerTitle ? " has-centered-title" : ""}${headerTabs ? " has-header-tabs" : ""}`}
       data-tauri-drag-region={maximized ? "" : undefined}
       onPointerDown={onDragStart}
     >
@@ -140,6 +149,8 @@ export function DesktopAppWindow({
           {mark}
         </span>
       ) : null}
+      {headerLeadingActions}
+      {headerTabs}
       {maximized ? (
         <span
           className="desktop-app-window-maximized-title"
@@ -154,6 +165,7 @@ export function DesktopAppWindow({
         <div className="desktop-app-window-centered-title">{centerTitle}</div>
       ) : null}
       <div className="preview-panel-actions desktop-app-window-actions">
+        {headerActions}
         <button
           type="button"
           className="preview-toolbar-icon"

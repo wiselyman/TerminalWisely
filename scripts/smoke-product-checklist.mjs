@@ -468,6 +468,7 @@ function readStyles() {
   const wysiwyg = read("src/components/preview/MarkdownWysiwygEditor.tsx");
   const mdPreview = read("src/components/preview/MarkdownPreview.tsx");
   const mode = read("src/lib/previewMarkdownMode.ts");
+  const roundTrip = read("src/lib/markdownSourceRoundTrip.ts");
   const viteVditor = read("vite.vditor.ts");
   const viteCfg = read("vite.config.ts");
   const rust = read("src-tauri/src/preview.rs");
@@ -475,12 +476,18 @@ function readStyles() {
   if (
     deps.vditor &&
     wysiwyg.includes('mode: "ir"') &&
+    wysiwyg.includes('"outline"') &&
+    wysiwyg.includes('engine: "KaTeX"') &&
+    roundTrip.includes('"mermaid"') &&
+    roundTrip.includes('"math"') &&
     wysiwyg.includes('data-testid="preview-markdown-wysiwyg"') &&
     mdPreview.includes("MarkdownWysiwygEditor") &&
     mode.includes('markdownMode: "wysiwyg"') === false &&
     mode.includes('return "wysiwyg"') &&
     viteVditor.includes("copyVditorAssetsPlugin") &&
     viteCfg.includes("copyVditorAssetsPlugin") &&
+    exists("public/vditor/dist/js/katex/katex.min.js") &&
+    exists("public/vditor/dist/js/mermaid/mermaid.min.js") &&
     rust.includes("preview_read_bytes") === false &&
     rust.includes("read_preview_bytes") &&
     cmds.includes("preview_read_bytes") &&
@@ -489,6 +496,142 @@ function readStyles() {
     pass("preview.markdown-wysiwyg", "Vditor IR + mode helpers + remote bytes");
   } else {
     fail("preview.markdown-wysiwyg", "markdown WYSIWYG wiring incomplete");
+  }
+}
+
+// --- MarkWisely: OS Markdown file association and open-file delivery ---
+{
+  const config = JSON.parse(read("src-tauri/tauri.conf.json"));
+  const associations = config.bundle?.fileAssociations ?? [];
+  const markdownAssociation = associations.find((entry) =>
+    entry.ext?.includes("md") && entry.ext?.includes("markdown"),
+  );
+  const desktop = read("src-tauri/linux/TerminalWisely.desktop");
+  const rust = read("src-tauri/src/markdown_open.rs");
+  const lib = read("src-tauri/src/lib.rs");
+  const app = read("src/App.tsx");
+  if (
+    markdownAssociation?.mimeType === "text/markdown" &&
+    markdownAssociation.role === "Editor" &&
+    desktop.includes("MimeType=text/markdown;text/x-markdown;") &&
+    rust.includes("markdown_paths_from_args") &&
+    rust.includes("take_pending_markdown_opens") &&
+    lib.includes("tauri_plugin_single_instance::init") &&
+    app.includes("tw://markdown-open-files") &&
+    app.includes("openDocument({")
+  ) {
+    pass("markwisely.os-file-open", "md/markdown association + single-instance queue + Home open bridge");
+  } else {
+    fail("markwisely.os-file-open", "OS Markdown association or delivery wiring incomplete");
+  }
+}
+
+// --- MarkWisely: local/remote Markdown workspace search ---
+{
+  const sidebar = read("src/components/desktop/MarkWiselySidebar.tsx");
+  const workspace = read("src/lib/markWiselyWorkspace.ts");
+  const window = read("src/components/desktop/MarkWiselyWindow.tsx");
+  const outline = read("src/components/desktop/MarkWiselyOutlinePanel.tsx");
+  if (
+    sidebar.includes('data-testid="markwisely-content-search"') &&
+    sidebar.includes('data-testid="markwisely-search-cancel"') &&
+    sidebar.includes('markwisely-sidebar-directory') &&
+    !sidebar.includes('data-testid="markwisely-outline-filter"') &&
+    !sidebar.includes('data-testid="markwisely-outline-heading"') &&
+    outline.includes('data-testid="markwisely-outline-filter"') &&
+    outline.includes('data-testid="markwisely-outline-heading"') &&
+    workspace.includes("searchMarkdownWorkspace") &&
+    workspace.includes("throwIfAborted") &&
+    window.includes("<MarkWiselySidebar") &&
+    window.includes("<MarkWiselyOutlinePanel") &&
+    window.includes('"workspace-folder"')
+  ) {
+    pass("markwisely.workspace-search", "host-scoped Markdown browser + explicit cancellable content search");
+  } else {
+    fail("markwisely.workspace-search", "Markdown workspace browse/search wiring incomplete");
+  }
+}
+
+// --- MarkWisely: editor preferences and scoped themes ---
+{
+  const preferences = read("src/lib/markdownEditor/preferences.ts");
+  const store = read("src/stores/markWiselyPreferencesStore.ts");
+  const panel = read("src/components/desktop/MarkWiselyPreferencesPanel.tsx");
+  const window = read("src/components/desktop/MarkWiselyWindow.tsx");
+  const editor = read("src/components/preview/MarkdownWysiwygEditor.tsx");
+  const styles = `${readStyles()}\n${read("src/components/desktop/MarkWiselyWindow.css")}`;
+  if (
+    preferences.includes("scopeEditorCss") &&
+    preferences.includes("EDITOR_THEME_OPTIONS") &&
+    store.includes("preferences: loadEditorPreferences(storage)") &&
+    panel.includes('data-testid="markwisely-typewriter-mode"') &&
+    panel.includes('data-testid="markwisely-focus-mode"') &&
+    panel.includes('data-testid="markwisely-spellcheck"') &&
+    window.includes('data-editor-theme={editorPreferences.theme}') &&
+    window.includes('spellcheck={editorPreferences.spellcheck}') &&
+    editor.includes("spellcheckRef.current = spellcheck") &&
+    window.includes("markwisely-custom-editor-css") &&
+    editor.includes("const centerCaretBlock") &&
+    styles.includes(".markwisely-editor-view.is-focus-mode") &&
+    styles.includes(".markwisely-editor-view.editor-theme-sepia")
+  ) {
+    pass("markwisely.editor-preferences", "versioned preferences + editor-scoped themes, focus/typewriter, and safe CSS");
+  } else {
+    fail("markwisely.editor-preferences", "MarkWisely preferences, isolation, or editor mode wiring incomplete");
+  }
+}
+
+// --- MarkWisely: built-in and optional Pandoc format adapters ---
+{
+  const adapters = read("src/lib/markdownImportExport/adapters.ts");
+  const window = read("src/components/desktop/MarkWiselyWindow.tsx");
+  const rust = read("src-tauri/src/markdown_conversion.rs");
+  const commands = read("src-tauri/src/commands/mod.rs");
+  if (
+    adapters.includes("BUILTIN_EXPORT_FORMATS") &&
+    adapters.includes("convertWithPandoc") &&
+    adapters.includes("importDocumentFromPath") &&
+    adapters.includes("MAX_CONVERSION_BYTES") &&
+    window.includes("exportMarkdownDocument") &&
+    window.includes("importIntoNewDocument") &&
+    window.includes("createDocument({") &&
+    window.includes("markwisely-import-document") &&
+    window.includes("markwisely-conversion-cancel") &&
+    rust.includes("Command::new(executable)") &&
+    rust.includes("child.kill()") &&
+    rust.includes("MAX_OUTPUT_BYTES") &&
+    commands.includes("markdown_pandoc_convert") &&
+    commands.includes("markdown_pandoc_import_file") &&
+    commands.includes("markdown_pandoc_cancel") &&
+    commands.includes("markdown_pandoc_input_formats") &&
+    commands.includes("markdown_pandoc_formats") &&
+    window.includes("markdown_pandoc_formats") &&
+    window.includes("markwisely.pandocUnavailable")
+  ) {
+    pass("markwisely.import-export-adapters", "offline built-in exports + bounded argument-based optional Pandoc bridge");
+  } else {
+    fail("markwisely.import-export-adapters", "MarkWisely import/export adapter wiring incomplete");
+  }
+}
+
+// --- MarkWisely: paired performance report tooling ---
+{
+  const capture = read("scripts/markdown-benchmark/capture.mjs");
+  const analyzer = read("scripts/markdown-benchmark/analyze.mjs");
+  const fixtures = read("scripts/markdown-benchmark/fixtures/generate.mjs");
+  const matrix = read("docs/TEST_MATRIX.md");
+  if (
+    capture.includes("createPairedReport") &&
+    capture.includes("createHash(\"sha256\")") &&
+    analyzer.includes("evaluateBenchmark") &&
+    fixtures.includes("generateLargeFixture") &&
+    exists("scripts/markdown-benchmark/fixtures/small-markdown.md") &&
+    exists("scripts/markdown-benchmark/fixtures/large-markdown.md") &&
+    matrix.includes("markdownBenchmark.test")
+  ) {
+    pass("markwisely.performance-report", "fixed Markdown fixtures + paired report builder + macOS median gate");
+  } else {
+    fail("markwisely.performance-report", "MarkWisely paired performance report tooling incomplete");
   }
 }
 

@@ -66,9 +66,16 @@ function wrapApi(page: Page): TwE2eApi {
     getLastPreviewOpen: () => call("getLastPreviewOpen") as Promise<Record<string, unknown> | null>,
     getLastPreviewSave: () => call("getLastPreviewSave") as Promise<Record<string, unknown> | null>,
     getLastLocalBytesWrite: () => call("getLastLocalBytesWrite") as Promise<Record<string, unknown> | null>,
+    getLastRemoteBytesWrite: () => call("getLastRemoteBytesWrite") as Promise<Record<string, unknown> | null>,
     setNextDialogSaveResult: (path) => call("setNextDialogSaveResult", path),
+    setNextDialogOpenResult: (path) => call("setNextDialogOpenResult", path),
+    setPandocFormats: (input, output) => call("setPandocFormats", input, output),
+    getLastPandocImport: () => call("getLastPandocImport") as Promise<Record<string, unknown> | null>,
+    getMarkWiselyDocument: (path) => call("getMarkWiselyDocument", path) as Promise<{ text: string } | null>,
     failNextLocalWrite: () => call("failNextLocalWrite"),
     getLocalText: (path) => call("getLocalText", path) as Promise<string | null>,
+    seedLocalText: (path, text) => call("seedLocalText", path, text) as Promise<void>,
+    setLocalReadDelay: (milliseconds) => call("setLocalReadDelay", milliseconds) as Promise<void>,
     getLastAiTerminalExec: () =>
       call("getLastAiTerminalExec") as Promise<Record<string, unknown> | null>,
     getLastAiLease: () => call("getLastAiLease") as Promise<Record<string, unknown> | null>,
@@ -100,6 +107,21 @@ export async function twE2e(page: Page): Promise<TwE2eApi> {
 export async function gotoApp(page: Page) {
   await page.goto("/");
   await waitForTwE2e(page);
+}
+
+export async function clickMarkWiselyMenuControl(page: Page, testId: string) {
+  const headerControl = page.getByTestId("markwisely-panel").getByTestId(testId);
+  if (["markwisely-sidebar-toggle", "markwisely-view-mode-toggle", "markwisely-outline-toggle"].includes(testId)) {
+    await expect(headerControl).toBeVisible();
+    await headerControl.click();
+    return;
+  }
+  const menu = page.getByTestId("markwisely-action-menu");
+  if (!(await menu.isVisible().catch(() => false))) {
+    await page.getByTestId("markwisely-document-actions").click();
+  }
+  await expect(menu).toBeVisible();
+  await menu.getByTestId(testId).click();
 }
 
 /** Expand default Ungrouped entity list (collapsed by default). */

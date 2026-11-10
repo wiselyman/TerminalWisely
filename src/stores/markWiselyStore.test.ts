@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreviewOpenResult } from "../types";
+import { saveMarkWiselyDraft } from "../lib/markWiselyRecovery";
+import { readMarkWiselyDraft } from "../lib/markWiselyRecovery";
 
 const invoke = vi.fn();
 
@@ -36,6 +38,8 @@ describe("markWiselyStore", () => {
     });
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it("keeps recent Markdown paths isolated by host", async () => {
     const { useMarkWiselyStore } = await import("./markWiselyStore");
     await useMarkWiselyStore.getState().openDocument({
@@ -55,6 +59,92 @@ describe("markWiselyStore", () => {
     expect(useMarkWiselyStore.getState().getRecentFiles("server-b")).toEqual([
       expect.objectContaining({ path: "/home/e2e/b.md" }),
     ]);
+  });
+
+  it("keeps multiple documents open in one target and restores the selected document", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      hostKey: "server-a",
+      path: "/home/e2e/first.md",
+    });
+    const firstId = useMarkWiselyStore.getState().getDocument("session-a")?.documentId;
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      hostKey: "server-a",
+      path: "/home/e2e/second.md",
+    });
+
+    expect(useMarkWiselyStore.getState().getDocuments("session-a").map((doc) => doc.path)).toEqual([
+      "/home/e2e/first.md",
+      "/home/e2e/second.md",
+    ]);
+    expect(useMarkWiselyStore.getState().getDocument("session-a")?.path).toBe("/home/e2e/second.md");
+    useMarkWiselyStore.getState().activateDocument("session-a", String(firstId));
+    expect(useMarkWiselyStore.getState().getDocument("session-a")?.path).toBe("/home/e2e/first.md");
+    useMarkWiselyStore.getState().setEditorValue("session-a", "# First changed\n", String(firstId));
+    expect(useMarkWiselyStore.getState().getDocuments("session-a")).toEqual([
+      expect.objectContaining({ path: "/home/e2e/first.md", text: "# First changed\n", savedText: "# Note\n" }),
+      expect.objectContaining({ path: "/home/e2e/second.md", text: "# Note\n", savedText: "# Note\n" }),
+    ]);
+    await useMarkWiselyStore.getState().saveDocument("session-a", String(firstId));
+    expect(invoke).toHaveBeenCalledWith("preview_save", {
+      request: { handle_id: "preview-handle", content: "# First changed\n", sudo_password: null },
+    });
+    await useMarkWiselyStore.getState().closeDocument("session-a", String(firstId));
+    expect(useMarkWiselyStore.getState().getDocument("session-a")?.path).toBe("/home/e2e/second.md");
+  });
+
+  it("re-activates a repeated file-open request without replacing a dirty buffer", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    invoke.mockImplementation(async (command: string) => command === "read_local_text" ? "# Disk version\n" : null);
+    const options = { target: { kind: "local" as const }, hostKey: "local", path: "/Users/test/repeated.md" };
+    await useMarkWiselyStore.getState().openDocument(options);
+    useMarkWiselyStore.getState().setEditorValue("local", "# Unsaved edit\n");
+    await useMarkWiselyStore.getState().openDocument(options);
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(useMarkWiselyStore.getState().getDocuments("local")).toHaveLength(1);
+    expect(useMarkWiselyStore.getState().getDocument("local")?.text).toBe("# Unsaved edit\n");
+  });
+
+  it("offers a recovered draft without replacing the source until restored", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    saveMarkWiselyDraft(localStorage, "server-a", "/home/e2e/note.md", "# Recovery draft\n", 1);
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      hostKey: "server-a",
+      path: "/home/e2e/note.md",
+    });
+
+    const documentId = useMarkWiselyStore.getState().getDocument("session-a")?.documentId;
+    expect(useMarkWiselyStore.getState().getDocument("session-a")).toMatchObject({
+      text: "# Note\n",
+      savedText: "# Note\n",
+      recoveryText: "# Recovery draft\n",
+    });
+    useMarkWiselyStore.getState().restoreDraft("session-a", String(documentId));
+    expect(useMarkWiselyStore.getState().getDocument("session-a")).toMatchObject({
+      text: "# Recovery draft\n",
+      savedText: "# Note\n",
+      recoveryText: null,
+    });
+  });
+
+  it("persists a debounced recovery draft and removes it after a successful save", async () => {
+    vi.useFakeTimers();
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    await useMarkWiselyStore.getState().openDocument({
+      sessionId: "session-a",
+      hostKey: "server-a",
+      path: "/home/e2e/note.md",
+    });
+    useMarkWiselyStore.getState().setEditorValue("session-a", "# Draft\n");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(readMarkWiselyDraft(localStorage, "server-a", "/home/e2e/note.md")?.text).toBe("# Draft\n");
+
+    await useMarkWiselyStore.getState().saveDocument("session-a");
+    expect(readMarkWiselyDraft(localStorage, "server-a", "/home/e2e/note.md")).toBeNull();
   });
 
   it("saves the latest editor value to the remote preview handle", async () => {

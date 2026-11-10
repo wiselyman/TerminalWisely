@@ -131,6 +131,12 @@ export const e2eLocalDir = [
 
 export const e2eRemoteDir = [
   {
+    name: "guide.md",
+    path: "/home/e2e/guide.md",
+    kind: "file",
+    size_bytes: 64,
+  },
+  {
     name: "logs",
     path: "/home/e2e/logs",
     kind: "directory",

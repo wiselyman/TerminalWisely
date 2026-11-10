@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.1] - 2026-11-10
+
+Expand MarkWisely into a full local and remote Markdown workspace.
+
+- Add multi-document editing, outline navigation, workspace browsing and search, recovery drafts, themes, and source/compatibility editing
+- Import supported formats into new documents and export styled HTML, PDF, and Word files; expose additional formats when Pandoc is installed
+- Associate `.md` and `.markdown` files with TerminalWisely and open them in the local MarkWisely workspace
+- Let maximized Desktop apps cover the full TerminalWisely workspace and preserve readable Markdown layout through repeated resizing
+- Support PostgreSQL text filters for non-text database values
+
+将 MarkWisely 扩展为完整的本机与远程 Markdown 工作台。
+
+- 增加多文档编辑、大纲导航、工作区浏览与搜索、恢复草稿、主题以及源码/兼容语法编辑
+- 将支持的格式导入为新文档并导出带样式的 HTML、PDF 和 Word；安装 Pandoc 后可使用更多格式
+- 将 `.md` 和 `.markdown` 文件关联到 TerminalWisely，并在本机 MarkWisely 工作区打开
+- Desktop 应用最大化时覆盖整个 TerminalWisely 工作区，反复缩放时 Markdown 排版保持可读
+- 支持 PostgreSQL 非文本数据库值的文本筛选
+
 ## [0.1.0] - 2026-10-30
 
 Add a local Desktop workspace to Home, sharing the existing Home PTY and isolating Local state from each SSH host.

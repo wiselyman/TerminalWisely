@@ -72,6 +72,8 @@ import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useLocalFsStore } from "./stores/localFsStore";
 import { useBrowserStore } from "./stores/browserStore";
 import { useDesktopStore } from "./stores/desktopStore";
+import { useMarkWiselyStore } from "./stores/markWiselyStore";
+import { createMarkdownOpenDrain } from "./lib/markdownOpenQueue";
 import { isSshDesktopTarget } from "./lib/desktopTarget";
 import { useToastStore } from "./stores/toastStore";
 import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
@@ -168,6 +170,46 @@ function App() {
   useEffect(() => {
     void useSessionStore.getState().hydrateFromBackend();
   }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    const drainPendingMarkdown = createMarkdownOpenDrain(
+      () => invoke<string[]>("take_pending_markdown_opens"),
+      async (path) => {
+        if (cancelled) return;
+        useSessionStore.getState().activateHome();
+        useManagedEntityStore.getState().openHome();
+        useSidebarViewStore.getState().setView("hosts");
+        useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+        useDesktopStore.getState().launchApp("markwisely");
+        try {
+          await useMarkWiselyStore.getState().openDocument({
+            target: { kind: "local" },
+            hostKey: "local",
+            path,
+          });
+        } catch (error) {
+          pushToast(formatAppError(error), false);
+        }
+      },
+    );
+    void (async () => {
+      unlisten = await listen("tw://markdown-open-files", () => {
+        void drainPendingMarkdown().catch(() => undefined);
+      });
+      try {
+        await drainPendingMarkdown();
+      } catch {
+        // The command is unavailable in browser previews and older dev builds.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [pushToast]);
 
   // Check for updates after the UI settles and show the dialog when one is available.
   useEffect(() => {

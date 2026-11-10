@@ -1538,6 +1538,36 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
+pub fn markdown_pandoc_path() -> Option<String> {
+    crate::markdown_conversion::find_pandoc().map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn markdown_pandoc_formats() -> Vec<String> {
+    crate::markdown_conversion::list_formats()
+}
+
+#[tauri::command]
+pub fn markdown_pandoc_input_formats() -> Vec<String> {
+    crate::markdown_conversion::list_input_formats()
+}
+
+#[tauri::command]
+pub fn markdown_pandoc_convert(request_id: String, from: String, to: String, input: String) -> Result<String, String> {
+    crate::markdown_conversion::convert(&request_id, &from, &to, &input)
+}
+
+#[tauri::command]
+pub fn markdown_pandoc_cancel(request_id: String) -> bool {
+    crate::markdown_conversion::cancel_conversion(&request_id)
+}
+
+#[tauri::command]
+pub fn markdown_pandoc_import_file(request_id: String, from: String, path: String) -> Result<String, String> {
+    crate::markdown_conversion::import_file(&request_id, &from, std::path::Path::new(&path))
+}
+
+#[tauri::command]
 pub fn get_update_target() -> crate::updater_support::UpdateTargetInfo {
     crate::updater_support::update_target_info()
 }

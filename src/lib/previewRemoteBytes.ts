@@ -6,7 +6,29 @@ export function suggestPasteImageName(
 ): string {
   const base = originalName.replace(/\\/g, "/").split("/").pop()?.trim() ?? "";
   if (!base || base === "." || base === "..") return `paste-${nowMs}.png`;
-  return base.replace(/[^\w.\-()+ ]+/g, "_");
+  return base.replace(/[^\p{L}\p{N}_.\-()+ ]+/gu, "_");
+}
+
+export function uniquePasteImageName(
+  originalName: string,
+  nowMs: number,
+  existingNames: string[],
+): string {
+  const suggested = suggestPasteImageName(originalName, nowMs);
+  const existing = new Set(existingNames.map((name) => name.toLocaleLowerCase()));
+  if (!existing.has(suggested.toLocaleLowerCase())) return suggested;
+  const dot = suggested.lastIndexOf(".");
+  const stem = dot > 0 ? suggested.slice(0, dot) : suggested;
+  const extension = dot > 0 ? suggested.slice(dot) : "";
+  const timestamped = `${stem}-${nowMs}${extension}`;
+  if (!existing.has(timestamped.toLocaleLowerCase())) return timestamped;
+  let suffix = 1;
+  let candidate = `${stem}-${nowMs}-${suffix}${extension}`;
+  while (existing.has(candidate.toLocaleLowerCase())) {
+    suffix += 1;
+    candidate = `${stem}-${nowMs}-${suffix}${extension}`;
+  }
+  return candidate;
 }
 
 export async function readPreviewRemoteBytes(

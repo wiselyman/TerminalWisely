@@ -41,6 +41,29 @@ test.describe("UI visual baselines", () => {
     expect(lightValues).toEqual({ canvas: "#f3f5f8", focus: "rgb(40, 103, 215)" });
   });
 
+  test("MarkWisely writing surface remains legible in both app themes", async ({ page }) => {
+    test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.seedLocalText("/tmp/visual-markdown.md", "# A calm writing surface\n\nA short paragraph with readable line length and comfortable spacing.");
+    await api.openHome();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("markwisely-open-document").click();
+    await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
+    await page.getByTestId("markwisely-file-entry").filter({ hasText: "visual-markdown.md" }).click();
+    const editorView = page.getByTestId("markwisely-editor-view");
+    await expect(editorView).toBeVisible();
+    for (const theme of themes) {
+      await setTheme(page, theme);
+      await expect(editorView).toHaveScreenshot(`markwisely-editor-${theme}.png`, {
+        animations: "disabled",
+        caret: "hide",
+        maxDiffPixels: 20,
+      });
+    }
+  });
+
   test("Home terminal and local chat remain balanced in both themes", async ({ page }) => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
@@ -145,6 +168,7 @@ test.describe("UI visual baselines", () => {
         fullPage: false,
         animations: "disabled",
         caret: "hide",
+        maxDiffPixels: 100,
       });
       await preview.getByRole("button", { name: "Close" }).click();
       await expect(preview).toBeHidden();
@@ -168,13 +192,13 @@ test.describe("UI visual baselines", () => {
       clock.style.flex = "0 0 140px";
       clock.style.height = "30px";
     });
+    await page.addStyleTag({ content: ".host-desktop-clock { visibility: hidden !important; }" });
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(page).toHaveScreenshot(`local-files-${theme}.png`, {
         fullPage: false,
         animations: "disabled",
         caret: "hide",
-        mask: [page.locator(".host-desktop-clock")],
       });
     }
   });

@@ -17,4 +17,8 @@ describe("MarkWisely export path", () => {
   it("normalizes extensions in Windows paths without changing the directory", () => {
     expect(normalizeMarkWiselyExportPath("C:\\Users\\me\\latest.json", "docx")).toBe("C:\\Users\\me\\latest.docx");
   });
+
+  it("normalizes dynamically detected Pandoc format extensions", () => {
+    expect(normalizeMarkWiselyExportPath("/tmp/notes.docx", "epub")).toBe("/tmp/notes.epub");
+  });
 });

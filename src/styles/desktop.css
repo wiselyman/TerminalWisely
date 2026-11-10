@@ -10,6 +10,21 @@
   z-index: 26000;
 }
 
+.app-shell.desktop-mode.desktop-app-chrome-mode .host-desktop-panel.find-panel,
+.app-shell.desktop-mode.desktop-app-chrome-mode .host-desktop-panel.local-fs-panel {
+  left: 0;
+  bottom: 0;
+}
+
+.app-shell.desktop-app-chrome-mode .sidebar-shell,
+.app-shell.desktop-app-chrome-mode .host-stats-statusbar {
+  display: none !important;
+}
+
+.app-shell.desktop-app-chrome-mode .app-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app-shell.desktop-mode .host-desktop-panel .find-panel-resizer {
   display: none;
 }
@@ -42,8 +57,14 @@
 }
 
 .desktop-app-window-head {
+  position: relative;
+  z-index: 10;
   cursor: grab;
   touch-action: none;
+}
+
+.desktop-app-window-head.has-header-tabs {
+  container: markwisely-titlebar / inline-size;
 }
 
 .desktop-app-window-head:active {
@@ -710,6 +731,11 @@
   transform: translateX(-50%);
   pointer-events: none;
 }
+
+.desktop-app-window-head.has-header-tabs .desktop-app-window-centered-title {
+  display: none;
+}
+
 
 .desktop-app-window-maximized-title {
   min-width: 0;

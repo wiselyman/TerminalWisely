@@ -47,3 +47,30 @@ export function resolveMarkdownImageSrc(
         : `${base}/${posixSrc}`;
   return normalizePosixPath(joined);
 }
+
+/** Encode each path segment so spaces and Unicode remain valid Markdown URLs. */
+export function markdownImageDestination(relativePath: string): string {
+  return relativePath
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+/** Place an image beside its Markdown document, preserving Windows or POSIX paths. */
+export function joinMarkdownImagePath(mdPath: string, imageName: string): string {
+  const separator = mdPath.includes("\\") ? "\\" : "/";
+  const normalized = mdPath.replace(/[\\/]/g, separator);
+  const index = normalized.lastIndexOf(separator);
+  if (index < 0) return imageName;
+  if (index === 0) return `${separator}${imageName}`;
+  if (separator === "\\" && index === 2 && /^[a-z]:/i.test(normalized)) {
+    return `${normalized.slice(0, 3)}${imageName}`;
+  }
+  return `${normalized.slice(0, index)}${separator}${imageName}`;
+}
+
+/** Place a pasted image under an `images` folder beside its Markdown document. */
+export function joinMarkdownImagesDirectoryPath(mdPath: string, imageName: string): string {
+  return joinMarkdownImagePath(mdPath, `images${mdPath.includes("\\") ? "\\" : "/"}${imageName}`);
+}

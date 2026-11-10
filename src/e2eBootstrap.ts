@@ -16,9 +16,15 @@ import {
   __e2eLastPreviewOpen,
   __e2eLastPreviewSave,
   __e2eLastLocalBytesWrite,
+  __e2eLastRemoteBytesWrite,
   __e2eSetNextDialogSaveResult,
+  __e2eSetNextDialogOpenResult,
+  __e2eSetPandocFormats,
+  __e2eLastPandocImport,
   __e2eFailNextLocalWrite,
   __e2eLocalText,
+  __e2eSeedLocalText,
+  __e2eSetLocalReadDelay,
   __e2eLastUploadRequest,
   __e2eResetMocks,
   __e2eResetUploadRequest,
@@ -32,6 +38,7 @@ import { useSidebarViewStore } from "./stores/sidebarViewStore";
 import { focusManagedEntity } from "./stores/managedEntityStore";
 import { useSessionStore } from "./stores/sessionStore";
 import { useHostStatsStore } from "./stores/hostStatsStore";
+import { useMarkWiselyStore } from "./stores/markWiselyStore";
 import { useAppUpdateStore } from "./stores/appUpdateStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { openAppSettings } from "./stores/downloadSettingsStore";
@@ -87,9 +94,16 @@ export interface TwE2eApi {
   getLastPreviewOpen: () => Record<string, unknown> | null;
   getLastPreviewSave: () => Record<string, unknown> | null;
   getLastLocalBytesWrite: () => Record<string, unknown> | null;
+  getLastRemoteBytesWrite: () => Record<string, unknown> | null;
   setNextDialogSaveResult: (path: string | null) => void;
+  setNextDialogOpenResult: (path: string | null) => void;
+  setPandocFormats: (input: string[], output: string[]) => void;
+  getLastPandocImport: () => Record<string, unknown> | null;
+  getMarkWiselyDocument: (path: string) => { text: string } | null;
   failNextLocalWrite: () => void;
   getLocalText: (path: string) => string | null;
+  seedLocalText: (path: string, text: string) => void;
+  setLocalReadDelay: (milliseconds: number) => void;
   getLastAiTerminalExec: () => Record<string, unknown> | null;
   getLastAiLease: () => Record<string, unknown> | null;
   getLastK8sApply: () => Record<string, unknown> | null;
@@ -530,9 +544,16 @@ export function runE2eBootstrap(): void {
     getLastPreviewOpen: __e2eLastPreviewOpen,
     getLastPreviewSave: __e2eLastPreviewSave,
     getLastLocalBytesWrite: __e2eLastLocalBytesWrite,
+    getLastRemoteBytesWrite: __e2eLastRemoteBytesWrite,
     setNextDialogSaveResult: __e2eSetNextDialogSaveResult,
+    setNextDialogOpenResult: __e2eSetNextDialogOpenResult,
+    setPandocFormats: __e2eSetPandocFormats,
+    getLastPandocImport: __e2eLastPandocImport,
+    getMarkWiselyDocument: (path) => useMarkWiselyStore.getState().getDocuments("local").find((document) => document.path === path) ?? null,
     failNextLocalWrite: __e2eFailNextLocalWrite,
     getLocalText: __e2eLocalText,
+    seedLocalText: __e2eSeedLocalText,
+    setLocalReadDelay: __e2eSetLocalReadDelay,
     getLastAiTerminalExec: __e2eLastAiTerminalExec,
     getLastAiLease: __e2eLastAiLease,
     getLastK8sApply: __e2eLastK8sApply,

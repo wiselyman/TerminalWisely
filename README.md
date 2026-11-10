@@ -6,7 +6,7 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
+**Current version: 0.1.1** · **Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
 **Local and remote operations in one window.** Home pairs an interactive local Terminal with local chat; Hosts, Kubernetes, and Databases provide remote workspaces with object-specific chats. Changes wait for approval, and STOP is always there.
 
@@ -30,7 +30,7 @@
 | **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
 | **Kubernetes** | Sidebar Hosts ↔ K8s; add cluster via + (file or paste kubeconfig) or SSH kubectl; resource tree, YAML, logs, Pod shell. One-click install of kubectl/Helm into the app data dir (or use PATH / SSH). Practical Lens-inspired subset — not a full Lens IDE |
-| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; Markdown Typora-like WYSIWYG; download, compress, cross-server send |
+| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; MarkWisely local/remote Markdown workbench with multi-document editing, outline, search, recovery, and export; download, compress, cross-server send |
 | **AI Engineer** | Local chat in Home; follows the open host, cluster, or database elsewhere. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |

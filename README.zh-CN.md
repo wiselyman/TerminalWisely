@@ -6,7 +6,7 @@
 
 [English](./README.md) | **中文**
 
-**最新版本：[下载最新版本](https://github.com/wiselyman/TerminalWisely/releases/latest)**
+**当前版本：0.1.1** · **最新版本：[下载最新版本](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
 **本机与远程运维，在同一个窗口。** Home 将本机交互式 Terminal 和本机聊天并排显示；主机、Kubernetes、数据库提供远程工作区和按对象隔离的聊天。变更要批准，随时可以 STOP。
 
@@ -30,7 +30,7 @@
 | **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **Kubernetes** | 侧栏 Hosts ↔ K8s；+ 添加集群（文件或粘贴 kubeconfig）或 SSH kubectl；资源树、YAML、日志、Pod Shell。可一键把最新 kubectl/Helm 装到应用数据目录（也可用 PATH / SSH）。受 Lens 启发的实用子集，非完整 Lens IDE |
-| **文件** | 拖拽上传、`ls` 点击进目录或预览；Markdown 类 Typora 所见即所得；下载、压缩、跨服务器发送 |
+| **文件** | 拖拽上传、`ls` 点击进目录或预览；MarkWisely 本机/远程 Markdown 工作台，支持多文档、大纲、搜索、恢复和导出；下载、压缩、跨服务器发送 |
 | **AI 工程师** | Home 使用本机聊天；其他空间跟随当前主机、集群或数据库。长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |

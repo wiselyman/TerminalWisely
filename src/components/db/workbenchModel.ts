@@ -613,12 +613,17 @@ function likeSuffixLiteral(engine: string, needle: string): string {
   return `${sqlTextLiteral(engine, `%${escapeLikeBody(needle)}`)} ESCAPE '!'`;
 }
 
+function textSearchColumn(engine: string, column: string): string {
+  const ident = quoteIdent(engine, column);
+  return engine === "postgres" ? `CAST(${ident} AS TEXT)` : ident;
+}
+
 function filterWhere(engine: string, columns: string[], filter: string): string {
   const needle = filter.trim();
   const names = columns.filter((name) => name.trim());
   if (!needle || names.length === 0) return "";
   const pattern = likeLiteral(engine, needle);
-  return ` WHERE ${names.map((name) => `${quoteIdent(engine, name)} LIKE ${pattern}`).join(" OR ")}`;
+  return ` WHERE ${names.map((name) => `${textSearchColumn(engine, name)} LIKE ${pattern}`).join(" OR ")}`;
 }
 
 function filterRulePredicate(engine: string, column: string, op: FilterOp, value: string): string | null {
@@ -637,11 +642,11 @@ function filterRulePredicate(engine: string, column: string, op: FilterOp, value
     case "gte":
       return `${ident} >= ${engineSqlLiteral(engine, value)}`;
     case "contains":
-      return `${ident} LIKE ${likeLiteral(engine, value)}`;
+      return `${textSearchColumn(engine, column)} LIKE ${likeLiteral(engine, value)}`;
     case "begin":
-      return `${ident} LIKE ${likePrefixLiteral(engine, value)}`;
+      return `${textSearchColumn(engine, column)} LIKE ${likePrefixLiteral(engine, value)}`;
     case "end":
-      return `${ident} LIKE ${likeSuffixLiteral(engine, value)}`;
+      return `${textSearchColumn(engine, column)} LIKE ${likeSuffixLiteral(engine, value)}`;
     case "is_null":
       return `${ident} IS NULL`;
     case "is_not_null":

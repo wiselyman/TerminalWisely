@@ -1,3 +1,6 @@
+mod markdown_open;
+mod markdown_conversion;
+
 mod host;
 mod host_stats;
 mod find;
@@ -191,6 +194,13 @@ pub fn run() {
     webkit_localstorage::compact_bloated_webkit_localstorage();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let paths = markdown_open::markdown_paths_from_args(
+                args.iter().skip(1).map(String::as_str),
+                cwd,
+            );
+            markdown_open::enqueue(app, paths);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -200,7 +210,17 @@ pub fn run() {
         .manage(SessionManager::new())
         .manage(preview::PreviewManager::new())
         .manage(browser::BrowserManager::new())
+        .manage(markdown_open::MarkdownOpenQueue::default())
         .setup(|app| {
+            let startup_args: Vec<String> = std::env::args_os()
+                .skip(1)
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect();
+            let cwd = std::env::current_dir().unwrap_or_default();
+            markdown_open::enqueue(
+                app.handle(),
+                markdown_open::markdown_paths_from_args(startup_args.iter().map(String::as_str), cwd),
+            );
             durable::startup(app.handle());
             apply_window_icon(app)?;
             app_menu::install(app)?;
@@ -271,6 +291,7 @@ pub fn run() {
             commands::insert_terminal_command,
             commands::get_saved_connections,
             commands::take_catalog_restore_notice,
+            markdown_open::take_pending_markdown_opens,
             commands::save_entity_layout,
             commands::load_entity_layout,
             commands::save_connection,
@@ -358,6 +379,12 @@ pub fn run() {
             commands::ai_chat_history_import_localstorage,
             commands::ai_chat_history_mark_migrated,
             commands::get_app_version,
+            commands::markdown_pandoc_path,
+            commands::markdown_pandoc_formats,
+            commands::markdown_pandoc_input_formats,
+            commands::markdown_pandoc_convert,
+            commands::markdown_pandoc_cancel,
+            commands::markdown_pandoc_import_file,
             commands::get_update_target,
             commands::k8s_discover_contexts,
             commands::k8s_import_kubeconfig,
@@ -433,9 +460,16 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| {
-            if let tauri::RunEvent::Exit = event {
-                ai_engineer::stop_sidecar();
+        .run(|app, event| {
+            match event {
+                tauri::RunEvent::Exit => ai_engineer::stop_sidecar(),
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Opened { urls } => {
+                    let paths = urls.into_iter().filter_map(|url| url.to_file_path().ok())
+                        .filter(|path| markdown_open::is_markdown_path(path)).collect();
+                    markdown_open::enqueue(&app, paths);
+                }
+                _ => {}
             }
         });
 }

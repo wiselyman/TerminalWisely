@@ -83,6 +83,12 @@ import {
 } from "./workbenchModel";
 
 describe("database workbench model", () => {
+  it("casts PostgreSQL search operands for numeric columns", () => {
+    expect(tableViewSql("postgres", "public", "orders", ["id"], null, "asc", "12", 1)).toContain('CAST("id" AS TEXT) LIKE');
+    for (const op of ["contains", "begin", "end"] as const) {
+      expect(filterRulesToWhere("postgres", ["id"], [{ id: "1", enabled: true, column: "id", op, value: "12", join: "and" }])).toContain('CAST("id" AS TEXT) LIKE');
+    }
+  });
   it("encodes text independently of database backslash modes", () => {
     expect(sqlTextLiteral("mysql", "中\\'a")).toBe("CONVERT(X'e4b8ad5c2761' USING utf8mb4)");
     expect(sqlTextLiteral("postgres", "中\\'a")).toBe("E'中\\\\''a'");
@@ -363,7 +369,7 @@ describe("database workbench model", () => {
 
   it("builds a paged table select and insert or delete statements", () => {
     expect(tableViewSql("postgres", "public", "orders", ["id", "name"], "name", "desc", "a'; DROP", 2)).toBe(
-      `SELECT * FROM "public"."orders" WHERE "id" LIKE E'%a''; DROP%' ESCAPE '!' OR "name" LIKE E'%a''; DROP%' ESCAPE '!' ORDER BY "name" DESC LIMIT 100 OFFSET 100`,
+      `SELECT * FROM "public"."orders" WHERE CAST("id" AS TEXT) LIKE E'%a''; DROP%' ESCAPE '!' OR CAST("name" AS TEXT) LIKE E'%a''; DROP%' ESCAPE '!' ORDER BY "name" DESC LIMIT 100 OFFSET 100`,
     );
     expect(tableViewSql("mysql", "shop", "orders", ["id"], "missing", "asc", "", 1)).toBe(
       "SELECT * FROM `shop`.`orders` LIMIT 100 OFFSET 0",
@@ -397,7 +403,7 @@ describe("database workbench model", () => {
       { id: "4", enabled: true, column: "gone", op: "is_null", value: "", join: "and" },
     ];
     expect(filterRulesToWhere("postgres", ["id", "name"], rules)).toBe(
-      ` WHERE "name" LIKE E'%ab!%%' ESCAPE '!' OR "id" = E'1'`,
+      ` WHERE CAST("name" AS TEXT) LIKE E'%ab!%%' ESCAPE '!' OR "id" = E'1'`,
     );
     expect(filterRulesToWhere("postgres", ["id"], [{ id: "a", enabled: true, column: "id", op: "is_not_null", value: "", join: "and" }])).toBe(
       ` WHERE "id" IS NOT NULL`,

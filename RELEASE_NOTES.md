@@ -1,53 +1,25 @@
-# TerminalWisely v0.1.0
+# TerminalWisely v0.1.1
 
 ## English
 
-TerminalWisely 0.1.0 brings the local Home workspace to Desktop.
+TerminalWisely 0.1.1 expands MarkWisely into a full local and remote Markdown workspace.
 
 ### Highlights
 
-- **Home Desktop** — switch between the local Terminal/chat and a local Desktop with Terminal, AI Local, and MarkWisely; native file, browser, and process tools stay available on the computer
-- **One local shell and chat** — Desktop Terminal reuses the selected Home PTY, and AI Local opens the existing Home chat; Local and SSH app state remains isolated
-- **Local Markdown** — MarkWisely edits files on this computer; AI Linux remains SSH-only
-- **Windows Terminal** — bundle Microsoft Coreutils for Windows v2026.9.3 for x64 and ARM64; commands and alias precedence apply only inside TerminalWisely's PowerShell 5.1 child process
+- **MarkWisely workbench** — edit local and SSH-host Markdown with multiple open documents, outline navigation, workspace browsing and search, recovery drafts, themes, and source/compatibility editing
+- **Import and export** — create documents from supported imports and export styled HTML, PDF, and Word files; optional Pandoc formats are available when Pandoc is installed
+- **Markdown files open in the app** — register `.md` and `.markdown` files with TerminalWisely and route them to the local MarkWisely workspace
+- **Desktop windows** — maximize internal apps across the full TerminalWisely workspace, and keep the Markdown canvas readable through repeated resizing
+- **Database filtering** — text filters work consistently with PostgreSQL values that are not stored as text
 
 ## 中文
 
-TerminalWisely 0.1.0 为 Home 增加完整的本机 Desktop 工作区。
+TerminalWisely 0.1.1 将 MarkWisely 扩展为完整的本机与远程 Markdown 工作台。
 
 ### 主要更新
 
-- **Home Desktop** — 在本机 Terminal/聊天与本机桌面间切换；桌面提供 Terminal、AI Local 和 MarkWisely，本机文件、浏览器和进程仍使用电脑自带的应用
-- **共用本机 Shell 和聊天** — Desktop Terminal 复用当前 Home PTY，AI Local 打开现有 Home 聊天；本机状态与各 SSH 主机状态隔离
-- **本机 Markdown** — MarkWisely 编辑当前电脑上的文件；AI Linux 仍只用于 SSH
-- **Windows Terminal** — x64 和 ARM64 安装包内置微软 Coreutils for Windows v2026.9.3；命令路径和别名优先级仅作用于 TerminalWisely 启动的 PowerShell 5.1 子进程
-
----
-
-## TerminalWisely v0.0.9
-
-## English
-
-TerminalWisely 0.0.9 refines the desktop workspace, file manager, Markdown editing, and update experience.
-
-### Highlights
-
-- **Desktop workspace** — maximized apps can cover the Dock, which appears when the pointer reaches the bottom edge
-- **File manager** — list view shows Linux file metadata; icon view focuses on names, and file actions live in Desktop
-- **MarkWisely** — open, create, edit, and save remote Markdown files from a dedicated Desktop app
-- **Update and navigation** — render release notes as Markdown and switch Chat/Desktop with one click
-- **Clearer context** — Desktop identifies the connected machine by its host name
-
-## 中文
-
-TerminalWisely 0.0.9 改进了 Desktop 工作区、文件管理器、Markdown 编辑和升级体验。
-
-### 主要更新
-
-- **Desktop 工作区** — 应用最大化时可覆盖 Dock，鼠标移到底边时 Dock 再显示
-- **文件管理器** — 列表视图展示 Linux 文件属性；图标视图只显示文件名，文件操作集中在 Desktop
-- **MarkWisely** — 可在独立的 Desktop 应用中打开、新建、编辑和保存远程 Markdown 文件
-- **升级与导航** — 发布说明按 Markdown 渲染，聊天与 Desktop 支持单击切换
-- **主机信息更清楚** — Desktop 标题栏显示当前连接的机器名
-
-安装包：Windows；macOS（Apple Silicon / Intel）；Linux（x86_64 / ARM64，具体格式视平台而定）。
+- **MarkWisely 工作台** — 编辑本机和 SSH 主机上的 Markdown，支持多文档、大纲导航、工作区浏览与搜索、恢复草稿、主题以及源码/兼容语法编辑
+- **导入与导出** — 将支持的格式导入为新文档，并导出带样式的 HTML、PDF 和 Word；安装 Pandoc 后可使用更多格式
+- **Markdown 文件关联** — 将 `.md` 和 `.markdown` 文件关联到 TerminalWisely，并在本机 MarkWisely 工作区打开
+- **Desktop 窗口** — 内部应用最大化后覆盖 TerminalWisely 工作区；反复缩放窗口时 Markdown 画布仍保持可读
+- **数据库筛选** — PostgreSQL 非文本字段也可正常使用文本筛选
