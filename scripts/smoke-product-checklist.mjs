@@ -486,8 +486,8 @@ function readStyles() {
     mode.includes('return "wysiwyg"') &&
     viteVditor.includes("copyVditorAssetsPlugin") &&
     viteCfg.includes("copyVditorAssetsPlugin") &&
-    exists("public/vditor/dist/js/katex/katex.min.js") &&
-    exists("public/vditor/dist/js/mermaid/mermaid.min.js") &&
+    exists("node_modules/vditor/dist/js/katex/katex.min.js") &&
+    exists("node_modules/vditor/dist/js/mermaid/mermaid.min.js") &&
     rust.includes("preview_read_bytes") === false &&
     rust.includes("read_preview_bytes") &&
     cmds.includes("preview_read_bytes") &&
