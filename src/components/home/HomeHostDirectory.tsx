@@ -1,0 +1,126 @@
+import { Computer, MessageSquareText, Terminal } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { SavedConnection } from "../../types";
+import { ServerOsIcon } from "../ServerOsIcon";
+
+export type HomeHostGroupInput = {
+  key: string;
+  name: string;
+  hostIds: string[];
+};
+
+export type HomeHostSection = {
+  key: string;
+  name: string;
+  local: boolean;
+  hosts: SavedConnection[];
+};
+
+export function buildHomeHostSections(
+  groups: HomeHostGroupInput[],
+  savedConnections: SavedConnection[],
+): HomeHostSection[] {
+  const hostsById = new Map(savedConnections.map((host) => [host.id, host]));
+  return [
+    { key: "local", name: "Local", local: true, hosts: [] },
+    ...groups.map((group) => ({
+      key: group.key,
+      name: group.name,
+      local: false,
+      hosts: group.hostIds
+        .map((id) => hostsById.get(id))
+        .filter((host): host is SavedConnection => host != null),
+    })),
+  ];
+}
+
+type Props = {
+  groups: HomeHostGroupInput[];
+  savedConnections: SavedConnection[];
+  loading?: boolean;
+  onOpenLocal: () => void;
+  onOpenHost: (saved: SavedConnection) => void;
+  onOpenTerminal: () => void;
+  onOpenChat: () => void;
+};
+
+export function HomeHostDirectory({
+  groups,
+  savedConnections,
+  loading = false,
+  onOpenLocal,
+  onOpenHost,
+  onOpenTerminal,
+  onOpenChat,
+}: Props) {
+  const { t } = useTranslation("shell");
+  const sections = buildHomeHostSections(groups, savedConnections);
+
+  return (
+    <main className="home-host-directory" data-testid="home-host-directory">
+      <header className="home-host-directory-header">
+        <div>
+          <h1>{t("homeDirectoryTitle")}</h1>
+          <p>{t("homeDirectorySubtitle")}</p>
+        </div>
+        <div className="home-directory-actions">
+          <button type="button" onClick={onOpenTerminal} data-testid="home-directory-terminal">
+            <Terminal size={16} aria-hidden />
+            {t("homeDirectoryTerminal")}
+          </button>
+          <button type="button" onClick={onOpenChat} data-testid="home-directory-chat">
+            <MessageSquareText size={16} aria-hidden />
+            {t("homeDirectoryChat")}
+          </button>
+        </div>
+      </header>
+
+      {loading ? <p className="home-host-directory-loading">{t("homeDirectoryLoading")}</p> : null}
+
+      {sections.map((section) => (
+        <section
+          className={`home-host-section${section.local ? " home-host-section-local" : ""}`}
+          key={section.key}
+          data-testid={section.local ? "home-local-section" : `home-host-group-${section.key}`}
+        >
+          <header className="home-host-section-header">
+            <h2>{section.local ? t("homeDirectoryLocal") : section.name}</h2>
+            {!section.local ? <span>{t("homeDirectoryHostCount", { count: section.hosts.length })}</span> : null}
+          </header>
+          <div className="home-host-card-grid">
+            {section.local ? (
+              <button
+                type="button"
+                className="home-host-card home-host-card-local"
+                data-testid="home-local-host-card"
+                onClick={onOpenLocal}
+              >
+                <span className="home-host-card-icon"><Computer size={24} aria-hidden /></span>
+                <span className="home-host-card-copy">
+                  <strong>{t("homeDirectoryThisComputer")}</strong>
+                  <small>{t("homeDirectoryLocalDesktopHint")}</small>
+                </span>
+              </button>
+            ) : section.hosts.length > 0 ? section.hosts.map((host) => (
+              <button
+                type="button"
+                className="home-host-card"
+                key={host.id}
+                data-testid={`home-host-card-${host.id}`}
+                onClick={() => onOpenHost(host)}
+              >
+                <span className="home-host-card-icon"><ServerOsIcon osId={host.os_id} osName={host.os_name} size={24} /></span>
+                <span className="home-host-card-copy">
+                  <strong>{host.name}</strong>
+                  <small>{host.username}@{host.host}:{host.port}</small>
+                </span>
+              </button>
+            )) : (
+              <p className="home-host-section-empty">{t("homeDirectoryEmptyGroup")}</p>
+            )}
+          </div>
+        </section>
+      ))}
+    </main>
+  );
+}
