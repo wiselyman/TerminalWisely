@@ -23,7 +23,7 @@
 
 | 模块 | 能力 |
 |------|------|
-| **Home** | 分组主机目录和状态隔离的本机 Desktop：Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理使用电脑自带的应用；Windows 使用 PowerShell |
+| **Home** | 标题栏 Home 图标打开分组主机目录；Local Desktop 固定为第一个工作区标签，包含 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理使用电脑自带的应用；Windows 使用 PowerShell |
 | **Agent 运行时** | Cursor Agent / Codex / Claude Code 跟随当前本机或 SSH 主机；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | Terminal 在本机或远程 Desktop 内运行；保存 SSH 主机、断线重连、中英文界面 |
 | **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
@@ -38,7 +38,7 @@
 
 ## Home 本机 Desktop
 
-Home 打开后显示主机目录，Local 固定在最上方，已保存 SSH 主机沿用现有分组。点击主机卡片会使用现有 SSH 连接流程，并在新标题栏标签打开对应 Desktop；点击 Local 会打开独立的本机 Desktop 标签，不创建 SSH 会话。所有工作区标签都代表 Desktop，左侧 Hosts 列表和独立 Terminal 标签已移除。本机 Desktop Dock 提供 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理本机已有对应应用，因此不在 Home Dock 中重复提供。AI Local 会在桌面窗口中打开现有本机聊天，并保留对话和草稿；不会创建 SSH 会话。AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 使用现有本机 PTY，不创建独立标签。本机桌面的窗口和 Markdown 最近文件都与各 SSH 主机分别保存。
+标题栏最左侧的 Home 图标打开已保存主机目录。目录按现有分组显示 SSH 主机，不再显示 Local 项。Local Desktop 是紧跟 Home 图标、位于 SSH 标签之前的唯一固定工作区标签；点击它不会创建 SSH 会话。所有工作区标签都代表 Desktop，左侧 Hosts 列表和独立 Terminal 标签已移除。本机 Desktop Dock 提供 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理本机已有对应应用，因此不在 Home Dock 中重复提供。AI Local 会在桌面窗口中打开现有本机聊天，并保留对话和草稿；不会创建 SSH 会话。AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 使用现有本机 PTY，不创建独立标签。本机桌面的窗口和 Markdown 最近文件都与各 SSH 主机分别保存。
 
 Windows Local Desktop Terminal 继续使用 Windows PowerShell 5.1。Windows 安装包按 x64 或 ARM64 内置微软维护的 Coreutils for Windows v2026.9.3（Preview）。在应用终端里可直接按命令名调用 Coreutils；PowerShell 5.1 不包含完整的 PowerShell 7 通配符和管道集成。应用只在该终端子进程中调整 PATH 并移除冲突别名，不修改系统 PATH、PowerShell Profile 或注册表。
 

@@ -260,7 +260,9 @@ function readStyles() {
   const panel = read("src/components/ConnectionPanel.tsx");
   const sidebar = read("src/stores/sidebarViewStore.ts");
   if (
-    app.includes('data-testid="home-directory-tab"') &&
+    app.includes('data-testid="home-directory-button"') &&
+    !app.includes('data-testid="home-directory-tab"') &&
+    app.includes('data-testid="local-desktop-tab"') &&
     !app.includes('data-testid="sidebar-view-home"') &&
     !app.includes('data-testid="sidebar-view-hosts"') &&
     app.includes('collapsed={true}') &&
@@ -268,7 +270,7 @@ function readStyles() {
     panel.includes('scope="hosts"') &&
     sidebar.includes('export type SidebarView = "hosts"')
   ) {
-    pass("product.home-hosts-only", "Home is a directory tab, host lists stay in Home, and workspace tabs omit standalone terminals");
+    pass("product.home-hosts-only", "Home is an icon launcher, Local Desktop is pinned first, and workspace tabs omit standalone terminals");
   } else {
     fail("product.home-hosts-only", "Home/Desktop navigation or the no-sidebar/no-standalone-terminal contract is missing");
   }
@@ -283,6 +285,8 @@ function readStyles() {
   if (
     directory.includes('data-testid="home-host-directory"') &&
     directory.includes("buildHomeHostSections") &&
+    !directory.includes("home-local-host-card") &&
+    app.indexOf('data-testid="local-desktop-tab"') < app.indexOf("{tabs.map((tab)" ) &&
     managed.includes("openHomeDesktopTab") &&
     managed.includes("closeHomeDesktopTab") &&
     panel.includes("onRegisterOpenSavedHost") &&
@@ -290,7 +294,7 @@ function readStyles() {
     app.includes("homeDirectoryOpen") &&
     app.includes("<HomeHostDirectory")
   ) {
-    pass("ui.home-host-directory", "Home lists Local and saved SSH hosts and opens Desktop workspaces from their cards");
+    pass("ui.home-host-directory", "Home icon opens the saved-host directory and a pinned Local Desktop tab precedes SSH tabs");
   } else {
     fail("ui.home-host-directory", "Home directory, Local Desktop tabs, or saved-host Desktop routing is missing");
   }

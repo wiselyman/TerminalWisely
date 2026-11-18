@@ -527,6 +527,7 @@ body,
 }
 
 .chrome-titlebar-main .tab-bar,
+.chrome-home-button,
 .chrome-new-session,
 .chrome-sidebar-slot,
 .chrome-sidebar-toggle,
@@ -1672,6 +1673,39 @@ body.find-panel-resizing .ai-engineer-panel {
 .tab-bar .tab.active {
   flex: 0 0 auto;
   max-width: none;
+}
+
+.chrome-home-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin: 0 5px 0 1px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--tw-fg-faint);
+  cursor: pointer;
+}
+
+.chrome-home-button > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.chrome-home-button:hover:not(.active) {
+  background: var(--tw-hover);
+  color: var(--tw-fg);
+}
+
+.chrome-home-button.active {
+  border-color: var(--tw-border);
+  background: var(--tab-active-bg);
+  color: var(--tw-fg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tw-fg) 10%, transparent);
 }
 
 .tab-bar::-webkit-scrollbar {

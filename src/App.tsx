@@ -394,12 +394,6 @@ function App() {
   const registerOpenSavedHost = useCallback((open: (saved: (typeof savedConnections)[number]) => void) => {
     openSavedHostRef.current = open;
   }, []);
-  const openLocalDesktopTab = useCallback(() => {
-    const id = useManagedEntityStore.getState().openHomeDesktopTab();
-    useSessionStore.getState().activateHome();
-    useManagedEntityStore.getState().activateHomeDesktopTab(id);
-    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
-  }, []);
   const hostEntityIds = useMemo(() => savedConnections.map((host) => host.id), [savedConnections]);
   const hostLayout = useEntityLayoutStore((s) => s.layouts.hosts);
   const ensureEntityScope = useEntityLayoutStore((s) => s.ensureScope);
@@ -910,17 +904,38 @@ function App() {
                   event.preventDefault();
                 }}
               >
-                <div
-                  role="tab"
-                  aria-selected={homeDirectoryOpen}
-                  className={`tab home-directory-tab${homeDirectoryOpen ? " active" : ""}`}
-                  data-testid="home-directory-tab"
+                <button
+                  type="button"
+                  className={`chrome-home-button${homeOpen && homeDirectoryOpen ? " active" : ""}`}
+                  data-testid="home-directory-button"
+                  aria-label={t("homeDirectoryTab")}
+                  aria-pressed={homeOpen && homeDirectoryOpen}
+                  title={t("homeDirectoryTab")}
                   onClick={() => activateHome()}
                 >
-                  {homeDirectoryOpen ? <><span className="tab-curve tab-curve-start" aria-hidden="true" /><span className="tab-curve tab-curve-end" aria-hidden="true" /></> : null}
-                  <span className="tab-kind home-terminal"><TabHomeIcon /></span>
-                  <span className="tab-title">{t("homeDirectoryTab")}</span>
-                </div>
+                  <TabHomeIcon />
+                </button>
+                {homeDesktopTabs.map((tab) => {
+                  const active = homeOpen && !homeDirectoryOpen && tab.id === activeHomeDesktopTabId;
+                  return (
+                    <div
+                      key={tab.id}
+                      className={`tab${active ? " active" : ""}`}
+                      data-testid="local-desktop-tab"
+                      data-desktop-tab-id={tab.id}
+                      onClick={() => {
+                        useSessionStore.getState().activateHome();
+                        closeDesktopRemembering();
+                        useManagedEntityStore.getState().activateHomeDesktopTab(tab.id);
+                        useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+                      }}
+                    >
+                      {active ? <><span className="tab-curve tab-curve-start" aria-hidden="true" /><span className="tab-curve tab-curve-end" aria-hidden="true" /></> : null}
+                      <span className="tab-kind desktop-tab-icon"><SystemInfoIcon /></span>
+                      <span className="tab-title" title={tab.title}>{tab.title}</span>
+                    </div>
+                  );
+                })}
                 {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
             const tabOs = resolveSessionOsProfile(tab, savedConnections);
@@ -1108,44 +1123,6 @@ function App() {
             </div>
             );
           })}
-              {homeDesktopTabs.map((tab) => {
-                const active = homeOpen && !homeDirectoryOpen && tab.id === activeHomeDesktopTabId;
-                return (
-                  <div
-                    key={tab.id}
-                    className={`tab${active ? " active" : ""}`}
-                    data-testid="local-desktop-tab"
-                    data-desktop-tab-id={tab.id}
-                    onClick={() => {
-                      useSessionStore.getState().activateHome();
-                      closeDesktopRemembering();
-                      useManagedEntityStore.getState().activateHomeDesktopTab(tab.id);
-                      useDesktopStore.getState().openDesktopTarget({ kind: "local" });
-                    }}
-                  >
-                    {active ? <><span className="tab-curve tab-curve-start" aria-hidden="true" /><span className="tab-curve tab-curve-end" aria-hidden="true" /></> : null}
-                    <span className="tab-kind desktop-tab-icon"><SystemInfoIcon /></span>
-                    <span className="tab-title" title={tab.title}>{tab.title}</span>
-                    <button
-                      type="button"
-                      className="tab-close"
-                      aria-label={t("closeTabAria", { title: tab.title })}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        const store = useManagedEntityStore.getState();
-                        store.closeHomeDesktopTab(tab.id);
-                        const current = useManagedEntityStore.getState();
-                        if (active && current.activeHomeDesktopTabId) {
-                          useDesktopStore.getState().openDesktopTarget({ kind: "local" });
-                        } else if (active) {
-                          useDesktopStore.getState().close();
-                        }
-                      }}
-                    >×</button>
-                  </div>
-                );
-              })}
               </div>
               <button
                   type="button"
@@ -1260,7 +1237,6 @@ function App() {
                     groups={homeHostSections}
                     savedConnections={savedConnections}
                     loading={!savedConnectionsLoaded}
-                    onOpenLocal={openLocalDesktopTab}
                     onOpenHost={(saved) => openSavedHostRef.current(saved)}
                   />
                 ) : null}

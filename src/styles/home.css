@@ -61,10 +61,6 @@
   transform: translateY(-1px);
 }
 
-.home-host-card-local {
-  border-color: color-mix(in srgb, var(--tw-accent) 55%, var(--tw-border));
-}
-
 .home-host-card-icon {
   display: grid;
   width: 48px;

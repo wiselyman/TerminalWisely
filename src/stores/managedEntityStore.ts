@@ -27,11 +27,13 @@ interface ManagedEntityState {
   focused: (kind: ManagedKind) => ManagedEntityRef | null;
 }
 
+const LOCAL_DESKTOP_TAB = { id: "local-desktop", title: "Local Desktop" };
+
 export const useManagedEntityStore = create<ManagedEntityState>((set, get) => ({
   homeOpen: true,
   homeDirectoryOpen: true,
-  homeDesktopTabs: [],
-  activeHomeDesktopTabId: null,
+  homeDesktopTabs: [LOCAL_DESKTOP_TAB],
+  activeHomeDesktopTabId: LOCAL_DESKTOP_TAB.id,
   homeChatOpen: false,
   focusedByKind: {},
 
@@ -39,36 +41,35 @@ export const useManagedEntityStore = create<ManagedEntityState>((set, get) => ({
 
   showHomeDirectory: () => set({ homeOpen: true, homeDirectoryOpen: true, homeChatOpen: false }),
 
-  showHomeWorkspace: () => set({ homeOpen: true, homeDirectoryOpen: false, activeHomeDesktopTabId: null }),
+  showHomeWorkspace: () => set({
+    homeOpen: true,
+    homeDirectoryOpen: false,
+    activeHomeDesktopTabId: LOCAL_DESKTOP_TAB.id,
+  }),
 
   openHomeDesktopTab: () => {
-    const id = `local-desktop-${crypto.randomUUID()}`;
+    const id = LOCAL_DESKTOP_TAB.id;
     set((state) => ({
       homeOpen: true,
       homeDirectoryOpen: false,
       homeChatOpen: false,
-      homeDesktopTabs: [...state.homeDesktopTabs, { id, title: "Local Desktop" }],
+      homeDesktopTabs: state.homeDesktopTabs.some((tab) => tab.id === id)
+        ? state.homeDesktopTabs
+        : [LOCAL_DESKTOP_TAB],
       activeHomeDesktopTabId: id,
     }));
     return id;
   },
 
-  activateHomeDesktopTab: (id) => set((state) => ({
+  activateHomeDesktopTab: () => set(() => ({
     homeOpen: true,
     homeDirectoryOpen: false,
     homeChatOpen: false,
-    activeHomeDesktopTabId: state.homeDesktopTabs.some((tab) => tab.id === id) ? id : state.activeHomeDesktopTabId,
+    homeDesktopTabs: [LOCAL_DESKTOP_TAB],
+    activeHomeDesktopTabId: LOCAL_DESKTOP_TAB.id,
   })),
 
-  closeHomeDesktopTab: (id) => set((state) => {
-    const remaining = state.homeDesktopTabs.filter((tab) => tab.id !== id);
-    if (state.activeHomeDesktopTabId !== id) return { homeDesktopTabs: remaining };
-    return {
-      homeDesktopTabs: remaining,
-      activeHomeDesktopTabId: remaining[remaining.length - 1]?.id ?? null,
-      homeDirectoryOpen: remaining.length === 0,
-    };
-  }),
+  closeHomeDesktopTab: () => set({ homeDesktopTabs: [LOCAL_DESKTOP_TAB] }),
 
   leaveHome: () => set({ homeOpen: false, homeDirectoryOpen: false }),
 

@@ -1,4 +1,3 @@
-import { Computer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SavedConnection } from "../../types";
 import { ServerOsIcon } from "../ServerOsIcon";
@@ -12,7 +11,6 @@ export type HomeHostGroupInput = {
 export type HomeHostSection = {
   key: string;
   name: string;
-  local: boolean;
   hosts: SavedConnection[];
 };
 
@@ -21,24 +19,19 @@ export function buildHomeHostSections(
   savedConnections: SavedConnection[],
 ): HomeHostSection[] {
   const hostsById = new Map(savedConnections.map((host) => [host.id, host]));
-  return [
-    { key: "local", name: "Local", local: true, hosts: [] },
-    ...groups.map((group) => ({
-      key: group.key,
-      name: group.name,
-      local: false,
-      hosts: group.hostIds
-        .map((id) => hostsById.get(id))
-        .filter((host): host is SavedConnection => host != null),
-    })),
-  ];
+  return groups.map((group) => ({
+    key: group.key,
+    name: group.name,
+    hosts: group.hostIds
+      .map((id) => hostsById.get(id))
+      .filter((host): host is SavedConnection => host != null),
+  }));
 }
 
 type Props = {
   groups: HomeHostGroupInput[];
   savedConnections: SavedConnection[];
   loading?: boolean;
-  onOpenLocal: () => void;
   onOpenHost: (saved: SavedConnection) => void;
 };
 
@@ -46,7 +39,6 @@ export function HomeHostDirectory({
   groups,
   savedConnections,
   loading = false,
-  onOpenLocal,
   onOpenHost,
 }: Props) {
   const { t } = useTranslation("shell");
@@ -58,29 +50,16 @@ export function HomeHostDirectory({
 
       {sections.map((section) => (
         <section
-          className={`home-host-section${section.local ? " home-host-section-local" : ""}`}
+          className="home-host-section"
           key={section.key}
-          data-testid={section.local ? "home-local-section" : `home-host-group-${section.key}`}
+          data-testid={`home-host-group-${section.key}`}
         >
           <header className="home-host-section-header">
-            <h2>{section.local ? t("homeDirectoryLocal") : section.name}</h2>
-            {!section.local ? <span>{t("homeDirectoryHostCount", { count: section.hosts.length })}</span> : null}
+            <h2>{section.name}</h2>
+            <span>{t("homeDirectoryHostCount", { count: section.hosts.length })}</span>
           </header>
           <div className="home-host-card-grid">
-            {section.local ? (
-              <button
-                type="button"
-                className="home-host-card home-host-card-local"
-                data-testid="home-local-host-card"
-                onClick={onOpenLocal}
-              >
-                <span className="home-host-card-icon"><Computer size={24} aria-hidden /></span>
-                <span className="home-host-card-copy">
-                  <strong>{t("homeDirectoryThisComputer")}</strong>
-                  <small>{t("homeDirectoryLocalDesktopHint")}</small>
-                </span>
-              </button>
-            ) : section.hosts.length > 0 ? section.hosts.map((host) => (
+            {section.hosts.length > 0 ? section.hosts.map((host) => (
               <button
                 type="button"
                 className="home-host-card"

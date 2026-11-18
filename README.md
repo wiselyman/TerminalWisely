@@ -8,7 +8,7 @@
 
 **Current version: 0.1.3** · **Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
-**Local and remote desktops in one window.** Home lists this computer first, then saved SSH hosts in their groups; select one to open its Desktop workspace. Terminal and chat run as apps inside their Desktop. Changes wait for approval, and STOP is always there.
+**Local and remote desktops in one window.** The Home icon opens saved SSH hosts in their groups, while Local Desktop stays pinned as the first workspace tab. Select a host to open its Desktop workspace. Terminal and chat run as apps inside their Desktop. Changes wait for approval, and STOP is always there.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
@@ -23,7 +23,7 @@
 
 | Area | Highlights |
 |------|------------|
-| **Home** | A grouped host directory and target-isolated Local Desktop with Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
+| **Home** | An icon launcher for the grouped host directory; Local Desktop is the first pinned workspace tab and contains Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
 | **Agent runtimes** | Cursor Agent, Codex, Claude Code on the current local or SSH host; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Local and remote Terminal apps inside Desktop workspaces, saved SSH hosts, reconnect, English / 中文 UI |
 | **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
@@ -38,7 +38,7 @@
 
 ## Home Desktop
 
-Home opens a host directory with Local first, followed by saved SSH hosts in their existing groups. Selecting a host opens its Desktop workspace in a new titlebar tab using the existing SSH connection flow. The Local card opens a separate Local Desktop tab without creating an SSH session. All workspace tabs represent Desktop workspaces; the left Hosts list and standalone Terminal tabs are removed. The Local Desktop Dock contains Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing local chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal uses the existing local PTY without creating a standalone tab. Local Desktop windows and recent Markdown files have their own state, separate from each SSH host.
+The Home icon at the left of the titlebar opens the saved host directory. The directory shows saved SSH hosts in their existing groups and has no Local entry. Local Desktop is a single fixed workspace tab immediately after the Home icon and before SSH tabs; selecting it does not create an SSH session. All workspace tabs represent Desktop workspaces; the left Hosts list and standalone Terminal tabs are removed. The Local Desktop Dock contains Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing local chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal uses the existing local PTY without creating a standalone tab. Local Desktop windows and recent Markdown files have their own state, separate from each SSH host.
 
 The Local Desktop Terminal on Windows uses Windows PowerShell 5.1. Windows packages include Microsoft Coreutils for Windows v2026.9.3 for x64 or ARM64, a preview release. Coreutils commands are available by command name in the app terminal; PowerShell 5.1 does not receive the full PowerShell 7 globbing and pipeline integration. The app adds its bundled command directory and clears conflicting aliases only in that terminal process. It does not change the system PATH, PowerShell profiles, or registry.
 
