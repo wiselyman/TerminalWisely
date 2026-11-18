@@ -41,6 +41,7 @@
 | Home Terminal 留白、Home/Hosts 工作区标签隔离 | `homeSplit` | — | smoke | Playwright `app-shell` / `home-local-terminal-chat` | ✓ |
 | 自定义标题栏 / 窗口控制 | — | — | smoke | — | ✓ |
 | Home / Hosts 空间切换 | — | — | smoke | — | ✓ |
+| Home 主机目录（Local 固定置顶、SSH 沿用分组排序；卡片打开 Local/SSH Desktop 标签；本机 Terminal/聊天入口保留） | `HomeHostDirectory.test` + `managedEntityStore.test` | SSH 卡片沿用 `connectSaved` 与凭据提示 | smoke `ui.home-host-directory` | **✓** `home-host-directory` Local/SSH Desktop 打开与切换；`app-shell` Home 返回目录 | 0.1.3 |
 | 多 Tab SSH 会话 | Rust shell | — | smoke | — | ✓ |
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |

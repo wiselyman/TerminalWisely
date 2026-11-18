@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.3] - 2026-11-18
+
+Restore the Home host directory with Local pinned first and saved SSH hosts shown in their current groups.
+
+- Open Local Desktop in its own titlebar tab without creating an SSH session
+- Open a saved SSH host through the existing credential and session flow, then show its Desktop in the new session tab
+- Keep Home Terminal and local chat available from the directory; remove Home-only AI/Desktop titlebar shortcuts
+- Preserve the existing Hosts sidebar group layout and target-specific Desktop state
+
+恢复 Home 主机目录，Local 固定置顶，已保存 SSH 主机沿用当前分组显示。
+
+- 点击 Local 可在独立标题栏标签打开本机 Desktop，不创建 SSH 会话
+- 点击已保存 SSH 主机沿用原凭据和会话流程，并在新会话标签中显示 Desktop
+- Home 目录保留本机 Terminal 和聊天入口；移除 Home 目录专用的 AI/Desktop 标题栏快捷按钮
+- 保留 Hosts 侧栏分组布局和按目标隔离的 Desktop 状态
+
 ## [0.1.2] - 2026-11-18
 
 Focus TerminalWisely on local Home and remote SSH Hosts workspaces, with Terminal and Desktop tools.

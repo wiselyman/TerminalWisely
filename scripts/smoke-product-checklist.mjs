@@ -271,6 +271,28 @@ function readStyles() {
   }
 }
 
+// --- Home host directory + Local/SSH Desktop entry ---
+{
+  const directory = read("src/components/home/HomeHostDirectory.tsx");
+  const managed = read("src/stores/managedEntityStore.ts");
+  const panel = read("src/components/ConnectionPanel.tsx");
+  const app = read("src/App.tsx");
+  if (
+    directory.includes('data-testid="home-host-directory"') &&
+    directory.includes("buildHomeHostSections") &&
+    managed.includes("openHomeDesktopTab") &&
+    managed.includes("closeHomeDesktopTab") &&
+    panel.includes("onRegisterOpenSavedHost") &&
+    panel.includes('switchWorkspacePanel("desktop", sessionId') &&
+    app.includes("homeDirectoryOpen") &&
+    app.includes("<HomeHostDirectory")
+  ) {
+    pass("ui.home-host-directory", "Home lists Local and saved SSH hosts and opens Desktop workspaces from their cards");
+  } else {
+    fail("ui.home-host-directory", "Home directory, Local Desktop tabs, or saved-host Desktop routing is missing");
+  }
+}
+
 // --- AI interactive password fail-fast ---
 {
   const fe = read("src/lib/aiEngineer/sudoOutput.ts");
