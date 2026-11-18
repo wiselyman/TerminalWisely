@@ -389,6 +389,7 @@ function App() {
   const hostEntityIds = useMemo(() => savedConnections.map((host) => host.id), [savedConnections]);
   const hostLayout = useEntityLayoutStore((s) => s.layouts.hosts);
   const ensureEntityScope = useEntityLayoutStore((s) => s.ensureScope);
+  const handleEntityItemDrop = useEntityLayoutStore((s) => s.handleItemDrop);
   useEffect(() => {
     ensureEntityScope("hosts", hostEntityIds);
   }, [ensureEntityScope, hostEntityIds]);
@@ -1206,6 +1207,16 @@ function App() {
                     savedConnections={savedConnections}
                     loading={!savedConnectionsLoaded}
                     onOpenHost={(saved) => openSavedHostRef.current(saved)}
+                    onItemDrop={(dragId, target) =>
+                      handleEntityItemDrop(
+                        "hosts",
+                        hostEntityIds,
+                        dragId,
+                        target,
+                        undefined,
+                        t("entityUngrouped"),
+                      )
+                    }
                   />
                 ) : null}
                 {homeOpen && !homeDirectoryOpen ? (

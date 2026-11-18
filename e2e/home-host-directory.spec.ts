@@ -4,7 +4,19 @@ import { gotoApp, twE2e } from "./tw-e2e";
 const expectQuick = expect.configure({ timeout: 5_000 });
 
 test.describe("Home host directory", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    if (testInfo.title === "dragging a saved host card assigns it to a group") {
+      await page.addInitScript(() => {
+        localStorage.setItem("tw.entityLayout.hosts", JSON.stringify({
+          version: 4,
+          groupOrder: ["target-group", "__ungrouped__"],
+          groups: [{ id: "target-group", name: "Target" }],
+          defaultGroupCollapsed: false,
+          assignments: { "e2e-conn-1": null },
+          order: { "target-group": [], "__ungrouped__": ["e2e-conn-1"] },
+        }));
+      });
+    }
     await gotoApp(page, "directory");
     const api = await twE2e(page);
     await api.resetMocks();
@@ -72,6 +84,33 @@ test.describe("Home host directory", () => {
     await expectQuick(page.getByTestId("home-host-directory")).toHaveCount(0);
     await expectQuick(page.locator('[data-tab-kind="ssh"]').filter({ hasText: "E2E Test Host" })).toBeVisible();
     expect(await api.getCreateSshCallCount()).toBe(before + 1);
+  });
+
+  test("dragging a saved host card assigns it to a group", async ({ page }) => {
+    const api = await twE2e(page);
+    await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
+    const createCount = await api.getCreateSshCallCount();
+    const boxes = await page.evaluate(() => {
+      const source = document.querySelector<HTMLElement>('[data-testid="home-host-card-e2e-conn-1"]');
+      const target = document.querySelector<HTMLElement>('[data-testid="home-host-group-target-group"] .home-host-section-header');
+      return {
+        source: source?.getBoundingClientRect().toJSON() ?? null,
+        target: target?.getBoundingClientRect().toJSON() ?? null,
+      };
+    });
+    const { source: sourceBox, target: targetBox } = boxes;
+    expect(sourceBox?.width ?? 0).toBeGreaterThan(0);
+    expect(targetBox?.width ?? 0).toBeGreaterThan(0);
+    await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    const targetGroup = page.getByTestId("home-host-group-target-group");
+    await expectQuick(targetGroup.getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
+    await expectQuick(targetGroup.locator(".home-host-section-header span")).toHaveText("1 hosts");
+    await expectQuick(page.getByTestId("home-host-group-__ungrouped__").getByTestId("home-host-card-e2e-conn-1")).toHaveCount(0);
+    expect(await api.getCreateSshCallCount()).toBe(createCount);
   });
 
   test("active SSH tabs have no folder navigation or directory shortcut controls", async ({ page }) => {

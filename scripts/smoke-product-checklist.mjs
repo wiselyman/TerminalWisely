@@ -308,6 +308,17 @@ function readStyles() {
   } else {
     fail("ui.host-tabs-no-folder-shortcuts", "per-tab folder navigation or directory shortcuts remain wired");
   }
+
+  if (
+    directory.includes("startEntityPointerReorder") &&
+    directory.includes("data-entity-group-id={section.key}") &&
+    directory.includes("data-entity-item-id={host.id}") &&
+    app.includes("handleEntityItemDrop")
+  ) {
+    pass("ui.home-host-drag-to-group", "Home host cards use the persisted entity layout for group drops");
+  } else {
+    fail("ui.home-host-drag-to-group", "Home host cards are not wired to entity group drop handling");
+  }
 }
 
 // --- AI interactive password fail-fast ---
