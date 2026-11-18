@@ -12,9 +12,6 @@ export const COMMON_PORT_PRESETS: CommonPortPreset[] = [
   { id: "22", port: "22", label: "SSH", hintKey: "sshLogin", groupKey: "common" },
   { id: "80", port: "80", label: "HTTP", hintKey: "httpPort", groupKey: "common" },
   { id: "443", port: "443", label: "HTTPS", hintKey: "httpsPort", groupKey: "common" },
-  { id: "3306", port: "3306", label: "MySQL", hintKey: "database", groupKey: "database" },
-  { id: "5432", port: "5432", label: "PostgreSQL", hintKey: "database", groupKey: "database" },
-  { id: "6379", port: "6379", label: "Redis", hintKey: "cache", groupKey: "database" },
   { id: "8080", port: "8080", label: "8080", hintKey: "commonApp", groupKey: "app" },
   { id: "9000", port: "9000", label: "9000", hintKey: "commonApp", groupKey: "app" },
 ];

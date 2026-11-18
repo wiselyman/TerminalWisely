@@ -1,37 +1,22 @@
 import { create } from "zustand";
-import { closeDesktopRemembering } from "./hostWorkspaceMemory";
 import { useAiEngineerStore } from "./aiEngineerStore";
-import { useDbWorkspaceStore } from "./dbWorkspaceStore";
-import { useFindStore } from "./findStore";
-import { useLocalFsStore } from "./localFsStore";
 import { useManagedEntityStore } from "./managedEntityStore";
-import { useTaskManagerStore } from "./taskManagerStore";
-import { useBrowserStore } from "./browserStore";
-import { useK8sStore } from "./k8sStore";
 
-export type SidebarView = "hosts" | "k8s" | "db";
+export type SidebarView = "hosts";
 
 const STORAGE_KEY = "tw.sidebar.view";
 
 function loadView(): SidebarView {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    // Home is the first screen. The database tree only mounts after leaving Home,
-    // so restoring "db" would leave the hosts list as an empty sidebar.
-    if (v === "k8s") return v;
-    return "hosts";
+    const view = localStorage.getItem(STORAGE_KEY);
+    if (view !== "hosts") localStorage.setItem(STORAGE_KEY, "hosts");
+    localStorage.removeItem("tw.entityLayout.k8s");
+    localStorage.removeItem("tw.entityLayout.db");
+    localStorage.removeItem("tw.k8s.detailPercent");
   } catch {
-    return "hosts";
+    /* local storage may be unavailable in an embedded webview */
   }
-}
-
-/** Hosts-only right panels must not linger after switching to K8s. */
-function closeHostsWorkspacePanels() {
-  closeDesktopRemembering();
-  useLocalFsStore.getState().close();
-  useTaskManagerStore.getState().close();
-  useFindStore.getState().close();
-  void useBrowserStore.getState().close();
+  return "hosts";
 }
 
 interface SidebarViewState {
@@ -41,49 +26,14 @@ interface SidebarViewState {
 
 export const useSidebarViewStore = create<SidebarViewState>((set) => ({
   view: loadView(),
-  setView: (view) => {
+  setView: () => {
     try {
-      localStorage.setItem(STORAGE_KEY, view);
+      localStorage.setItem(STORAGE_KEY, "hosts");
     } catch {
       /* ignore */
     }
-    if (view === "db") {
-      // Stay on Home until the user opens a connection/workspace (Navicat-like).
-      closeHostsWorkspacePanels();
-      useAiEngineerStore.getState().setEngineerMode("db");
-      set({ view });
-      return;
-    }
-
-    // Leaving DB must not remount into an auto-expanded live tree.
-    useDbWorkspaceStore.getState().setActive(null);
-
-    useAiEngineerStore
-      .getState()
-      .setEngineerMode(view === "k8s" ? "k8s" : "linux");
-
-    if (view === "k8s") {
-      closeHostsWorkspacePanels();
-      // No cluster selected → stay on Home (no empty CTA in the workbench).
-      if (!useK8sStore.getState().selectedCluster) {
-        useManagedEntityStore.getState().openHome();
-      }
-    }
-
-    const focused =
-      useManagedEntityStore
-        .getState()
-        .focused(view === "k8s" ? "cluster" : "server");
-    if (focused) {
-      useAiEngineerStore.getState().bindManagedEntity(focused);
-    } else if (view === "k8s") {
-      useAiEngineerStore.getState().close({ force: true });
-    }
-    set({ view });
+    const focused = useManagedEntityStore.getState().focused("server");
+    if (focused) useAiEngineerStore.getState().bindManagedEntity(focused);
+    set({ view: "hosts" });
   },
 }));
-
-// Sync engineer mode on cold start.
-useAiEngineerStore.getState().setEngineerMode(
-  loadView() === "k8s" ? "k8s" : loadView() === "db" ? "db" : "linux",
-);

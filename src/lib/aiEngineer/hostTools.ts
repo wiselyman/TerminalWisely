@@ -3,11 +3,7 @@
 export function isHostExecutedTool(name: string): boolean {
   return (
     name === "terminal_exec" ||
-    name === "ai_exec" ||
-    name.startsWith("k8s_") ||
-    name === "db_query" ||
-    name === "db_explain" ||
-    name === "db_search_objects"
+    name === "ai_exec"
   );
 }
 

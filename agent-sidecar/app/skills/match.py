@@ -36,19 +36,14 @@ def _keyword_tokens(text: str) -> set[str]:
     return {t for t in re.findall(r"[a-z0-9_\-]{3,}", (text or "").lower()) if t}
 
 
-def match_skills(
-    user_message: str,
-    *,
-    limit: int = 2,
-    engineer_mode: str | None = None,
-) -> list[dict[str, str]]:
+def match_skills(user_message: str, *, limit: int = 2) -> list[dict[str, str]]:
     """Return skill excerpts matched by tags and/or title/body keywords."""
     msg = (user_message or "").lower()
     if not msg.strip():
         return []
     msg_tokens = _keyword_tokens(msg)
     hits: list[tuple[int, dict[str, str]]] = []
-    for path in _iter_skill_paths(engineer_mode=engineer_mode):
+    for path in _iter_skill_paths():
         skill_id = path.parent.name
         if is_archived(skill_id):
             continue

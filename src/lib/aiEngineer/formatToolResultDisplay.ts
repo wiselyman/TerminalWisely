@@ -90,7 +90,7 @@ export function formatToolResultForDisplay(
     }
   }
 
-  // Structured non-terminal results (e.g. k8s rows already stringified in stdout).
+  // Structured non-terminal results already stringified in stdout.
   const rest: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(p)) {
     if (HARNESS_KEYS.has(k)) continue;

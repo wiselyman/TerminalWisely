@@ -56,6 +56,8 @@ test.describe("UI visual baselines", () => {
     await expect(editorView).toBeVisible();
     for (const theme of themes) {
       await setTheme(page, theme);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await page.waitForTimeout(250);
       await expect(editorView).toHaveScreenshot(`markwisely-editor-${theme}.png`, {
         animations: "disabled",
         caret: "hide",
@@ -83,26 +85,15 @@ test.describe("UI visual baselines", () => {
     }
   });
 
-  test("Hosts navigation and Kubernetes workspace in both themes", async ({ page }) => {
+  test("Hosts navigation remains legible in both themes", async ({ page }) => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
-    const api = await twE2e(page);
     await page.getByTestId("sidebar-view-hosts").click();
     await expect(page.locator(".sidebar-shell")).toBeVisible();
     await expect(page.locator(".terminal-view-connecting")).toHaveCount(0, { timeout: 10_000 });
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(page).toHaveScreenshot(`hosts-${theme}.png`, {
-        fullPage: false,
-        animations: "disabled",
-        caret: "hide",
-      });
-    }
-    await api.openK8sWorkbench();
-    await expect(page.locator(".k8s-workbench")).toBeVisible();
-    for (const theme of themes) {
-      await setTheme(page, theme);
-      await expect(page).toHaveScreenshot(`kubernetes-${theme}.png`, {
         fullPage: false,
         animations: "disabled",
         caret: "hide",
@@ -131,22 +122,6 @@ test.describe("UI visual baselines", () => {
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(panel).toHaveScreenshot(`ai-approval-${theme}.png`, {
-        animations: "disabled",
-        caret: "hide",
-      });
-    }
-  });
-
-  test("Database form in both themes", async ({ page }) => {
-    test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
-    await gotoApp(page);
-    await page.getByTestId("sidebar-view-db").click();
-    await page.getByTestId("chrome-new-session").click();
-    await expect(page.getByTestId("db-connection-form")).toBeVisible();
-    for (const theme of themes) {
-      await setTheme(page, theme);
-      await expect(page).toHaveScreenshot(`database-${theme}.png`, {
-        fullPage: false,
         animations: "disabled",
         caret: "hide",
       });
@@ -195,6 +170,8 @@ test.describe("UI visual baselines", () => {
     await page.addStyleTag({ content: ".host-desktop-clock { visibility: hidden !important; }" });
     for (const theme of themes) {
       await setTheme(page, theme);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await page.waitForTimeout(250);
       await expect(page).toHaveScreenshot(`local-files-${theme}.png`, {
         fullPage: false,
         animations: "disabled",

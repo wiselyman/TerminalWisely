@@ -1,13 +1,12 @@
 import { LOCAL_CHAT_SESSION } from "./localTarget";
 
-export type AiPanelSidebarView = "hosts" | "k8s" | "db";
+export type AiPanelSidebarView = "hosts";
 
-/** AI Engineer panel is hidden in K8s view until a cluster is selected. */
+/** AI Engineer panel follows the active SSH host; Home chat is a separate surface. */
 export function shouldShowAiEngineerPanel(opts: {
   open: boolean;
   sessionId: string | null | undefined;
   sidebarView: AiPanelSidebarView;
-  hasSelectedCluster: boolean;
   /** Hosts tab: must match the AI-bound session or the panel stays hidden. */
   activeTabId?: string | null;
   /** Welcome page. Chat belongs to a service tab, not Home. */
@@ -16,7 +15,6 @@ export function shouldShowAiEngineerPanel(opts: {
   if (!opts.open || !opts.sessionId) return false;
   if (opts.homeOpen) return false;
   if (opts.sessionId === LOCAL_CHAT_SESSION) return false;
-  if (opts.sidebarView === "k8s" && !opts.hasSelectedCluster) return false;
   if (
     opts.sidebarView === "hosts" &&
     opts.activeTabId != null &&

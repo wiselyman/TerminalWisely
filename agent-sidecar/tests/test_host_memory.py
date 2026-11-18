@@ -18,26 +18,6 @@ def test_memory_scope_prefers_server_id() -> None:
     assert memory_scope_key(server_id=None, session_id="tab1") == "tab1"
 
 
-def test_memory_scope_k8s_prefers_cluster_id() -> None:
-    assert (
-        memory_scope_key(
-            server_id="ignored",
-            session_id="tab1",
-            cluster_id="prod-east",
-            engineer_mode="k8s",
-        )
-        == "prod-east"
-    )
-    assert (
-        memory_scope_key(
-            server_id=None,
-            session_id="tab1",
-            engineer_mode="k8s",
-        )
-        == "tab1"
-    )
-
-
 def test_put_load_inject_and_clear(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("TW_AI_DATA_DIR", str(tmp_path))
     scope = memory_scope_key(server_id="u@host:22", session_id="s")
@@ -54,16 +34,12 @@ def test_put_load_inject_and_clear(tmp_path: Path, monkeypatch) -> None:
     assert host_memory_prompt_block(scope) == ""
 
 
-def test_host_and_cluster_memory_isolated(tmp_path: Path, monkeypatch) -> None:
+def test_host_memory_is_scoped_to_ssh_hosts(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("TW_AI_DATA_DIR", str(tmp_path))
-    put_host_memory("same-id", facts=["linux-fact"], engineer_mode="linux")
-    put_host_memory("same-id", facts=["k8s-fact"], engineer_mode="k8s")
-    assert load_host_memory("same-id", engineer_mode="linux")["facts"] == ["linux-fact"]
-    assert load_host_memory("same-id", engineer_mode="k8s")["facts"] == ["k8s-fact"]
+    put_host_memory("same-id", facts=["host fact"])
+    assert load_host_memory("same-id")["facts"] == ["host fact"]
     assert (tmp_path / "memory" / "hosts" / "same-id.json").is_file()
-    assert (tmp_path / "memory" / "clusters" / "same-id.json").is_file()
-    k8s_block = host_memory_prompt_block("same-id", engineer_mode="k8s")
-    assert "CLUSTER MEMORY" in k8s_block
+    assert not (tmp_path / "memory" / "clusters").exists()
 
 
 def test_memory_cannot_look_like_policy_grant(tmp_path: Path, monkeypatch) -> None:

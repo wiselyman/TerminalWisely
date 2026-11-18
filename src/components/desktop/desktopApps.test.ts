@@ -6,7 +6,7 @@ describe("desktop apps by target", () => {
     const localIds = getDesktopAppsForTarget({ kind: "local" }).map((app) => app.id);
     const sshIds = getDesktopAppsForTarget({ kind: "ssh", sessionId: "host-1" }).map((app) => app.id);
 
-    expect(localIds).toEqual(["terminal", "aiLocal", "markwisely"]);
-    expect(sshIds).toEqual(["files", "processes", "browser", "terminal", "aiLinux", "markwisely"]);
+    expect(localIds).toEqual(["terminal", "aiLocal", "markwisely", "editorwisely"]);
+    expect(sshIds).toEqual(["files", "processes", "browser", "terminal", "aiLinux", "markwisely", "editorwisely"]);
   });
 });

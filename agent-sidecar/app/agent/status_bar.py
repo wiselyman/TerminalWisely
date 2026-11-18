@@ -131,7 +131,6 @@ def build_status_bar(
     *,
     messages: list[dict[str, Any]],
     security_mode: str = "safe",
-    engineer_mode: str = "linux",
     memory_scope: str | None = None,
     active_plan: list[Any] | None = None,
     injected_skills: list[str] | None = None,
@@ -178,7 +177,7 @@ def build_status_bar(
         lines.append(f"- Alert: {warn}")
     if injected_skills:
         lines.append(f"- Skills injected: {', '.join(injected_skills[:4])}")
-    constraints: list[str] = [f"security={security_mode}", f"mode={engineer_mode}"]
+    constraints: list[str] = [f"security={security_mode}"]
     if memory_scope:
         constraints.append(f"host_scope={memory_scope}")
     if pending_approval:
@@ -230,7 +229,6 @@ def status_bar_for_run(run: Any) -> str:
     return build_status_bar(
         messages=list(getattr(run, "messages", None) or []),
         security_mode=str(getattr(run, "security_mode", None) or "safe"),
-        engineer_mode=str(meta.get("engineer_mode") or "linux"),
         memory_scope=str(meta.get("memory_scope") or "") or None,
         active_plan=plan if isinstance(plan, list) else None,
         injected_skills=[str(s) for s in skills] if isinstance(skills, list) else None,

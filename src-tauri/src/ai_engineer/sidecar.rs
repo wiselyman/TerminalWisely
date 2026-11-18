@@ -245,9 +245,9 @@ pub fn stop_sidecar() {
 }
 
 /// Modules that must import after pip install. Keep in sync with
-/// `agent-sidecar/requirements-runtime.txt` (sqlglot is required for db SQL risk).
+/// `agent-sidecar/requirements-runtime.txt`.
 const RUNTIME_DEP_PROBE: &str =
-    "import uvicorn, fastapi, pydantic, httpx, yaml, sqlglot";
+    "import uvicorn, fastapi, pydantic, httpx, yaml";
 
 fn python_has_runtime_deps(python: &str) -> bool {
     python_has_runtime_deps_with_path(python, None)
@@ -1476,16 +1476,4 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn runtime_dep_probe_requires_sqlglot_for_db_sql_risk() {
-        assert!(
-            super::RUNTIME_DEP_PROBE.contains("sqlglot"),
-            "health check must fail closed when sqlglot is missing"
-        );
-        let req = include_str!("../../../agent-sidecar/requirements-runtime.txt");
-        assert!(
-            req.contains("sqlglot"),
-            "requirements-runtime.txt must list sqlglot"
-        );
-    }
 }

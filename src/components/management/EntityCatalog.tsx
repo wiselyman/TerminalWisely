@@ -9,7 +9,7 @@ type Props = {
   className?: string;
 };
 
-/** Shared sidebar entity list chrome for Hosts and Kubernetes. */
+/** Shared sidebar entity list chrome for Hosts. */
 export function EntityCatalog({
   emptyText,
   emptyAction,

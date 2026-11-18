@@ -22,8 +22,6 @@ def normalize_interaction_mode(raw: str | None) -> InteractionMode:
 def tools_for_interaction_mode(
     mode: str | None,
     *,
-    engineer_mode: str | None = None,
-    ssh_session_id: str | None = None,
     target: str | None = None,
 ) -> list[dict[str, Any]]:
     del mode
@@ -31,7 +29,7 @@ def tools_for_interaction_mode(
         from app.tools.schema import local_openai_tools
 
         return local_openai_tools()
-    return openai_tools(engineer_mode=engineer_mode, ssh_session_id=ssh_session_id)
+    return openai_tools()
 
 
 def interaction_mode_prompt_addendum(mode: str | None) -> str:

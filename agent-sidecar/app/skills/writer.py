@@ -45,7 +45,6 @@ def save_user_skill(
     title: str,
     tags: list[str],
     body: str,
-    engineer_mode: str | None = None,
 ) -> dict[str, str | bool]:
     sid = validate_skill_id(skill_id)
     if not sid:
@@ -53,7 +52,7 @@ def save_user_skill(
             "ok": False,
             "error": "id must be 2–64 chars: lowercase letters, digits, hyphens",
         }
-    root = user_skills_root(engineer_mode=engineer_mode) / sid
+    root = user_skills_root() / sid
     root.mkdir(parents=True, exist_ok=True)
     path = root / "SKILL.md"
     path.write_text(
@@ -64,11 +63,9 @@ def save_user_skill(
     return {"ok": True, "id": sid, "path": str(path)}
 
 
-def skill_path(
-    skill_id: str, *, engineer_mode: str | None = None
-) -> Path | None:
+def skill_path(skill_id: str) -> Path | None:
     sid = validate_skill_id(skill_id)
     if not sid:
         return None
-    path = user_skills_root(engineer_mode=engineer_mode) / sid / "SKILL.md"
+    path = user_skills_root() / sid / "SKILL.md"
     return path if path.is_file() else None

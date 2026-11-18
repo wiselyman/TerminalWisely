@@ -61,6 +61,7 @@ type EntryMenuProps = {
   onUpload?: () => void;
   onSendToRemote: () => void;
   onPreview?: () => void;
+  onOpenEditor?: () => void;
   onCompress: () => void;
   onExtract?: () => void;
   onRename: () => void;
@@ -302,6 +303,9 @@ export function LocalFsContextMenu(props: LocalFsContextMenuProps) {
           >
             {t("terminal:editAndPreview")}
           </ContextMenuItem>
+        ) : null}
+        {pathKind === "file" && props.onOpenEditor ? (
+          <ContextMenuItem icon={Pencil} onClick={() => run(props.onOpenEditor!)}>{t("tools:editor.openWith")}</ContextMenuItem>
         ) : null}
         <ContextMenuItem
           icon={Archive}

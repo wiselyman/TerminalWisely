@@ -625,6 +625,167 @@ test("Home Desktop shows the complete MarkWisely icon label", async ({ page }) =
   })).toBe(true);
 });
 
+test("Home Desktop opens a local text file in EditorWisely and keeps MarkWisely available", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await page.getByTestId("local-fs-tool").click();
+  await expect(page.getByTestId("desktop-icon-editorwisely")).toBeVisible();
+  await expect(page.getByTestId("desktop-icon-markwisely")).toBeVisible();
+  await page.getByTestId("dock-app-editorwisely").click();
+  await expect(page.getByTestId("editorwisely-window")).toBeVisible();
+  await expect(page.getByTestId("editorwisely-home")).toBeVisible();
+  await expect(page.getByTestId("dock-app-markwisely")).toBeVisible();
+});
+
+test("EditorWisely opens files through its own MarkWisely-style picker", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await page.getByTestId("local-fs-tool").click();
+  await page.getByTestId("dock-app-editorwisely").click();
+  await page.getByTestId("editorwisely-open-document").click();
+  await expect(page.getByTestId("editorwisely-file-picker")).toBeVisible();
+});
+
+test("EditorWisely displays existing file contents after its asynchronous read finishes", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/editor-reopen.md", "content from disk");
+  await api.setLocalReadDelay(100);
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/editor-reopen.md");
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
+    .toHaveText("content from disk", { timeout: 3000 });
+});
+
+test("EditorWisely keeps saved contents when the document is closed and reopened", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/editor-persist.md", "before");
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/editor-persist.md");
+  const editor = page.getByTestId("editorwisely-editor").locator(".cm-content");
+  await expect(editor).toHaveText("before", { timeout: 3000 });
+  await editor.click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.type("after save");
+  await expect(page.locator(".editorwisely-toolbar")).toContainText("Saved", { timeout: 3000 });
+  await expect.poll(() => api.getLocalText("/tmp/editor-persist.md"))
+    .toBe("after save");
+
+  await page.getByRole("button", { name: "Close editor-persist.md" }).click();
+  await expect(page.getByTestId("editorwisely-home")).toBeVisible();
+  await api.openEditorWiselyDocument("/tmp/editor-persist.md");
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
+    .toHaveText("after save", { timeout: 3000 });
+});
+
+test("EditorWisely picker reopens in the directory of the last opened file", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/project/src/main.sh", "echo ok");
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/project/src/main.sh");
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
+    .toHaveText("echo ok", { timeout: 3000 });
+  await page.getByRole("button", { name: "Close main.sh" }).click();
+  await page.getByTestId("editorwisely-open-document").click();
+  await expect(page.getByTestId("local-fs-crumb-src")).toHaveAttribute("title", "/tmp/project/src");
+});
+
+test("EditorWisely applies syntax highlighting to shell, Go, and JavaScript files", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/project/main.sh", "#!/bin/sh\nprintf \"%s\" \"$HOME\"");
+  await api.seedLocalText("/tmp/project/main.go", "package main\nfunc main() {}");
+  await api.seedLocalText("/tmp/project/main.js", "const answer = 42;");
+  await page.getByTestId("local-fs-tool").click();
+  const editor = page.getByTestId("editorwisely-editor");
+  for (const [path, text] of [["/tmp/project/main.sh", "printf"], ["/tmp/project/main.go", "package main"], ["/tmp/project/main.js", "const answer"]]) {
+    await api.openEditorWiselyDocument(path);
+    await expect(editor.locator(".cm-content")).toContainText(text);
+    await expect.poll(() => editor.locator(".cm-content span").count()).toBeGreaterThan(0);
+  }
+});
+
+test("EditorWisely edits and saves a local UTF-8 file", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/editor-local.js", "const value = 1;\r\n");
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/editor-local.js");
+  await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
+  await page.getByTestId("editorwisely-editor").locator(".cm-content").click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.type("const value = 2;");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(async () => (await api.getLastLocalBytesWrite())?.path).toBe("/tmp/editor-local.js");
+  await expect(page.getByTestId("editorwisely-window")).toBeVisible();
+});
+
+test("EditorWisely automatically saves a writable local file after typing pauses", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/editor-autosave.txt", "before\n");
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/editor-autosave.txt");
+  const editor = page.getByTestId("editorwisely-editor").locator(".cm-content");
+  await editor.click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.type("after");
+
+  await expect.poll(async () => (await api.getLastLocalBytesWrite())?.path, { timeout: 3000 })
+    .toBe("/tmp/editor-autosave.txt");
+  await expect.poll(async () => (await api.getLastLocalBytesWrite())?.base64)
+    .toBe("YWZ0ZXI=");
+  await expect(page.locator(".editorwisely-toolbar")).toContainText("Saved");
+});
+
+test("EditorWisely keeps an autosave failure visible without retrying the same text", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/editor-autosave-failure.txt", "before");
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/editor-autosave-failure.txt");
+  api.failNextLocalWrite();
+  const editor = page.getByTestId("editorwisely-editor").locator(".cm-content");
+  await editor.click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.type("after");
+
+  await expect(page.getByRole("alert")).toContainText("Mock local write failed", { timeout: 3000 });
+  await page.waitForTimeout(1200);
+  await expect(page.getByRole("alert")).toContainText("Mock local write failed", { timeout: 3000 });
+  await expect(page.locator(".editorwisely-toolbar")).toContainText("Unsaved changes");
+});
+
+test("EditorWisely preserves a failed local edit and offers Save As", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/editor-readonly.txt", "original\n");
+  await page.getByTestId("local-fs-tool").click();
+  await api.openEditorWiselyDocument("/tmp/editor-readonly.txt");
+  await page.getByTestId("editorwisely-editor").locator(".cm-content").click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.type("changed");
+  api.failNextLocalWrite();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Mock local write failed");
+  await api.setNextDialogSaveResult("/tmp/editor-copy.txt");
+  await page.getByTestId("editorwisely-save-as").click();
+  await expect.poll(async () => (await api.getLastLocalBytesWrite())?.path).toBe("/tmp/editor-copy.txt");
+  await expect(page.locator(".editorwisely-toolbar")).toContainText("/tmp/editor-copy.txt");
+});
+
 test("AI Local Dock glyph has a visible tile background", async ({ page }) => {
   await gotoApp(page);
   await (await twE2e(page)).openHome();

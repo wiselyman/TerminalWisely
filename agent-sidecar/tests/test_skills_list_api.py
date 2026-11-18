@@ -62,27 +62,3 @@ def test_get_v1_skills() -> None:
         ids = {s["id"] for s in body["skills"]}
         assert "nginx-reload" in ids
         assert "root" in body
-        assert body.get("engineer_mode") == "linux"
-
-
-def test_skills_catalog_mode_isolation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TW_AI_DATA_DIR", str(tmp_path))
-    save_user_skill(
-        skill_id="linux-only",
-        title="Linux skill",
-        tags=["disk"],
-        body="df -h",
-        engineer_mode="linux",
-    )
-    save_user_skill(
-        skill_id="k8s-only",
-        title="K8s skill",
-        tags=["pods"],
-        body="kubectl get pods",
-        engineer_mode="k8s",
-    )
-    linux = list_user_skills_catalog(engineer_mode="linux")
-    k8s = list_user_skills_catalog(engineer_mode="k8s")
-    assert {s["id"] for s in linux["skills"]} == {"linux-only"}
-    assert {s["id"] for s in k8s["skills"]} == {"k8s-only"}
-    assert "user-k8s" in str(k8s["root"]).replace("\\", "/")

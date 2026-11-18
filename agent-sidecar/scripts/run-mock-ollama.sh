@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start scripted mock Ollama (default :11435) for K8s Engineer chat regression.
+# Start scripted mock Ollama (default :11435) for agent workflow regression.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="${TW_AI_VENV:-$HOME/.local/share/com.wangyunfei.terminalwisely/ai-engineer/venv}"

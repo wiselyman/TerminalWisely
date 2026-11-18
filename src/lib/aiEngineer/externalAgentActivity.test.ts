@@ -12,7 +12,6 @@ describe("isMirroredTwMcpActivity", () => {
     expect(isMirroredTwMcpActivity("terminal_exec")).toBe(true);
     expect(isMirroredTwMcpActivity("cursor.web_search")).toBe(true);
     expect(isMirroredTwMcpActivity("mcp.web_fetch")).toBe(true);
-    expect(isMirroredTwMcpActivity("cursor.k8s_get")).toBe(true);
   });
 
   it("keeps local agent activity that is not a TW tool card", () => {

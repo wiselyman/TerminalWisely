@@ -36,17 +36,6 @@ export function FindInFilesIcon() {
   );
 }
 
-/** lucide: database — 数据库 */
-export function DatabaseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" {...iconProps}>
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-      <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
-    </svg>
-  );
-}
-
 /** lucide: server — 服务器资源 */
 export function SystemInfoIcon() {
   return (
@@ -107,6 +96,11 @@ export function MarkWiselyIcon() {
       <path d="m16 15 4-4 2 2-4 4-3 1z" />
     </svg>
   );
+}
+
+/** Text document editor. */
+export function EditorWiselyIcon() {
+  return <svg viewBox="0 0 24 24" {...iconProps} strokeWidth={1.8}><path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M8 12h8M8 16h8"/></svg>;
 }
 
 /** lucide: monitor — host workspace / this computer */

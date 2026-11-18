@@ -33,8 +33,7 @@ export type BusyPhaseInput = {
 function isHostExecTool(name: string): boolean {
   return (
     name === "terminal_exec" ||
-    name === "ai_exec" ||
-    name.startsWith("k8s_")
+    name === "ai_exec"
   );
 }
 

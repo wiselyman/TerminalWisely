@@ -514,12 +514,12 @@ const catalog = {
     eyebrow: { zh: "v0.0.6", en: "v0.0.6" },
     productName: { zh: "TerminalWisely", en: "TerminalWisely" },
     tagline: {
-      zh: "主机、集群和数据库，在同一个窗口",
-      en: "Hosts, clusters, and databases in one window",
+      zh: "本地与远程终端、桌面，在同一个窗口",
+      en: "Local and remote terminals and desktops in one window",
     },
     summary: {
-      zh: "侧栏分成主机、Kubernetes、数据库。打开哪一块，标题栏的 AI 就跟到哪一块，聊天按对象隔开。Home 是欢迎页。变更要批准，随时可以 STOP。",
-      en: "The sidebar is Hosts, Kubernetes, and Databases. The title-bar AI follows whichever one is open, and each object keeps its own chat. Home is the welcome page. Changes wait for approval, and STOP is always there.",
+      zh: "在 Home 使用本机终端和桌面，也可连接 SSH Hosts 使用远程终端与桌面；聊天和文件操作跟随当前工作区。变更要批准，随时可以 STOP。",
+      en: "Use the local terminal and desktop from Home, or connect to SSH Hosts for remote terminals and desktops. Chat and file work follow the active workspace. Changes wait for approval, and STOP is always there.",
     },
     quickStart: { zh: "快速开始", en: "Quick start" },
     "feature.hosts.title": { zh: "主机", en: "Hosts" },
@@ -527,20 +527,10 @@ const catalog = {
       zh: "多标签 SSH。点主机图标打开这台机器的桌面：文件、进程、走主机网络的浏览器、终端。",
       en: "Multi-tab SSH. The host icon opens that machine’s desktop: files, processes, a browser on the host network, and a terminal.",
     },
-    "feature.kubernetes.title": { zh: "Kubernetes", en: "Kubernetes" },
-    "feature.kubernetes.desc": {
-      zh: "添加集群，或绑定已连接主机上的 kubectl。浏览工作负载、YAML、日志和 Helm。一个集群一份聊天。",
-      en: "Add a cluster, or bind kubectl on a host you already connected. Browse workloads, YAML, logs, and Helm. One cluster, one chat.",
-    },
-    "feature.databases.title": { zh: "数据库", en: "Databases" },
-    "feature.databases.desc": {
-      zh: "直接连接 PostgreSQL、MySQL、MariaDB、SQLite、SQL Server、Oracle、MongoDB、Redis。一个服务一个页签、一份聊天。表页签标出库和 schema。",
-      en: "Connect directly to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show the database and schema.",
-    },
     "feature.ai.title": { zh: "AI", en: "AI" },
     "feature.ai.desc": {
-      zh: "内置模型，或本机已登录的 Cursor、Codex、Claude Code。用自然语言问已打开的主机、集群或库。Home 上不打开聊天。",
-      en: "Built-in models, or Cursor, Codex, and Claude Code already signed in on this machine. Ask in plain language about the host, cluster, or database that is open. Home does not show a chat.",
+      zh: "内置模型，或本机已登录的 Cursor、Codex、Claude Code。用自然语言询问当前本机或 SSH 主机。",
+      en: "Built-in models, or Cursor, Codex, and Claude Code already signed in on this machine. Ask in plain language about the current local or SSH host.",
     },
     "feature.safety.title": { zh: "批准与 STOP", en: "Approval and STOP" },
     "feature.safety.desc": {
@@ -551,16 +541,6 @@ const catalog = {
     "step.hosts.text": {
       zh: "在主机侧栏连接 Linux，或打开它的桌面。",
       en: "Connect a Linux host from the Hosts sidebar, or open its desktop.",
-    },
-    "step.kubernetes.iconLabel": { zh: "Kubernetes", en: "Kubernetes" },
-    "step.kubernetes.text": {
-      zh: "切到 Kubernetes，添加集群。",
-      en: "Switch to Kubernetes and add a cluster.",
-    },
-    "step.databases.iconLabel": { zh: "数据库", en: "Databases" },
-    "step.databases.text": {
-      zh: "切到数据库，新建连接。执行自己的 SQL 之后，用恢复图标回到表的默认数据。",
-      en: "Switch to Databases and add a connection. After you run your own SQL, the restore icon returns the table’s default data.",
     },
   },
   errors: {
@@ -908,12 +888,10 @@ const catalog = {
     },
     "ports.sectionCommon": { zh: "常见端口", en: "Common ports" },
     "ports.group.common": { zh: "常用服务", en: "Common services" },
-    "ports.group.database": { zh: "数据库", en: "Databases" },
     "ports.group.app": { zh: "应用", en: "Applications" },
     "ports.hint.sshLogin": { zh: "远程登录", en: "Remote login" },
     "ports.hint.httpPort": { zh: "网站 80 端口", en: "Website port 80" },
     "ports.hint.httpsPort": { zh: "网站 443 端口", en: "Website port 443" },
-    "ports.hint.database": { zh: "数据库", en: "Database" },
     "ports.hint.cache": { zh: "缓存", en: "Cache" },
     "ports.hint.commonApp": { zh: "常见应用端口", en: "Common app port" },
     "ports.emptyOptional": {
@@ -940,7 +918,6 @@ const catalog = {
     "ports.orEnter": { zh: "或输入端口号", en: "Or enter a port number" },
     "ports.placeholderOptional": { zh: "留空=全部", en: "Blank = all" },
     "keywords.group.webNetwork": { zh: "Web 与网络", en: "Web & network" },
-    "keywords.group.database": { zh: "数据库", en: "Database" },
     "keywords.group.ops": { zh: "运维工具", en: "Ops tools" },
     "keywords.group.dev": { zh: "开发工具", en: "Dev tools" },
     "keywords.group.common": { zh: "常用工具", en: "Common tools" },
@@ -950,8 +927,6 @@ const catalog = {
     "keywords.group.systemFiles": { zh: "系统文件", en: "System files" },
     "keywords.hint.webServer": { zh: "Web 服务器", en: "Web server" },
     "keywords.hint.cliHttpTool": { zh: "命令行 HTTP 工具", en: "CLI HTTP tool" },
-    "keywords.hint.database": { zh: "数据库", en: "Database" },
-    "keywords.hint.cacheDatabase": { zh: "缓存数据库", en: "Cache database" },
     "keywords.hint.container": { zh: "容器", en: "Container" },
     "keywords.hint.versionControl": { zh: "版本控制", en: "Version control" },
     "keywords.hint.scriptLanguage": { zh: "脚本语言", en: "Scripting language" },

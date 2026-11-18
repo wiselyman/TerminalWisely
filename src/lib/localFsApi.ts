@@ -19,6 +19,11 @@ export function readLocalText(path: string): Promise<string> {
   return invoke("read_local_text", { request: { path } });
 }
 
+export async function readLocalBytes(path: string): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>("read_local_bytes", { request: { path } });
+  return Uint8Array.from(bytes);
+}
+
 export function writeLocalText(path: string, content: string): Promise<void> {
   return invoke("write_local_text", { request: { path, content } });
 }
@@ -27,6 +32,12 @@ export function writeLocalBytes(path: string, content: Uint8Array): Promise<void
   let binary = "";
   for (const byte of content) binary += String.fromCharCode(byte);
   return invoke("write_local_bytes", { request: { path, base64: btoa(binary) } });
+}
+
+export function saveLocalBytesAs(path: string, content: Uint8Array): Promise<void> {
+  let binary = "";
+  for (const byte of content) binary += String.fromCharCode(byte);
+  return invoke("save_local_bytes_as", { request: { path, base64: btoa(binary) } });
 }
 
 export function renameLocalPath(path: string, newName: string): Promise<string> {

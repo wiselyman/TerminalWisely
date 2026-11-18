@@ -25,6 +25,46 @@ async function expectMaximizedDesktopAppToFillWindow(page: Page, app: Locator) {
 }
 
 test.describe("Host desktop mode", () => {
+  test("EditorWisely desktop icon stays fully visible above the dock in a short window", async ({ page }) => {
+    await gotoApp(page);
+    await page.setViewportSize({ width: 1280, height: 680 });
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+
+    const icon = page.getByTestId("desktop-icon-editorwisely").locator(".host-desktop-glyph");
+    const dock = page.getByTestId("host-desktop-dock");
+    await expect(icon).toBeVisible();
+    const bounds = await page.evaluate(() => {
+      const iconRect = document.querySelector<HTMLElement>('[data-testid="desktop-icon-editorwisely"] .host-desktop-glyph')!.getBoundingClientRect();
+      const dockRect = document.querySelector<HTMLElement>('[data-testid="host-desktop-dock"]')!.getBoundingClientRect();
+      const stageRect = document.querySelector<HTMLElement>(".host-desktop-stage")!.getBoundingClientRect();
+      const markRect = document.querySelector<HTMLElement>('[data-testid="desktop-icon-markwisely"] .host-desktop-glyph')!.getBoundingClientRect();
+      return { iconLeft: iconRect.left, markLeft: markRect.left, iconBottom: iconRect.bottom, dockTop: dockRect.top, stageBottom: stageRect.bottom };
+    });
+    expect(bounds.iconBottom).toBeLessThanOrEqual(bounds.dockTop);
+    expect(bounds.iconLeft).toBeGreaterThan(bounds.markLeft + 76);
+    await icon.click();
+    await expect(page.getByTestId("editorwisely-window")).toBeVisible();
+  });
+
+  test("EditorWisely opens and saves text from the active SSH host", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await api.openEditorWiselyDocument("/home/e2e/guide.md");
+    await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
+    await page.getByTestId("editorwisely-editor").locator(".cm-content").click();
+    await page.keyboard.press("Meta+A");
+    await page.keyboard.type("updated remote text");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(async () => (await api.getLastRemoteBytesWrite())?.path).toBe("/home/e2e/guide.md");
+    await expect(page.getByTestId("dock-app-markwisely")).toBeVisible();
+  });
+
   test("MarkWisely opens from the Desktop Dock", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);

@@ -15,6 +15,8 @@ describe("App Home tab", () => {
     expect(app).not.toContain('data-tab-role="home"');
     expect(app).not.toContain('t("homeTabTitle")');
     expect(app).toContain('data-testid="sidebar-view-home"');
+    expect(app).not.toContain('data-testid="sidebar-view-k8s"');
+    expect(app).not.toContain('data-testid="sidebar-view-db"');
     expect(app).toContain("onClick={() => activateHome()}");
   });
 });
@@ -57,15 +59,13 @@ describe("Home chat hint", () => {
 });
 
 describe("Home local terminal tabs", () => {
-  it("routes Home plus to local terminal tabs and keeps other spaces on their existing add flows", () => {
+  it("routes Home plus to local terminals and Hosts plus to SSH", () => {
     expect(app).toContain('data-testid="home-terminal-tab"');
     expect(app).toContain("addHomeTerminalTab");
     expect(app).toContain("if (homeOpen)");
     expect(app).toContain("addHomeTerminalTab();");
     expect(app).toContain("homeTerminalTabs[0]?.id !== tab.id");
     expect(app).toContain("homeTerminalTabs[0]?.id === terminalId");
-    expect(app).toContain("chromeNew === \"cluster\"");
-    expect(app).toContain("chromeNew === \"database\"");
     expect(app).toContain("openNewRemoteRef.current()");
   });
 });

@@ -5,20 +5,12 @@ import zh from "./locales/zh-CN/welcome.json";
 const CARD_AND_STEP_KEYS = [
   "feature.hosts.title",
   "feature.hosts.desc",
-  "feature.kubernetes.title",
-  "feature.kubernetes.desc",
-  "feature.databases.title",
-  "feature.databases.desc",
   "feature.ai.title",
   "feature.ai.desc",
   "feature.safety.title",
   "feature.safety.desc",
   "step.hosts.iconLabel",
   "step.hosts.text",
-  "step.kubernetes.iconLabel",
-  "step.kubernetes.text",
-  "step.databases.iconLabel",
-  "step.databases.text",
 ] as const;
 
 describe("welcome copy uses flat keys", () => {

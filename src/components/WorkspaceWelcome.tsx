@@ -1,15 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { K8sClusterIcon } from "./k8s/K8sClusterIcon";
 import { SidebarActionIcon } from "./SidebarIcons";
-import { DatabaseIcon } from "./WorkspaceToolIcons";
 
-const FEATURE_KEYS = ["hosts", "kubernetes", "databases", "ai", "safety"] as const;
+const FEATURE_KEYS = ["home", "hosts", "ai", "safety"] as const;
 
-const STEPS = [
-  { key: "hosts", icon: "ssh" },
-  { key: "kubernetes", icon: "k8s" },
-  { key: "databases", icon: "db" },
-] as const;
+const STEPS = [{ key: "hosts" }] as const;
 
 export function WorkspaceWelcome() {
   const { t } = useTranslation("welcome");
@@ -38,13 +32,7 @@ export function WorkspaceWelcome() {
           <ol>
             {STEPS.map((step) => (
               <li key={step.key}>
-                {step.icon === "ssh" ? (
-                  <SidebarActionIcon kind="ssh" label={t(`step.${step.key}.iconLabel`)} />
-                ) : (
-                  <span className="sidebar-action-icon" title={t(`step.${step.key}.iconLabel`)}>
-                    {step.icon === "k8s" ? <K8sClusterIcon size={16} /> : <DatabaseIcon />}
-                  </span>
-                )}
+                <SidebarActionIcon kind="ssh" label={t(`step.${step.key}.iconLabel`)} />
                 <span>{t(`step.${step.key}.text`)}</span>
               </li>
             ))}

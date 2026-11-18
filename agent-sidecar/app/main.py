@@ -100,17 +100,7 @@ def _seed_history(run: Any, mode: str, interaction_mode: str, history: list[Any]
             "content": build_system_prompt(
                 security_mode=mode,
                 interaction_mode=interaction_mode,
-                engineer_mode=str(run.metadata.get("engineer_mode") or "linux"),
-                cluster_id=(
-                    str(run.metadata["cluster_id"])
-                    if run.metadata.get("cluster_id")
-                    else None
-                ),
-                cluster_name=(
-                    str(run.metadata["cluster_name"])
-                    if run.metadata.get("cluster_name")
-                    else None
-                ),
+                target=str(run.metadata.get("target") or "ssh"),
             ),
         }
     )
@@ -691,30 +681,19 @@ async def audit_verify(_: AuthDep) -> dict[str, Any]:
 
 
 @app.get("/v1/skills")
-async def skills_list(
-    _: AuthDep, engineer_mode: str | None = None
-) -> dict[str, Any]:
-    """User-authored skills on this machine (panel UI), scoped by engineer_mode."""
+async def skills_list(_: AuthDep) -> dict[str, Any]:
+    """User-authored skills on this machine (panel UI)."""
     from app.skills.loader import list_user_skills_catalog
 
-    mode = (engineer_mode or "linux").strip().lower()
-    if mode not in {"linux", "k8s"}:
-        mode = "linux"
-    catalog = list_user_skills_catalog(engineer_mode=mode)
-    return catalog
+    return list_user_skills_catalog()
 
 
 @app.get("/v1/memory/meta")
-async def memory_meta(
-    _: AuthDep, engineer_mode: str | None = None
-) -> dict[str, Any]:
-    """Memory paths + counts for panel UI (read-only), scoped by engineer_mode."""
+async def memory_meta(_: AuthDep) -> dict[str, Any]:
+    """Memory paths + counts for panel UI (read-only)."""
     from app.memory.catalog import memory_meta_catalog
 
-    mode = (engineer_mode or "linux").strip().lower()
-    if mode not in {"linux", "k8s"}:
-        mode = "linux"
-    return memory_meta_catalog(engineer_mode=mode)
+    return memory_meta_catalog()
 
 
 @app.get("/v1/media/{media_id}")
@@ -888,13 +867,10 @@ async def mcp_tools_list(
         raise HTTPException(status_code=404, detail="run not found")
     from app.runtime.tw_mcp import tw_mcp_list_tools
 
-    mode = str(run.metadata.get("engineer_mode") or "linux")
-    from app.agent.db_context import bound_ssh_session_id
-
     return {
         "tools": tw_mcp_list_tools(
-            engineer_mode=mode,
-            ssh_session_id=bound_ssh_session_id(run.metadata),
+            interaction_mode=run.interaction_mode,
+            target=str(run.metadata.get("target") or "ssh"),
         )
     }
 

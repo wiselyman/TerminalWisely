@@ -112,6 +112,7 @@ function cloneDesktopUi(
       aiLocal: copy(apps.aiLocal),
       aiLinux: copy(apps.aiLinux),
       markwisely: copy(apps.markwisely),
+      editorwisely: copy(apps.editorwisely),
     },
     focusOrder: [...focusOrder],
     filesTab,
@@ -128,6 +129,7 @@ function idleApps(): Record<DesktopAppId, DesktopAppWindow> {
     aiLocal: { open: false, minimized: false, maximized: false },
     aiLinux: { open: false, minimized: false, maximized: false },
     markwisely: { open: false, minimized: false, maximized: false },
+    editorwisely: { open: false, minimized: false, maximized: false },
   };
 }
 

@@ -6,7 +6,6 @@ import { postToolResultWithRetry } from "./postToolResult";
 import { hostToolResultStdout, isHostExecutedTool } from "./hostTools";
 import { executeToolCall, type ToolCallEvent, type ToolExecCallbacks } from "./toolBridge";
 import { LOCAL_CHAT_SESSION } from "./localTarget";
-import type { K8sClusterTarget } from "../k8s/types";
 import { parseResumeMissBody, ResumeMissError } from "./resumeMiss";
 
 export type AgentUiEvent =
@@ -479,26 +478,11 @@ async function handleProtocolEvent(opts: {
               ),
             }
           : undefined;
-      const command =
-        name.startsWith("k8s_")
-          ? String(
-              (args.kind && args.name
-                ? `${args.kind}/${args.namespace ?? ""}/${args.name}`
-                : "") ||
-                (args.category as string) ||
-                (args.pod as string) ||
-                (args.name as string) ||
-                name,
-            )
-          : name.startsWith("db_")
-            ? String(args.sql ?? args.query ?? args.intent ?? name)
-            : String(args.command ?? "").trim();
+      const command = String(args.command ?? "").trim();
       const intent =
         typeof args.intent === "string" && args.intent.trim()
           ? args.intent.trim()
-          : name.startsWith("k8s_")
-            ? name
-            : undefined;
+          : undefined;
       onToolExec?.onStart?.({ callId, command, intent });
       // Do NOT await host exec on the stream chain — otherwise a hung sudo/
       // systemctl blocks approvals and later messages while the card stays "running".
@@ -772,20 +756,6 @@ export async function runAgentChat(opts: {
   sidecar: SidecarInfo;
   sessionId: string;
   message: string;
-  engineerMode?: "linux" | "k8s" | "db";
-  dbContext?: {
-    connection_id: string | null;
-    revision: number;
-    engine: string | null;
-    name: string | null;
-    ssh_session_id: string | null;
-    database?: string | null;
-    schema?: string | null;
-    selected_sql?: string | null;
-  };
-  clusterId?: string;
-  clusterName?: string;
-  clusterTarget?: K8sClusterTarget;
   securityMode?: string;
   serverId?: string;
   /** SSH host key fingerprint for TargetSessionIdentity (approval cache binding). */
@@ -824,11 +794,6 @@ export async function runAgentChat(opts: {
     sidecar,
     sessionId,
     message,
-    engineerMode,
-    clusterId,
-    clusterName,
-    clusterTarget,
-    dbContext,
     securityMode,
     serverId,
     hostFingerprint,
@@ -848,25 +813,8 @@ export async function runAgentChat(opts: {
     signal,
   } = opts;
 
-  const metadata: Record<string, unknown> = {
-    engineer_mode: engineerMode ?? "linux",
-  };
+  const metadata: Record<string, unknown> = {};
   if (target === "local" || sessionId === LOCAL_CHAT_SESSION) metadata.target = "local";
-  if (clusterId) metadata.cluster_id = clusterId;
-  if (clusterName) metadata.cluster_name = clusterName;
-  if (clusterTarget) metadata.cluster_target = clusterTarget;
-  if (dbContext?.connection_id) {
-    metadata.db_context = {
-      connection_id: dbContext.connection_id,
-      revision: dbContext.revision,
-      engine: dbContext.engine,
-      name: dbContext.name,
-      ssh_session_id: dbContext.ssh_session_id || undefined,
-      database: dbContext.database || undefined,
-      schema: dbContext.schema || undefined,
-      selected_sql: dbContext.selected_sql || undefined,
-    };
-  }
 
   const startRes = await sidecarFetch(sidecar, "/v1/chat/start", {
     method: "POST",

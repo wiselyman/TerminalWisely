@@ -8,8 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { K8sClusterIcon } from "../k8s/K8sClusterIcon";
-import { DatabaseIcon, TerminalIcon } from "../WorkspaceToolIcons";
+import { TerminalIcon } from "../WorkspaceToolIcons";
 import { isDefaultGroupId, type EntityLayoutScope } from "../../lib/entityListLayout";
 import {
   startEntityPointerReorder,
@@ -48,7 +47,7 @@ export function EntityListView({
   visibleIds,
   forceExpand = false,
 }: Props) {
-  const { t } = useTranslation(["shell", "k8s"]);
+  const { t } = useTranslation(["shell"]);
   const listRef = useRef<HTMLDivElement>(null);
   const layout = useEntityLayoutStore((s) => s.layouts[scope]);
   const ensureScope = useEntityLayoutStore((s) => s.ensureScope);
@@ -60,12 +59,7 @@ export function EntityListView({
   const toggleGroupCollapsed = useEntityLayoutStore((s) => s.toggleGroupCollapsed);
 
   const defaultGroupName = t("shell:entityUngrouped");
-  const addEntityLabel =
-    scope === "k8s"
-      ? t("k8s:addClusterTitle")
-      : scope === "db"
-        ? t("shell:dbNewConnection")
-        : t("shell:newSsh");
+  const addEntityLabel = t("shell:newSsh");
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
 
@@ -164,13 +158,7 @@ export function EntityListView({
             title={addEntityLabel}
             aria-label={addEntityLabel}
           >
-            {scope === "k8s" ? (
-              <K8sClusterIcon size={16} />
-            ) : scope === "db" ? (
-              <DatabaseIcon />
-            ) : (
-              <TerminalIcon />
-            )}
+            <TerminalIcon />
             <span className="entity-add-badge" aria-hidden />
           </button>
         ) : null}

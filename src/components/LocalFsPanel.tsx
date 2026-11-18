@@ -15,6 +15,7 @@ import type { FindFileEntry, LocalFsEntry, PathSizeResult, ProcessEntry } from "
 import { useFindStore } from "../stores/findStore";
 import { useLocalFsStore } from "../stores/localFsStore";
 import { useDesktopStore } from "../stores/desktopStore";
+import { useEditorWiselyStore } from "../stores/editorWiselyStore";
 import { useTaskManagerStore } from "../stores/taskManagerStore";
 import { useSessionStore } from "../stores/sessionStore";
 import { usePreviewStore } from "../stores/previewStore";
@@ -89,6 +90,9 @@ export function LocalFsPanel({
   const isEmbedded = presentation === "embedded";
   const pushToast = useToastStore((s) => s.pushToast);
   const openPreview = usePreviewStore((s) => s.openPreview);
+  const openEditorWisely = useEditorWiselyStore((s) => s.open);
+  const launchDesktopApp = useDesktopStore((s) => s.launchApp);
+  const desktopTarget = useDesktopStore((s) => s.target);
   const openSendTo = useSessionStore((s) => s.openSendTo);
   const transferCount = useSessionStore(
     (s) => Object.keys(s.activeTransfers).length,
@@ -568,6 +572,10 @@ export function LocalFsPanel({
           ? () => {
               handleOpenFile(entry);
             }
+          : undefined,
+      onOpenEditor:
+        pathKind === "file" && desktopTarget
+          ? () => { void openEditorWisely(desktopTarget, entry.path); launchDesktopApp("editorwisely"); }
           : undefined,
       onCompress: () => {
         handleCompress(entry.path);

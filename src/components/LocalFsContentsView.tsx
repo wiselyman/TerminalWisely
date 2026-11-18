@@ -18,6 +18,7 @@ import { startLocalFsPointerMove } from "../lib/localFsPointerMove";
 import type { LocalFsEntry } from "../types";
 import { useLocalFsStore } from "../stores/localFsStore";
 import { LocalFsEntryIcon } from "./LocalFsIcons";
+import { sortLocalFsEntries, type LocalFsSort, type LocalFsSortField } from "../lib/localFsSort";
 
 function formatSize(sizeBytes: number | null | undefined) {
   if (sizeBytes == null) return "—";
@@ -74,6 +75,7 @@ export function LocalFsContentsView({
   const marqueeCleanupRef = useRef<(() => void) | null>(null);
   const contentsRef = useRef<HTMLDivElement | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [sort, setSort] = useState<LocalFsSort | null>(null);
   const [marquee, setMarquee] = useState<{
     left: number;
     top: number;
@@ -101,7 +103,8 @@ export function LocalFsContentsView({
     if (!contentsPath) return [];
     return childrenCache[contentsPath] ?? [];
   }, [childrenCache, contentsPath, entriesOverride]);
-  const orderedPaths = useMemo(() => entries.map((e) => e.path), [entries]);
+  const listEntries = useMemo(() => sortLocalFsEntries(entries, sort), [entries, sort]);
+  const orderedPaths = useMemo(() => (viewMode === "list" ? listEntries : entries).map((e) => e.path), [entries, listEntries, viewMode]);
   const isLoading =
     loadingOverride ??
     (loadingRoot ||
@@ -110,6 +113,25 @@ export function LocalFsContentsView({
   const openDir = (path: string) => {
     if (searchMode) onLeaveSearch?.();
     void openDirectory(path);
+  };
+
+  useEffect(() => setSort(null), [contentsPath]);
+
+  const toggleSort = (field: LocalFsSortField) => {
+    setSort((current) => current?.field === field
+      ? { field, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { field, direction: "asc" });
+  };
+
+  const sortableHeader = (field: LocalFsSortField, label: string) => {
+    const direction = sort?.field === field ? sort.direction : null;
+    return (
+      <div role="columnheader" aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}>
+        <button type="button" data-testid={`local-fs-sort-${field}`} aria-pressed={direction !== null} onClick={() => toggleSort(field)}>
+          {label}<span aria-hidden="true">{direction === "asc" ? " ▲" : direction === "desc" ? " ▼" : ""}</span>
+        </button>
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -405,16 +427,16 @@ export function LocalFsContentsView({
       onPointerDown={beginMarquee}
     >
       {marqueeEl}
-      <div className="local-fs-list-header" aria-hidden>
-        <span>{t("localFs.colName")}</span>
-        <span>{t("localFs.colPermissions")}</span>
-        <span>{t("localFs.colOwner")}</span>
-        <span>{t("localFs.colGroup")}</span>
-        <span>{t("localFs.colSize")}</span>
-        <span>{t("localFs.colModified")}</span>
+      <div className="local-fs-list-header" role="row">
+        {sortableHeader("name", t("localFs.colName"))}
+        <div role="columnheader">{t("localFs.colPermissions")}</div>
+        <div role="columnheader">{t("localFs.colOwner")}</div>
+        <div role="columnheader">{t("localFs.colGroup")}</div>
+        {sortableHeader("size", t("localFs.colSize"))}
+        {sortableHeader("modified", t("localFs.colModified"))}
       </div>
       <div className="local-fs-list">
-        {entries.map((entry) => {
+        {listEntries.map((entry) => {
           const isDir = entry.kind === "directory";
           const isSelected = selectedSet.has(entry.path);
           const isDrop = dropTarget === entry.path;

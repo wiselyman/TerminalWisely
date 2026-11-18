@@ -15,19 +15,15 @@ def bundled_skills_root() -> Path:
     return Path(__file__).resolve().parents[2] / "skills"
 
 
-def user_skills_root(*, engineer_mode: str | None = None) -> Path:
-    """Linux and K8s user skills are strictly separate directories."""
-    mode = (engineer_mode or "linux").strip().lower()
-    leaf = "user-k8s" if mode == "k8s" else "user"
-    d = paths.data_dir() / "skills" / leaf
+def user_skills_root() -> Path:
+    """User-authored playbooks for the local and SSH terminal workflows."""
+    d = paths.data_dir() / "skills" / "user"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def archive_skills_root(*, engineer_mode: str | None = None) -> Path:
-    mode = (engineer_mode or "linux").strip().lower()
-    leaf = "archive-k8s" if mode == "k8s" else "archive"
-    d = paths.data_dir() / "skills" / leaf
+def archive_skills_root() -> Path:
+    d = paths.data_dir() / "skills" / "archive"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -71,25 +67,23 @@ def record_skill_use(skill_id: str) -> None:
     save_usage(data)
 
 
-def is_archived(skill_id: str, *, engineer_mode: str | None = None) -> bool:
-    return (archive_skills_root(engineer_mode=engineer_mode) / skill_id / "SKILL.md").is_file()
+def is_archived(skill_id: str) -> bool:
+    return (archive_skills_root() / skill_id / "SKILL.md").is_file()
 
 
 def is_bundled(skill_id: str) -> bool:
     return (bundled_skills_root() / skill_id / "SKILL.md").is_file()
 
 
-def archive_user_skill(
-    skill_id: str, *, engineer_mode: str | None = None
-) -> bool:
+def archive_user_skill(skill_id: str) -> bool:
     """Move user skill to archive. Never archives bundled skills."""
     sid = (skill_id or "").strip()
     if not sid or is_bundled(sid):
         return False
-    src = user_skills_root(engineer_mode=engineer_mode) / sid
+    src = user_skills_root() / sid
     if not (src / "SKILL.md").is_file():
         return False
-    dest = archive_skills_root(engineer_mode=engineer_mode) / sid
+    dest = archive_skills_root() / sid
     if dest.exists():
         shutil.rmtree(dest)
     shutil.move(str(src), str(dest))
@@ -100,20 +94,19 @@ def curator_archive_stale(
     *,
     unused_days: float = 30.0,
     now: float | None = None,
-    engineer_mode: str | None = None,
 ) -> list[str]:
     """Archive user skills unused for unused_days. Bundled skills untouched."""
     ts = now if now is not None else time.time()
     cutoff = ts - unused_days * 86400
     data = load_usage()
     archived: list[str] = []
-    for path in sorted(user_skills_root(engineer_mode=engineer_mode).glob("*/SKILL.md")):
+    for path in sorted(user_skills_root().glob("*/SKILL.md")):
         sid = path.parent.name
         entry = data.get("skills", {}).get(sid) or {}
         last = float(entry.get("last_used") or entry.get("created") or 0)
         if last <= 0:
             last = path.stat().st_mtime
         if last < cutoff:
-            if archive_user_skill(sid, engineer_mode=engineer_mode):
+            if archive_user_skill(sid):
                 archived.append(sid)
     return archived

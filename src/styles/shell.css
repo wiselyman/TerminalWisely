@@ -118,12 +118,4 @@
   .app-shell:not(.home-space) .mgmt-workbench-nav {
     width: 136px;
   }
-
-  .mgmt-workbench.k8s-workbench .mgmt-workbench-body {
-    grid-template-columns: 136px minmax(0, 1fr);
-  }
-
-  .mgmt-workbench.k8s-workbench .mgmt-workbench-body::after {
-    left: 136px;
-  }
 }

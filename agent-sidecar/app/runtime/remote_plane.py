@@ -1,7 +1,7 @@
 """Dual-plane rules for external agent CLIs (Cursor / Codex / Claude).
 
 Local workspace plane: the TW-managed agent workspace on the Mac running TW.
-Remote host plane: the connected SSH / K8s session — only via TW MCP.
+Remote host plane: the connected SSH session — only via TW MCP.
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ from pathlib import Path
 # Soft constraint prepended to every external-agent turn.
 REMOTE_PLANE_ADDENDUM = (
     "[TerminalWisely remote plane]\n"
-    "The user's connected SSH/K8s host is the only machine they mean by "
+    "The user's connected SSH host is the only machine they mean by "
     '"this computer / this machine / this host / 这台电脑 / 这台机器". '
     "That host is reached ONLY through TerminalWisely MCP tools on server "
-    "`terminalwisely` (terminal_exec, web_search, web_fetch, ask_user, k8s_*).\n"
+    "`terminalwisely` (terminal_exec, web_search, web_fetch, ask_user).\n"
     "The Mac (or PC) running TerminalWisely is the *client*, not the target. "
     "Do NOT use local Computer Use / CUA / desktop / screenshot / local shell "
     "to answer facts about the connected host, and do not open a new SSH login.\n"
@@ -26,8 +26,8 @@ REMOTE_PLANE_ADDENDUM = (
 _GUIDANCE_MD = """# TerminalWisely dual plane (mandatory)
 
 ## Remote host plane (default for ops questions)
-- User phrases like "this computer / this machine / 这台电脑" mean the **connected SSH/K8s host in TerminalWisely**, never the local machine running this agent.
-- Probe and change that host **only** via MCP server `terminalwisely` tools (`terminal_exec`, `k8s_*`, `web_*`, `ask_user`).
+- User phrases like "this computer / this machine / 这台电脑" mean the **connected SSH host in TerminalWisely**, never the local machine running this agent.
+- Probe and change that host **only** via MCP server `terminalwisely` tools (`terminal_exec`, `web_*`, `ask_user`).
 - Never open a second SSH session to that host.
 
 ## Local workspace plane

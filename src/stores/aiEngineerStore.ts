@@ -83,7 +83,6 @@ import {
 } from "../lib/aiEngineer/chatHistoryDisk";
 import { needsDiskMessageHydration } from "../lib/aiEngineer/chatScopeHydrate";
 import { LOCAL_CHAT_SESSION } from "../lib/aiEngineer/localTarget";
-import type { K8sClusterTarget } from "../lib/k8s/types";
 import type { ManagedEntityRef } from "../lib/management/types";
 import { revealAiEngineerPanel } from "./workspacePanelSwitch";
 import { focusManagedEntity } from "./managedEntityStore";
@@ -770,76 +769,28 @@ export type ActiveInvestigation = {
   summaryPreview?: string;
 };
 
-export type EngineerMode = "linux" | "k8s" | "db";
-
-/** Isolate chat by cluster, host, or terminal session. */
+/** Isolate chat by SSH host or local terminal session. */
 export function aiChatScopeKey(
   sessionId: string,
   serverId?: string | null,
-  clusterId?: string | null,
 ): string {
-  const cid = (clusterId ?? "").trim();
-  if (cid) return `cluster:${cid}`;
   const sid = (serverId ?? "").trim();
   if (!sid && sessionId === LOCAL_CHAT_SESSION) return LOCAL_CHAT_SESSION;
   return sid ? `server:${sid}` : `session:${sessionId}`;
 }
 
-export function dbSyntheticSessionId(connectionId: string): string {
-  return `db:${connectionId.replace(/\//g, "|")}`;
-}
-
-export function k8sSyntheticSessionId(clusterId: string): string {
-  // Cluster ids often embed kubeconfig paths (`kube:/path:ctx`). Starlette
-  // decodes %2F to `/` before routing, so /v1/sessions/{session_id}/pull|stream
-  // must stay a single path segment — never put raw `/` in the session id.
-  return `k8s:${clusterId.replace(/\//g, "|")}`;
-}
-
-/** Reverse of k8sSyntheticSessionId — used by parked AI fibers to resolve scope. */
-export function clusterIdFromK8sSyntheticSessionId(
-  sessionId: string,
-): string | null {
-  if (!sessionId.startsWith("k8s:")) return null;
-  return sessionId.slice(4).replace(/\|/g, "/");
-}
-
-/**
- * Chat scope for a mounted AI panel fiber. K8s fibers use cluster: scope;
- * linux fibers use server:/session: — must match store chatScope or the
- * messages selector returns a fresh [] every render (React #185).
- */
+/** Chat scope for a mounted AI panel fiber. */
 export function panelFiberChatScopeKey(
   sessionId: string,
   serverId?: string | null,
 ): string {
-  const clusterId = clusterIdFromK8sSyntheticSessionId(sessionId);
-  if (clusterId) return aiChatScopeKey(sessionId, null, clusterId);
   return aiChatScopeKey(sessionId, serverId);
 }
 
-/**
- * Which bind to run before a chat send. Must not force linux when already in
- * database mode — that swapped db_query for terminal_exec and used db:* as SSH.
- */
-export function bindKindForOutgoingSend(state: {
-  engineerMode: EngineerMode;
-  dbConnectionId: string | null;
-  clusterId: string | null;
-}, opts: {
+export function bindKindForOutgoingSend(opts: {
   sessionId: string;
   serverId?: string | null;
-  clusterId?: string | null;
-}):
-  | { kind: "k8s"; clusterId: string }
-  | { kind: "db" }
-  | { kind: "linux"; sessionId: string; serverId?: string | null } {
-  const clusterId =
-    opts.clusterId ?? (state.engineerMode === "k8s" ? state.clusterId : null);
-  if (clusterId) return { kind: "k8s", clusterId };
-  if (state.engineerMode === "db" && state.dbConnectionId) {
-    return { kind: "db" };
-  }
+}): { kind: "linux"; sessionId: string; serverId?: string | null } {
   return {
     kind: "linux",
     sessionId: opts.sessionId,
@@ -851,28 +802,15 @@ type HomeChatSnapshot = {
   open: boolean;
   sessionId: string | null;
   serverId: string | null;
-  engineerMode: EngineerMode;
-  clusterId: string | null;
-  clusterName: string | null;
-  clusterTarget: K8sClusterTarget | null;
-  dbConnectionId: string | null;
-  dbConnectionName: string | null;
-  dbEngine: string | null;
-  dbRevision: number;
-  dbSshSessionId: string | null;
-  dbDatabase: string | null;
-  dbSchema: string | null;
-  dbSelectedSql: string | null;
 };
 
 let chatBeforeHome: HomeChatSnapshot | null = null;
 let chatAbort: AbortController | null = null;
 let activeRunId: string | null = null;
-let dbSqlSink: ((sql: string) => void) | null = null;
 /** Scope that owns the in-flight run; events continue even if UI parked on another host. */
 let activeRunScope: string | null = null;
 let activeRunThreadId: string | null = null;
-/** SSH/k8s session id that currently holds the AI SSH lease. */
+/** SSH session id that currently holds the AI SSH lease. */
 let activeLeaseSessionId: string | null = null;
 
 /** Test-only: seed / inspect the in-flight run markers. */
@@ -980,20 +918,7 @@ type AiEngineerState = {
   width: number;
   sessionId: string | null;
   serverId: string | null;
-  engineerMode: EngineerMode;
   execTarget: "local" | "ssh";
-  clusterId: string | null;
-  clusterName: string | null;
-  clusterTarget: K8sClusterTarget | null;
-  dbConnectionId: string | null;
-  dbConnectionName: string | null;
-  dbEngine: string | null;
-  dbRevision: number;
-  dbSshSessionId: string | null;
-  dbDatabase: string | null;
-  dbSchema: string | null;
-  dbSelectedSql: string | null;
-  insertDbSql: (sql: string) => void;
   /** Current chat bucket key (cluster:*, server:*, or session:*). */
   chatScope: string | null;
   activeThreadId: string | null;
@@ -1028,18 +953,10 @@ type AiEngineerState = {
   /** Bumped to focus the composer textarea (e.g. after Send to chat). */
   composerFocusNonce: number;
   openPanel: (sessionId: string, serverId?: string) => void;
-  openK8sPanel: (
-    clusterId: string,
-    clusterName?: string,
-    clusterTarget?: K8sClusterTarget | null,
-  ) => void;
-  /** Unified Hosts/K8s AI binding entry. */
+  /** Bind the remote AI chat to its SSH host. */
   bindManagedEntity: (
     ref: ManagedEntityRef,
-    opts?: {
-      open?: boolean;
-      clusterTarget?: K8sClusterTarget | null;
-    },
+    opts?: { open?: boolean },
   ) => void;
   requestComposerFocus: () => void;
   /** Re-bind chat when the active terminal/server changes while panel stays open. */
@@ -1048,23 +965,6 @@ type AiEngineerState = {
   restoreChatAfterHome: () => void;
   /** Open Home local chat and send a prepared install / setup prompt. */
   sendLocalInstallPrompt: (text: string) => Promise<void>;
-  bindK8sContext: (
-    clusterId: string,
-    clusterName?: string,
-    clusterTarget?: K8sClusterTarget | null,
-  ) => void;
-  bindDbContext: (connection: {
-    id: string;
-    name: string;
-    engine: string;
-    revision: number;
-    sshSessionId?: string | null;
-    database?: string | null;
-    schema?: string | null;
-    selectedSql?: string | null;
-  }) => void;
-  setDbSqlSink: (sink: ((sql: string) => void) | null) => void;
-  setEngineerMode: (mode: EngineerMode) => void;
   /** Soft-close kept for callers; side panels stay open until explicit collapse. */
   close: (opts?: { force?: boolean }) => void;
   setWidth: (w: number) => void;
@@ -1084,7 +984,6 @@ type AiEngineerState = {
   sendMessage: (opts: {
     sessionId: string;
     serverId?: string;
-    clusterId?: string;
     /** Stop the in-flight run first, then send (interject). */
     interruptIfBusy?: boolean;
   }) => Promise<void>;
@@ -1244,25 +1143,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
   width: readWorkspacePanelWidth(),
   sessionId: null,
   serverId: null,
-  engineerMode: "linux",
   execTarget: "ssh",
-  clusterId: null,
-  clusterName: null,
-  clusterTarget: null,
-  dbConnectionId: null,
-  dbConnectionName: null,
-  dbEngine: null,
-  dbRevision: 0,
-  dbSshSessionId: null,
-  dbDatabase: null,
-  dbSchema: null,
-  dbSelectedSql: null,
-  insertDbSql: (sql) => {
-    dbSqlSink?.(sql);
-  },
-  setDbSqlSink: (sink) => {
-    dbSqlSink = sink;
-  },
   chatScope: null,
   activeThreadId: null,
   ready: false,
@@ -1303,33 +1184,11 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     );
   },
 
-  openK8sPanel: (clusterId, clusterName, clusterTarget) => {
-    get().bindManagedEntity(
-      {
-        kind: "cluster",
-        id: clusterId,
-        label: clusterName ?? clusterId,
-      },
-      { open: true, clusterTarget },
-    );
-  },
-
   bindManagedEntity: (ref, opts) => {
     focusManagedEntity(ref);
-    const open = opts?.open ?? false;
-    if (ref.kind === "cluster") {
-      set({ engineerMode: "k8s" });
-      get().bindK8sContext(ref.id, ref.label, opts?.clusterTarget);
-      if (open) {
-        set({ open: true });
-        void get().ensureReady();
-      }
-      return;
-    }
     const sessionId = ref.sessionId || ref.id;
-    set({ engineerMode: "linux" });
     get().bindContext(sessionId, ref.serverId ?? undefined);
-    if (open) {
+    if (opts?.open) {
       set({ open: true });
       void get().ensureReady();
     }
@@ -1340,121 +1199,6 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       open: true,
       composerFocusNonce: s.composerFocusNonce + 1,
     }));
-  },
-
-  setEngineerMode: (mode) => {
-    set({ engineerMode: mode });
-  },
-
-  bindK8sContext: (clusterId, clusterName, clusterTarget) => {
-    const sessionId = k8sSyntheticSessionId(clusterId);
-    const nextScope = aiChatScopeKey(sessionId, null, clusterId);
-    const prev = get();
-    // Prefer explicit target; if omitted while staying on the same cluster, keep
-    // previous. When switching cluster id without a target, clear stale target
-    // so the host bridge falls back to the workbench selection.
-    const nextTarget =
-      clusterTarget !== undefined && clusterTarget !== null
-        ? clusterTarget
-        : prev.clusterId === clusterId
-          ? prev.clusterTarget
-          : null;
-    if (
-      prev.chatScope === nextScope &&
-      prev.sessionId === sessionId &&
-      prev.clusterId === clusterId
-    ) {
-      if (clusterTarget && clusterTarget !== prev.clusterTarget) {
-        set({ clusterTarget, clusterName: clusterName ?? prev.clusterName });
-      }
-      applyScopeAfterDiskLoad(get, set, nextScope);
-      return;
-    }
-
-    const persisted = persistCurrentThread(get);
-    // Host/cluster switch parks the UI only — never abort a background run.
-    stashBackgroundPending(prev);
-    const loaded = loadScopeIntoState(
-      persisted.threadsByScope,
-      nextScope,
-      persisted.inputsByThread,
-    );
-    const runHere = scopeHasActiveRun(nextScope);
-    const pending = pendingForScope(nextScope, prev);
-
-    set({
-      ...persisted,
-      ...loaded,
-      engineerMode: "k8s",
-      execTarget: "ssh",
-      sessionId,
-      serverId: null,
-      clusterId,
-      clusterName: clusterName ?? clusterId,
-      clusterTarget: nextTarget ?? null,
-      chatScope: nextScope,
-      busy: runHere,
-      modelPhase: runHere
-        ? prev.chatScope === nextScope
-          ? prev.modelPhase
-          : "thinking"
-        : "idle",
-      pendingAsk: pending.pendingAsk,
-      pendingApproval: pending.pendingApproval,
-      activeInvestigation: runHere ? prev.activeInvestigation : null,
-    });
-    applyScopeAfterDiskLoad(get, set, nextScope);
-  },
-
-  bindDbContext: (connection) => {
-    const sessionId = dbSyntheticSessionId(connection.id);
-    const nextScope = aiChatScopeKey(sessionId, null, null);
-    const prev = get();
-    const dbFields = {
-      engineerMode: "db" as const,
-      execTarget: "ssh" as const,
-      dbConnectionId: connection.id,
-      dbConnectionName: connection.name,
-      dbEngine: connection.engine,
-      dbRevision: connection.revision,
-      dbSshSessionId: connection.sshSessionId || null,
-      dbDatabase: connection.database || null,
-      dbSchema: connection.schema || null,
-      dbSelectedSql: connection.selectedSql || null,
-      clusterId: null,
-      clusterName: null,
-      clusterTarget: null,
-    };
-    if (prev.chatScope === nextScope && prev.sessionId === sessionId) {
-      set(dbFields);
-      return;
-    }
-    const persisted = persistCurrentThread(get);
-    stashBackgroundPending(prev);
-    const loaded = loadScopeIntoState(
-      persisted.threadsByScope,
-      nextScope,
-      persisted.inputsByThread,
-    );
-    const runHere = scopeHasActiveRun(nextScope);
-    const pending = pendingForScope(nextScope, prev);
-    set({
-      ...persisted,
-      ...loaded,
-      ...dbFields,
-      sessionId,
-      serverId: null,
-      chatScope: nextScope,
-      busy: runHere,
-      modelPhase: runHere
-        ? prev.chatScope === nextScope
-          ? prev.modelPhase
-          : "thinking"
-        : "idle",
-      pendingAsk: pending.pendingAsk,
-      pendingApproval: pending.pendingApproval,
-      activeInvestigation: runHere ? prev.activeInvestigation : null,
-    });
   },
 
   bindLocalContext: () => {
@@ -1468,18 +1212,6 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       open: prev.open,
       sessionId: prev.sessionId,
       serverId: prev.serverId,
-      engineerMode: prev.engineerMode,
-      clusterId: prev.clusterId,
-      clusterName: prev.clusterName,
-      clusterTarget: prev.clusterTarget,
-      dbConnectionId: prev.dbConnectionId,
-      dbConnectionName: prev.dbConnectionName,
-      dbEngine: prev.dbEngine,
-      dbRevision: prev.dbRevision,
-      dbSshSessionId: prev.dbSshSessionId,
-      dbDatabase: prev.dbDatabase,
-      dbSchema: prev.dbSchema,
-      dbSelectedSql: prev.dbSelectedSql,
     };
     const sessionId = LOCAL_CHAT_SESSION;
     const nextScope = aiChatScopeKey(sessionId);
@@ -1497,12 +1229,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       ...loaded,
       open: false,
       execTarget: "local",
-      engineerMode: "linux",
       sessionId,
       serverId: null,
-      clusterId: null,
-      clusterName: null,
-      clusterTarget: null,
       chatScope: nextScope,
       busy: runHere,
       modelPhase: runHere ? "thinking" : "idle",
@@ -1542,26 +1270,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       }
       return;
     }
-    if (snap.engineerMode === "k8s" && snap.clusterId) {
-      get().bindK8sContext(
-        snap.clusterId,
-        snap.clusterName ?? undefined,
-        snap.clusterTarget,
-      );
-    } else if (snap.engineerMode === "db" && snap.dbConnectionId) {
-      get().bindDbContext({
-        id: snap.dbConnectionId,
-        name: snap.dbConnectionName || "",
-        engine: snap.dbEngine || "postgres",
-        revision: snap.dbRevision,
-        sshSessionId: snap.dbSshSessionId,
-        database: snap.dbDatabase,
-        schema: snap.dbSchema,
-        selectedSql: snap.dbSelectedSql,
-      });
-    } else {
-      get().bindContext(snap.sessionId, snap.serverId ?? undefined);
-    }
+    get().bindContext(snap.sessionId, snap.serverId ?? undefined);
     if (snap.open) set({ open: true });
   },
 
@@ -1575,8 +1284,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     if (
       prev.chatScope === nextScope &&
       prev.sessionId === sessionId &&
-      (prev.serverId ?? null) === (serverId ?? null) &&
-      prev.engineerMode === "linux"
+      (prev.serverId ?? null) === (serverId ?? null)
     ) {
       // Warm reopen: keep transcript if bodies are already in memory. Index
       // hydrate leaves titles with empty messages — still load from disk.
@@ -1613,13 +1321,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     set({
       ...persisted,
       ...loaded,
-      engineerMode: "linux",
       execTarget: "ssh",
       sessionId,
       serverId: serverId ?? null,
-      clusterId: null,
-      clusterName: null,
-      clusterTarget: null,
       chatScope: nextScope,
       busy: runHere,
       modelPhase: runHere
@@ -2109,44 +1813,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     });
   },
 
-  sendMessage: async ({ sessionId, serverId, clusterId, interruptIfBusy }) => {
-    const bindKind = bindKindForOutgoingSend(get(), {
-      sessionId,
-      serverId,
-      clusterId,
-    });
-    const effectiveClusterId =
-      bindKind.kind === "k8s" ? bindKind.clusterId : null;
-    if (bindKind.kind === "k8s") {
-      // Refresh cluster_target from workbench without a static import cycle.
-      const { useK8sStore } = await import("./k8sStore");
-      const ks = useK8sStore.getState();
-      const target =
-        ks.clusters.find((c) => c.id === bindKind.clusterId) ??
-        (ks.selectedCluster?.id === bindKind.clusterId
-          ? ks.selectedCluster
-          : null) ??
-        get().clusterTarget;
-      get().bindK8sContext(
-        bindKind.clusterId,
-        target?.display_name ?? get().clusterName ?? bindKind.clusterId,
-        target,
-      );
-    } else if (bindKind.kind === "db") {
-      const s = get();
-      get().bindDbContext({
-        id: s.dbConnectionId!,
-        name: s.dbConnectionName || "",
-        engine: s.dbEngine || "postgres",
-        revision: s.dbRevision,
-        sshSessionId: s.dbSshSessionId,
-        database: s.dbDatabase,
-        schema: s.dbSchema,
-        selectedSql: s.dbSelectedSql,
-      });
-    } else {
-      get().bindContext(bindKind.sessionId, bindKind.serverId ?? undefined);
-    }
+  sendMessage: async ({ sessionId, serverId, interruptIfBusy }) => {
+    get().bindContext(sessionId, serverId ?? undefined);
     const text = get().input.trim();
     const pendingAtts = [...get().pendingAttachments];
     if (!text && pendingAtts.length === 0) return;
@@ -2168,12 +1836,8 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
     if (get().busy) return;
 
-    const runSessionId = effectiveClusterId
-      ? k8sSyntheticSessionId(effectiveClusterId)
-      : sessionId;
-    const runScope = effectiveClusterId
-      ? aiChatScopeKey(runSessionId, null, effectiveClusterId)
-      : aiChatScopeKey(sessionId, serverId);
+    const runSessionId = sessionId;
+    const runScope = aiChatScopeKey(sessionId, serverId);
     // Another host still streaming in the background — do not steal/abort it
     // unless the caller explicitly interrupted (interruptIfBusy above).
     if (activeRunId && activeRunScope && activeRunScope !== runScope) {
@@ -2185,26 +1849,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
     }
     let runThreadId = get().activeThreadId;
     if (!runThreadId || get().chatScope !== runScope) {
-      if (bindKind.kind === "k8s") {
-        get().bindK8sContext(
-          bindKind.clusterId,
-          get().clusterName ?? bindKind.clusterId,
-        );
-      } else if (bindKind.kind === "db") {
-        const s = get();
-        get().bindDbContext({
-          id: s.dbConnectionId!,
-          name: s.dbConnectionName || "",
-          engine: s.dbEngine || "postgres",
-          revision: s.dbRevision,
-          sshSessionId: s.dbSshSessionId,
-          database: s.dbDatabase,
-          schema: s.dbSchema,
-          selectedSql: s.dbSelectedSql,
-        });
-      } else {
-        get().bindContext(bindKind.sessionId, bindKind.serverId ?? undefined);
-      }
+      get().bindContext(sessionId, serverId ?? undefined);
       runThreadId = get().activeThreadId;
     }
     if (!runThreadId) {
@@ -2276,8 +1921,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       busy: true,
       modelPhase: "idle",
       sessionId: runSessionId,
-      serverId: effectiveClusterId ? null : (serverId ?? get().serverId),
-      clusterId: effectiveClusterId ?? null,
+      serverId: serverId ?? get().serverId,
       chatScope: runScope,
       activeThreadId: runThreadId,
       messages: nextMessages,
@@ -2476,16 +2120,9 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       activeRunScope = runScope;
       activeRunThreadId = runThreadId;
       activeLeaseSessionId = runSessionId;
-      const dbSshSessionId = get().dbSshSessionId;
       const localChat =
         get().execTarget === "local" || runSessionId === LOCAL_CHAT_SESSION;
-      if (!localChat) {
-        if (get().engineerMode === "db") {
-          if (dbSshSessionId) void acquireAiSshLease(dbSshSessionId);
-        } else {
-          void acquireAiSshLease(runSessionId);
-        }
-      }
+      if (!localChat) void acquireAiSshLease(runSessionId);
 
       /** Last SSE / tool activity — used to unstick 「模型思考中」 if the stream dies. */
       let lastStreamActivityAt = Date.now();
@@ -2521,9 +2158,7 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
       const sshTab = useSessionStore
         .getState()
         .tabs.find((t) => t.id === runSessionId);
-      const resolvedServerId = effectiveClusterId
-        ? undefined
-        : (serverId ?? get().serverId ?? sshTab?.server_id ?? undefined);
+      const resolvedServerId = serverId ?? get().serverId ?? sshTab?.server_id ?? undefined;
       const hostFingerprint = sshTab?.host_fingerprint ?? null;
       const remoteUser = remoteUserFromServerId(resolvedServerId ?? null);
 
@@ -2535,28 +2170,6 @@ export const useAiEngineerStore = create<AiEngineerState>((set, get) => ({
         sidecar,
         sessionId: runSessionId,
         message: text,
-        engineerMode:
-          get().engineerMode === "db"
-            ? "db"
-            : effectiveClusterId
-              ? "k8s"
-              : "linux",
-        clusterId: effectiveClusterId ?? undefined,
-        dbContext:
-          get().engineerMode === "db" && get().dbConnectionId
-            ? {
-                connection_id: get().dbConnectionId,
-                revision: get().dbRevision,
-                engine: get().dbEngine,
-                name: get().dbConnectionName,
-                ssh_session_id: get().dbSshSessionId,
-                database: get().dbDatabase,
-                schema: get().dbSchema,
-                selected_sql: get().dbSelectedSql,
-              }
-            : undefined,
-        clusterName: get().clusterName ?? undefined,
-        clusterTarget: get().clusterTarget ?? undefined,
         target: localChat ? "local" : "ssh",
         securityMode: normalizeSecurityMode(
           get()

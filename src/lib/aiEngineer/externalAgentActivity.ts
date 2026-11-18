@@ -23,14 +23,12 @@ export function isMirroredTwMcpActivity(name: string): boolean {
   ) {
     return true;
   }
-  if (base.startsWith("k8s_")) return true;
   // Prefixed MCP ids: terminalwisely-terminal_exec, mcp.terminal_exec
   if (
     /(^|[._-])(terminal_exec|web_search|web_fetch|ask_user)($|[._-])/.test(n)
   ) {
     return true;
   }
-  if (/(^|[._-])k8s_/.test(n)) return true;
   return false;
 }
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.2] - 2026-11-18
+
+Focus TerminalWisely on local Home and remote SSH Hosts workspaces, with Terminal and Desktop tools.
+
+- Add EditorWisely, a CodeMirror 6 editor for local and SSH-host text/source files, with syntax highlighting, multi-document tabs, find/replace, autosave, unsaved-change protection, and UTF-8/BOM plus LF/CRLF preservation
+- Open text files in EditorWisely from the Home or Host file manager, using the existing local filesystem or SSH session
+- Sort file lists by name, size, and modified time; keep Desktop app icons fully visible in a separate column
+- Remove retired Kubernetes and Database workspaces and their dedicated commands, tools, and UI; clean up app-owned legacy data while preserving SSH/AI credentials and external user configuration
+- Preserve Home and Hosts Terminal/Desktop workflows and the existing MarkWisely Markdown workspace
+
+TerminalWisely 聚焦本机 Home 与远程 SSH Hosts 工作区，提供 Terminal 和 Desktop 工具。
+
+- 新增 EditorWisely：基于 CodeMirror 6 的本机与 SSH 文本/源码编辑器，支持语法高亮、多文档标签、查找替换、自动保存、未保存保护，并保留 UTF-8/BOM 与 LF/CRLF 格式
+- 可从 Home 或主机文件管理器打开文本文件，沿用现有本机文件系统或 SSH 会话
+- 文件列表支持按名称、大小和修改时间排序；桌面应用图标完整显示在独立列中
+- 移除已退役工作区及其专属命令、工具和界面；清理应用自有遗留数据，同时保留 SSH/AI 凭据和用户配置
+- 保留 Home 与 Hosts 的 Terminal/Desktop 工作流，以及 MarkWisely Markdown 工作台
+
 ## [0.1.1] - 2026-11-10
 
 Expand MarkWisely into a full local and remote Markdown workspace.

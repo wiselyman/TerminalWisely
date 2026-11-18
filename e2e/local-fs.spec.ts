@@ -48,6 +48,28 @@ test.describe("Local FS panel", () => {
     await expect(card).not.toContainText(expectedModified);
   });
 
+  test("file list sorts by name, size, and modified time when their headers are activated", async ({ page }) => {
+    const panel = page.getByTestId("host-file-manager-panel");
+    const rows = panel.locator(".local-fs-row-name");
+
+    await panel.getByTestId("local-fs-sort-name").click();
+    await expect(panel.getByTestId("local-fs-sort-name").locator(".."))
+      .toHaveAttribute("aria-sort", "ascending");
+    await expect(rows).toHaveText(["logs", "app.log", "guide.md"]);
+    await panel.getByTestId("local-fs-sort-name").click();
+    await expect(rows).toHaveText(["logs", "guide.md", "app.log"]);
+
+    await panel.getByTestId("local-fs-sort-size").click();
+    await expect(rows).toHaveText(["logs", "guide.md", "app.log"]);
+    await panel.getByTestId("local-fs-sort-size").click();
+    await expect(rows).toHaveText(["logs", "app.log", "guide.md"]);
+
+    await panel.getByTestId("local-fs-sort-modified").click();
+    await expect(panel.getByTestId("local-fs-sort-modified").locator(".."))
+      .toHaveAttribute("aria-sort", "ascending");
+    await expect(rows).toHaveText(["logs", "app.log", "guide.md"]);
+  });
+
   test("file actions remain available from Desktop", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     const row = panel.locator('[data-path="/var/log/app.log"]');

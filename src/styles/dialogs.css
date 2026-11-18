@@ -73,11 +73,6 @@
   word-break: break-word;
 }
 
-.modal-hint.k8s-delete-owned-warn {
-  margin-top: -4px;
-  color: #d29922;
-}
-
 .modal-body .form-row {
   display: flex;
   flex-wrap: wrap;

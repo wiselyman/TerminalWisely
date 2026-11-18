@@ -12,22 +12,10 @@ VERIFY_NUDGE = (
     "Exit code alone is insufficient."
 )
 
-VERIFY_NUDGE_K8S = (
-    "[HARNESS] Previous mutating k8s_* call reported exit_code=0 but SUCCESS requires "
-    "evidence. Verify with k8s_get / k8s_describe / k8s_logs / k8s_list before concluding. "
-    "Exit code alone is insufficient."
-)
-
 ACT_NUDGE = (
     "[HARNESS] Your previous turn had no tool calls and no user-facing answer "
     "(planning/thinking only). Call the required tools now (e.g. terminal_exec / "
     "web_fetch) to make progress. Do not narrate a plan without acting."
-)
-
-ACT_NUDGE_K8S = (
-    "[HARNESS] Your previous turn had no tool calls and no user-facing answer "
-    "(planning/thinking only). Call the required tools now (e.g. k8s_list / k8s_get / "
-    "k8s_describe / k8s_logs) to make progress. Do not narrate a plan without acting."
 )
 
 CONCLUDE_NUDGE = (
@@ -49,13 +37,6 @@ TRUNCATED_PLAN_NUDGE = (
     "[HARNESS] You wrote a numbered plan (and may have stopped mid-step) but did "
     "not call any tools. Do NOT continue writing Step N. Immediately call "
     "terminal_exec for the next real command. Output ONLY tool calls this turn."
-)
-
-TRUNCATED_PLAN_NUDGE_K8S = (
-    "[HARNESS] You wrote a numbered plan (and may have stopped mid-step) but did "
-    "not call any tools. Do NOT continue writing Step N. Immediately call "
-    "k8s_list / k8s_get / k8s_describe for the next real probe. Output ONLY tool "
-    "calls this turn."
 )
 
 TRUNCATED_ANSWER_NUDGE = (
@@ -354,15 +335,14 @@ LOOP_ABORT_MESSAGE = (
 )
 
 
-def nudge_for_engineer_mode(kind: str, engineer_mode: str | None = None) -> str:
-    """Return Linux or K8s harness nudge text without changing Linux defaults."""
-    k8s = (engineer_mode or "linux").strip().lower() == "k8s"
+def nudge_for_kind(kind: str) -> str:
+    """Return the generic host-operation harness nudge for a loop condition."""
     if kind == "verify":
-        return VERIFY_NUDGE_K8S if k8s else VERIFY_NUDGE
+        return VERIFY_NUDGE
     if kind == "act":
-        return ACT_NUDGE_K8S if k8s else ACT_NUDGE
+        return ACT_NUDGE
     if kind == "truncated_plan":
-        return TRUNCATED_PLAN_NUDGE_K8S if k8s else TRUNCATED_PLAN_NUDGE
+        return TRUNCATED_PLAN_NUDGE
     if kind == "truncated_answer":
         return TRUNCATED_ANSWER_NUDGE
     return CONCLUDE_NUDGE

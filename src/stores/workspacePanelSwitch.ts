@@ -11,7 +11,6 @@ import { useSessionStore } from "./sessionStore";
 import { useTaskManagerStore } from "./taskManagerStore";
 import type { LocalFsState } from "./localFsStore";
 import type { ManagedEntityRef } from "../lib/management/types";
-import type { K8sClusterTarget } from "../lib/k8s/types";
 import { unstable_batchedUpdates } from "react-dom";
 
 export type WorkspacePanelId =
@@ -167,7 +166,6 @@ export function revealAiEngineerPanel() {
  */
 export function switchToAiEngineerPanel(
   ref: ManagedEntityRef,
-  opts?: { clusterTarget?: K8sClusterTarget | null },
 ) {
   if (
     isPanelOpen("aiEngineer") &&
@@ -177,20 +175,14 @@ export function switchToAiEngineerPanel(
     !isPanelOpen("find") &&
     !isPanelOpen("browser")
   ) {
-    useAiEngineerStore.getState().bindManagedEntity(ref, {
-      open: true,
-      clusterTarget: opts?.clusterTarget,
-    });
+    useAiEngineerStore.getState().bindManagedEntity(ref, { open: true });
     return;
   }
 
   animateNextWorkspacePanelEnter = !hasAnyWorkspacePanelOpen();
   unstable_batchedUpdates(() => {
     closeOtherWorkspacePanels("aiEngineer");
-    useAiEngineerStore.getState().bindManagedEntity(ref, {
-      open: true,
-      clusterTarget: opts?.clusterTarget,
-    });
+    useAiEngineerStore.getState().bindManagedEntity(ref, { open: true });
   });
 }
 

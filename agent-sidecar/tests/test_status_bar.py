@@ -15,7 +15,6 @@ def test_status_bar_contains_goal_and_constraints() -> None:
     text = build_status_bar(
         messages=msgs,
         security_mode="safe",
-        engineer_mode="linux",
         memory_scope="u@h:22",
         last_mutation_risk="R2",
         verify_nudged=False,
@@ -68,17 +67,16 @@ def test_messages_with_status_bar_appends_at_end_not_system_merge() -> None:
     assert sum(1 for m in again if "[AGENT_STATUS]" in str(m.get("content") or "")) == 1
 
 
-def test_status_bar_for_run_reads_metadata() -> None:
+def test_status_bar_for_run_reads_local_and_ssh_metadata() -> None:
     run = AgentRun(session_id="s", run_id="r1", security_mode="observe")
-    run.metadata["engineer_mode"] = "k8s"
-    run.metadata["memory_scope"] = "cluster-a"
-    run.metadata["injected_skills"] = ["k8s-debug"]
-    run.metadata["active_plan"] = [{"step": "list pods"}]
-    run.append_message({"role": "user", "content": "why is the pod crashlooping?"})
+    run.metadata["memory_scope"] = "host-a"
+    run.metadata["injected_skills"] = ["service-check"]
+    run.metadata["active_plan"] = [{"step": "check service"}]
+    run.append_message({"role": "user", "content": "check service status"})
     text = status_bar_for_run(run)
-    assert "mode=k8s" in text
-    assert "k8s-debug" in text
-    assert "crashloop" in text.lower() or "pod" in text.lower()
+    assert "service-check" in text
+    assert "security=observe" in text
+    assert "host_scope=host-a" in text
 
 
 def test_status_bar_marks_continuing_prior_run() -> None:

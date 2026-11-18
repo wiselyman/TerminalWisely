@@ -13,7 +13,7 @@ from mock_ollama.server import DEFAULT_MODEL, create_app
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Scripted OpenAI/Ollama-compatible mock LLM for K8s Engineer tests",
+        description="Scripted OpenAI/Ollama-compatible mock LLM for agent workflow tests",
     )
     parser.add_argument("--host", default=os.environ.get("MOCK_OLLAMA_HOST", "127.0.0.1"))
     parser.add_argument(
@@ -25,7 +25,7 @@ def main() -> None:
         "--scenarios",
         type=Path,
         default=None,
-        help="YAML scenario file (default: mock_ollama/scenarios/k8s_engineer.yaml)",
+        help="YAML scenario file (a YAML scenario file is required)",
     )
     parser.add_argument("--model", default=os.environ.get("MOCK_OLLAMA_MODEL", DEFAULT_MODEL))
     args = parser.parse_args()

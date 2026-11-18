@@ -108,7 +108,7 @@ fn empty_settings() -> StoredSettings {
 
 fn seal_profile_secrets(
     settings: &mut StoredSettings,
-    secrets: &dyn crate::db::secrets::SecretStore,
+    secrets: &dyn crate::secrets::SecretStore,
 ) -> Result<(), String> {
     for profile in &mut settings.profiles {
         if let Some(key) = profile.api_key.clone().filter(|value| !value.is_empty()) {
@@ -125,7 +125,7 @@ fn seal_profile_secrets(
 
 fn open_profile_secrets(
     settings: &mut StoredSettings,
-    secrets: &dyn crate::db::secrets::SecretStore,
+    secrets: &dyn crate::secrets::SecretStore,
 ) -> Result<bool, String> {
     let mut migrated = false;
     for profile in &mut settings.profiles {
@@ -167,14 +167,14 @@ fn load_stored(app: &AppHandle) -> AppResult<StoredSettings> {
         .filter(|profile| !profile.secret_id.is_empty())
         .map(|profile| profile.secret_id.clone())
         .collect::<Vec<_>>();
-    crate::db::secrets::FileVault::import_legacy_once(
+    crate::secrets::FileVault::import_legacy_once(
         &dir,
-        crate::db::secrets::AI_KEYCHAIN_SERVICE,
+        crate::secrets::AI_KEYCHAIN_SERVICE,
         &ids,
-        &crate::db::secrets::KeyringSecretStore::ai(),
+        &crate::secrets::KeyringSecretStore::ai(),
     )
     .map_err(AppError::msg)?;
-    let secrets = crate::db::secrets::FileVault::open(&dir, crate::db::secrets::AI_KEYCHAIN_SERVICE)
+    let secrets = crate::secrets::FileVault::open(&dir, crate::secrets::AI_KEYCHAIN_SERVICE)
         .map_err(AppError::msg)?;
     let migrated = open_profile_secrets(&mut s, &secrets).map_err(AppError::msg)?;
     if migrated {
@@ -189,9 +189,9 @@ fn store_settings(
     mode: crate::durable::WriteMode,
 ) -> AppResult<()> {
     let mut disk = settings.clone();
-    let secrets = crate::db::secrets::FileVault::open(
+    let secrets = crate::secrets::FileVault::open(
         &crate::durable::app_roots(app).primary,
-        crate::db::secrets::AI_KEYCHAIN_SERVICE,
+        crate::secrets::AI_KEYCHAIN_SERVICE,
     )
     .map_err(AppError::msg)?;
     seal_profile_secrets(&mut disk, &secrets)
@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn api_key_moves_to_secret_store_without_trimming() {
-        use crate::db::secrets::{MemorySecretStore, SecretStore};
+        use crate::secrets::{MemorySecretStore, SecretStore};
         let secrets = MemorySecretStore::default();
         let mut settings = super::StoredSettings {
             active_profile_id: "p".into(),

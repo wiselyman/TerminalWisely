@@ -162,7 +162,6 @@ impl SessionManager {
 
     pub async fn close(&self, session_id: &str) -> AppResult<()> {
         self.set_ai_ssh_lease(session_id, false).await;
-        crate::db::cancel_ssh(session_id);
         let mut sessions = self.sessions.lock().await;
         if let Some(mut session) = sessions.remove(session_id) {
             session.close()?;
@@ -1238,7 +1237,7 @@ pub fn saved_connection_from_request(
 
 pub fn seal_saved_passwords(
     connections: &mut [crate::types::SavedConnection],
-    secrets: &dyn crate::db::secrets::SecretStore,
+    secrets: &dyn crate::secrets::SecretStore,
 ) -> Result<(), String> {
     for connection in connections {
         if let Some(password) = connection
@@ -1261,7 +1260,7 @@ pub fn seal_saved_passwords(
 
 pub fn open_saved_passwords(
     connections: &mut [crate::types::SavedConnection],
-    secrets: &dyn crate::db::secrets::SecretStore,
+    secrets: &dyn crate::secrets::SecretStore,
 ) -> Result<bool, String> {
     let mut migrated = false;
     for connection in connections {
@@ -1328,9 +1327,9 @@ pub fn store_connections(
     mode: crate::durable::WriteMode,
 ) -> AppResult<()> {
     let mut disk = connections.to_vec();
-    let secrets = crate::db::secrets::FileVault::open(
+    let secrets = crate::secrets::FileVault::open(
         &crate::durable::app_roots(app).primary,
-        crate::db::secrets::SSH_KEYCHAIN_SERVICE,
+        crate::secrets::SSH_KEYCHAIN_SERVICE,
     )?;
     seal_saved_passwords(&mut disk, &secrets)?;
     let value = serde_json::json!({ "connections": disk });
@@ -1350,14 +1349,14 @@ pub fn load_connections(app: &AppHandle) -> AppResult<Vec<SavedConnection>> {
         .iter()
         .filter_map(|item| item.secret_id.clone().filter(|id| !id.is_empty()))
         .collect::<Vec<_>>();
-    crate::db::secrets::FileVault::import_legacy_once(
+    crate::secrets::FileVault::import_legacy_once(
         &dir,
-        crate::db::secrets::SSH_KEYCHAIN_SERVICE,
+        crate::secrets::SSH_KEYCHAIN_SERVICE,
         &ids,
-        &crate::db::secrets::KeyringSecretStore::ssh(),
+        &crate::secrets::KeyringSecretStore::ssh(),
     )
     .map_err(AppError::msg)?;
-    let secrets = crate::db::secrets::FileVault::open(&dir, crate::db::secrets::SSH_KEYCHAIN_SERVICE)
+    let secrets = crate::secrets::FileVault::open(&dir, crate::secrets::SSH_KEYCHAIN_SERVICE)
         .map_err(AppError::msg)?;
     let migrated = open_saved_passwords(&mut connections, &secrets).map_err(AppError::msg)?;
     if migrated {
@@ -1624,7 +1623,7 @@ mod ai_ssh_lease_tests {
 #[cfg(test)]
 mod saved_password_tests {
     use super::{open_saved_passwords, seal_saved_passwords};
-    use crate::db::secrets::{MemorySecretStore, SecretStore};
+    use crate::secrets::{MemorySecretStore, SecretStore};
     use crate::types::{AuthMethod, SavedConnection};
 
     #[test]

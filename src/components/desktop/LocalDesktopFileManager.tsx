@@ -3,6 +3,8 @@ import { FileText, Folder, FolderPlus, FilePlus2, ArrowLeft, ArrowUp, RefreshCw,
 import { useTranslation } from "react-i18next";
 import type { LocalFsEntry } from "../../types";
 import { formatAppError } from "../../lib/formatAppError";
+import { useDesktopStore } from "../../stores/desktopStore";
+import { useEditorWiselyStore } from "../../stores/editorWiselyStore";
 import {
   createLocalPath,
   deleteLocalPath,
@@ -45,6 +47,8 @@ function sizeLabel(size?: number | null) {
 
 export function LocalDesktopFileManager() {
   const { t, i18n } = useTranslation(["tools", "common"]);
+  const openEditor = useEditorWiselyStore((s) => s.open);
+  const launchApp = useDesktopStore((s) => s.launchApp);
   const [roots, setRoots] = useState<string[]>([]);
   const [path, setPath] = useState<string | null>(readLastLocalDirectory);
   const [pathDraft, setPathDraft] = useState("");
@@ -207,7 +211,7 @@ export function LocalDesktopFileManager() {
             <tbody>
               {entries.map((entry) => {
                 const Icon = entry.kind === "directory" ? Folder : FileText;
-                return <tr key={entry.path} data-testid="local-file-row" className={selected?.path === entry.path ? "is-selected" : ""} onClick={() => { setSelected(entry); setText(null); }} onDoubleClick={() => void openEntry(entry)}>
+                return <tr key={entry.path} data-testid="local-file-row" className={selected?.path === entry.path ? "is-selected" : ""} onClick={() => { setSelected(entry); setText(null); }} onDoubleClick={() => { if (entry.kind === "file") { void openEditor({ kind: "local" }, entry.path); launchApp("editorwisely"); } else void openEntry(entry); }}>
                   <td><span className={`local-desktop-files-entry-icon is-${entry.kind}`}><Icon size={17} /></span><span className="local-desktop-files-entry-name" title={entry.name}>{entry.name}</span></td>
                   <td>{modifiedLabel(entry.modified_ms, i18n.language)}</td>
                   <td>{entry.kind === "directory" ? "—" : sizeLabel(entry.size_bytes)}</td>
@@ -218,6 +222,7 @@ export function LocalDesktopFileManager() {
           </table>
           {loading ? <div className="local-desktop-files-loading" role="status">{t("localFs.loading")}</div> : null}
         </div>
+        {selected?.kind === "file" ? <div className="local-desktop-files-selected-actions"><button type="button" data-testid="local-files-open-editorwisely" onClick={() => { void openEditor({ kind: "local" }, selected.path); launchApp("editorwisely"); }}>{t("editor.openWith")}</button></div> : null}
         {text != null && selected ? (
           <section className="local-desktop-files-editor" aria-label={selected.name}>
             <header><strong>{selected.name}</strong><div>

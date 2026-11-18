@@ -1,15 +1,9 @@
 import {
   E2E_SSH_SESSION_ID,
-  e2eClusterSummary,
-  e2eClusterTarget,
-  e2eContexts,
-  e2eDeploymentRows,
   e2eFindResults,
   e2eHostStats,
   e2eLocalDir,
   e2eLocalRoots,
-  e2eNodeRows,
-  e2ePodRows,
   e2eProcesses,
   e2eRemoteDir,
   e2eSavedConnection,
@@ -66,17 +60,8 @@ let localProcesses = [{ pid: 42001, name: "e2e-worker", command: "worker --local
 let localFsText = new Map<string, string>([["/tmp/e2e-file.txt", "local test contents"]]);
 let lastAiTerminalExec: Record<string, unknown> | null = null;
 let lastAiLease: Record<string, unknown> | null = null;
-let lastK8sApply: Record<string, unknown> | null = null;
 let lastKillProcess: Record<string, unknown> | null = null;
-let lastK8sRolloutRestart: Record<string, unknown> | null = null;
-let lastK8sHelmInstall: Record<string, unknown> | null = null;
-let lastK8sOpenKubectlTerminal: Record<string, unknown> | null = null;
-let lastK8sDelete: Record<string, unknown> | null = null;
 let createSshCallCount = 0;
-const e2eDbConnections: Array<Record<string, unknown>> = [];
-let e2eDbTableName = "orders";
-const e2eDbLeases = new Set<string>();
-const e2eSavedQueries: Record<string, Array<{ id: string; name: string; sql: string }>> = {};
 
 export function __e2eResetMocks() {
   lastUploadRequest = null;
@@ -102,12 +87,7 @@ export function __e2eResetMocks() {
   localFsText = new Map([["/tmp/e2e-file.txt", "local test contents"]]);
   lastAiTerminalExec = null;
   lastAiLease = null;
-  lastK8sApply = null;
   lastKillProcess = null;
-  lastK8sRolloutRestart = null;
-  lastK8sHelmInstall = null;
-  lastK8sOpenKubectlTerminal = null;
-  lastK8sDelete = null;
   createSshCallCount = 0;
 }
 
@@ -192,28 +172,8 @@ export function __e2eLastAiLease() {
   return lastAiLease;
 }
 
-export function __e2eLastK8sApply() {
-  return lastK8sApply;
-}
-
 export function __e2eLastKillProcess() {
   return lastKillProcess;
-}
-
-export function __e2eLastK8sRolloutRestart() {
-  return lastK8sRolloutRestart;
-}
-
-export function __e2eLastK8sHelmInstall() {
-  return lastK8sHelmInstall;
-}
-
-export function __e2eLastK8sOpenKubectlTerminal() {
-  return lastK8sOpenKubectlTerminal;
-}
-
-export function __e2eLastK8sDelete() {
-  return lastK8sDelete;
 }
 
 async function sidecarHttpProxy(args: InvokeArgs): Promise<{
@@ -544,6 +504,11 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     if (!localFsText.has(path)) throw new Error("Not a text file");
     return localFsText.get(path);
   },
+  read_local_bytes: async (args) => {
+    const path = (args as { request: { path: string } }).request.path;
+    if (localReadDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, localReadDelayMs));
+    return Array.from(new TextEncoder().encode(localFsText.get(path) ?? ""));
+  },
   write_local_text: (args) => {
     const request = (args as { request: { path: string; content: string } }).request;
     if (failNextLocalWrite) { failNextLocalWrite = false; throw new Error("Mock local write failed"); }
@@ -554,6 +519,14 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     const request = (args as { request: { path: string; base64: string } }).request;
     if (failNextLocalWrite) { failNextLocalWrite = false; throw new Error("Mock local write failed"); }
     lastLocalBytesWrite = request;
+    localFsText.set(request.path, new TextDecoder().decode(Uint8Array.from(atob(request.base64), (value) => value.charCodeAt(0))));
+    return null;
+  },
+  save_local_bytes_as: (args) => {
+    const request = (args as { request: { path: string; base64: string } }).request;
+    if (failNextLocalWrite) { failNextLocalWrite = false; throw new Error("Mock local write failed"); }
+    lastLocalBytesWrite = request;
+    localFsText.set(request.path, new TextDecoder().decode(Uint8Array.from(atob(request.base64), (value) => value.charCodeAt(0))));
     return null;
   },
   list_remote_directory: (args) => {
@@ -643,11 +616,13 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     return null;
   },
   preview_read_bytes: () => ({
-    base64: "",
-    mime_hint: "application/octet-stream",
+    base64: btoa("remote text\n"),
+    mime_hint: "text/plain",
   }),
   preview_write_bytes: (args) => {
     lastRemoteBytesWrite = (args as { request: Record<string, unknown> }).request;
+    const request = lastRemoteBytesWrite as { base64?: string };
+    if (request.base64) lastRemoteBytesWrite.content = new TextDecoder().decode(Uint8Array.from(atob(request.base64), (c) => c.charCodeAt(0)));
     return null;
   },
   probe_path: () => "file",
@@ -742,363 +717,8 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     lastAiLease = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
     return { ok: true, lease_id: "e2e-lease" };
   },
-  k8s_discover_contexts: () => e2eContexts,
-  k8s_list_ssh_bindings: () => [],
-  k8s_list_imported_kubeconfigs: () => [],
-  k8s_import_kubeconfig: () => e2eContexts,
-  k8s_import_kubeconfig_yaml: () => e2eContexts,
-  k8s_rename_imported_kubeconfig: () => e2eContexts,
-  k8s_read_kubeconfig: () => "apiVersion: v1\nkind: Config\n",
-  k8s_update_kubeconfig: () => e2eContexts,
-  k8s_remove_imported_kubeconfig: () => null,
-  k8s_probe_ssh_kubectl: () => ({ ok: true, version: "v1.28.0" }),
-  k8s_save_ssh_binding: () => e2eClusterTarget,
-  k8s_update_ssh_binding_session: () => null,
-  k8s_delete_ssh_binding: () => null,
-  k8s_list_namespaces: () => ["default", "demo", "kube-system"],
-  k8s_list_resources: (args) => {
-    const category = (args as { category?: string }).category;
-    if (category === "nodes") return e2eNodeRows;
-    if (category === "deployments") return e2eDeploymentRows;
-    return e2ePodRows;
-  },
-  k8s_get_resource: () => ({
-    kind: "Pod",
-    namespace: "demo",
-    name: "web-abc",
-    yaml: [
-      "apiVersion: v1",
-      "kind: Pod",
-      "metadata:",
-      "  name: web-abc",
-      "  ownerReferences:",
-      "  - kind: StatefulSet",
-      "    name: my-statefulset",
-      "spec:",
-      "  containers:",
-      "  - name: web",
-      "    ports:",
-      "    - containerPort: 80",
-      "      protocol: TCP",
-      "      name: http",
-      "    - containerPort: 443",
-      "      protocol: TCP",
-      "      name: https",
-      "    volumeMounts:",
-      "    - name: data",
-      "      mountPath: /data",
-      "    - name: tmp",
-      "      mountPath: /tmp",
-      "  volumes:",
-      "  - name: data",
-      "    persistentVolumeClaim:",
-      "      claimName: web-data",
-      "  - name: tmp",
-      "    emptyDir: {}",
-    ].join("\n"),
-    overview: {
-      Status: "Running",
-      Node: "node-1",
-      ownerRefs: "StatefulSet/my-statefulset",
-    },
-  }),
-  k8s_apply_yaml: (args) => {
-    lastK8sApply = args as Record<string, unknown>;
-    return { ok: true, stdout: "", stderr: "", exit_code: 0 };
-  },
-  k8s_delete_resource: (args) => {
-    lastK8sDelete = args as Record<string, unknown>;
-    return { ok: true, stdout: "", stderr: "", exit_code: 0 };
-  },
-  k8s_scale_resource: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_cordon_node: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_uncordon_node: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_drain_node: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_node_shell_command: () =>
-    "kubectl run tw-nsh-e2e0000 -n kube-system --restart=Never --rm -it --image=alpine:3.19 --overrides='{\"spec\":{\"nodeName\":\"ubuntu\"}}'",
-  k8s_node_shell_start: () => ({ id: "e2e-node-shell", namespace: "", pod: "ubuntu" }),
-  k8s_pod_logs: () => "e2e pod log line\n",
-  k8s_pod_containers: () => ["app"],
-  k8s_pod_shell_command: () => "kubectl exec -it ...",
-  k8s_open_pod_shell_local: () => null,
-  k8s_port_forward_start: () => ({ id: "pf-1", local_port: 18080, remote_port: 8080 }),
-  k8s_port_forward_stop: () => null,
-  k8s_port_forward_list: () => [],
-  k8s_helm_list_releases: () => [{ name: "e2e-chart", namespace: "demo", status: "deployed", revision: "1", chart: "demo", app_version: "1.0" }],
-  k8s_helm_get_values: () => "replicaCount: 1\n",
-  k8s_helm_list_charts: () => [{ name: "stable/nginx", version: "1.0.0", app_version: "1.0", description: "nginx" }],
-  k8s_helm_list_repos: () => [{ name: "stable", url: "https://example.com" }],
-  k8s_helm_add_repo: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_helm_chart_values: () => "replicaCount: 1\n",
-  k8s_helm_install: (args) => {
-    lastK8sHelmInstall = args as Record<string, unknown>;
-    return { ok: true, stdout: "", stderr: "", exit_code: 0 };
-  },
-  k8s_helm_upgrade: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_helm_rollback: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_helm_uninstall: () => ({ ok: true, stdout: "", stderr: "", exit_code: 0 }),
-  k8s_rollout_restart: (args) => {
-    lastK8sRolloutRestart = args as Record<string, unknown>;
-    return { ok: true, stdout: "", stderr: "", exit_code: 0 };
-  },
-  k8s_list_crd_catalog: () => [
-    { group: "traefik.io", kind: "IngressRoute", plural: "ingressroutes", name: "ingressroutes.traefik.io", scope: "Namespaced" },
-  ],
-  k8s_list_applications: () => [],
-  k8s_list_crd_instances: () => [],
-  k8s_tools_status: () => ({
-    kubectl: { installed: true, version: "v1.28.0", bundled: true },
-    helm: { installed: true, version: "v3.14.0", bundled: true },
-  }),
-  k8s_tools_install: () => null,
-  k8s_cluster_summary: () => e2eClusterSummary,
-  k8s_top_pods: () => [],
-  k8s_kubectl_shell_command: () => "kubectl",
-  k8s_kubectl_cluster_shell_start: () => ({
-    id: "e2e-cluster-shell",
-    namespace: "",
-    pod: "e2e-k3s-local",
-  }),
-  k8s_open_kubectl_terminal: (args) => {
-    lastK8sOpenKubectlTerminal = args as Record<string, unknown>;
-    return null;
-  },
-  k8s_pod_shell_start: () => ({ session_id: "e2e-pod-shell" }),
-  k8s_pod_shell_input: () => null,
-  k8s_pod_shell_resize: () => null,
-  k8s_pod_shell_stop: () => null,
-  k8s_kubectl: () => ({ ok: true, stdout: "{}", stderr: "", exit_code: 0, parsed: {} }),
   "plugin:resources|close": () => null,
-  db_list_connections: () => e2eDbConnections.map(({ password: _password, ...item }) => item),
-  db_test_connection: () => "ok",
-  db_save_connection: (args) => {
-    const request = (args?.request ?? {}) as Record<string, unknown>;
-    if (String(request.name ?? "") === "bad-save") {
-      throw { message: "could not write the secret file" };
-    }
-    const password = String(request.password ?? "");
-    const saved = {
-      id: `db-${e2eDbConnections.length + 1}`,
-      name: String(request.name ?? ""),
-      engine: String(request.engine ?? "postgres"),
-      host: String(request.host ?? ""),
-      port: Number(request.port ?? 5432),
-      database: String(request.database ?? ""),
-      user: String(request.user ?? ""),
-      tls: String(request.tls ?? "disabled"),
-      ssh_session_id: request.ssh_session_id ? String(request.ssh_session_id) : null,
-      revision: 1,
-      secret_id: `secret-${e2eDbConnections.length + 1}`,
-      password,
-    };
-    e2eDbConnections.push(saved);
-    e2eDbTableName = "orders";
-    return { ...saved, password: undefined };
-  },
-  db_delete_connection: () => null,
-  db_list_databases: async (args) => {
-    const connectionId = String(args?.connectionId ?? args?.connection_id ?? "");
-    const match = e2eDbConnections.find((item) => item.id === connectionId);
-    if (match?.host === "closed.example") {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      throw new Error("Input/output error: connection closed");
-    }
-    const name = match?.database || e2eDbConnections[e2eDbConnections.length - 1]?.database || "app";
-    return {
-      kind: "rows",
-      columns: ["datname"],
-      rows: [[name]],
-      truncated: false,
-      risk: "",
-      connection_id: connectionId || match?.id || "db-1",
-      revision: 1,
-      operation: "search",
-      sql: "",
-    };
-  },
-  db_search_structure: (args) => ({
-    kind: "rows",
-    columns: ["schema", "table", "name", "detail", "group"],
-    rows: [],
-    truncated: false,
-    risk: "",
-    connection_id: String(
-      args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
-    ),
-    revision: 1,
-    operation: "search",
-    sql: "",
-  }),
-  db_search_objects: (args) => {
-    const connectionId = String(
-      args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
-    );
-    const match = e2eDbConnections.find((item) => item.id === connectionId);
-    const engine = String(match?.engine ?? "postgres");
-    const rows =
-      engine === "redis"
-        ? [["0", "user:1", "", "", "KEY"]]
-        : engine === "mongodb"
-          ? [["", "orders", "", "", "COLLECTION"]]
-          : [
-              ["public", e2eDbTableName, "id", "integer", "BASE TABLE", match?.name === "navicat" ? "" : "PRI"],
-              ["public", e2eDbTableName, "start_time", "time(6)", "BASE TABLE", ""],
-            ];
-    return {
-      kind: "rows",
-      columns: ["table_schema", "table_name", "column_name", "data_type", "table_type", "key"],
-      rows,
-      truncated: false,
-      risk: "",
-      connection_id: connectionId,
-      revision: 1,
-      operation: "search",
-      sql: "",
-    };
-  },
-  db_cancel_query: () => null,
-  db_list_saved_queries: (args) =>
-    e2eSavedQueries[String(args?.connectionId ?? args?.connection_id ?? "")] ?? [],
-  db_write_saved_queries: (args) => {
-    const id = String(args?.connectionId ?? args?.connection_id ?? "");
-    e2eSavedQueries[id] = Array.isArray(args?.queries) ? (args.queries as Array<{ id: string; name: string; sql: string }>) : [];
-    return null;
-  },
-  db_query: (args) => {
-    const sql = String(args?.sql ?? "");
-    const leaseId = String(args?.leaseId ?? args?.lease_id ?? "");
-    const connectionId = String(args?.connectionId ?? args?.connection_id ?? e2eDbConnections[0]?.id ?? "db-1");
-    if (sql.includes("BROKEN")) {
-      throw new Error("password authentication failed");
-    }
-    const writing =
-      /^\s*(update|delete|truncate|alter|rename|insert|drop|create|exec|vacuum|analyze|optimize|reindex|expire|persist|set|del)\b/i.test(
-        sql,
-      ) ||
-      /\bsp_rename\b/i.test(sql) ||
-      /\.(insertOne|replaceOne|deleteOne)\s*\(/i.test(sql);
-    if (writing && !e2eDbLeases.has(leaseId)) {
-      return {
-        kind: "needs_approval",
-        columns: [],
-        rows: [],
-        truncated: false,
-        risk: "R2",
-        connection_id: connectionId,
-        revision: 1,
-        operation: "query",
-        sql: sql.trim(),
-      };
-    }
-    if (e2eDbLeases.has(leaseId)) {
-      const renamed = sql.match(/RENAME\s+TO\s+[`"]?([A-Za-z_][A-Za-z0-9_]*)/i)
-        || sql.match(/sp_rename\s+N'[^']*',\s*N'([A-Za-z_][A-Za-z0-9_]*)'/i)
-        || sql.match(/TO\s+[`"]?[A-Za-z_][A-Za-z0-9_]*[`"]*\.?\s*[`"]?([A-Za-z_][A-Za-z0-9_]*)[`"]?\s*$/i);
-      if (/rename/i.test(sql) && renamed?.[1]) {
-        e2eDbTableName = renamed[1];
-      }
-    }
-    if (/^\s*TYPE\b/i.test(sql)) {
-      return {
-        kind: "rows",
-        columns: ["type"],
-        rows: [["string"]],
-        truncated: false,
-        risk: "",
-        connection_id: connectionId,
-        revision: 1,
-        operation: "query",
-        sql: sql.trim(),
-      };
-    }
-    if (/^\s*TTL\b/i.test(sql)) {
-      return {
-        kind: "rows",
-        columns: ["ttl"],
-        rows: [["120"]],
-        truncated: false,
-        risk: "",
-        connection_id: connectionId,
-        revision: 1,
-        operation: "query",
-        sql: sql.trim(),
-      };
-    }
-    if (/^\s*GET\b/i.test(sql)) {
-      return {
-        kind: "rows",
-        columns: ["value"],
-        rows: [["hello"]],
-        truncated: false,
-        risk: "",
-        connection_id: connectionId,
-        revision: 1,
-        operation: "query",
-        sql: sql.trim(),
-      };
-    }
-    const tableOpen = /^\s*select\b/i.test(sql) && /from/i.test(sql) && !/select\s+empty/i.test(sql.trim());
-    const fixture = e2eDbConnections.find((item) => item.id === connectionId);
-    if (tableOpen && (fixture?.name === "export-500" || fixture?.name === "export-501")) {
-      const total = fixture.name === "export-500" ? 500 : 501;
-      const offset = Number(sql.match(/OFFSET\s+(\d+)/i)?.[1] ?? 0);
-      const count = Math.max(0, Math.min(100, total - offset));
-      return { kind: "rows", columns: ["id", "start_time"], rows: Array.from({ length: count }, (_, i) => [String(offset + i), "12:00:00"]), truncated: false, risk: "", connection_id: connectionId, revision: 1, operation: "query", sql };
-    }
-    const mongoFind = /\.find\s*\(/i.test(sql);
-    return {
-      kind: "rows",
-      columns: tableOpen ? ["id", "start_time"] : mongoFind ? ["doc"] : ["ok"],
-      rows:
-        sql.trim() === "SELECT empty"
-          ? []
-          : tableOpen
-            ? [["1", "19:30:00.000000"]]
-            : mongoFind
-              ? [['{"_id":"1","n":1}']]
-              : [[sql.trim() || "1"]],
-      truncated: false,
-      risk: "",
-      connection_id: connectionId,
-      revision: 1,
-      operation: "query",
-      sql: sql.trim(),
-    };
-  },
-  db_status: (args) => {
-    if (String(args?.page ?? "") === "denied") {
-      throw new Error("permission denied");
-    }
-    return {
-    kind: "rows",
-    columns: ["page"],
-    rows: [[String(args?.page ?? "")]],
-    truncated: false,
-    risk: "",
-    connection_id: String(
-      args?.connectionId ?? args?.connection_id ?? e2eDbConnections[e2eDbConnections.length - 1]?.id ?? "db-1",
-    ),
-    revision: 1,
-    operation: "status",
-    sql: "",
-    };
-  },
-  db_explain: (args) => ({
-    kind: "rows",
-    columns: ["plan"],
-    rows: [["scan"]],
-    truncated: false,
-    risk: "",
-    connection_id: String(args?.connectionId ?? "db-1"),
-    revision: 1,
-    operation: "explain",
-    sql: "",
-  }),
-  db_register_lease: () => {
-    const id = `lease-${e2eDbLeases.size + 1}`;
-    e2eDbLeases.add(id);
-    return id;
-  },
+
 };
 
 export async function invoke<T>(cmd: string, args?: InvokeArgs): Promise<T> {

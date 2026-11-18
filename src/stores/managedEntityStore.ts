@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { ManagedEntityRef, ManagedKind } from "../lib/management/types";
 
 interface ManagedEntityState {
-  /** Shared Home surface for Hosts and Kubernetes. */
+  /** Home provides the local Terminal and local chat. */
   homeOpen: boolean;
   /** Home local chat starts collapsed and is independent of workspace AI panels. */
   homeChatOpen: boolean;

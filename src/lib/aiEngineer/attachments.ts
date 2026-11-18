@@ -225,22 +225,7 @@ export const WORKFLOW_CHIP_IDS = [
   "nginx502",
 ] as const;
 
-export const K8S_WORKFLOW_CHIP_IDS = [
-  "podIssues",
-  "crashLoop",
-  "deployStatus",
-  "recentEvents",
-] as const;
-
-export const DB_WORKFLOW_CHIP_IDS = [
-  "dbWaiting",
-  "dbSlow",
-  "dbSize",
-] as const;
-
 export type WorkflowChipId = (typeof WORKFLOW_CHIP_IDS)[number];
-export type K8sWorkflowChipId = (typeof K8S_WORKFLOW_CHIP_IDS)[number];
-export type DbWorkflowChipId = (typeof DB_WORKFLOW_CHIP_IDS)[number];
 
 /** English prompts; FE maps via i18n keys for display labels. */
 export function workflowPrompt(id: WorkflowChipId): string {
@@ -253,29 +238,5 @@ export function workflowPrompt(id: WorkflowChipId): string {
       return "Check disk usage and identify what is consuming space.";
     case "nginx502":
       return "Diagnose nginx 502: check listeners, upstream, and recent error logs.";
-  }
-}
-
-export function dbWorkflowPrompt(id: DbWorkflowChipId): string {
-  switch (id) {
-    case "dbWaiting":
-      return "Who is waiting on this database, and what are they waiting for?";
-    case "dbSlow":
-      return "Why is the selected statement slow? If none is selected, find the heaviest one.";
-    case "dbSize":
-      return "How large are the databases on this connection?";
-  }
-}
-
-export function k8sWorkflowPrompt(id: K8sWorkflowChipId): string {
-  switch (id) {
-    case "podIssues":
-      return "List pods, find unhealthy ones, and diagnose the worst issue with describe/logs.";
-    case "crashLoop":
-      return "Find CrashLoopBackOff or ImagePullBackOff pods and diagnose root cause from events/logs.";
-    case "deployStatus":
-      return "Check Deployments Ready/Available status and explain any gaps.";
-    case "recentEvents":
-      return "List recent Warning events and investigate the most severe one.";
   }
 }

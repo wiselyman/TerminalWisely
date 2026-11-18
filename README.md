@@ -6,9 +6,9 @@
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: 0.1.1** · **Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
+**Current version: 0.1.2** · **Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
-**Local and remote operations in one window.** Home pairs an interactive local Terminal with local chat; Hosts, Kubernetes, and Databases provide remote workspaces with object-specific chats. Changes wait for approval, and STOP is always there.
+**Local and remote terminals and desktops in one window.** Home provides this computer’s Terminal and Desktop; SSH Hosts provide remote Terminal and Desktop workspaces. Changes wait for approval, and STOP is always there.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
@@ -23,15 +23,13 @@
 
 | Area | Highlights |
 |------|------------|
-| **Home** | Local interactive Terminal and chat, plus a target-isolated Desktop with Terminal, AI Local, and MarkWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
-| **Databases** | Direct connections to PostgreSQL, MySQL, MariaDB, SQLite, SQL Server, Oracle, MongoDB, and Redis. One service, one tab, one chat. Table tabs show database and schema. Connections can be grouped |
-| **Agent runtimes** | Cursor Agent, Codex, Claude Code on the open host, cluster, or database; dual-plane UX (local CLI stream + remote exec cards) |
+| **Home** | Local interactive Terminal and chat, plus a target-isolated Desktop with Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
+| **Agent runtimes** | Cursor Agent, Codex, Claude Code on the current local or SSH host; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Multi-tab SSH, bookmarks, reconnect, English / 中文 UI |
 | **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
-| **Kubernetes** | Sidebar Hosts ↔ K8s; add cluster via + (file or paste kubeconfig) or SSH kubectl; resource tree, YAML, logs, Pod shell. One-click install of kubectl/Helm into the app data dir (or use PATH / SSH). Practical Lens-inspired subset — not a full Lens IDE |
-| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; MarkWisely local/remote Markdown workbench with multi-document editing, outline, search, recovery, and export; download, compress, cross-server send |
-| **AI Engineer** | Local chat in Home; follows the open host, cluster, or database elsewhere. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
+| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; MarkWisely Markdown workbench and EditorWisely local/remote source and text editor; download, compress, cross-server send |
+| **AI Engineer** | Local chat in Home; follows the active SSH host elsewhere. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
 | **Insight** | Host CPU, memory, disk I/O, and network on the status bar |
@@ -40,9 +38,22 @@
 
 ## Home Desktop
 
-In Home, use the Desktop control to switch from the local Terminal and chat to the local Desktop. Its Dock contains Terminal, AI Local, and MarkWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing Home chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal moves the active Home terminal into its window and returns it without starting another shell. Local Desktop windows and recent Markdown files have their own state, separate from each SSH host.
+In Home, use the Desktop control to switch from the local Terminal and chat to the local Desktop. Its Dock contains Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing Home chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal moves the active Home terminal into its window and returns it without starting another shell. Local Desktop windows and recent Markdown files have their own state, separate from each SSH host.
 
 Windows Home Terminal remains Windows PowerShell 5.1. Windows packages include Microsoft Coreutils for Windows v2026.9.3 for x64 or ARM64, a preview release. Coreutils commands are available by command name in the app terminal; PowerShell 5.1 does not receive the full PowerShell 7 globbing and pipeline integration. The app adds its bundled command directory and clears conflicting aliases only in that terminal process. It does not change the system PATH, PowerShell profiles, or registry.
+
+---
+
+## EditorWisely
+
+EditorWisely is the text and source editor included in both the Home and SSH Host Desktops. Open it from the Desktop Dock, or choose a text file in the corresponding file manager and open it with EditorWisely. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
+
+- **Syntax highlighting** — JavaScript/TypeScript, Python, Go, Rust, Shell, C/C++, Java, PHP, JSON, YAML, TOML, XML, HTML, CSS/Sass, SQL, Markdown, Kotlin, Swift, Ruby, properties, Dockerfiles, and Makefiles.
+- **Editing tools** — multiple document tabs, line numbers, find and replace, undo and redo, indentation, and a status bar with language, cursor position, encoding, and line endings.
+- **Save with confidence** — writable files save automatically after typing pauses, and you can also save explicitly. Unsaved changes are marked; closing a modified document asks before discarding it. Failed reads or writes keep the edited text available.
+- **Preserve text format** — UTF-8 files, UTF-8 BOM, and LF/CRLF line endings are retained when saving. Binary files and unsupported encodings are reported instead of silently rewritten.
+
+EditorWisely and MarkWisely are separate Desktop apps: EditorWisely handles plain text and source files, while MarkWisely remains the Markdown writing workspace.
 
 ---
 
@@ -64,22 +75,18 @@ Switch between **Model** (built-in profiles you configure) and **Agent** (local 
 
 Open **AI Engineer** → pick a runtime (**Built-in**, **Cursor**, **Codex**, or **Claude Code**).
 
-- **Their agent, your session** — the CLI runs locally; remote work goes through TW’s MCP (`terminal_exec`, `k8s_*`, …) on the session you already own.
+- **Their agent, your session** — the CLI runs locally; remote work goes through TW’s MCP (`terminal_exec`, web tools, …) on the session you already own.
 - **No shadow SSH** — same lease as the terminal tab; long runs keep it alive.
 - **Approvals stay in TW** — capability grades (R0–R4); mutations need exact target-bound approval; agent source is labeled on the card.
 - **Install & login guidance** — missing CLI or expired auth surfaces as a guided flow, not a silent background install.
 
 Requires the corresponding CLI installed and signed in on your machine (Cursor Agent / Codex / Claude Code).
 
-### Built-in AI Linux & K8S Engineers
+### Built-in AI for local and SSH sessions
 
-Mode follows the sidebar:
-
-- **Hosts** → **AI Linux Engineer** on the connected SSH session (`terminal_exec`)
-- **K8s** → **AI K8S Engineer** on the selected cluster (`k8s_list` / `k8s_get` / `k8s_logs` / …)
-- **Databases** → SQL on that service (`db_search_objects` / `db_query` / `db_explain`)
-
-- **Same session / cluster** — no hidden second SSH login; kubectl jumps use the bound session.
+- **Home** → local AI chat with the local Terminal
+- **Hosts** → AI on the connected SSH session (`terminal_exec`)
+- **Same session** — no hidden second SSH login.
 - **Evidence first** — the agent reads output before concluding.
 - **You stay in control** — read-only probes can run on their own; writes need your explicit approval.
 - **Bring your model** — save multiple profiles (cloud or local) and switch the active one in Settings.
@@ -90,11 +97,8 @@ Mode follows the sidebar:
 |---------|----------------|
 | “Find what’s eating disk” | `df` / `du` drill-down (Linux) |
 | “Who listens on 8080?” | Socket / process lookup; kill only after approval |
-| “Why is this Pod CrashLooping?” | `k8s_describe` / `k8s_logs` on the selected cluster |
-| “Scale api to 3” | `k8s_scale` after approval |
 | “nginx 502” | Status, logs, upstream checks |
 | “How much GPU memory?” | Read-only checks such as `nvidia-smi` |
-| “Which tables mention orders?” | Search objects on the open database, then query |
 
 ---
 
@@ -163,44 +167,13 @@ Click the host icon. Sidebar, title bar, and status bar stay. Everything to the 
 
 ---
 
-## Kubernetes workbench
-
-Switch the sidebar to **Kubernetes**: overview, workloads, network, storage, and security resources — plus AI on the selected cluster.
-
-<p align="center">
-  <img src="./docs/images/v002-11-k8s-ops.png" alt="Figure 14 — Kubernetes ops" width="920" />
-</p>
-<p align="center"><em>Figure 14 — Kubernetes ops: cluster overview and AI Engineer answering whether the cluster is healthy.</em></p>
-
----
-
-## Databases
-
-Switch the sidebar to **Databases** and add a connection. The workbench opens a service tab as soon as the connection lists its databases. A second connection keeps the first service, its inner tabs, and its chat.
-
-<p align="center">
-  <img src="./docs/images/v005-01-database.jpg" alt="Figure 15 — Database workbench" width="920" />
-</p>
-<p align="center"><em>Figure 15 — Database workbench: the PostgreSQL service, the orders table labeled <code>twreview / public</code>, and that service’s own AI chat.</em></p>
-
-- **One service, one chat** — PostgreSQL and MySQL do not share a conversation.
-- **Table tabs** show the database and schema on one line, for example `shop / public`.
-- **Groups** — connections start under 未分组 / Ungrouped. Add your own groups; host groups are not copied here.
-- **SQL** — run a statement on the table tab. A restore icon appears after you run something other than the default browse, and puts the table’s data back. Typing in the editor does not change the grid until you run.
-- **AI** follows this service. Read-only SQL can run; changes wait for approval.
-
----
-
 ## Quick start
 
 1. **Hosts** — add an SSH host and connect, or click the host icon to open that machine’s desktop.
-2. **Kubernetes** — switch the sidebar and click **+** to add a cluster (kubeconfig file or paste).
-3. **Databases** — switch the sidebar and add a connection.
-4. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed). Home provides a local chat beside the local Terminal.
-5. For Built-in: Settings → add a model profile (Base URL + model id; Ollama often needs no key).
-6. Approve or reject any command the agent marks as a system change.
+2. Optional: open **AI Engineer** → choose a runtime (Built-in model, or Cursor / Codex / Claude Code if installed). Home provides a local chat beside the local Terminal.
+3. For Built-in: Settings → add a model profile (Base URL + model id; Ollama often needs no key).
+4. Approve or reject any command the agent marks as a system change.
 
-Kubernetes notes: local cluster ops prefer kubectl/Helm installed into the app data directory (one-click from the UI), with PATH as fallback; SSH jump hosts still use the remote PATH. The K8s UI is a practical Lens-inspired subset — not a full Lens IDE.
 
 ---
 

@@ -8,11 +8,6 @@ import {
   __e2eLastCreateSshRequest,
   __e2eLastEnterDirectory,
   __e2eLastKillProcess,
-  __e2eLastK8sApply,
-  __e2eLastK8sHelmInstall,
-  __e2eLastK8sOpenKubectlTerminal,
-  __e2eLastK8sRolloutRestart,
-  __e2eLastK8sDelete,
   __e2eLastPreviewOpen,
   __e2eLastPreviewSave,
   __e2eLastLocalBytesWrite,
@@ -31,14 +26,14 @@ import {
 } from "./e2e/tauriCoreMock";
 import { invoke } from "@tauri-apps/api/core";
 import { useAiEngineerStore } from "./stores/aiEngineerStore";
-import { useK8sStore } from "./stores/k8sStore";
-import { useDbWorkspaceStore } from "./stores/dbWorkspaceStore";
 import { useLocalFsStore } from "./stores/localFsStore";
 import { useSidebarViewStore } from "./stores/sidebarViewStore";
-import { focusManagedEntity } from "./stores/managedEntityStore";
+import { focusManagedEntity, useManagedEntityStore } from "./stores/managedEntityStore";
 import { useSessionStore } from "./stores/sessionStore";
 import { useHostStatsStore } from "./stores/hostStatsStore";
 import { useMarkWiselyStore } from "./stores/markWiselyStore";
+import { useEditorWiselyStore } from "./stores/editorWiselyStore";
+import { useDesktopStore } from "./stores/desktopStore";
 import { useAppUpdateStore } from "./stores/appUpdateStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { openAppSettings } from "./stores/downloadSettingsStore";
@@ -46,14 +41,10 @@ import {
   captureHostWorkspace,
   restoreHostWorkspace,
 } from "./stores/hostWorkspaceMemory";
-import type { K8sResourceCategory } from "./lib/k8s/types";
 import type { HostStatsSnapshot, TabSession } from "./types";
 
 export interface TwE2eApi {
   openHome: () => void;
-  openK8sWorkbench: () => Promise<void>;
-  openDbWorkspace: () => void;
-  clearK8sSelection: () => void;
   openSshTab: () => void;
   openSecondSshTab: () => void;
   closeTab: (sessionId: string) => Promise<void>;
@@ -86,6 +77,7 @@ export interface TwE2eApi {
   invokeEnterDirectory: (path: string) => Promise<string>;
   invokePreviewOpen: (path: string) => Promise<unknown>;
   openMarkdownPreview: (path?: string) => Promise<void>;
+  openEditorWiselyDocument: (path: string, target?: { kind: "local" } | { kind: "ssh"; sessionId: string }) => Promise<void>;
   resetMocks: () => void;
   getLastUpload: () => Record<string, unknown> | null;
   getLastCreateSsh: () => Record<string, unknown> | null;
@@ -106,18 +98,11 @@ export interface TwE2eApi {
   setLocalReadDelay: (milliseconds: number) => void;
   getLastAiTerminalExec: () => Record<string, unknown> | null;
   getLastAiLease: () => Record<string, unknown> | null;
-  getLastK8sApply: () => Record<string, unknown> | null;
   getLastKillProcess: () => Record<string, unknown> | null;
-  getLastK8sRolloutRestart: () => Record<string, unknown> | null;
-  getLastK8sHelmInstall: () => Record<string, unknown> | null;
-  getLastK8sOpenKubectlTerminal: () => Record<string, unknown> | null;
-  getLastK8sDelete: () => Record<string, unknown> | null;
-  setK8sCategory: (category: string) => Promise<void>;
   resetUpload: () => void;
   openSettings: () => void;
   showUpdateDialog: (body: string) => void;
   invokeKillProcess: (pid: number) => Promise<void>;
-  invokeK8sApplyYaml: (yaml: string) => Promise<void>;
   /** Drop model profiles so the picker shows the unconfigured label. */
   clearAiModelConfig: () => Promise<void>;
 }
@@ -134,31 +119,6 @@ function openHome() {
   useSessionStore.getState().activateHome();
   useAiEngineerStore.getState().close({ force: true });
   useLocalFsStore.getState().close();
-}
-
-async function openK8sWorkbench() {
-  useSidebarViewStore.getState().setView("k8s");
-  await useK8sStore.getState().refreshClusters();
-  const cluster = useK8sStore.getState().clusters[0] ?? null;
-  if (cluster) {
-    useK8sStore.getState().selectCluster(cluster.id);
-    useK8sStore.getState().setNamespace("demo");
-    useK8sStore.getState().setCategory("pods");
-    await useK8sStore.getState().refreshResources();
-  }
-}
-
-function openDbWorkspace() {
-  useDbWorkspaceStore.getState().openWorkspace({
-    connectionId: "e2e-db-connection",
-    connectionName: "e2e-db",
-    database: "app",
-    engine: "postgres",
-  });
-}
-
-function clearK8sSelection() {
-  useK8sStore.setState({ selectedCluster: null, selectedClusterId: null });
 }
 
 function mountSshTab(tab: TabSession) {
@@ -265,15 +225,9 @@ function showUpdateDialog(body: string) {
 }
 
 async function openAiChat() {
-  await openK8sWorkbench();
-  const cluster = useK8sStore.getState().selectedCluster;
-  if (!cluster) {
-    throw new Error("openAiChat: no k8s cluster selected");
-  }
-  useAiEngineerStore.getState().bindManagedEntity(
-    { kind: "cluster", id: cluster.id, label: cluster.display_name || cluster.id },
-    { open: true, clusterTarget: cluster },
-  );
+  openHome();
+  useManagedEntityStore.getState().setHomeChatOpen(true);
+  useAiEngineerStore.getState().bindLocalContext();
   await useAiEngineerStore.getState().ensureReady();
 }
 
@@ -484,33 +438,12 @@ async function invokeKillProcess(pid: number) {
   });
 }
 
-async function invokeK8sApplyYaml(yaml: string) {
-  await invoke("k8s_apply_yaml", {
-    target: {
-      id: "kube:e2e-context",
-      kind: "kubeconfig",
-      display_name: "e2e-k3s-local",
-      context: "e2e-context",
-      namespace: "demo",
-    },
-    yaml,
-  });
-}
-
-async function setK8sCategory(category: string) {
-  useK8sStore.getState().setCategory(category as K8sResourceCategory);
-  await useK8sStore.getState().refreshResources();
-}
-
 /** Playwright / CI browser E2E helpers */
 export function runE2eBootstrap(): void {
   if (!isE2eBrowserMode()) return;
 
   const api: TwE2eApi = {
     openHome,
-    openK8sWorkbench,
-    openDbWorkspace,
-    clearK8sSelection,
     openSshTab,
     openSecondSshTab,
     closeTab,
@@ -550,39 +483,30 @@ export function runE2eBootstrap(): void {
     setPandocFormats: __e2eSetPandocFormats,
     getLastPandocImport: __e2eLastPandocImport,
     getMarkWiselyDocument: (path) => useMarkWiselyStore.getState().getDocuments("local").find((document) => document.path === path) ?? null,
+    openEditorWiselyDocument: async (path, target) => { const activeTarget = target ?? useDesktopStore.getState().target ?? { kind: "local" as const }; useDesktopStore.getState().launchApp("editorwisely"); await useEditorWiselyStore.getState().open(activeTarget, path); },
     failNextLocalWrite: __e2eFailNextLocalWrite,
     getLocalText: __e2eLocalText,
     seedLocalText: __e2eSeedLocalText,
     setLocalReadDelay: __e2eSetLocalReadDelay,
     getLastAiTerminalExec: __e2eLastAiTerminalExec,
     getLastAiLease: __e2eLastAiLease,
-    getLastK8sApply: __e2eLastK8sApply,
     getLastKillProcess: __e2eLastKillProcess,
-    getLastK8sRolloutRestart: __e2eLastK8sRolloutRestart,
-    getLastK8sHelmInstall: __e2eLastK8sHelmInstall,
-    getLastK8sOpenKubectlTerminal: __e2eLastK8sOpenKubectlTerminal,
-    getLastK8sDelete: __e2eLastK8sDelete,
-    setK8sCategory,
     resetUpload: __e2eResetUploadRequest,
     openSettings,
     showUpdateDialog,
     invokeKillProcess,
-    invokeK8sApplyYaml,
   };
 
   window.__TW_E2E__ = api;
 
   // Only auto-boot when VITE_E2E_SCENARIO is set. Default homeOpen is already
   // true; a delayed openHome() races with Playwright helpers (openSshTab /
-  // openK8sWorkbench) and snaps the UI back to the welcome page.
+  // host bootstraps) and snaps the UI back to the welcome page.
   const scenario = import.meta.env.VITE_E2E_SCENARIO?.trim();
   if (!scenario) return;
 
   const boot = () => {
     switch (scenario) {
-      case "k8s":
-        void openK8sWorkbench();
-        break;
       case "ssh":
         openSshTab();
         break;

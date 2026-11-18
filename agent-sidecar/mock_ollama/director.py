@@ -186,5 +186,5 @@ class ScenarioDirector:
 
 def load_scenarios(path: Path | None = None) -> ScenarioDirector:
     if path is None:
-        path = Path(__file__).resolve().parent / "scenarios" / "k8s_engineer.yaml"
+        raise ValueError("scenarios_path is required when no bundled scenario is configured")
     return ScenarioDirector.from_file(path)

@@ -86,14 +86,12 @@ def test_read_only_argv_drops_write_flags(tmp_path) -> None:
 
 
 def test_mcp_keeps_terminal_exec_regardless_of_old_pose() -> None:
-    names = tw_mcp_tool_names(engineer_mode="linux", interaction_mode="plan")
+    names = tw_mcp_tool_names(interaction_mode="plan")
     assert TOOL_TERMINAL_EXEC in names
     assert "web_search" in names
-    ask = tw_mcp_tool_names(engineer_mode="linux", interaction_mode="ask")
+    ask = tw_mcp_tool_names(interaction_mode="ask")
     assert TOOL_TERMINAL_EXEC in ask
-    k8s = tw_mcp_tool_names(engineer_mode="k8s", interaction_mode="plan")
-    assert "k8s_apply" in k8s
-    assert "k8s_get" in k8s
+    assert set(names) == set(ask)
 
 
 def test_one_writer_cancels_the_previous_run() -> None:

@@ -395,16 +395,11 @@ export interface UserSkillRow {
 export interface UserSkillsCatalog {
   count: number;
   root: string;
-  engineer_mode?: string;
   skills: UserSkillRow[];
 }
 
-export async function fetchUserSkills(
-  sidecar: SidecarInfo,
-  engineerMode: "linux" | "k8s" | "db" = "linux",
-): Promise<UserSkillsCatalog> {
-  const q = new URLSearchParams({ engineer_mode: engineerMode });
-  const res = await sidecarFetch(sidecar, `/v1/skills?${q}`);
+export async function fetchUserSkills(sidecar: SidecarInfo): Promise<UserSkillsCatalog> {
+  const res = await sidecarFetch(sidecar, "/v1/skills");
   if (!res.ok) throw new Error(`Skills list failed (${res.status})`);
   return res.json() as Promise<UserSkillsCatalog>;
 }
@@ -418,7 +413,6 @@ export interface MemoryHostRow {
 }
 
 export interface MemoryMetaCatalog {
-  engineer_mode?: string;
   data_dir: string;
   memory_dir?: string;
   user_path: string;
@@ -429,12 +423,8 @@ export interface MemoryMetaCatalog {
   host_count: number;
 }
 
-export async function fetchMemoryMeta(
-  sidecar: SidecarInfo,
-  engineerMode: "linux" | "k8s" | "db" = "linux",
-): Promise<MemoryMetaCatalog> {
-  const q = new URLSearchParams({ engineer_mode: engineerMode });
-  const res = await sidecarFetch(sidecar, `/v1/memory/meta?${q}`);
+export async function fetchMemoryMeta(sidecar: SidecarInfo): Promise<MemoryMetaCatalog> {
+  const res = await sidecarFetch(sidecar, "/v1/memory/meta");
   if (!res.ok) throw new Error(`Memory meta failed (${res.status})`);
   return res.json() as Promise<MemoryMetaCatalog>;
 }

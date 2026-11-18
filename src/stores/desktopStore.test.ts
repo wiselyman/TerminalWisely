@@ -163,6 +163,14 @@ describe("desktopStore", () => {
     expect(browserOpenPanel).not.toHaveBeenCalled();
   });
 
+  it("launches EditorWisely as an independent desktop app", async () => {
+    const { useDesktopStore } = await import("./desktopStore");
+    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+    useDesktopStore.getState().toggleDockApp("editorwisely");
+    expect(useDesktopStore.getState().apps.editorwisely).toMatchObject({ open: true, minimized: false });
+    expect(useDesktopStore.getState().apps.markwisely.open).toBe(false);
+  });
+
   it("restores independent desktop windows for Local and each SSH target", async () => {
     const { useDesktopStore } = await import("./desktopStore");
     useDesktopStore.getState().openDesktopTarget({ kind: "local" });

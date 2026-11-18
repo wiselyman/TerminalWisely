@@ -20,12 +20,6 @@ function wrapApi(page: Page): TwE2eApi {
 
   return {
     openHome: () => call("openHome"),
-    openK8sWorkbench: async () => {
-      await call("openK8sWorkbench");
-      await page.locator(".k8s-workbench").waitFor({ state: "visible", timeout: 30_000 });
-    },
-    openDbWorkspace: () => call("openDbWorkspace"),
-    clearK8sSelection: () => call("clearK8sSelection"),
     openSshTab: async () => {
       await call("openSshTab");
       await page.getByTestId("terminal-view").waitFor({ state: "visible", timeout: 15_000 });
@@ -57,6 +51,7 @@ function wrapApi(page: Page): TwE2eApi {
     invokeEnterDirectory: (path) => call("invokeEnterDirectory", path) as Promise<string>,
     invokePreviewOpen: (path) => call("invokePreviewOpen", path),
     openMarkdownPreview: (path) => call("openMarkdownPreview", path) as Promise<void>,
+    openEditorWiselyDocument: (path, target) => call("openEditorWiselyDocument", path, target) as Promise<void>,
     resetMocks: () => call("resetMocks"),
     getLastUpload: () => call("getLastUpload") as Promise<Record<string, unknown> | null>,
     getLastCreateSsh: () => call("getLastCreateSsh") as Promise<Record<string, unknown> | null>,
@@ -79,22 +74,11 @@ function wrapApi(page: Page): TwE2eApi {
     getLastAiTerminalExec: () =>
       call("getLastAiTerminalExec") as Promise<Record<string, unknown> | null>,
     getLastAiLease: () => call("getLastAiLease") as Promise<Record<string, unknown> | null>,
-    getLastK8sApply: () => call("getLastK8sApply") as Promise<Record<string, unknown> | null>,
     getLastKillProcess: () => call("getLastKillProcess") as Promise<Record<string, unknown> | null>,
-    getLastK8sRolloutRestart: () =>
-      call("getLastK8sRolloutRestart") as Promise<Record<string, unknown> | null>,
-    getLastK8sHelmInstall: () =>
-      call("getLastK8sHelmInstall") as Promise<Record<string, unknown> | null>,
-    getLastK8sOpenKubectlTerminal: () =>
-      call("getLastK8sOpenKubectlTerminal") as Promise<Record<string, unknown> | null>,
-    getLastK8sDelete: () =>
-      call("getLastK8sDelete") as Promise<Record<string, unknown> | null>,
-    setK8sCategory: (category) => call("setK8sCategory", category) as Promise<void>,
     resetUpload: () => call("resetUpload"),
     openSettings: () => call("openSettings"),
     showUpdateDialog: (body) => call("showUpdateDialog", body),
     invokeKillProcess: (pid) => call("invokeKillProcess", pid) as Promise<void>,
-    invokeK8sApplyYaml: (yaml) => call("invokeK8sApplyYaml", yaml) as Promise<void>,
   };
 }
 

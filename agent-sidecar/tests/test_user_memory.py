@@ -27,18 +27,13 @@ def test_user_put_load_inject_and_clear(tmp_path: Path, monkeypatch) -> None:
     assert user_memory_prompt_block() == ""
 
 
-def test_user_memory_linux_k8s_isolated(tmp_path: Path, monkeypatch) -> None:
+def test_user_memory_uses_one_local_and_ssh_catalog(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("TW_AI_DATA_DIR", str(tmp_path))
-    put_user_memory(prefs=["linux concise"], engineer_mode="linux")
-    put_user_memory(prefs=["k8s yaml first"], engineer_mode="k8s")
-    assert load_user_memory(engineer_mode="linux")["prefs"] == ["linux concise"]
-    assert load_user_memory(engineer_mode="k8s")["prefs"] == ["k8s yaml first"]
+    put_user_memory(prefs=["local and remote concise"])
+    assert load_user_memory()["prefs"] == ["local and remote concise"]
     assert (tmp_path / "memory" / "user.json").is_file()
-    assert (tmp_path / "memory" / "user-k8s.json").is_file()
-    k8s_block = user_memory_prompt_block(engineer_mode="k8s")
-    assert "k8s yaml first" in k8s_block
-    assert "linux concise" not in k8s_block
-    assert "K8s-mode" in k8s_block
+    assert not (tmp_path / "memory" / "user-k8s.json").exists()
+    assert "local and remote concise" in user_memory_prompt_block()
 
 
 def test_user_memory_independent_of_host(tmp_path: Path, monkeypatch) -> None:

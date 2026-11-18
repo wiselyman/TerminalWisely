@@ -12,12 +12,13 @@ type Props = {
   sessionId?: string;
   target?: DesktopTarget;
   mode: "file" | "directory";
+  fileFilter?: "markdown" | "text";
   initialPath?: string;
   onSelect: (path: string) => void;
   onCancel: () => void;
 };
 
-export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onSelect, onCancel }: Props) {
+export function MarkWiselyFilePicker({ sessionId, target, mode, fileFilter = "markdown", initialPath, onSelect, onCancel }: Props) {
   const { t } = useTranslation("tools");
   const [path, setPath] = useState<string | undefined>(initialPath);
   const [result, setResult] = useState<ListLocalDirectoryResult | null>(null);
@@ -48,16 +49,16 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
   const visibleEntries = entries.filter((entry) => {
     if (entry.kind === "directory") return true;
     if (mode === "directory" || entry.kind !== "file") return false;
-    return /\.(md|markdown)$/i.test(entry.name);
+    return fileFilter === "markdown" ? /\.(md|markdown)$/i.test(entry.name) : true;
   });
 
   return (
     <section
       className="markwisely-picker"
-      data-testid="markwisely-picker"
       role="dialog"
       aria-modal="true"
-      aria-label={t(mode === "file" ? "markwisely.openTitle" : "markwisely.chooseFolder")}
+      data-testid={fileFilter === "text" ? "editorwisely-file-picker" : "markwisely-picker"}
+      aria-label={t(mode === "file" ? (fileFilter === "text" ? "editor.openTitle" : "markwisely.openTitle") : "markwisely.chooseFolder")}
     >
       <header className="markwisely-picker-head">
         <button
@@ -69,7 +70,7 @@ export function MarkWiselyFilePicker({ sessionId, target, mode, initialPath, onS
         >
           <X aria-hidden="true" size={18} />
         </button>
-        <strong>{mode === "file" ? t("markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>
+        <strong>{mode === "file" ? t(fileFilter === "text" ? "editor.openTitle" : "markwisely.openTitle") : t("markwisely.chooseFolder")}</strong>
       </header>
       <div className="local-fs-toolbar markwisely-picker-toolbar">
         <div className="local-fs-tool-group">

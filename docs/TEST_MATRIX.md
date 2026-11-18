@@ -9,21 +9,20 @@
 
 | 层级 | 命令 | 说明 |
 |------|------|------|
-| **单元测试** | `npm test` / `cargo test` / `pytest tests/` | 纯函数、策略、模型，无真实 SSH/K8s |
+| **单元测试** | `npm test` / `cargo test` / `pytest tests/` | 纯函数、策略、模型，无真实 SSH |
 | **集成测试** | `pytest tests/test_api_surface_integration.py` 等 | Sidecar HTTP API、AgentLoop + mock 模型 |
 | **静态功能检查** | `node scripts/smoke-product-checklist.mjs` | 前端 wiring、i18n、关键文件存在性 |
 | **端到端 (E2E)** | `pytest tests/test_e2e_hard_gates.py` 等 | Pull 协议 + fake 模型完整对话 |
 | **SSH 实时连接 / SFTP 上传** | `bash scripts/e2e-ssh-integration.sh` | Docker openssh + Rust `live_integration`（密码/密钥/下载/取消/重连） |
-| **K8s 真集群** | `bash scripts/e2e-k8s-integration.sh` | k3d + Rust `k8s::live_integration` |
 | **拖拽上传 UI** | `npm run test:e2e` → `e2e/ssh-drag-upload.spec.ts` | Playwright HTML5 drop + mock `upload_files` |
-| **用户测试 / UI E2E** | `npm run test:e2e` (Playwright) | AI chat、SSH、K8s、Tab、审批、LocalFS、设置 |
+| **用户测试 / UI E2E** | `npm run test:e2e` (Playwright) | AI chat、SSH、Tab、审批、LocalFS、Desktop、设置 |
 
 ## 跨平台 / 跨架构 CI 矩阵
 
 | Runner | OS | CPU | 测试内容 |
 |--------|-----|-----|----------|
-| `linux-x86_64` | Ubuntu 22.04 | x86_64 | smoke + Vitest + build + `cargo test` + SSH/K8s live + pytest + Playwright |
-| `linux-aarch64` | Ubuntu 24.04 ARM | aarch64 | 同上（含 SSH/K8s live） |
+| `linux-x86_64` | Ubuntu 22.04 | x86_64 | smoke + Vitest + build + `cargo test` + SSH live + pytest + Playwright |
+| `linux-aarch64` | Ubuntu 24.04 ARM | aarch64 | 同上（含 SSH live） |
 | `macos-aarch64` | macOS latest | Apple Silicon | smoke + Vitest + build + `cargo test` + `cargo check` x86_64 + pytest |
 | `windows-x86_64` | Windows latest | x86_64 | smoke + Vitest + build + `cargo check` + `cargo check` ARM64 + pytest + Playwright UI E2E (PowerShell harness) |
 
@@ -38,10 +37,10 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| 0.0.8 UI 暗亮基线（Home / Hosts / K8s / DB / AI 聊天与审批 / 文件 / 桌面 / 设置） | — | — | smoke | Playwright `ui-visual-baselines`（固定视口截图；Home 窄屏与键盘焦点） | ✓ |
-| Home Terminal 留白、Home/Hosts/K8s/DB 空间标签隔离与 K8s 空集群无冗余提示 | `chromeContract` | — | smoke | Playwright `app-shell` / `home-local-terminal-chat` / `db-workbench` | ✓ |
+| 当前 UI 暗亮基线（Home / Hosts / AI 聊天与审批 / 文件 / 桌面 / 设置） | — | — | smoke | Playwright `ui-visual-baselines`（固定视口截图；Home 窄屏与键盘焦点） | ✓ |
+| Home Terminal 留白、Home/Hosts 工作区标签隔离 | `homeSplit` | — | smoke | Playwright `app-shell` / `home-local-terminal-chat` | ✓ |
 | 自定义标题栏 / 窗口控制 | — | — | smoke | — | ✓ |
-| 活动栏 Hosts / K8s 切换 | — | — | smoke | — | ✓ |
+| Home / Hosts 空间切换 | — | — | smoke | — | ✓ |
 | 多 Tab SSH 会话 | Rust shell | — | smoke | — | ✓ |
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
@@ -50,10 +49,8 @@
 | 主题切换（深色/浅色） | `appTheme` | Playwright `app-shell`（data-theme） | smoke `theme-switcher` | — | ✓ |
 | 应用设置 / 更新检查 | Rust updater | — | smoke | — | ✓ |
 | Toast / 状态栏传输进度 | `transferFormat.test` | — | smoke | — | ✓ |
+| Legacy workspace data cleanup (只删应用自有的退役工作区记录；保留 SSH/AI 密钥和用户配置；失败下次重试) | Rust `durable::tests::feature_cleanup` / `startup_feature_cleanup` | startup cleanup is best-effort | smoke Home/Hosts-only | — | ✓ |
 | 功能五段（计划闸门） | — | — | smoke `process.feature-flow` | — | 计划缺旧行为、架构或设计时不改产品代码；不走 Codex 联合审查 |
-| DB 侧栏 / AI SQL / sqlglot（2026-10-10） | vitest `App.homeTab` + `panelVisibility` + `aiEngineerDbBind` + `objectPaneVisibleColumns` + `hostTools` + `dbWorkspaceStore` + `entityListLayout` | — | smoke `sidecar.runtime-sqlglot` | Playwright：Home 不显示 AI 聊天、回到服务页签恢复聊天、数据库连接可分组、Home 隐藏 DB 目录侧栏并在切回数据库空间后恢复、连接卡片无引擎副标题、表页签同一行标出库和 schema | 计划 `docs/superpowers/plans/2026-10-10-sidebar-groups-consistent.md`；顶层页签是数据库服务，一个服务一份聊天；表页签路径为 `库 / schema` |
-| 连接表单紧凑状态（测试 ✅ / 保存错误） | vitest `formatDbFormError`；cargo `format_error` 展开 pg `db error` | — | — | Playwright `db-form-status` / `db-test-ok` / `db-form-error` | 真机 PG 保存依赖本机 vault |
-| 引擎能力差异（菜单/维护/Redis·Mongo） | vitest `objectMenuActions` / `maintainSql` / redis TTL / `parseMongoJson` | — | smoke `db.engine-capability-diff` | Playwright maintain 审批、Redis TTL、Mongo JSON | SQL Server/Oracle 维护清单后补；真机未测项见计划 |
 
 ## 2. SSH 终端与会话
 
@@ -104,9 +101,11 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面；任一内部 App 最大化时覆盖完整 TerminalWisely 内容区并隐藏外部导航/状态栏，还原后恢复） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` | — | smoke `ui.host-desktop` | **✓** `host-desktop`：MarkWisely、Files、Processes 全窗口边界及还原回归 | ✓ |
+| Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面；任一内部 App 最大化时覆盖完整 TerminalWisely 内容区并隐藏外部导航/状态栏，还原后恢复；短窗口下 Dock 上方图标换列，EditorWisely 完整可见） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` | — | smoke `ui.host-desktop` | **✓** `host-desktop`：MarkWisely、Files、Processes 全窗口边界及还原、短窗口 EditorWisely 图标边界回归 | ✓ |
 | Dock → 文件管理器浮窗（含检索） | — | — | smoke | **✓** `local-fs` | ✓ |
+| 文件列表 Name/Size/Modified 表头可键盘聚焦、点击升降序排序；目录优先、元数据缺失项置后、并列值稳定；切目录回默认顺序 | `localFsSort.test` | — | — | **✓** `local-fs` Name/Size/Modified 排序顺序与 ARIA 状态 | ✓ |
 | Dock → MarkWisely（远程 Markdown 新建/打开/编辑/自动保存/最近文件；图标化文件夹选择操作和工具栏悬浮说明；HTML/PDF/Word 高质量直接导出到本机并强制匹配实际文件扩展名；最大化恢复布局） | `markWiselyStore.test`, `markWiselyExport.test`, `markWiselyExportPath.test`, `markWiselyPdf.test`, `localFsApi.test` | SSH `preview_open` / `preview_save` / `create_path`; 本机 HTML/PDF/DOCX 文件写入 | `host-desktop` 文件夹图标与 hover 标签、工具栏悬浮标签、导出菜单、本机保存框、错误扩展名校正、PDF 可解析与文本提取 | **✓** `host-desktop` | ✓ |
+| EditorWisely（CodeMirror 6 文本编辑、本机/SSH 多文档标签、JS/TS/JSX、Python、JSON、Markdown、HTML/CSS/Sass、YAML/XML、Rust、SQL、C/C++、Java、Go、PHP、Shell、TOML、Kotlin、Swift、Ruby、properties、Dockerfile、Makefile 语法高亮、UTF-8 BOM 与 LF/CRLF 保留、查找替换、800ms 空闲自动保存、异步读取呈现与迟到读取保护、未保存保护、失败内容保留、最近文件目录） | `editorWiselyText.test` + `editorWiselyLanguages.test` + `editorWiselyRecents.test` + `editorWiselyStore.test` + `desktopStore.test` | 本机 `read_local_bytes` / `write_local_bytes`；Hosts 当前 SSH 会话 `preview_read_bytes` / `preview_write_bytes` | smoke `ui.editorwisely`；Home/Hosts 打开与保存、异步读取/关闭重开内容呈现、自动保存和失败保留、标签/关闭保护；Shell/Go/JS 高亮；关闭文件后重新打开选择器回到文件目录；MarkWisely 原有路径回归 | **✓** | 0.1.2 |
 | MarkWisely 多文档标签、独立脏状态/恢复草稿、本机与 SSH 图片相对路径、系统 `.md`/`.markdown` 文件关联及队列投递 | `markWiselyStore.test`, `markWiselyRecovery.test`, `markdownOpenQueue.test`, `markdownImagePath.test`, `previewRemoteBytes.test`, Rust `markdown_open::tests` | 本机 read/write + SSH `preview_open`/`preview_save`/`preview_read_bytes`/`preview_write_bytes` | smoke `markwisely.os-file-open`；`home-local-terminal-chat` 本机图片、恢复/丢弃/失败保存关闭保护/重试、源码兼容；`host-desktop` 多文档 | **✓** 定向 Playwright 图片/恢复/丢弃/失败保存/多文档/源码兼容 | OS 原生关联尚需打包真机验证 |
 | MarkWisely Typora 对齐写作画布（混合语法默认 WYSIWYG；YAML/HTML/未知围栏/引用局部兼容节点与定点源码编辑；显式源码视图；左侧文件树、右上角图标按需切换 Outline；标题栏图标顺序 Hide sidebar/Source/下拉；无 Editor preferences 菜单项；Import 转成并打开新 Markdown 文档、不改动当前文档；统计固定显示在右下角且与瞬时保存状态错开；剪贴板图片写入同级 `images/`；居中限宽、紧凑操作、快捷打开/保存；隐藏格式工具栏、右键完整格式菜单含表格/链接/任务列表/标题层级/撤销重做、标题栏窄窗不重叠与统一画布底色；正文宽度不再被 Vditor 默认内边距压窄；长中文列表在宽画布最多两行；多文档页签并入窗口标题栏同一水平行且最大化后仍可见；编辑器连续缩放后宽度跟随宿主且不受陈旧内联宽度影响；下拉菜单可见并命中菜单操作；旧偏好迁移） | `markdownSourceRoundTrip.test`, `preferences.test`, `markdownStatistics.test`, `markdownImagePath.test`, `previewRemoteBytes.test` | Home 本机文本与 `images/` 文件读写；Hosts 当前 SSH 会话 Markdown 与 `images/` 文件读写；Pandoc 输出通过本机或远程目标新建/保存，不改动来源文档；旧兼容片段逐字还原 | smoke 验证 Vditor 包内资源和构建复制插件（无需预先生成 `public/vditor`）+ Home 混合兼容节点/编辑/取消/应用/视图切换、标题控件排序/右下统计/图片剪贴板/新文档导入/工具栏隐藏/右键格式 E2E；Hosts 右上 Outline/侧栏/视图模式/远程图片剪贴板/保存、右键加粗/表格、正文宽度、窄窗标题栏 E2E | Home + Hosts 定向 Playwright；标题栏同一行页签、窄窗无重叠、连续缩放和陈旧宽度恢复、下拉菜单可视与点击回归；light/dark 视觉基线；单元往返、路径和偏好迁移 | Windows/Linux 外观与大文档性能待验证 |
 | Typora 对照固定样例、成对报告与中位数/macOS 10% 门槛 | `markdownBenchmark.test` | `capture.mjs`, deterministic `fixtures/`, `analyze.mjs` | smoke `markwisely.performance-report` | capture/hash/sample-pair tests; existing analyzer threshold tests | M3 MacBook Air metadata captured; Typora not installed, so paired app timings remain unmeasured |
@@ -158,18 +157,7 @@
 | 状态栏 CPU/内存/磁盘/网络 | Rust disk_io | — | smoke | — | ✓ |
 | `formatSizeHuman` | `formatSize.test` | — | — | — | — |
 
-## 8. Kubernetes 工作台
-
-| 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
-|------|:----:|:----:|:----:|:---:|:----:|
-| 集群导入 / kubeconfig | — | **K8s live** | smoke | **✓** | ✓ |
-| 资源列表/详情/YAML / Pod Volumes 概览 | `podVolumes` | **K8s live** | smoke | **✓** | ✓ |
-| Apply/Delete/Scale | — | — | smoke | **✓** | ✓ |
-| Pod 日志 / Shell / Port-forward（多端口列表） | `forwardablePorts` | — | smoke | **✓** k8s-ops | ✓ |
-| Helm / Overview / 自动刷新 | — | — | smoke | — | ✓ |
-| kubectl 工具安装 | — | — | smoke | — | ✓ |
-
-## 9. AI Engineer（Linux + K8s）
+## 8. AI Engineer（本机 + SSH Hosts）
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
@@ -179,10 +167,10 @@
 | 流式 SSE / Pull | — | pytest stream | — | hard_gates | ✓ |
 | 安全模式 R0–R4 | `riskLabels.test` | pytest policy | — | — | ✓ |
 | 审批 / 取消 / 缓存 | approval_cache + session semantics + panel hygiene | pytest approval | once/session/reject UI | approval e2e（含面板未崩） | ✓ |
-| 主机记忆 (prefs/facts) | `test_host_memory` | — | host_memory_*；linux/k8s 分目录 | — | ✓ |
-| 个人记忆 (按模式隔离) | `test_user_memory` | — | user_memory_*；linux≠k8s prefs | — | ✓ |
+| 主机记忆 (prefs/facts) | `test_host_memory` | — | host_memory_*；按 SSH 主机隔离 | — | ✓ |
+| 个人记忆 (跨主机) | `test_user_memory` | — | user_memory_*；Home/Hosts 共用个人偏好 | — | ✓ |
 | 手动提炼 Skill | `test_skill_writer` | — | skill_save + reply icon | — | ✓ |
-| Skills 列表 UI | `test_skills_list_api` | — | Skills 菜单；`engineer_mode` 隔离 | — | ✓ |
+| Skills 列表 UI | `test_skills_list_api` | — | Skills 菜单 | — | ✓ |
 | Agent Status Bar | `test_status_bar` / `test_trajectory_fixtures` | — | 采样尾部注入；**Prior 近期话题**；Goal 跳过 harness | — | ✓ |
 | 同聊多话题（单目标收束 + 可引用 prior） | `test_prompts_continue` + `test_status_bar` Prior | CONCLUDE_NUDGE | — | — | ✓ |
 | Tool artifact 预算 | `test_tool_artifacts` | — | 超长工具落盘预览 | — | ✓ |
@@ -193,10 +181,7 @@
 | 上下文压缩 durable | compaction + tool_pairing | pytest | — | — | ✓ |
 | Skill curator 归档 | `test_skill_curator` | — | — | — | ✓ |
 | terminal_exec 桥接 | Rust terminal | pytest gate | — | **✓** | ✓ |
-| K8s 工具 (k8s_*) | — | pytest k8s | — | mock_ollama | ✓ |
 | 单一写者（无 Ask/Plan、无一起回答、无审批第二意见） | vitest `compareVoices` history | pytest `test_compare_voices` one writer | — | chat e2e composer 无模式切换 | ✓ |
-| 数据库工作台（Postgres/MySQL/MariaDB/SQLite/MongoDB/Redis/SQL Server/Oracle；ClickHouse 已退出下拉框） | vitest `workbenchModel`（库顺序、对象列表、`WorkbenchTab`/`freshObjectTab`/`findObjectTab`、标识符引用、表查看排序筛选分页、`filterRulesToWhere`/`sortRulesToOrder` Navicat 条件筛选、插入删除、建表删表清空、CSV 预览/列跳过/分批、本机查询、Redis/Mongo 命令、SQL Server/Oracle 端口与 schema）+ `dbWorkspaceStore`（库顶栏打开/切换/关闭、每库独立子页签）+ db api + sidebar | pytest `test_sql_risk` + `test_db_tools` | cargo `durable::` 与 `db::`（SQLite 只读打开不能改文件、取消标志中断长读、命名查询 `db-queries.json` 往返与删除、MariaDB 独立 id、SQL Server/Oracle 可保存、未知引擎和 ClickHouse 不能保存、库列表和对象搜索各一条 read、对象/结构搜索用 `CATALOG_ROW_LIMIT`（避免按列展开被 500 截断丢表/schema）、`pg_cell` 支持 time/uuid/json、命令写入要审批、表查看语句仍单条且写/DDL 要批准、定义读取仍是 read）。真实库 ignored：`TW_DB_*` 的 Postgres/MySQL；`TW_ENGINE_HOST` + `TW_ENGINE_PASSWORD` 的 MariaDB/Redis/Mongo（读、错误语句、写入停在审批）。2026-10-01 对本机可达的 `192.168.100.176` 跑过这两项 ignored 测试并通过。SQL Server `TW_DB_MSSQL_*`、Oracle `TW_DB_ORACLE_*` 保持 ignored，当前未测。CI 默认不跑 | e2e `db-workbench` 覆盖 mock 界面（左树每一级缩进、Object Pane：连接=库列表 / PG 库=schema 列表 / schema=默认表、开库后顶栏 `db-workspace-tab` 引擎图标、开表得 `db-object-tab` 与 SQL 平行、无面包屑 `db-context`、结果区无 Summary/Plan 页签、Explain 进结果体、底栏执行/取消/执行计划 + `db-tools-menu` 收纳导出导入建表命名查询会话锁容量、数据网格顶栏筛选/`+`、底栏分页、Filter 面板（无排序区）、行内草稿插行、越页不显示「没有行」、Object Pane/树汇总数量、time 列原生 time 控件、列头菜单升序/降序/清除排序/添加筛选、定义/清空/截断/删表在左树右键、选区、错误态、审批、顶栏 AI 入口、打开表、CSV 导入预览） | 权威范围见 `docs/superpowers/specs/2026-09-30-engine-matrix.md`「当前能力」 |
-| 本地目录（主机、K8s、数据库、AI 配置） | — | — | cargo `durable::tests`、`saved_password_tests`、`api_key_moves_to_secret_store`、`file_vault_round_trip_and_one_legacy_import` | — | 正本在 app data，镜像在 `~/.terminal-wisely/catalog`。密码在 `vault.bin`，启动不再读登录钥匙串 |
 | Investigator 子代理 | — | pytest | — | — | ✓ |
 | Run trace 追踪 | — | pytest trace | — | — | ✓ |
 | 中途 user_context | — | API surface | — | — | ✓ |
@@ -218,14 +203,14 @@
 | Home Local Desktop 工作区（显式 `DesktopTarget.local`；Files/Processes/Browser/Terminal/AI Local/MarkWisely 本机能力；AI Local 复用 Home `LOCAL_CHAT_SESSION`，AI Linux 仅 SSH；Desktop Terminal 与 Home 共用 PTY；Local 与 SSH state 分桶；Terminal 页签关闭 Desktop 并收起聊天，图标应用名完整显示） | `desktopTarget.test` + `desktopApps.test` + `desktopStore.test` + Local FS/MarkWisely/Process/Browser store tests + `local_terminal` | Rust `fs_local` / local process / Browser commands | smoke `ui.home-local-desktop` + `windows.local-coreutils-resource` | `home-local-desktop`（本机 Files/Processes/Browser/MarkWisely 路径、单击切换、SSH 状态隔离）；`home-local-terminal-chat`（Terminal 页签从聊天或 Desktop 返回 PTY、图标标签不截断、Terminal PTY 复用、AI Local chat reuse） | Windows PowerShell/Coreutils 实际运行见 Windows CI |
 | Windows Home PowerShell Coreutils（Microsoft Coreutils 2026.9.3；x64/ARM64 资源；只注入应用子进程 PATH 并清理该 session 别名；不写 Profile/系统 PATH/注册表） | `local_terminal::tests` + `fetch-windows-coreutils.test.mjs` | Windows PowerShell 5.1 package smoke：`Get-Command ls`、PATH/Profile 不变；ARM64 包含资源 | smoke `windows.local-coreutils-resource` | Windows CI / Release matrix x64 运行、ARM64 资源检查 | Windows CI |
 
-## 10. AI chat 可观测性
+## 9. AI chat 可观测性
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
 | Run trace bar UI | — | — | smoke | ✓ | ✓ |
 | flushUserContext / mid-run | — | API surface | smoke | — | ✓ |
 
-## 11. Agent Sidecar 策略与工具
+## 10. Agent Sidecar 策略与工具
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
@@ -256,7 +241,7 @@
 | 批准卡 = 执行卡同壳（标题栏 + `$` 命令 + 底栏拒绝/会话/批准；批准后隐藏批准卡） | `approvalCommandDedupe.test` + e2e `ai-engineer-approval` | — | smoke `ai.approval.command-exec-chrome` | ✓ | — |
 | Auto-continue until finished（禁止用「请回复继续」躲避未写完） | `test_stream_loop` | — | smoke | — | — |
 | Ops plan / update_plan | pytest | — | — | — | — |
-| Mock Ollama 场景 | pytest director | — | — | k8s_e2e | — |
+| Mock Ollama 场景 | pytest director | — | — | configurable fixtures | — |
 
 ---
 
@@ -266,7 +251,7 @@
 # 全量（推荐每次 PR / 发版前）
 ./scripts/run-all-tests.sh
 
-# Playwright UI E2E（AI chat / SSH / K8s — 无需人工）
+# Playwright UI E2E（AI chat / SSH / Desktop — 无需人工）
 npm run test:e2e
 
 # 分项

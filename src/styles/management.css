@@ -1,4 +1,4 @@
-/* —— Shared management chrome (Hosts + K8s) —— */
+/* Shared Hosts management chrome. */
 .mgmt-workbench {
   display: flex;
   flex-direction: column;

@@ -139,7 +139,7 @@ Release 默认直接发布（非 Draft），可在 [Releases](https://github.com
 
 CI 全绿只代表「能编出来」，以下需在**真实机器**上各测一遍（约 5 分钟/平台）：
 
-- [ ] 应用能启动；Home 显示本机 Terminal 与本机聊天，Windows 使用 PowerShell；Hosts/Kubernetes/Databases 侧栏可正常切换
+- [ ] 应用能启动；Home 显示本机 Terminal 与本机聊天，Windows 使用 PowerShell；Hosts 侧栏可连接远程终端和桌面
 - [ ] Home 的 Terminal 页签可新增，首个页签固定；Terminal 与聊天的分隔栏可调整
 - [ ] SSH 能连接，执行 `ls`、`docker ps` 正常
 - [ ] 拖拽本机文件到 SSH 窗口能上传

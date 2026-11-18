@@ -47,8 +47,6 @@ class FakeResearch(ResearchProvider):
 def test_local_target_lists_only_home_mcp_tools() -> None:
     names = tw_mcp_tool_names(target="local")
     assert names == ["terminal_exec", "web_search", "web_fetch", "ask_user"]
-    assert "k8s_list" not in names
-    assert "db_query" not in names
 
 
 def test_local_openai_tools_match_mcp_names() -> None:
@@ -81,7 +79,7 @@ async def test_local_terminal_exec_marks_target() -> None:
     run = AgentRun(
         session_id="local",
         run_id="r-local",
-        metadata={"engineer_mode": "linux", "target": "local"},
+        metadata={"target": "local"},
     )
     loop = AgentLoop(run, model=SilentModel(), research=FakeResearch())
 
@@ -110,22 +108,21 @@ async def test_local_terminal_exec_marks_target() -> None:
     assert marked, run.events
 
 
-def test_tw_mcp_lists_linux_and_k8s_tools() -> None:
-    linux = tw_mcp_tool_names(engineer_mode="linux")
-    assert TOOL_TERMINAL_EXEC in linux
-    assert TOOL_WEB_SEARCH in linux
-    assert "k8s_list" not in linux
-    k8s = tw_mcp_tool_names(engineer_mode="k8s")
-    assert "k8s_list" in k8s
-    assert TOOL_TERMINAL_EXEC not in k8s
-    descs = tw_mcp_list_tools(engineer_mode="linux")
+def test_tw_mcp_lists_home_and_ssh_tools() -> None:
+    ssh = tw_mcp_tool_names(target="ssh")
+    assert TOOL_TERMINAL_EXEC in ssh
+    assert TOOL_WEB_SEARCH in ssh
+    local = tw_mcp_tool_names(target="local")
+    assert TOOL_TERMINAL_EXEC in local
+    assert "service_status" not in local
+    descs = tw_mcp_list_tools(target="ssh")
     assert any(t["name"] == TOOL_WEB_SEARCH for t in descs)
     assert all("description" in t for t in descs)
 
 
 @pytest.mark.asyncio
 async def test_tw_mcp_web_search_via_loop_handlers() -> None:
-    run = AgentRun(session_id="s", run_id="r", metadata={"engineer_mode": "linux"})
+    run = AgentRun(session_id="s", run_id="r", metadata={})
     loop = AgentLoop(run, model=SilentModel(), research=FakeResearch())
     mcp = TwMcpServer(loop)
     result = await mcp.call_tool(TOOL_WEB_SEARCH, {"query": "nginx status"})
@@ -138,7 +135,7 @@ async def test_tw_mcp_web_search_via_loop_handlers() -> None:
 
 @pytest.mark.asyncio
 async def test_tw_mcp_accepts_cursor_prefixed_tool_name() -> None:
-    run = AgentRun(session_id="s", run_id="r", metadata={"engineer_mode": "linux"})
+    run = AgentRun(session_id="s", run_id="r", metadata={})
     loop = AgentLoop(run, model=SilentModel(), research=FakeResearch())
     mcp = TwMcpServer(loop)
     result = await mcp.call_tool(
@@ -151,7 +148,7 @@ async def test_tw_mcp_accepts_cursor_prefixed_tool_name() -> None:
 
 @pytest.mark.asyncio
 async def test_tw_mcp_terminal_exec_waits_for_host() -> None:
-    run = AgentRun(session_id="s", run_id="r", metadata={"engineer_mode": "linux"})
+    run = AgentRun(session_id="s", run_id="r", metadata={})
     loop = AgentLoop(run, model=SilentModel(), research=FakeResearch())
     mcp = TwMcpServer(loop)
 

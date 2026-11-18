@@ -5,35 +5,12 @@ import {
 } from "./panelVisibility";
 
 describe("shouldShowAiEngineerPanel", () => {
-  it("hides the panel in K8s view when no cluster is selected", () => {
-    expect(
-      shouldShowAiEngineerPanel({
-        open: true,
-        sessionId: "sess",
-        sidebarView: "k8s",
-        hasSelectedCluster: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("shows the panel in K8s view with a selected cluster", () => {
-    expect(
-      shouldShowAiEngineerPanel({
-        open: true,
-        sessionId: "sess",
-        sidebarView: "k8s",
-        hasSelectedCluster: true,
-      }),
-    ).toBe(true);
-  });
-
   it("shows the panel in Hosts view when open", () => {
     expect(
       shouldShowAiEngineerPanel({
         open: true,
         sessionId: "sess",
         sidebarView: "hosts",
-        hasSelectedCluster: false,
         activeTabId: "sess",
       }),
     ).toBe(true);
@@ -45,7 +22,6 @@ describe("shouldShowAiEngineerPanel", () => {
         open: true,
         sessionId: "bonsai-sess",
         sidebarView: "hosts",
-        hasSelectedCluster: false,
         activeTabId: "spark-sess",
       }),
     ).toBe(false);
@@ -55,9 +31,8 @@ describe("shouldShowAiEngineerPanel", () => {
     expect(
       shouldShowAiEngineerPanel({
         open: true,
-        sessionId: "db:postgres",
-        sidebarView: "db",
-        hasSelectedCluster: false,
+        sessionId: "ssh-session",
+        sidebarView: "hosts",
         homeOpen: true,
       }),
     ).toBe(false);
@@ -68,8 +43,7 @@ describe("shouldShowAiEngineerPanel", () => {
       shouldShowAiEngineerPanel({
         open: true,
         sessionId: "local",
-        sidebarView: "db",
-        hasSelectedCluster: false,
+        sidebarView: "hosts",
         homeOpen: false,
       }),
     ).toBe(false);
@@ -81,7 +55,6 @@ describe("shouldShowAiEngineerPanel", () => {
         open: false,
         sessionId: "sess",
         sidebarView: "hosts",
-        hasSelectedCluster: true,
         activeTabId: "sess",
       }),
     ).toBe(false);
@@ -90,7 +63,6 @@ describe("shouldShowAiEngineerPanel", () => {
         open: true,
         sessionId: null,
         sidebarView: "hosts",
-        hasSelectedCluster: true,
         activeTabId: "sess",
       }),
     ).toBe(false);

@@ -19,7 +19,8 @@ export type DesktopAppId =
   | "terminal"
   | "aiLocal"
   | "aiLinux"
-  | "markwisely";
+  | "markwisely"
+  | "editorwisely";
 
 export interface DesktopAppWindow {
   open: boolean;
@@ -45,6 +46,7 @@ function idleApps(): AppsState {
     aiLocal: idleApp(),
     aiLinux: idleApp(),
     markwisely: idleApp(),
+    editorwisely: idleApp(),
   };
 }
 
@@ -300,6 +302,7 @@ export const useDesktopStore = create<DesktopState>((set, get) => {
         app === "aiLocal" ||
         app === "aiLinux" ||
         app === "markwisely"
+        || app === "editorwisely"
       ) {
         set({
           apps: patchApp(get().apps, app, {

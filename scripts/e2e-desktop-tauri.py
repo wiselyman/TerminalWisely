@@ -98,7 +98,7 @@ def main() -> int:
     im = Image.open(shot)
     im.crop((20 + 1400 - 450, 80, 20 + 1400, 80 + 860)).save(ART / "e2e-desktop-eval.png")
     ocr2 = run(["tesseract", str(ART / "e2e-desktop-eval.png"), "stdout"], check=False).stdout or ""
-    eval_ok = any(k in ocr2 for k in ("8/8", "8 / 8", "100", "passed", "k8s_", "通过"))
+    eval_ok = any(k in ocr2 for k in ("8/8", "8 / 8", "100", "passed", "通过"))
     results["steps"].append({"step": "eval_ui", "ok": eval_ok, "ocr": ocr2[:200]})
 
     results["pass"] = plat_ok and eval_ok

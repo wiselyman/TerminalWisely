@@ -37,8 +37,6 @@ function readStyles() {
     "src/styles/shell.css",
     "src/styles/home.css",
     "src/styles/management.css",
-    "src/styles/k8s.css",
-    "src/styles/database.css",
     "src/styles/ai-chat.css",
     "src/styles/files.css",
     "src/styles/desktop.css",
@@ -256,124 +254,20 @@ function readStyles() {
   }
 }
 
-// --- Local terminal removal ---
+// --- Home/Hosts product scope ---
 {
-  const hits = [];
-  const scan = (rel) => {
-    if (!exists(rel)) return;
-    const t = read(rel);
-    for (const bad of [
-      "create_local_session",
-      "createLocalSession",
-      "SessionKind::Local",
-      "get_local_shell_info",
-    ]) {
-      if (t.includes(bad)) hits.push(`${rel}:${bad}`);
-    }
-  };
-  scan("src-tauri/Cargo.toml");
-  scan("src-tauri/src/lib.rs");
-  scan("src-tauri/src/types.rs");
-  scan("src-tauri/src/commands/mod.rs");
-  scan("src/stores/sessionStore.ts");
-  scan("src/types/index.ts");
-  if (hits.length) fail("local-terminal.removed", hits.join(", "));
-  else pass("local-terminal.removed", "no create_local / portable-pty / Local kind");
-
-  if (exists("src-tauri/src/pty/mod.rs") || exists("src-tauri/src/local_shell.rs")) {
-    fail("local-terminal.modules-gone", "pty/ or local_shell.rs still on disk");
-  } else {
-    pass("local-terminal.modules-gone", "pty/ and local_shell.rs deleted");
-  }
-
-  const conn = read("src/components/ConnectionPanel.tsx");
-  if (/localTerminal|createLocalSession|gitBashMissing/.test(conn)) {
-    fail("local-terminal.ui-entry", "ConnectionPanel still has local terminal entry");
-  } else {
-    pass("local-terminal.ui-entry", "ConnectionPanel clean of local terminal");
-  }
-  if (exists("src/lib/terminalFont.ts")) {
-    const font = read("src/lib/terminalFont.ts");
-    if (
-      font.includes("getTerminalFontSize") &&
-      font.includes("handleTerminalFontSizeHotkey") &&
-      font.includes("tw.terminal.fontSize")
-    ) {
-      pass("terminal.font-size-zoom", "Cmd/Ctrl+/- font size with persistence");
-    } else {
-      fail("terminal.font-size-zoom", "missing terminal font size zoom helpers");
-    }
-  } else {
-    fail("terminal.font-size-zoom", "missing terminalFont.ts");
-  }
-  if (conn.includes('data-testid="k8s-host-add-cluster"')) {
-    pass("k8s.host-add-cluster", "Hosts row has add-to-K8s control");
-  } else {
-    fail("k8s.host-add-cluster", "missing k8s-host-add-cluster testid");
-  }
-  const appCss = readStyles();
+  const app = read("src/App.tsx");
+  const panel = read("src/components/ConnectionPanel.tsx");
+  const sidebar = read("src/stores/sidebarViewStore.ts");
   if (
-    appCss.includes("saved-item-action--k8s-detected") &&
-    appCss.includes("k8s-host-detected-flash")
+    app.includes('data-testid="sidebar-view-home"') &&
+    app.includes('data-testid="sidebar-view-hosts"') &&
+    panel.includes('scope="hosts"') &&
+    sidebar.includes('export type SidebarView = "hosts"')
   ) {
-    pass("k8s.host-detected-flash", "Hosts K8s detected flash animation wired");
+    pass("product.home-hosts-only", "Home and SSH Hosts remain as the only management scopes");
   } else {
-    fail("k8s.host-detected-flash", "missing K8s host detected flash CSS");
-  }
-  if (
-    /bindSshPickHost|k8s-bind-ssh-panel|bindSshNoKubectl/.test(conn)
-  ) {
-    fail(
-      "k8s.bind-ssh-panel-gone",
-      "ConnectionPanel still has K8s sidebar SSH bind panel",
-    );
-  } else {
-    pass("k8s.bind-ssh-panel-gone", "K8s sidebar SSH bind panel removed");
-  }
-  if (
-    conn.includes("EntityListView") &&
-    conn.includes('scope="hosts"') &&
-    conn.includes('scope="k8s"') &&
-    conn.includes("onAddEntity")
-  ) {
-    pass("sidebar.entity-list-dnd", "Hosts/K8s lists use EntityListView drag layout");
-  } else {
-    fail("sidebar.entity-list-dnd", "EntityListView not wired for hosts/k8s");
-  }
-  const k8sStore = read("src/stores/k8sStore.ts");
-  if (
-    k8sStore.includes("ensureJumpHostConnected") &&
-    k8sStore.includes("jumpHostGate") &&
-    k8sStore.includes("liveJumpHostSessionId")
-  ) {
-    pass(
-      "k8s.jump-host-gate",
-      "ssh_kubectl open auto-connects jump host or shows gate",
-    );
-  } else {
-    fail("k8s.jump-host-gate", "jump host gate missing from k8sStore");
-  }
-  const entityListView = read("src/components/management/EntityListView.tsx");
-  if (
-    entityListView.includes("entity-list-icon-btn") &&
-    entityListView.includes("entity-add-item-") &&
-    entityListView.includes("TerminalIcon") &&
-    entityListView.includes("FolderPlus")
-  ) {
-    pass("sidebar.entity-list-toolbar-icons", "entity list toolbar uses icon buttons");
-  } else {
-    fail("sidebar.entity-list-toolbar-icons", "entity list toolbar icons missing");
-  }
-  const layoutLib = read("src/lib/entityListLayout.ts");
-  if (
-    layoutLib.includes("ENTITY_LAYOUT_KEYS") &&
-    layoutLib.includes("LAYOUT_VERSION = 4") &&
-    layoutLib.includes("SIDEBAR_LAYOUT_KEY") &&
-    layoutLib.includes("migrateV2SidebarScope")
-  ) {
-    pass("sidebar.per-scope-layout-v3", "sidebar uses per-view v3 entity layout");
-  } else {
-    fail("sidebar.per-scope-layout-v3", "per-view entity layout storage missing");
+    fail("product.home-hosts-only", "Home/Hosts is missing or another management scope remains wired");
   }
 }
 
@@ -984,16 +878,14 @@ function readStyles() {
   const userStore = read("agent-sidecar/app/memory/user_store.py");
   if (
     mainPy.includes('/v1/memory/meta') &&
-    mainPy.includes("engineer_mode") &&
     api.includes("fetchMemoryMeta") &&
-    api.includes("engineer_mode") &&
     panel.includes("ai-engineer-memory-toggle") &&
     panel.includes("ai-engineer-memory-section-user") &&
     panel.includes("ai-engineer-memory-section-targets") &&
     !panel.includes("ai-engineer-open-data-dir") &&
     !panel.includes("ai-engineer-memory-path") &&
-    hostStore.includes('leaf = "clusters"') &&
-    userStore.includes("user-k8s.json") &&
+    hostStore.includes('"hosts"') &&
+    userStore.includes('"user.json"') &&
     statusBar.includes("AGENT_STATUS") &&
     artifacts.includes("maybe_spill_tool_content")
   ) {
@@ -1548,194 +1440,6 @@ function readStyles() {
   }
 }
 
-// --- K8s workbench wiring ---
-{
-  const wb = read("src/components/k8s/K8sWorkbench.tsx");
-  const summary = read("src/components/k8s/K8sClusterSummary.tsx");
-  if (summary.includes('data-testid="k8s-overview-title"')) {
-    pass("k8s.overview-title", "overview title");
-  } else {
-    fail("k8s.overview-title", "missing overview title in K8sClusterSummary");
-  }
-  if (
-    summary.includes("onWarningSendToChat") &&
-    summary.includes("k8s-warning-send-chat") &&
-    summary.includes("k8s-health-send-chat") &&
-    summary.includes("onHealthSendToChat") &&
-    wb.includes("sendWarningToChat") &&
-    wb.includes("sendLogsToChat") &&
-    wb.includes("sendYamlToChat") &&
-    wb.includes("sendHealthToChat") &&
-    wb.includes("sendSelectionToChat") &&
-    wb.includes("k8s-yaml-send-chat") &&
-    wb.includes("k8s-yaml-apply") &&
-    wb.includes("K8sYamlEditor") &&
-    wb.includes("k8s-yaml-find") &&
-    wb.includes("sendErrorToChat")
-  ) {
-    pass("k8s.send-to-chat", "warning/logs/yaml/health/error/selection send to chat");
-  } else {
-    fail("k8s.send-to-chat", "missing send-to-chat wiring");
-  }
-  const term = read("src/components/k8s/K8sClusterTerminal.tsx");
-  const podShell = read("src/components/k8s/K8sPodShellTerminal.tsx");
-  const ctxMenu = read("src/components/k8s/K8sSelectionContextMenu.tsx");
-  if (
-    term.includes("onSendSelection") &&
-    term.includes('testIdPrefix="k8s-cluster-terminal"') &&
-    term.includes("contextMenuSelectionRef") &&
-    term.includes("K8sSelectionContextMenu") &&
-    !term.includes("k8s-terminal-selection-bar") &&
-    podShell.includes("onSendSelection") &&
-    podShell.includes('testIdPrefix="k8s-pod-shell"') &&
-    podShell.includes("contextMenuSelectionRef") &&
-    podShell.includes("K8sSelectionContextMenu") &&
-    !podShell.includes("k8s-terminal-selection-bar") &&
-    ctxMenu.includes("sendToChat") &&
-    ctxMenu.includes("${testIdPrefix}-send-chat") &&
-    wb.includes("k8s-logs-pre") &&
-    wb.includes("setLogsMenu")
-  ) {
-    pass("k8s.terminal-send-selection", "cluster + pod shell + logs selection menus");
-  } else {
-    fail("k8s.terminal-send-selection", "missing terminal/logs selection send-to-chat");
-  }
-  const toastStore = read("src/stores/toastStore.ts");
-  const statusBar = read("src/components/StatusBarToasts.tsx");
-  if (
-    toastStore.includes("actionLabel") &&
-    statusBar.includes("statusbar-toast-action")
-  ) {
-    pass("k8s.toast-action", "toast action button");
-  } else {
-    fail("k8s.toast-action", "missing toast action wiring");
-  }
-  for (const [needle, id] of [
-    ["K8sClusterSummaryView", "k8s.summary"],
-    ["K8sNamespacePicker", "k8s.namespace-picker"],
-    ["k8sPodLogs", "k8s.pod-logs"],
-    ["buildNavGroups", "k8s.nav-groups"],
-  ]) {
-    if (wb.includes(needle)) pass(id, needle);
-    else fail(id, `missing ${needle} in K8sWorkbench`);
-  }
-  const k8sApi = read("src/lib/k8s/api.ts");
-  for (const [needle, id] of [
-    ["k8s_list_resources", "k8s.api.list"],
-    ["k8s_apply_yaml", "k8s.api.apply"],
-    ["k8s_delete_resource", "k8s.api.delete"],
-    ["k8s_scale_resource", "k8s.api.scale"],
-    ["k8s_helm_install", "k8s.api.helm-install"],
-    ["k8s_rollout_restart", "k8s.api.rollout-restart"],
-    ["k8s_kubectl_cluster_shell_start", "k8s.api.kubectl-cluster-shell"],
-    ["k8s_open_kubectl_terminal", "k8s.api.kubectl-terminal-legacy"],
-  ]) {
-    if (k8sApi.includes(needle)) pass(id, needle);
-    else fail(id, `missing ${needle} in k8s/api.ts`);
-  }
-  const workbench = read("src/components/k8s/K8sWorkbench.tsx");
-  const k8sStoreSrc = read("src/stores/k8sStore.ts");
-  if (
-    workbench.includes("buildNavGroups") &&
-    workbench.includes("K8S_AUTO_REFRESH_MS") &&
-    workbench.includes("k8s-nav-session-actions") &&
-    workbench.includes("k8s-nav-terminal") &&
-    workbench.includes("k8s-nav-create-resource") &&
-    workbench.includes("Terminal") &&
-    workbench.includes("ssh_kubectl") &&
-    workbench.includes("k8s-action-restart") &&
-    workbench.includes("k8s-detail-tab-port-forward") &&
-    workbench.includes("k8s-port-forward-pane") &&
-    workbench.includes("parseForwardablePorts") &&
-    workbench.includes("k8s-port-forward-rows") &&
-    workbench.includes("parsePodVolumes") &&
-    workbench.includes("k8s-overview-volumes") &&
-    k8sStoreSrc.includes("Keep open resource tabs") &&
-    exists("src/lib/k8s/forwardablePorts.ts") &&
-    exists("src/lib/k8s/podVolumes.ts") &&
-    !workbench.includes("k8s-row-menu-btn") &&
-    !workbench.includes("K8sDetailTabAddMenu") &&
-    !workbench.includes("sessionToolbarActions") &&
-    !workbench.includes("K8sWorkbenchDockAddBar") &&
-    !workbench.includes("title={cluster.display_name}")
-  ) {
-    pass("k8s.workbench-create", "nav footer + PF tab; tabs persist across category");
-  } else {
-    fail("k8s.workbench-create", "missing nav footer / PF tab / tabs still cleared on category");
-  }
-  if (exists("src/components/k8s/K8sClusterTerminalPanel.tsx")) {
-    pass("k8s.dock-component", "K8sClusterTerminalPanel.tsx");
-  } else {
-    fail("k8s.dock-component", "missing K8sClusterTerminalPanel.tsx");
-  }
-  const terminalPanel = read("src/components/k8s/K8sClusterTerminalPanel.tsx");
-  const createResource = read("src/lib/k8s/createResourceTemplates.ts");
-  if (
-    terminalPanel.includes("K8sClusterTerminalTabs") &&
-    terminalPanel.includes("K8sCreateResourceTabs") &&
-    terminalPanel.includes("K8sTemplatePicker") &&
-    terminalPanel.includes("K8sYamlEditor") &&
-    createResource.includes("CREATE_RESOURCE_TEMPLATE_GROUPS") &&
-    createResource.includes("CREATE_RESOURCE_TEMPLATES") &&
-    terminalPanel.includes("K8sDetailTabAddMenu") &&
-    terminalPanel.includes("K8sCreateResourcePanes") &&
-    workbench.includes("k8s-detail-tabs") &&
-    workbench.includes("k8s-tree-footer-spacer")
-  ) {
-    pass("k8s.terminal-inline-tabs", "terminal/create tabs in detail tablist");
-  } else {
-    fail("k8s.terminal-inline-tabs", "terminal not wired into detail tabs");
-  }
-  if (exists("src/lib/k8s/createResource.ts")) {
-    pass("k8s.create-resource", "createResource helper");
-  } else {
-    fail("k8s.create-resource", "missing createResource helper");
-  }
-  const actions = read("src/lib/k8s/actions.ts");
-  if (actions.includes("canRestart") && actions.includes("canLogs")) {
-    pass("k8s.actions", "canRestart/canLogs");
-  } else {
-    fail("k8s.actions", "missing canRestart/canLogs helpers");
-  }
-  const appTsx = read("src/App.tsx");
-  const clusterTabs = read("src/lib/k8s/clusterTabs.ts");
-  const k8sStore = read("src/stores/k8sStore.ts");
-  if (
-    appTsx.includes('data-tab-role="k8s-cluster"') &&
-    appTsx.includes("cluster.display_name") &&
-    appTsx.includes("k8s-cluster-tab-title") &&
-    clusterTabs.includes("syncOpenClusterTabIds") &&
-    k8sStore.includes("syncOpenClusterTabIds")
-  ) {
-    pass("k8s.cluster-tab-title", "top bar shows cluster display_name");
-  } else {
-    fail("k8s.cluster-tab-title", "missing cluster tab title wiring");
-  }
-  const k8sClusterStatusBar = read("src/components/k8s/K8sClusterStatusBar.tsx");
-  const appSrc = read("src/App.tsx");
-  if (
-    k8sClusterStatusBar.includes('data-testid="k8s-cluster-statusbar"') &&
-    k8sClusterStatusBar.includes("buildK8sStatusBarChips") &&
-    appSrc.includes("K8sClusterStatusBar") &&
-    appSrc.includes('sidebarView === "k8s"')
-  ) {
-    pass("k8s.cluster-statusbar", "K8sClusterStatusBar wired for k8s sidebar");
-  } else {
-    fail("k8s.cluster-statusbar", "missing K8s status bar wiring");
-  }
-  const connPanel = read("src/components/ConnectionPanel.tsx");
-  if (
-    appSrc.includes("chrome-sidebar-views") &&
-    appSrc.includes('data-testid="sidebar-view-hosts"') &&
-    appSrc.includes('data-testid="sidebar-view-k8s"') &&
-    !connPanel.includes("sidebar-activity-bar")
-  ) {
-    pass("shell.chrome-sidebar-views", "Hosts/K8s switch in titlebar after sidebar toggle");
-  } else {
-    fail("shell.chrome-sidebar-views", "Hosts/K8s switch still in sidebar body or missing from chrome");
-  }
-}
-
 // --- Sidecar API surface (Platform/MCP/eval removed) ---
 {
   if (exists("agent-sidecar/tests/test_api_surface_integration.py")) {
@@ -1794,41 +1498,6 @@ function readStyles() {
   }
 }
 
-// --- Sidecar runtime must ship sqlglot (DB SQL risk) ---
-{
-  const req = read("agent-sidecar/requirements-runtime.txt");
-  const sidecar = read("src-tauri/src/ai_engineer/sidecar.rs");
-  if (req.includes("sqlglot") && sidecar.includes("sqlglot")) {
-    pass("sidecar.runtime-sqlglot", "requirements-runtime + Python probe include sqlglot");
-  } else {
-    fail("sidecar.runtime-sqlglot", "sqlglot missing from runtime deps or sidecar probe");
-  }
-}
-
-// --- Navicat basic-layer matrix (0.0.5) ---
-{
-  const matrix = read("docs/superpowers/specs/2026-09-30-engine-matrix.md");
-  if (matrix.includes("## Navicat 18 基本层对照") && matrix.includes("Empty vs Truncate")) {
-    pass("db.navicat-basic-matrix", "engine-matrix names Navicat basic-layer gaps");
-  } else {
-    fail("db.navicat-basic-matrix", "missing Navicat 18 基本层对照 section");
-  }
-  if (
-    matrix.includes("## 引擎能力差异（Navicat Mac") &&
-    matrix.includes("navicat_mac_en.pdf") &&
-    matrix.includes("Chapter 5")
-  ) {
-    pass("db.engine-capability-diff", "engine-matrix names Mac PDF capability diff");
-  } else {
-    fail("db.engine-capability-diff", "missing 引擎能力差异（Navicat Mac） section");
-  }
-  if (exists("docs/superpowers/plans/2026-10-08-engine-capability-diff.md")) {
-    pass("db.engine-capability-plan", "engine capability plan file present");
-  } else {
-    fail("db.engine-capability-plan", "missing engine-capability-diff plan");
-  }
-}
-
 // --- Test infrastructure ---
 {
   if (exists("vitest.config.ts")) pass("test.vitest-config", "vitest.config.ts");
@@ -1877,19 +1546,12 @@ function readStyles() {
   if (exists("e2e/ssh-drag-upload.spec.ts"))
     pass("test.drag-upload-e2e", "Playwright drag-upload spec");
   else fail("test.drag-upload-e2e", "missing ssh-drag-upload.spec.ts");
-  if (exists("scripts/e2e-k8s-fixture.sh") && exists("scripts/e2e-k8s-integration.sh"))
-    pass("test.k8s-live-script", "k3d fixture + K8s integration runner");
-  else fail("test.k8s-live-script", "missing e2e-k8s scripts");
-  if (exists("src-tauri/src/k8s/live_integration.rs"))
-    pass("test.k8s-live-rust", "Rust k8s live_integration tests");
-  else fail("test.k8s-live-rust", "missing k8s live_integration.rs");
   const e2eSpecs = [
     "e2e/tab-management.spec.ts",
     "e2e/terminal-links.spec.ts",
     "e2e/ssh-connection-ui.spec.ts",
     "e2e/ai-engineer-approval.spec.ts",
     "e2e/local-fs-actions.spec.ts",
-    "e2e/k8s-actions.spec.ts",
     "e2e/settings-i18n.spec.ts",
   ];
   for (const rel of e2eSpecs) {
@@ -2200,7 +1862,6 @@ pass(
   "automated.ai-terminal-exec",
   "pytest hard_gates + approval_cancel + e2e/ai-engineer-approval.spec.ts",
 );
-pass("automated.k8s-workbench-live", "k3d + Rust k8s live_integration + k8s-actions E2E");
 
 // --- Release documentation must only claim a published version and shipped UI ---
 {
@@ -2218,10 +1879,27 @@ pass("automated.k8s-workbench-live", "k3d + Rust k8s live_integration + k8s-acti
     const end = markdown.indexOf("\n---", start);
     const homeSection = start >= 0 ? markdown.slice(start, end >= 0 ? end : undefined) : "";
     const dockApps = file === "README.md"
-      ? homeSection.includes("Terminal, AI Local, and MarkWisely") && !/Desktop[^\n]*(Files, Processes, Browser)/.test(homeSection)
-      : homeSection.includes("Terminal、AI Local 和 MarkWisely") && !/桌面[^\n]*(文件、进程、浏览器)/.test(homeSection);
+      ? homeSection.includes("Terminal, AI Local, MarkWisely, and EditorWisely") && !/Desktop[^\n]*(Files, Processes, Browser)/.test(homeSection)
+      : homeSection.includes("Terminal、AI Local、MarkWisely 和 EditorWisely") && !/桌面[^\n]*(文件、进程、浏览器)/.test(homeSection);
     if (dockApps) pass(`docs.${file}.home-desktop-apps`, "Home Desktop app list matches the shipped UI");
-    else fail(`docs.${file}.home-desktop-apps`, "Home Desktop must describe Terminal, AI Local, and MarkWisely only");
+    else fail(`docs.${file}.home-desktop-apps`, "Home Desktop app list must match shipped products");
+  }
+
+  const currentProductDocs = [
+    "README.md",
+    "README.zh-CN.md",
+    "docs/HANDOFF.md",
+    "docs/TEST_MATRIX.md",
+  ].map((file) => [file, read(file)]);
+  const retiredFeatureHeading = /^#{1,4}[^\n]*(?:Kubernetes|\bK8s\b|Database Workbench|数据库工作台)/im;
+  const retiredFeatureLabel = /(?:sidebar-view-(?:k8s|db)|src\/(?:components|lib)\/(?:k8s|db)\/|e2e\/(?:k8s|db)-)/i;
+  const staleDocs = currentProductDocs
+    .filter(([, markdown]) => retiredFeatureHeading.test(markdown) || retiredFeatureLabel.test(markdown))
+    .map(([file]) => file);
+  if (staleDocs.length === 0) {
+    pass("docs.current-product-scope", "current product docs describe the Home/Hosts Terminal and Desktop surface");
+  } else {
+    fail("docs.current-product-scope", `remove retired workspace sections and paths from ${staleDocs.join(", ")}`);
   }
 }
 

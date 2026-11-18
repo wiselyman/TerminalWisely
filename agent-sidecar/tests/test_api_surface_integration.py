@@ -82,11 +82,7 @@ def test_skills_list_route() -> None:
         body = r.json()
         assert "count" in body
         assert "root" in body
-        assert body.get("engineer_mode") == "linux"
         assert isinstance(body.get("skills"), list)
-        k8s = client.get("/v1/skills?engineer_mode=k8s", headers=_auth())
-        assert k8s.status_code == 200, k8s.text
-        assert k8s.json().get("engineer_mode") == "k8s"
 
 
 def test_memory_meta_route() -> None:
@@ -98,12 +94,7 @@ def test_memory_meta_route() -> None:
         assert "user_path" in body
         assert "hosts_dir" in body
         assert "user" in body
-        assert body.get("engineer_mode") == "linux"
         assert isinstance(body.get("hosts"), list)
-        k8s = client.get("/v1/memory/meta?engineer_mode=k8s", headers=_auth())
-        assert k8s.status_code == 200, k8s.text
-        assert k8s.json().get("engineer_mode") == "k8s"
-        assert "clusters" in k8s.json()["hosts_dir"].replace("\\", "/")
 
 
 def test_media_get_route(tmp_path, monkeypatch) -> None:

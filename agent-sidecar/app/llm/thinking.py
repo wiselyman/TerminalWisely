@@ -190,13 +190,9 @@ def _coerce_tool_call_dict(obj: Any) -> dict[str, Any] | None:
     if not (isinstance(name, str) and _TOOL_NAME_RE.match(name.strip())):
         cmd = obj.get("command")
         if isinstance(cmd, str) and cmd.strip():
-            from app.tools.schema import TOOL_K8S_EXEC, TOOL_TERMINAL_EXEC
+            from app.tools.schema import TOOL_TERMINAL_EXEC
 
-            pod = obj.get("pod")
-            if isinstance(pod, str) and pod.strip():
-                name = TOOL_K8S_EXEC
-            else:
-                name = TOOL_TERMINAL_EXEC
+            name = TOOL_TERMINAL_EXEC
             args: Any = {
                 k: v
                 for k, v in obj.items()

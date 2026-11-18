@@ -299,6 +299,12 @@ pub fn read_local_text(request: LocalPathRequest) -> AppResult<String> {
     std::fs::read_to_string(path).map_err(|e| AppError::msg(format!("Cannot read text file: {e}")))
 }
 
+pub fn read_local_bytes(request: LocalPathRequest) -> AppResult<Vec<u8>> {
+    let path = normalize_path(&request.path)?.canonicalize().map_err(AppError::from)?;
+    if !path.is_file() { return Err(AppError::msg("Not a file")); }
+    std::fs::read(path).map_err(AppError::from)
+}
+
 pub fn write_local_text(request: LocalTextWriteRequest) -> AppResult<()> {
     let path = normalize_path(&request.path)?;
     if !path.is_file() {
@@ -317,6 +323,16 @@ pub fn write_local_bytes(request: LocalBytesWriteRequest) -> AppResult<()> {
     if !path.is_file() {
         return Err(AppError::msg("Not a file"));
     }
+    std::fs::write(path, bytes).map_err(AppError::from)
+}
+
+pub fn save_local_bytes_as(request: LocalBytesWriteRequest) -> AppResult<()> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(request.base64)
+        .map_err(|e| AppError::msg(format!("Invalid binary file data: {e}")))?;
+    let path = normalize_path(&request.path)?;
+    let parent = path.parent().ok_or_else(|| AppError::msg("Invalid destination"))?;
+    if !parent.is_dir() { return Err(AppError::msg("Destination folder does not exist")); }
     std::fs::write(path, bytes).map_err(AppError::from)
 }
 
@@ -352,6 +368,8 @@ mod tests {
             content: "本机内容".into(),
         }).unwrap();
         assert_eq!(read_local_text(LocalPathRequest { path: file.clone() }).unwrap(), "本机内容");
+        std::fs::write(&file, [0xef, 0xbb, 0xbf, b'a', b'\r', b'\n']).unwrap();
+        assert_eq!(read_local_bytes(LocalPathRequest { path: file.clone() }).unwrap(), [0xef, 0xbb, 0xbf, b'a', b'\r', b'\n']);
 
         let renamed = rename_local_path(LocalRenameRequest {
             path: file,

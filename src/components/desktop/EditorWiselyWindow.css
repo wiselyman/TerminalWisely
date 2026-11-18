@@ -1,0 +1,24 @@
+.editorwisely-window { display:flex; flex-direction:column; min-height:0; height:100%; position:relative; background:var(--surface-1,#fff); color:var(--text-primary,#222); }
+.editorwisely-tabs { display:flex; min-width:0; overflow:auto; gap:3px; }
+.editorwisely-tab { display:flex; align-items:center; max-width:220px; border-radius:5px; background:var(--surface-2,#eee); }
+.editorwisely-tab.active { background:var(--surface-3,#ddd); }
+.editorwisely-tab button { border:0; background:transparent; color:inherit; padding:5px 7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.editorwisely-toolbar,.editorwisely-status { display:flex; justify-content:space-between; gap:12px; padding:6px 10px; color:var(--text-secondary,#777); font-size:12px; }
+.editorwisely-cm { min-height:0; flex:1; overflow:auto; }
+.editorwisely-loading { display:grid; place-items:center; flex:1; color:var(--text-secondary,#777); }
+.editorwisely-cm .cm-editor { height:100%; }
+.editorwisely-status { border-top:1px solid var(--border-subtle,#ddd); }
+.editorwisely-empty { display:grid; place-items:center; flex:1; color:var(--text-secondary,#777); }
+.editorwisely-error { padding:8px 12px; color:var(--danger,#a22); background:var(--surface-danger,#fee); }
+.editorwisely-confirm { position:absolute; inset:25% 25% auto; z-index:5; padding:20px; background:var(--surface-1,#fff); border:1px solid var(--border,#aaa); box-shadow:0 8px 30px #0004; }
+.editorwisely-home { width:min(100%,920px); margin:auto; padding:clamp(28px,5vh,56px) clamp(22px,5vw,64px); overflow:auto; }
+.editorwisely-home header { display:flex; align-items:center; gap:16px; padding-bottom:22px; border-bottom:1px solid var(--tw-border); }
+.editorwisely-home header>svg { width:48px; height:48px; padding:10px; color:var(--tw-accent); }
+.editorwisely-home h2,.editorwisely-home h3 { margin:0; }
+.editorwisely-home header p,.editorwisely-home section>p { color:var(--tw-fg-muted); }
+.editorwisely-home>button { display:flex; align-items:center; gap:12px; margin:24px 0; min-height:54px; padding:0 16px; color:inherit; background:var(--tw-panel); border:1px solid var(--tw-border); border-radius:9px; cursor:pointer; }
+.editorwisely-home section { display:grid; gap:8px; }
+.editorwisely-recent { display:grid; text-align:left; padding:10px 12px; color:inherit; background:transparent; border:0; border-radius:7px; cursor:pointer; }
+.editorwisely-recent:hover { background:var(--tw-panel); }
+.editorwisely-recent small { color:var(--tw-fg-muted); }
+.editorwisely-window .markwisely-open-backdrop { position:absolute; inset:0; z-index:6; display:grid; place-items:center; background:var(--tw-overlay); }

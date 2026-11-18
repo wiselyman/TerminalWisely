@@ -126,17 +126,11 @@ import {
   wholeAssistantReplyText,
 } from "../../lib/aiEngineer/chatCopy";
 import {
-  DB_WORKFLOW_CHIP_IDS,
-  K8S_WORKFLOW_CHIP_IDS,
   WORKFLOW_CHIP_IDS,
   classifyLocalFile,
-  dbWorkflowPrompt,
-  k8sWorkflowPrompt,
   nextAttachmentId,
   readLocalImageBase64,
   readLocalTextFile,
-  type DbWorkflowChipId,
-  type K8sWorkflowChipId,
   type PendingAttachment,
   type WorkflowChipId,
   workflowPrompt,
@@ -364,8 +358,7 @@ function ToolExecCard({
   const running = line.status === "running";
   const isExec =
     line.name === "terminal_exec" ||
-    line.name === "ai_exec" ||
-    line.name.startsWith("k8s_");
+    line.name === "ai_exec";
   // Live/running → open; finished → auto-collapse (unless user pinned open).
   const [expanded, setExpanded] = useState(() => running || Boolean(live));
 
@@ -566,18 +559,6 @@ function ToolExecCard({
         ) : null}
         {line.detail ? (
           <code className="ai-engineer-tool-detail">{line.detail}</code>
-        ) : null}
-        {(line.name === "db_query" || line.name === "db_explain") &&
-        line.detail?.trim() ? (
-          <button
-            type="button"
-            data-testid="db-insert-sql"
-            onClick={() =>
-              useAiEngineerStore.getState().insertDbSql(line.detail!.trim())
-            }
-          >
-            {t("aiEngineer.dbInsertSql")}
-          </button>
         ) : null}
       </details>
     );
@@ -1085,12 +1066,7 @@ export function AiEngineerPanel({
   const runTraceSpans = useAiEngineerStore((s) => s.runTraceSpans);
   const ensureReady = useAiEngineerStore((s) => s.ensureReady);
   const bindContext = useAiEngineerStore((s) => s.bindContext);
-  const bindK8sContext = useAiEngineerStore((s) => s.bindK8sContext);
   const bindLocalContext = useAiEngineerStore((s) => s.bindLocalContext);
-  const engineerMode = useAiEngineerStore((s) => s.engineerMode);
-  const clusterId = useAiEngineerStore((s) => s.clusterId);
-  const clusterName = useAiEngineerStore((s) => s.clusterName);
-  const clusterTarget = useAiEngineerStore((s) => s.clusterTarget);
   const settingsOpen = useAiEngineerStore((s) => s.settingsOpen);
   const setSettingsOpen = useAiEngineerStore((s) => s.setSettingsOpen);
   const settings = useAiEngineerStore((s) => s.settings);
@@ -1426,20 +1402,8 @@ export function AiEngineerPanel({
     void onLocalFiles(images);
   };
 
-  const applyWorkflowChip = (
-    id: WorkflowChipId | K8sWorkflowChipId | DbWorkflowChipId,
-  ) => {
-    if (engineerMode === "db") {
-      setComposerInput(dbWorkflowPrompt(id as DbWorkflowChipId));
-    } else if (engineerMode === "k8s") {
-      setComposerInput(
-        k8sWorkflowPrompt(id as K8sWorkflowChipId),
-      );
-    } else {
-      setComposerInput(
-        workflowPrompt(id as WorkflowChipId),
-      );
-    }
+  const applyWorkflowChip = (id: WorkflowChipId) => {
+    setComposerInput(workflowPrompt(id));
   };
 
   const profiles = settings?.profiles ?? [];
@@ -1471,29 +1435,13 @@ export function AiEngineerPanel({
     }
     if (homeOpen) return;
     if (!open) return;
-    if (engineerMode === "db") return;
-    if (engineerMode === "k8s" && clusterId) {
-      const live = useAiEngineerStore.getState();
-      // Same cluster already bound — skip re-entry (avoids hydrate write churn).
-      if (
-        live.clusterId === clusterId &&
-        live.sessionId === sessionId &&
-        live.chatScope === panelScope &&
-        live.engineerMode === "k8s"
-      ) {
-        return;
-      }
-      bindK8sContext(clusterId, clusterName ?? undefined, clusterTarget);
-      return;
-    }
     // Soft-hide restore / warm reopen: already bound to this host — do not
     // re-enter bindContext (avoids switch-abort races and disk hydrate flash).
     const live = useAiEngineerStore.getState();
     if (
       live.sessionId === sessionId &&
       live.chatScope === panelScope &&
-      (live.serverId ?? null) === (serverId ?? null) &&
-      live.engineerMode === "linux"
+      (live.serverId ?? null) === (serverId ?? null)
     ) {
       return;
     }
@@ -1503,12 +1451,7 @@ export function AiEngineerPanel({
     sessionId,
     serverId,
     panelScope,
-    engineerMode,
-    clusterId,
-    clusterName,
-    clusterTarget,
     bindContext,
-    bindK8sContext,
     homePlacement,
     homeOpen,
     bindLocalContext,
@@ -1658,7 +1601,7 @@ export function AiEngineerPanel({
     try {
       await ensureReady();
       const sidecar = await ensureSidecar();
-      const catalog = await fetchUserSkills(sidecar, engineerMode);
+      const catalog = await fetchUserSkills(sidecar);
       setSkillsCatalog(catalog);
     } catch (err) {
       setSkillsError(formatAppError(err));
@@ -1674,7 +1617,7 @@ export function AiEngineerPanel({
     try {
       await ensureReady();
       const sidecar = await ensureSidecar();
-      const catalog = await fetchMemoryMeta(sidecar, engineerMode);
+      const catalog = await fetchMemoryMeta(sidecar);
       setMemoryCatalog(catalog);
     } catch (err) {
       setMemoryError(formatAppError(err));
@@ -2314,7 +2257,6 @@ export function AiEngineerPanel({
           void sendMessage({
             sessionId,
             serverId,
-            clusterId: clusterId ?? undefined,
           });
         });
         return;
@@ -2324,7 +2266,6 @@ export function AiEngineerPanel({
     void sendMessage({
       sessionId,
       serverId,
-      clusterId: clusterId ?? undefined,
     });
   };
 
@@ -2511,28 +2452,17 @@ export function AiEngineerPanel({
   const requestSaveAsSkill = () => {
     if (busy || !ready || !canChat) return;
     setComposerInput(t("aiEngineer.saveAsSkillPrompt"));
-    void sendMessage({
-      sessionId,
-      serverId,
-      clusterId: engineerMode === "k8s" ? (clusterId ?? undefined) : undefined,
-    });
+    void sendMessage({ sessionId, serverId });
   };
 
   const panelTitle =
     homePlacement
       ? t("desktop.appAiLocal")
-      : engineerMode === "k8s"
-      ? t("aiEngineer.k8sTitle")
       : t("aiEngineer.linuxTitle");
   const emptyHint = homePlacement
     ? t("aiEngineer.hintLocal")
-    : engineerMode === "k8s"
-      ? t("aiEngineer.hintK8s")
-      : t("aiEngineer.hint");
-  const inputPlaceholder =
-    engineerMode === "k8s"
-      ? t("aiEngineer.inputPlaceholderK8s")
-      : t("aiEngineer.inputPlaceholder");
+    : t("aiEngineer.hint");
+  const inputPlaceholder = t("aiEngineer.inputPlaceholder");
 
   // Keep the transcript DOM mounted while soft-hidden (host-tab switch sets
   // open=false). Returning null remounts markdown and makes chat text flash.
@@ -2883,9 +2813,7 @@ export function AiEngineerPanel({
                         }}
                       >
                         <span className="ai-engineer-catalog-title">
-                          {engineerMode === "k8s"
-                            ? t("aiEngineer.memoryUserK8s")
-                            : t("aiEngineer.memoryUser")}
+                          {t("aiEngineer.memoryUser")}
                         </span>
                         <span className="ai-engineer-catalog-sub">
                           {t("aiEngineer.memoryUserCounts", {
@@ -2898,15 +2826,11 @@ export function AiEngineerPanel({
                         className="ai-engineer-memory-section-label"
                         data-testid="ai-engineer-memory-section-targets"
                       >
-                        {engineerMode === "k8s"
-                          ? t("aiEngineer.memorySectionClusters")
-                          : t("aiEngineer.memorySectionHosts")}
+                        {t("aiEngineer.memorySectionHosts")}
                       </div>
                       {(memoryCatalog?.hosts ?? []).length === 0 ? (
                         <div className="ai-engineer-menu-empty">
-                          {engineerMode === "k8s"
-                            ? t("aiEngineer.memoryClustersEmpty")
-                            : t("aiEngineer.memoryHostsEmpty")}
+                          {t("aiEngineer.memoryHostsEmpty")}
                         </div>
                       ) : (
                         <div className="ai-engineer-skills-list">
@@ -3189,12 +3113,7 @@ export function AiEngineerPanel({
                   >
                     <p className="find-panel-empty">{emptyHint}</p>
                     {homePlacement ? null : <div className="ai-engineer-workflow-chips" role="group">
-                      {(engineerMode === "db"
-                        ? DB_WORKFLOW_CHIP_IDS
-                        : engineerMode === "k8s"
-                          ? K8S_WORKFLOW_CHIP_IDS
-                          : WORKFLOW_CHIP_IDS
-                      ).map((id) => (
+                      {WORKFLOW_CHIP_IDS.map((id) => (
                         <button
                           key={id}
                           type="button"

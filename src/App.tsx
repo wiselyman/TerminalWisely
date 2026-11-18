@@ -12,7 +12,6 @@ import { SudoPasswordModal } from "./components/SudoPasswordModal";
 import { SendToDialog } from "./components/SendToDialog";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { HostStatsStatusBar } from "./components/hostStats/HostStatsStatusBar";
-import { K8sClusterStatusBar } from "./components/k8s/K8sClusterStatusBar";
 import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
 import { HomeWorkspace } from "./components/home/HomeWorkspace";
@@ -20,6 +19,7 @@ import { LocalFsTool } from "./components/LocalFsTool";
 import { BrowserPanel } from "./components/browser/BrowserPanel";
 import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
 import { MarkWiselyWindow } from "./components/desktop/MarkWiselyWindow";
+import { EditorWiselyWindow } from "./components/desktop/EditorWiselyWindow";
 import { DesktopPanel } from "./components/desktop/DesktopPanel";
 import { DesktopTerminalWindow } from "./components/desktop/DesktopTerminalWindow";
 import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
@@ -27,16 +27,8 @@ import { ProcessManagerPanel } from "./components/desktop/ProcessManagerPanel";
 import { TerminalView } from "./components/TerminalView";
 import { LOCAL_CHAT_SESSION } from "./lib/aiEngineer/localTarget";
 import { setDesktopChromeHost } from "./lib/desktopChromeHost";
-import { DbWorkbench } from "./components/db/DbWorkbench";
-import { EngineMark } from "./components/db/DbIcons";
-import { K8sWorkbench } from "./components/k8s/K8sWorkbench";
-import { AddK8sClusterModal } from "./components/k8s/AddK8sClusterModal";
-import { K8sClusterIcon } from "./components/k8s/K8sClusterIcon";
 import { useSidebarViewStore } from "./stores/sidebarViewStore";
-import { useK8sStore } from "./stores/k8sStore";
-import { useDbWorkspaceStore } from "./stores/dbWorkspaceStore";
 import { useManagedEntityStore } from "./stores/managedEntityStore";
-import { chromeNewAction } from "./lib/chromeNewSession";
 import { extractDroppedPaths } from "./lib/terminalLinks";
 import { getTerminalFontFamily, ensureTerminalFontsLoaded } from "./lib/terminalFont";
 import {
@@ -76,6 +68,7 @@ import { useMarkWiselyStore } from "./stores/markWiselyStore";
 import { createMarkdownOpenDrain } from "./lib/markdownOpenQueue";
 import { isSshDesktopTarget } from "./lib/desktopTarget";
 import { useToastStore } from "./stores/toastStore";
+import { splitStartupNotice } from "./lib/startupNotice";
 import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
 import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
 import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
@@ -86,7 +79,7 @@ import {
   ChromePlusIcon,
   SidebarToggleIcon,
 } from "./components/SidebarIcons";
-import { DatabaseIcon, SystemInfoIcon, TerminalIcon } from "./components/WorkspaceToolIcons";
+import { SystemInfoIcon, TerminalIcon } from "./components/WorkspaceToolIcons";
 import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
 import { isTauriRuntime } from "./lib/isTauri";
 import { showManualUpdateCheckResult } from "./lib/updateCheckFeedback";
@@ -108,15 +101,13 @@ import "./styles/primitives.css";
 import "./styles/shell.css";
 import "./styles/home.css";
 import "./styles/management.css";
-import "./styles/k8s.css";
-import "./styles/database.css";
 import "./styles/ai-chat.css";
 import "./styles/desktop.css";
 import "./styles/files.css";
 import "./styles/dialogs.css";
 
 function App() {
-  const { t } = useTranslation(["shell", "k8s"]);
+  const { t } = useTranslation(["shell"]);
   const platformClass = getPlatformShellClass();
   const macWindowChrome = isMacHost();
   const tauriDragRegion = isTauriRuntime() ? true : undefined;
@@ -139,8 +130,12 @@ function App() {
   useEffect(() => {
     void invoke<string[]>("take_catalog_restore_notice")
       .then((names) => {
-        if (names.length > 0) {
-          pushToast(t("catalogRestored", { files: names.join(", ") }), true);
+        const notice = splitStartupNotice(names);
+        if (notice.cleanupFailures.length > 0) {
+          pushToast(t("catalogCleanupIncomplete", { items: notice.cleanupFailures.join(", ") }), false);
+        }
+        if (notice.restored.length > 0) {
+          pushToast(t("catalogRestored", { files: notice.restored.join(", ") }), true);
         }
       })
       .catch(() => undefined);
@@ -399,27 +394,14 @@ function App() {
   }, [activeHomeTerminalId, homeTerminalTabs]);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
-  const openNewDbRef = useRef<() => void>(() => {});
   const registerNewRemote = useCallback((open: () => void) => {
     openNewRemoteRef.current = open;
-  }, []);
-  const registerNewDb = useCallback((open: () => void) => {
-    openNewDbRef.current = open;
   }, []);
   const aiEngineerOpen = useAiEngineerStore((s) => s.open);
   const aiEngineerSessionId = useAiEngineerStore((s) => s.sessionId);
   const aiEngineerServerId = useAiEngineerStore((s) => s.serverId);
-  const engineerMode = useAiEngineerStore((s) => s.engineerMode);
-  const dbConnectionId = useAiEngineerStore((s) => s.dbConnectionId);
   const sidebarView = useSidebarViewStore((s) => s.view);
   const setSidebarView = useSidebarViewStore((s) => s.setView);
-  const selectedCluster = useK8sStore((s) => s.selectedCluster);
-  const openClusterIds = useK8sStore((s) => s.openClusterIds);
-  const clusters = useK8sStore((s) => s.clusters);
-  const selectCluster = useK8sStore((s) => s.selectCluster);
-  const closeClusterTab = useK8sStore((s) => s.closeClusterTab);
-  const addClusterOpen = useK8sStore((s) => s.addClusterOpen);
-  const setAddClusterOpen = useK8sStore((s) => s.setAddClusterOpen);
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
   const homeChatOpen = useManagedEntityStore((s) => s.homeChatOpen);
   const toggleHomeChat = useManagedEntityStore((s) => s.toggleHomeChat);
@@ -433,23 +415,12 @@ function App() {
     homeWasOpen.current = homeOpen;
   }, [homeOpen]);
   const leaveHome = useManagedEntityStore((s) => s.leaveHome);
-  const dbWorkspaces = useDbWorkspaceStore((s) => s.workspaces);
-  const activeDbWorkspaceId = useDbWorkspaceStore((s) => s.activeId);
-  const setActiveDbWorkspace = useDbWorkspaceStore((s) => s.setActive);
-  const closeDbWorkspace = useDbWorkspaceStore((s) => s.closeWorkspace);
-  /** K8s workbench only when not on shared Home. */
-  const showK8sWorkbench = sidebarView === "k8s" && !homeOpen;
-  // Mount DB workbench whenever the DB sidebar is active so the tree can portal
-  // into the sidebar while Home is still showing.
-  const showDbWorkbench = sidebarView === "db";
   const showHostsSession = sidebarView === "hosts" && !homeOpen;
-  const chromeNew = chromeNewAction(sidebarView);
   const aiPanelSessionId = aiEngineerSessionId;
   const showAiEngineerPanel = shouldShowAiEngineerPanel({
     open: aiEngineerOpen,
     sessionId: aiPanelSessionId,
     sidebarView,
-    hasSelectedCluster: selectedCluster != null,
     activeTabId: sidebarView === "hosts" ? activeTabId : null,
     homeOpen,
   });
@@ -487,6 +458,7 @@ function App() {
   const desktopAiLocalMinimized = useDesktopStore((s) => s.apps.aiLocal.minimized);
   const desktopFilesOpen = useDesktopStore((s) => s.apps.files.open);
   const markWiselyOpen = useDesktopStore((s) => s.apps.markwisely.open);
+  const editorWiselyOpen = useDesktopStore((s) => s.apps.editorwisely.open);
   const desktopFilesMinimized = useDesktopStore((s) => s.apps.files.minimized);
   const desktopProcessesOpen = useDesktopStore((s) => s.apps.processes.open);
   const desktopProcessesMinimized = useDesktopStore(
@@ -567,14 +539,6 @@ function App() {
       );
     }
   }, [sidebarCollapsed, sidebarExpandedWidth]);
-
-  // K8s AI Engineer requires an active cluster — close if selection is cleared.
-  useEffect(() => {
-    if (sidebarView !== "k8s") return;
-    if (selectedCluster) return;
-    if (!aiEngineerOpen) return;
-    useAiEngineerStore.getState().close({ force: true });
-  }, [sidebarView, selectedCluster, aiEngineerOpen]);
 
   // Host tab changed while AI still bound to another session — soft-hide so
   // the previous host's transcript cannot paint over the new terminal.
@@ -990,36 +954,6 @@ function App() {
                   >
                     <SystemInfoIcon />
                   </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`chrome-sidebar-view-btn${!homeOpen && sidebarView === "k8s" ? " active" : ""}`}
-                    aria-label={t("sidebarViewK8s")}
-                    title={t("sidebarViewK8s")}
-                    aria-selected={!homeOpen && sidebarView === "k8s"}
-                    data-testid="sidebar-view-k8s"
-                    onClick={() => {
-                      setSidebarView("k8s");
-                      leaveHome();
-                    }}
-                  >
-                    <K8sClusterIcon />
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`chrome-sidebar-view-btn${!homeOpen && sidebarView === "db" ? " active" : ""}`}
-                    aria-label={t("sidebarViewDb")}
-                    title={t("sidebarViewDb")}
-                    aria-selected={!homeOpen && sidebarView === "db"}
-                    data-testid="sidebar-view-db"
-                    onClick={() => {
-                      setSidebarView("db");
-                      leaveHome();
-                    }}
-                  >
-                    <DatabaseIcon />
-                  </button>
                 </div>
               </div>
             </div>
@@ -1266,159 +1200,16 @@ function App() {
                   </div>
                 );
               }) : null}
-              {!homeOpen && sidebarView === "k8s" ? (
-                <>
-                  {openClusterIds.map((id) => {
-                    const cluster = clusters.find((c) => c.id === id);
-                    if (!cluster) return null;
-                    const active = !homeOpen && selectedCluster?.id === id;
-                    return (
-                      <div
-                        key={id}
-                        className={`tab${active ? " active" : ""}`}
-                        data-tab-role="k8s-cluster"
-                        data-testid={`k8s-cluster-tab-${id}`}
-                        onClick={() => {
-                          if (tabPointerButtonRef.current !== 0) {
-                            tabPointerButtonRef.current = 0;
-                            return;
-                          }
-                          if (Date.now() < suppressTabClickUntilRef.current) return;
-                          selectCluster(id);
-                        }}
-                        onMouseDown={(event) => {
-                          tabPointerButtonRef.current = event.button;
-                          if (event.button === 0) {
-                            clearChromeClickSuppress();
-                            suppressTabClickUntilRef.current = 0;
-                            selectCluster(id);
-                          }
-                        }}
-                      >
-                        {active ? (
-                          <>
-                            <span className="tab-curve tab-curve-start" aria-hidden="true" />
-                            <span className="tab-curve tab-curve-end" aria-hidden="true" />
-                          </>
-                        ) : null}
-                        <span className="tab-kind k8s" title="Kubernetes">
-                          <K8sClusterIcon size={16} />
-                        </span>
-                        <span
-                          className="tab-title"
-                          data-testid="k8s-cluster-tab-title"
-                          title={cluster.display_name}
-                        >
-                          {cluster.display_name}
-                        </span>
-                        <button
-                          type="button"
-                          className="tab-close"
-                          onMouseDown={(event) => event.stopPropagation()}
-                          aria-label={t("closeTabAria", { title: cluster.display_name })}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            closeClusterTab(id);
-                          }}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : null}
-              {!homeOpen && sidebarView === "db" ? (
-                <>
-                  {dbWorkspaces.map((workspace) => {
-                    const active = !homeOpen && activeDbWorkspaceId === workspace.id;
-                    return (
-                      <div
-                        key={workspace.id}
-                        className={`tab${active ? " active" : ""}`}
-                        data-tab-role="db-workspace"
-                        data-testid="db-workspace-tab"
-                        data-workspace-id={workspace.id}
-                        onClick={() => {
-                          if (tabPointerButtonRef.current !== 0) {
-                            tabPointerButtonRef.current = 0;
-                            return;
-                          }
-                          if (Date.now() < suppressTabClickUntilRef.current) return;
-                          leaveHome();
-                          setActiveDbWorkspace(workspace.id);
-                        }}
-                        onMouseDown={(event) => {
-                          tabPointerButtonRef.current = event.button;
-                          if (event.button === 0) {
-                            clearChromeClickSuppress();
-                            suppressTabClickUntilRef.current = 0;
-                            leaveHome();
-                            setActiveDbWorkspace(workspace.id);
-                          }
-                        }}
-                      >
-                        {active ? (
-                          <>
-                            <span className="tab-curve tab-curve-start" aria-hidden="true" />
-                            <span className="tab-curve tab-curve-end" aria-hidden="true" />
-                          </>
-                        ) : null}
-                        <span className="tab-kind db" title={workspace.title}>
-                          <EngineMark engine={workspace.engine} connected />
-                        </span>
-                        <span className="tab-title" title={workspace.title}>
-                          {workspace.title}
-                        </span>
-                        <button
-                          type="button"
-                          className="tab-close"
-                          onMouseDown={(event) => event.stopPropagation()}
-                          aria-label={t("closeTabAria", { title: workspace.title })}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            closeDbWorkspace(workspace.id);
-                          }}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : null}
               </div>
               <button
                   type="button"
                   className="chrome-new-session"
                   data-testid="chrome-new-session"
-                  aria-label={homeOpen
-                    ? t("newLocalTerminal", { ns: "terminal" })
-                    : chromeNew === "cluster"
-                      ? t("k8s:addClusterTitle")
-                      : chromeNew === "database"
-                        ? t("dbNewConnection")
-                        : t("newSsh")
-                  }
-                  title={homeOpen
-                    ? t("newLocalTerminal", { ns: "terminal" })
-                    : chromeNew === "cluster"
-                      ? t("k8s:addClusterTitle")
-                      : chromeNew === "database"
-                        ? t("dbNewConnection")
-                        : t("newSsh")
-                  }
+                  aria-label={homeOpen ? t("newLocalTerminal", { ns: "terminal" }) : t("newSsh")}
+                  title={homeOpen ? t("newLocalTerminal", { ns: "terminal" }) : t("newSsh")}
                   onClick={() => {
                     if (homeOpen) {
                       addHomeTerminalTab();
-                      return;
-                    }
-                    if (chromeNew === "cluster") {
-                      setAddClusterOpen(true);
-                      return;
-                    }
-                    if (chromeNew === "database") {
-                      openNewDbRef.current();
                       return;
                     }
                     openNewRemoteRef.current();
@@ -1441,15 +1232,7 @@ function App() {
                 />
                 <AiEngineerTool
                   active={homeOpen ? homeChatOpen : showAiEngineerPanel}
-                  disabled={
-                    homeOpen
-                      ? false
-                      : sidebarView === "k8s"
-                      ? !selectedCluster
-                      : sidebarView === "db"
-                        ? !dbConnectionId
-                        : !activeTabReady
-                  }
+                  disabled={!homeOpen && !activeTabReady}
                   onClick={() => {
                     if (homeOpen) {
                       if (desktopMode && desktopTarget?.kind === "local") {
@@ -1458,24 +1241,6 @@ function App() {
                         return;
                       }
                       toggleHomeChat();
-                      return;
-                    }
-                    if (sidebarView === "db" && dbConnectionId) {
-                      leaveHome();
-                      useAiEngineerStore.setState({ open: true });
-                      void useAiEngineerStore.getState().ensureReady();
-                      return;
-                    }
-                    if (sidebarView === "k8s" && selectedCluster) {
-                      leaveHome();
-                      switchToAiEngineerPanel(
-                        {
-                          kind: "cluster",
-                          id: selectedCluster.id,
-                          label: selectedCluster.display_name,
-                        },
-                        { clusterTarget: selectedCluster },
-                      );
                       return;
                     }
                     if (activeTabId) {
@@ -1556,10 +1321,6 @@ function App() {
                     chatOpen={homeChatOpen && !desktopMode}
                   />
                 ) : null}
-                {showK8sWorkbench ? <K8sWorkbench /> : null}
-                {showDbWorkbench ? (
-                  <DbWorkbench onRegisterNewConnection={registerNewDb} />
-                ) : null}
                 {tabs.map((tab) => (
                   <TerminalView
                     key={tab.id}
@@ -1585,9 +1346,6 @@ function App() {
         />
       ) : null}
       <SudoPasswordModal />
-      {addClusterOpen ? (
-        <AddK8sClusterModal onClose={() => setAddClusterOpen(false)} />
-      ) : null}
       <AppSettingsDialog />
       {updateDialog ? (
         <UpdateAvailableDialog
@@ -1606,14 +1364,7 @@ function App() {
                 key={fiberSessionId}
                 sessionId={fiberSessionId}
                 homeOpen={homeOpen}
-                serverId={
-                  engineerMode === "k8s" && fiberSessionId === aiPanelSessionId
-                    ? undefined
-                    : (tab?.server_id ??
-                      (fiberSessionId === aiPanelSessionId
-                        ? (aiEngineerServerId ?? undefined)
-                        : undefined))
-                }
+                serverId={tab?.server_id ?? (fiberSessionId === aiPanelSessionId ? aiEngineerServerId ?? undefined : undefined)}
                 surfaceActive={
                   showAiEngineerPanel && fiberSessionId === aiPanelSessionId
                 }
@@ -1650,6 +1401,7 @@ function App() {
           sessionTitle={activeSessionTitle}
         />
       ) : null}
+      {editorWiselyOpen && desktopMode && desktopTarget ? <EditorWiselyWindow target={desktopTarget} /> : sidebarView === "hosts" && activeTabId && editorWiselyOpen ? <EditorWiselyWindow target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId }} /> : null}
       {desktopMode && desktopTarget && desktopFilesOpen && (
         desktopTarget.kind === "local" || (sidebarView === "hosts" && activeTabId)
       ) ? (
@@ -1674,9 +1426,7 @@ function App() {
         />
       ) : null}
       {!homeOpen ? (
-        sidebarView === "k8s" ? (
-          <K8sClusterStatusBar />
-        ) : activeTabId && !activeTabDisconnected ? (
+        activeTabId && !activeTabDisconnected ? (
           <HostStatsStatusBar sessionId={activeTabId} />
         ) : (
           <HostStatsStatusBar sessionId={null} />

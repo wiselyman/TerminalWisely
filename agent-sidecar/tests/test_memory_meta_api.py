@@ -31,7 +31,6 @@ def test_memory_meta_route(tmp_path) -> None:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["data_dir"] == str(tmp_path)
-        assert body["engineer_mode"] == "linux"
         assert body["user"]["prefs"] == 1
         assert body["user"]["notes"] == 1
         assert body["host_count"] >= 1
@@ -45,28 +44,3 @@ def test_memory_meta_route(tmp_path) -> None:
             "memory/"
         )
         assert "/hosts" in body["hosts_dir"].replace("\\", "/")
-
-
-def test_memory_meta_k8s_isolated(tmp_path) -> None:
-    put_user_memory(prefs=["linux-pref"], engineer_mode="linux")
-    put_user_memory(prefs=["k8s-pref"], engineer_mode="k8s")
-    put_host_memory("host-a", facts=["os=ubuntu"], engineer_mode="linux")
-    put_host_memory("cluster-a", facts=["ns=prod"], engineer_mode="k8s")
-    with TestClient(app) as client:
-        linux = client.get(
-            "/v1/memory/meta?engineer_mode=linux",
-            headers={"Authorization": "Bearer test-token"},
-        ).json()
-        k8s = client.get(
-            "/v1/memory/meta?engineer_mode=k8s",
-            headers={"Authorization": "Bearer test-token"},
-        ).json()
-    assert linux["engineer_mode"] == "linux"
-    assert k8s["engineer_mode"] == "k8s"
-    assert linux["user"]["prefs"] == 1
-    assert k8s["user"]["prefs"] == 1
-    assert linux["user_path"].endswith("user.json")
-    assert k8s["user_path"].endswith("user-k8s.json")
-    assert {h["scope"] for h in linux["hosts"]} == {"host-a"}
-    assert {h["scope"] for h in k8s["hosts"]} == {"cluster-a"}
-    assert "/clusters" in k8s["hosts_dir"].replace("\\", "/")

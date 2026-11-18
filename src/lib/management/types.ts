@@ -1,6 +1,6 @@
-/** Shared management entity refs for Hosts (servers) and Kubernetes (clusters). */
+/** Shared reference to a saved or connected SSH host. */
 
-export type ManagedKind = "server" | "cluster";
+export type ManagedKind = "server";
 
 export interface ManagedEntityRef {
   kind: ManagedKind;

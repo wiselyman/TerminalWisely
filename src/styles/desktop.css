@@ -499,11 +499,18 @@
 .host-desktop-icons {
   position: absolute;
   top: 14px;
+  bottom: 104px;
   left: 12px;
   z-index: 1;
   display: flex;
   flex-direction: column;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  /* Keep a visible second column available for apps that don't fit vertically. */
+  width: 192px;
   gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .host-desktop-icon {
@@ -584,6 +591,10 @@
 
 .host-desktop-glyph.is-markwisely {
   background: linear-gradient(160deg, #7197f4 0%, #3f62cf 100%);
+}
+
+.host-desktop-glyph.is-editorwisely {
+  background: linear-gradient(160deg, #5268d8 0%, #293c9d 100%);
 }
 
 .host-desktop-dock {
@@ -2954,78 +2965,6 @@ body.find-panel-resizing {
   display: flex;
   align-items: center;
 }
-.k8s-sidebar-tools {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
-}
-.k8s-tool-icon-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--tw-border);
-  border-radius: 6px;
-  background: var(--tw-surface-2);
-  color: var(--tw-fg);
-  cursor: pointer;
-}
-.k8s-tool-icon-btn:hover:not(:disabled) {
-  border-color: var(--tw-accent);
-}
-.k8s-tool-icon-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-.k8s-tool-icon-btn--busy:disabled {
-  cursor: wait;
-}
-.k8s-tool-icon-btn--current:disabled {
-  opacity: 1;
-  cursor: default;
-}
-.k8s-tool-icon-btn--current:hover:not(:disabled) {
-  border-color: var(--tw-border);
-}
-.k8s-tool-badge {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  border: 1.5px solid var(--tw-bg);
-  box-sizing: border-box;
-  line-height: 0;
-}
-.k8s-tool-badge--missing {
-  background: var(--tw-border-strong);
-  color: var(--tw-fg-default);
-}
-.k8s-tool-badge--ok {
-  background: #238636;
-  color: #fff;
-}
-.k8s-tool-badge--update {
-  width: 9px;
-  height: 9px;
-  background: #d29922;
-  border-width: 1.5px;
-}
-.k8s-edit-path {
-  margin: 0 0 8px;
-  font-size: 11px;
-  color: var(--tw-fg-muted);
-  word-break: break-all;
-}
 
 .update-available-badge {
   display: inline-flex;
@@ -3328,6 +3267,26 @@ body.local-fs-tree-moving .terminal-drop-overlay {
   font-size: 0.72rem;
   color: var(--tw-fg-muted);
   border-bottom: 1px solid var(--tw-surface-2);
+  align-items: center;
+}
+
+.local-fs-list-header [role="columnheader"] > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.local-fs-list-header [role="columnheader"] > button:hover,
+.local-fs-list-header [role="columnheader"] > button:focus-visible {
+  color: var(--tw-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .local-fs-list {

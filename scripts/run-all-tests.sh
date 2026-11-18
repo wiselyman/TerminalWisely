@@ -42,47 +42,44 @@ run_step() {
   fi
 }
 
-section "1/10 Frontend static smoke (功能 wiring)"
+section "1/9 Frontend static smoke (功能 wiring)"
 run_step "smoke-product-checklist" node scripts/smoke-product-checklist.mjs
 run_step "windows-coreutils-provisioning" node --test scripts/fetch-windows-coreutils.test.mjs
 
-section "2/10 Frontend unit tests (Vitest)"
+section "2/9 Frontend unit tests (Vitest)"
 run_step "vitest" npm test -- --run
 
-section "3/10 Frontend typecheck + build"
+section "3/9 Frontend typecheck + build"
 run_step "tsc + vite build" npm run build
 
 if [[ "$SKIP_RUST" -eq 0 ]]; then
-  section "4/10 Rust unit tests (cargo test)"
+  section "4/9 Rust unit tests (cargo test)"
   run_step "cargo test" bash -c "cd src-tauri && cargo test --quiet"
 
   if [[ "$SKIP_LIVE" -eq 0 ]]; then
-    section "5/10 SSH live integration (Docker openssh)"
+    section "5/9 SSH live integration (Docker openssh)"
     run_step "ssh-live-integration" bash scripts/e2e-ssh-integration.sh
-
-    section "6/10 K8s live integration (k3d)"
-    run_step "k8s-live-integration" bash scripts/e2e-k8s-integration.sh
   else
     echo "⊘ Skipped live integration (--skip-live)"
   fi
 
-  section "7/10 Cross-arch Rust check (macOS / Windows hosts only)"
+  section "6/9 Cross-arch Rust check (macOS / Windows hosts only)"
   run_step "cross-arch-rust-check" bash scripts/cross-arch-rust-check.sh
 else
   echo "⊘ Skipped Rust tests (--skip-rust)"
 fi
 
-section "8/10 Agent sidecar pytest (单元 + 集成 + E2E)"
+section "7/9 Agent sidecar pytest (单元 + 集成 + E2E)"
 run_step "pytest" bash scripts/run-sidecar-pytest.sh
 
-section "9/10 Playwright UI E2E (full product surface)"
+section "8/9 Playwright UI E2E (full product surface)"
 if [[ "${SKIP_E2E:-0}" -eq 0 ]]; then
   run_step "playwright e2e" bash scripts/e2e-playwright.sh
 else
   echo "⊘ Skipped Playwright E2E (--skip-e2e or SKIP_E2E=1)"
 fi
 
-section "10/10 Summary"
+section "9/9 Summary"
 if [[ "$FAIL" -eq 0 ]]; then
   echo ""
   echo "All automated tests PASSED."

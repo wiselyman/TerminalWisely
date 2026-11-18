@@ -15,11 +15,6 @@ PROBE_TOOL_NAMES = frozenset(
         "terminal_exec",
         "web_search",
         "web_fetch",
-        "k8s_list",
-        "k8s_get",
-        "k8s_describe",
-        "k8s_logs",
-        "k8s_events",
     }
 )
 

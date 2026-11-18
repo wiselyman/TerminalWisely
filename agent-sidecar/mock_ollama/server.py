@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from mock_ollama.director import ScenarioDirector, load_scenarios
 
-DEFAULT_MODEL = "mock-k8s-engineer"
+DEFAULT_MODEL = "mock-agent-workflow"
 
 
 def create_app(
