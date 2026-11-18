@@ -15,6 +15,7 @@
   "emptyBookmarks": "No SSH bookmarks yet",
   "entityAddGroup": "New group",
   "entityGroupDefaultName": "Group",
+  "entityGroupNameLabel": "Group name",
   "entityUngrouped": "Ungrouped",
   "entityDeleteGroup": "Delete group",
   "entityDeleteGroupHint": "Delete group (items move to Ungrouped)",

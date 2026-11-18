@@ -285,11 +285,18 @@ function readStyles() {
   if (
     directory.includes('data-testid="home-host-directory"') &&
     directory.includes("buildHomeHostSections") &&
+    directory.includes('data-testid="home-add-group"') &&
+    directory.includes('data-testid={`home-host-edit-${host.id}`}') &&
+    directory.includes('data-testid={`home-host-delete-${host.id}`}') &&
+    directory.includes("onDeleteGroup(section.key)") &&
+    directory.includes('data-entity-group-id={section.key}') &&
     !directory.includes("home-local-host-card") &&
     app.indexOf('data-testid="local-desktop-tab"') < app.indexOf("{tabs.map((tab)" ) &&
     managed.includes("openHomeDesktopTab") &&
     managed.includes("closeHomeDesktopTab") &&
     panel.includes("onRegisterOpenSavedHost") &&
+    panel.includes("onRegisterEditSavedHost") &&
+    panel.includes("onRegisterDeleteSavedHost") &&
     panel.includes('switchWorkspacePanel("desktop", sessionId') &&
     app.includes("homeDirectoryOpen") &&
     app.includes("<HomeHostDirectory")

@@ -26,6 +26,8 @@ interface ConnectionPanelProps {
   onExpandedWidthChange: (width: number) => void;
   onRegisterNewRemote?: (open: () => void) => void;
   onRegisterOpenSavedHost?: (open: (saved: SavedConnection) => void) => void;
+  onRegisterEditSavedHost?: (open: (saved: SavedConnection) => void) => void;
+  onRegisterDeleteSavedHost?: (remove: (saved: SavedConnection) => void) => void;
 }
 
 const defaultRequest: SshConnectRequest = {
@@ -54,6 +56,8 @@ export function ConnectionPanel({
   onExpandedWidthChange,
   onRegisterNewRemote,
   onRegisterOpenSavedHost,
+  onRegisterEditSavedHost,
+  onRegisterDeleteSavedHost,
 }: ConnectionPanelProps) {
   const { t } = useTranslation(["connection", "shell"]);
   const [sshFormMode, setSshFormMode] = useState<SshFormMode | null>(null);
@@ -125,6 +129,14 @@ export function ConnectionPanel({
     });
     setRememberPassword(saved.has_password);
   };
+
+  useEffect(() => {
+    onRegisterEditSavedHost?.(openEditForm);
+  }, [onRegisterEditSavedHost]);
+
+  useEffect(() => {
+    onRegisterDeleteSavedHost?.((saved) => void deleteSavedConnection(saved.id));
+  }, [onRegisterDeleteSavedHost, deleteSavedConnection]);
 
   const closeSshForm = () => {
     setSshFormMode(null);

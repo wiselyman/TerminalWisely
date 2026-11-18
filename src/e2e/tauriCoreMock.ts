@@ -10,6 +10,7 @@ import {
   e2eSystemdUnits,
 } from "./fixtures";
 import { e2eSidecarToken, e2eSidecarUrl, isE2eBrowserMode } from "../lib/e2eRuntime";
+import type { SavedConnection } from "../types";
 
 type InvokeArgs = Record<string, unknown>;
 
@@ -62,6 +63,7 @@ let lastAiTerminalExec: Record<string, unknown> | null = null;
 let lastAiLease: Record<string, unknown> | null = null;
 let lastKillProcess: Record<string, unknown> | null = null;
 let createSshCallCount = 0;
+let e2eSavedConnections: SavedConnection[] = [{ ...e2eSavedConnection }];
 
 export function __e2eResetMocks() {
   lastUploadRequest = null;
@@ -89,6 +91,7 @@ export function __e2eResetMocks() {
   lastAiLease = null;
   lastKillProcess = null;
   createSshCallCount = 0;
+  e2eSavedConnections = [{ ...e2eSavedConnection }];
 }
 
 export function __e2eResetUploadRequest() {
@@ -225,7 +228,24 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   get_app_version: () => "0.0.3-e2e",
   get_update_target: () => "e2e",
   get_default_download_dir: () => "/tmp",
-  get_saved_connections: () => [e2eSavedConnection],
+  get_saved_connections: () => e2eSavedConnections,
+  update_saved_connection: (args) => {
+    const { id, name, request } = args as { id: string; name: string; request: Record<string, unknown> };
+    e2eSavedConnections = e2eSavedConnections.map((saved) => saved.id === id ? {
+      ...saved,
+      name,
+      host: String(request.host ?? saved.host),
+      port: Number(request.port ?? saved.port),
+      username: String(request.username ?? saved.username),
+      auth_method: String(request.auth_method ?? saved.auth_method) as SavedConnection["auth_method"],
+    } : saved);
+    return null;
+  },
+  delete_saved_connection: (args) => {
+    const { id } = args as { id: string };
+    e2eSavedConnections = e2eSavedConnections.filter((saved) => saved.id !== id);
+    return null;
+  },
   reorder_saved_connections: () => null,
   get_device_history: () => [],
   list_sessions: () => [sshSessionResult().session],

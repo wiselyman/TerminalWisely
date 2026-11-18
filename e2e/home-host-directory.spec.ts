@@ -17,6 +17,18 @@ test.describe("Home host directory", () => {
         }));
       });
     }
+    if (testInfo.title === "Home supports group and host management") {
+      await page.addInitScript(() => {
+        localStorage.setItem("tw.entityLayout.hosts", JSON.stringify({
+          version: 4,
+          groupOrder: ["__ungrouped__"],
+          groups: [],
+          defaultGroupCollapsed: false,
+          assignments: { "e2e-conn-1": null },
+          order: { "__ungrouped__": ["e2e-conn-1"] },
+        }));
+      });
+    }
     await gotoApp(page, "directory");
     const api = await twE2e(page);
     await api.resetMocks();
@@ -92,7 +104,7 @@ test.describe("Home host directory", () => {
     const createCount = await api.getCreateSshCallCount();
     const boxes = await page.evaluate(() => {
       const source = document.querySelector<HTMLElement>('[data-testid="home-host-card-e2e-conn-1"]');
-      const target = document.querySelector<HTMLElement>('[data-testid="home-host-group-target-group"] .home-host-section-header');
+      const target = document.querySelector<HTMLElement>('[data-testid="home-host-group-target-group"] .home-host-section-empty');
       return {
         source: source?.getBoundingClientRect().toJSON() ?? null,
         target: target?.getBoundingClientRect().toJSON() ?? null,
@@ -111,6 +123,43 @@ test.describe("Home host directory", () => {
     await expectQuick(targetGroup.locator(".home-host-section-header span")).toHaveText("1 hosts");
     await expectQuick(page.getByTestId("home-host-group-__ungrouped__").getByTestId("home-host-card-e2e-conn-1")).toHaveCount(0);
     expect(await api.getCreateSshCallCount()).toBe(createCount);
+  });
+
+  test("Home supports group and host management", async ({ page }) => {
+    await expectQuick(page.getByTestId("home-host-edit-e2e-conn-1")).toBeVisible();
+    await expectQuick(page.getByTestId("home-host-delete-e2e-conn-1")).toBeVisible();
+
+    await page.getByTestId("home-host-edit-e2e-conn-1").click();
+    await expectQuick(page.locator(".connection-form")).toBeVisible();
+    await page.locator(".connection-form input").first().fill("Updated host");
+    await page.getByRole("button", { name: /save|保存/i }).click();
+    await expectQuick(page.getByTestId("home-host-card-e2e-conn-1").getByText("Updated host")).toBeVisible();
+
+    await page.getByTestId("home-add-group").click();
+    const groupByName = page.locator(".home-host-section").filter({ has: page.getByRole("heading", { name: "Group", exact: true }) });
+    await expectQuick(groupByName).toBeVisible();
+    const boxes = await groupByName.evaluate((target) => {
+      const source = document.querySelector<HTMLElement>('[data-testid="home-host-card-e2e-conn-1"]');
+      return { source: source?.getBoundingClientRect().toJSON(), target: target.getBoundingClientRect().toJSON(), id: target.getAttribute("data-entity-group-id") };
+    });
+    const customGroup = page.getByTestId(`home-host-group-${boxes.id}`);
+    const deleteGroup = customGroup.locator(`[data-testid="home-host-delete-group-${boxes.id}"]`);
+    await customGroup.getByRole("button", { name: /edit Group/i }).click();
+    await customGroup.getByRole("textbox", { name: "Group name" }).fill("QA group");
+    await customGroup.getByRole("button", { name: "Save" }).click();
+    await expectQuick(customGroup.getByRole("heading", { name: "QA group" })).toBeVisible();
+    await page.mouse.move(boxes.source!.x + 30, boxes.source!.y + 30);
+    await page.mouse.down();
+    await page.mouse.move(boxes.target!.x + boxes.target!.width - 10, boxes.target!.y + boxes.target!.height - 10, { steps: 8 });
+    await page.mouse.up();
+    await expectQuick(customGroup.getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
+
+    await deleteGroup.click();
+    await expectQuick(customGroup).toHaveCount(0);
+    await expectQuick(page.getByTestId("home-host-group-__ungrouped__").getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
+
+    await page.getByTestId("home-host-delete-e2e-conn-1").click();
+    await expectQuick(page.getByTestId("home-host-card-e2e-conn-1")).toHaveCount(0);
   });
 
   test("active SSH tabs have no folder navigation or directory shortcut controls", async ({ page }) => {

@@ -71,7 +71,7 @@ import { createMarkdownOpenDrain } from "./lib/markdownOpenQueue";
 import { isSshDesktopTarget } from "./lib/desktopTarget";
 import { useToastStore } from "./stores/toastStore";
 import { splitStartupNotice } from "./lib/startupNotice";
-import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
+import type { SavedConnection, TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
 import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
 import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
@@ -386,10 +386,21 @@ function App() {
   const registerOpenSavedHost = useCallback((open: (saved: (typeof savedConnections)[number]) => void) => {
     openSavedHostRef.current = open;
   }, []);
+  const editSavedHostRef = useRef<(saved: SavedConnection) => void>(() => {});
+  const registerEditSavedHost = useCallback((edit: (saved: SavedConnection) => void) => {
+    editSavedHostRef.current = edit;
+  }, []);
+  const deleteSavedHostRef = useRef<(saved: SavedConnection) => void>(() => {});
+  const registerDeleteSavedHost = useCallback((remove: (saved: SavedConnection) => void) => {
+    deleteSavedHostRef.current = remove;
+  }, []);
   const hostEntityIds = useMemo(() => savedConnections.map((host) => host.id), [savedConnections]);
   const hostLayout = useEntityLayoutStore((s) => s.layouts.hosts);
   const ensureEntityScope = useEntityLayoutStore((s) => s.ensureScope);
   const handleEntityItemDrop = useEntityLayoutStore((s) => s.handleItemDrop);
+  const addEntityGroup = useEntityLayoutStore((s) => s.addGroup);
+  const renameEntityGroup = useEntityLayoutStore((s) => s.renameGroup);
+  const deleteEntityGroup = useEntityLayoutStore((s) => s.deleteGroup);
   useEffect(() => {
     ensureEntityScope("hosts", hostEntityIds);
   }, [ensureEntityScope, hostEntityIds]);
@@ -1181,6 +1192,8 @@ function App() {
           onExpandedWidthChange={() => {}}
           onRegisterNewRemote={registerNewRemote}
           onRegisterOpenSavedHost={registerOpenSavedHost}
+          onRegisterEditSavedHost={registerEditSavedHost}
+          onRegisterDeleteSavedHost={registerDeleteSavedHost}
         />
 
         <div className="workspace-frame">
@@ -1207,6 +1220,11 @@ function App() {
                     savedConnections={savedConnections}
                     loading={!savedConnectionsLoaded}
                     onOpenHost={(saved) => openSavedHostRef.current(saved)}
+                    onEditHost={(saved) => editSavedHostRef.current(saved)}
+                    onDeleteHost={(saved) => deleteSavedHostRef.current(saved)}
+                    onAddGroup={() => addEntityGroup("hosts", hostEntityIds, t("entityGroupDefaultName"))}
+                    onRenameGroup={(groupId, name) => renameEntityGroup("hosts", hostEntityIds, groupId, name)}
+                    onDeleteGroup={(groupId) => deleteEntityGroup("hosts", hostEntityIds, groupId, undefined, t("entityUngrouped"))}
                     onItemDrop={(dragId, target) =>
                       handleEntityItemDrop(
                         "hosts",

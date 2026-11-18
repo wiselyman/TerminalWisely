@@ -49,10 +49,10 @@ function findGroupTarget(
   listRoot: HTMLElement,
 ): Extract<EntityDropTarget, { kind: "group" }> | null {
   const element = document.elementFromPoint(x, y)?.closest<HTMLElement>(
-    "[data-entity-group-id]",
+    "[data-entity-group-id], [data-entity-section-id]",
   );
-  if (!element?.dataset.entityGroupId) return null;
-  const targetId = element.dataset.entityGroupId;
+  const targetId = element?.dataset.entityGroupId ?? element?.dataset.entitySectionId;
+  if (!element || !targetId) return null;
   if (targetId === dragId) return null;
   if (!listRoot.contains(element)) return null;
   if (dragKind === "group") {
@@ -73,9 +73,21 @@ function findDropTarget(
   if (dragKind === "group") {
     return findGroupTarget(x, y, dragId, dragKind, listRoot);
   }
+  const item = findItemTarget(x, y, dragId, listRoot);
+  if (item) {
+    const source = listRoot.querySelector<HTMLElement>(`[data-entity-item-id="${CSS.escape(dragId)}"]`);
+    const sourceSection = source?.closest<HTMLElement>("[data-entity-group-id], [data-entity-section-id]");
+    const target = listRoot.querySelector<HTMLElement>(`[data-entity-item-id="${CSS.escape(item.id)}"]`);
+    const targetSection = target?.closest<HTMLElement>("[data-entity-group-id], [data-entity-section-id]");
+    const sourceGroupId = sourceSection?.dataset.entityGroupId ?? sourceSection?.dataset.entitySectionId;
+    const targetGroupId = targetSection?.dataset.entityGroupId ?? targetSection?.dataset.entitySectionId;
+    if (sourceGroupId && targetGroupId) {
+      return sourceGroupId === targetGroupId ? item : { kind: "group", id: targetGroupId };
+    }
+  }
   const group = findGroupTarget(x, y, dragId, dragKind, listRoot);
   if (group) return group;
-  return findItemTarget(x, y, dragId, listRoot);
+  return item;
 }
 
 function clearDropMarkers(listRoot: HTMLElement) {
@@ -93,7 +105,7 @@ function applyDropMarker(listRoot: HTMLElement, target: EntityDropTarget) {
   if (!target) return;
   if (target.kind === "group") {
     const header = listRoot.querySelector<HTMLElement>(
-      `[data-entity-group-id="${target.id}"]`,
+      `[data-entity-group-id="${CSS.escape(target.id)}"], [data-entity-section-id="${CSS.escape(target.id)}"]`,
     );
     if (target.position) {
       const section = header?.closest<HTMLElement>(".entity-list-section");

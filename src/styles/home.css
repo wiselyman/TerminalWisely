@@ -21,6 +21,42 @@
   color: var(--tw-accent);
 }
 
+.home-host-directory-toolbar {
+  display: flex;
+  max-width: 1500px;
+  justify-content: flex-end;
+  margin: 0 auto 18px;
+}
+
+.home-host-add-group,
+.home-host-group-actions button,
+.home-host-group-rename button,
+.home-host-card-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--tw-fg-muted);
+  background: var(--tw-surface-1);
+  border: 1px solid var(--tw-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.home-host-add-group {
+  min-height: 36px;
+  padding: 0 12px;
+  color: var(--tw-fg);
+}
+
+.home-host-add-group:hover,
+.home-host-group-actions button:hover,
+.home-host-group-rename button:hover,
+.home-host-card-actions button:hover {
+  color: var(--tw-accent);
+  border-color: var(--tw-accent);
+}
+
 .home-host-section-header h2 {
   margin: 0;
   font-size: 1.35rem;
@@ -28,7 +64,18 @@
 
 .home-host-section {
   max-width: 1500px;
-  margin: 0 auto 26px;
+  margin: 0 auto 20px;
+  padding: 18px;
+  background: var(--tw-surface-1);
+  border: 1px solid var(--tw-border);
+  border-radius: 16px;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.home-host-section.entity-drop-into {
+  background: color-mix(in srgb, var(--tw-accent) 8%, var(--tw-surface-1));
+  border-color: var(--tw-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tw-accent) 15%, transparent);
 }
 
 .home-host-section-header {
@@ -40,10 +87,42 @@
   font-size: 0.85rem;
 }
 
+.home-host-section-meta,
+.home-host-group-actions,
+.home-host-card-actions,
+.home-host-group-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-host-group-actions button,
+.home-host-group-rename button,
+.home-host-card-actions button {
+  width: 30px;
+  height: 30px;
+}
+
+.home-host-group-rename input {
+  min-width: 150px;
+  padding: 6px 8px;
+  color: var(--tw-fg);
+  background: var(--tw-bg);
+  border: 1px solid var(--tw-border);
+  border-radius: 7px;
+}
+
 .home-host-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
   gap: 12px;
+}
+
+.home-host-card-shell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
 }
 
 .home-host-card {
@@ -59,6 +138,15 @@
   border-radius: 12px;
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  flex: 1 1 auto;
+  padding-right: 84px;
+}
+
+.home-host-card-actions {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
 }
 
 .home-host-card:hover {
@@ -110,6 +198,14 @@
 @media (max-width: 720px) {
   .home-host-directory {
     padding: 20px 16px;
+  }
+
+  .home-host-section {
+    padding: 14px;
+  }
+
+  .home-host-section-header {
+    align-items: flex-start;
   }
 
 }
