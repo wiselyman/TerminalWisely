@@ -10,10 +10,12 @@ const shellCss = readFileSync(join(dir, "styles/shell.css"), "utf8");
 const toolsZh = JSON.parse(readFileSync(join(dir, "i18n/locales/zh-CN/tools.json"), "utf8")) as Record<string, string>;
 const toolsEn = JSON.parse(readFileSync(join(dir, "i18n/locales/en/tools.json"), "utf8")) as Record<string, string>;
 
-describe("App Home tab", () => {
-  it("renders a fixed Home tab without Hosts sidebar navigation", () => {
-    expect(app).toContain('data-testid="home-directory-tab"');
-    expect(app).toContain('t("homeDirectoryTab")');
+describe("App Home navigation", () => {
+  it("renders Home as an icon button and Local Desktop before SSH tabs", () => {
+    expect(app).toContain('data-testid="home-directory-button"');
+    expect(app).not.toContain('data-testid="home-directory-tab"');
+    expect(app.indexOf('data-testid="local-desktop-tab"')).toBeLessThan(app.indexOf("{tabs.map((tab)"));
+    expect(app).toContain('data-testid="local-desktop-tab"');
     expect(app).not.toContain('data-testid="sidebar-view-home"');
     expect(app).not.toContain('data-testid="sidebar-view-hosts"');
     expect(app).not.toContain('data-testid="sidebar-view-k8s"');
@@ -22,12 +24,14 @@ describe("App Home tab", () => {
 });
 
 describe("Home directory chrome", () => {
-  it("omits its heading and local Terminal/chat buttons", () => {
+  it("omits local host entry and local Terminal/chat buttons", () => {
     const directory = readFileSync(join(dir, "components/home/HomeHostDirectory.tsx"), "utf8");
     expect(directory).not.toContain('t("homeDirectoryTitle")');
     expect(directory).not.toContain('t("homeDirectorySubtitle")');
     expect(directory).not.toContain('data-testid="home-directory-terminal"');
     expect(directory).not.toContain('data-testid="home-directory-chat"');
+    expect(directory).not.toContain('home-local-host-card');
+    expect(directory).not.toContain('home-local-section');
   });
 });
 

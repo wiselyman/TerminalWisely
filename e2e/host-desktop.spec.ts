@@ -700,7 +700,7 @@ test.describe("Host desktop mode", () => {
     }
     await expect(panel).toHaveAttribute("data-maximized", "true");
     await expect(page.locator(".app-shell")).toHaveClass(/desktop-app-chrome-mode/);
-    await expect(page.getByTestId("home-directory-tab")).toBeHidden();
+    await expect(page.getByTestId("home-directory-button")).toBeHidden();
     await expect(page.locator(".tab-bar")).toBeHidden();
     await expect(page.getByTestId("chrome-new-session")).toBeHidden();
     await expect(page.getByTestId("ai-engineer-tool")).toBeHidden();
@@ -714,7 +714,7 @@ test.describe("Host desktop mode", () => {
     await appChrome.getByTestId("markwisely-maximize").click();
     await expect(panel).toHaveAttribute("data-maximized", "false");
     await expect(page.locator(".app-shell")).not.toHaveClass(/desktop-app-chrome-mode/);
-    await expect(page.getByTestId("home-directory-tab")).toBeVisible();
+    await expect(page.getByTestId("home-directory-button")).toBeVisible();
     await expect(page.locator(".tab-bar")).toBeVisible();
 
     await expect.poll(async () => {

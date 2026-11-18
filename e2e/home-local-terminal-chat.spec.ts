@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { clickMarkWiselyMenuControl, gotoApp, twE2e } from "./tw-e2e";
 
-test("Home opens Local Desktop and its Terminal app without a Terminal tab", async ({ page }) => {
+test("Pinned Local Desktop opens its Terminal app without a Terminal tab", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);
   await api.openHomeDirectory();
   await expect(page.getByTestId("home-host-directory")).toBeVisible();
   await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
 
-  await page.getByTestId("home-local-host-card").click();
+  await page.getByTestId("local-desktop-tab").click();
   await expect(page.getByTestId("local-desktop-tab")).toBeVisible();
   await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
   await page.getByTestId("dock-app-terminal").click();

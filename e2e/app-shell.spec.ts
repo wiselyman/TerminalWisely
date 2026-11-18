@@ -8,14 +8,14 @@ test.describe("App shell & welcome", () => {
     await api.openHome();
   });
 
-  test("Home tab returns to the host directory without scope controls", async ({ page }) => {
+  test("Home icon returns to the host directory without scope controls", async ({ page }) => {
     const api = await twE2e(page);
     await api.resetMocks();
-    await page.getByTestId("home-directory-tab").click();
+    await page.getByTestId("home-directory-button").click();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.locator(".host-stats-statusbar")).toHaveCount(0);
     await expect(page.locator(".app-shell")).not.toHaveClass(/has-host-stats-statusbar/);
-    await expect(page.getByTestId("home-directory-tab")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("home-directory-button")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("sidebar-view-hosts")).toHaveCount(0);
     await expect(page.getByTestId("sidebar-view-home")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
@@ -28,7 +28,7 @@ test.describe("App shell & welcome", () => {
     await expect(page.locator(".app-shell")).toHaveClass(/has-host-stats-statusbar/);
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
-    await page.getByTestId("home-directory-tab").click();
+    await page.getByTestId("home-directory-button").click();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     await expect(page.getByTestId("home-host-directory")).toBeVisible();
@@ -40,8 +40,8 @@ test.describe("App shell & welcome", () => {
     await api.openSshTab();
     await expect(page.locator('[data-tab-kind="ssh"]')).toHaveCount(1);
 
-    await page.getByTestId("home-directory-tab").click();
-    await page.getByTestId("home-local-host-card").click();
+    await page.getByTestId("home-directory-button").click();
+    await page.getByTestId("local-desktop-tab").click();
     await expect(page.getByTestId("local-desktop-tab")).toBeVisible();
     await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
     await expect(page.locator('[data-tab-kind="ssh"]')).toHaveCount(1);
@@ -111,13 +111,13 @@ test.describe("App shell & welcome", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
-  test("Home tab navigates between the directory and host workspaces", async ({ page }) => {
+  test("Home icon navigates between the directory and host workspaces", async ({ page }) => {
     const api = await twE2e(page);
     await api.openHome();
     await expect(page.getByTestId("home-local-chat")).toBeVisible();
     await api.openSshTab();
     await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
-    await page.getByTestId("home-directory-tab").click();
+    await page.getByTestId("home-directory-button").click();
     await expect(page.getByTestId("home-host-directory")).toBeVisible();
   });
 

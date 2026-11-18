@@ -7,21 +7,21 @@ describe("Home desktop tabs", () => {
       homeOpen: true,
       homeDirectoryOpen: true,
       homeChatOpen: false,
-      homeDesktopTabs: [],
-      activeHomeDesktopTabId: null,
+      homeDesktopTabs: [{ id: "local-desktop", title: "Local Desktop" }],
+      activeHomeDesktopTabId: "local-desktop",
       focusedByKind: {},
     });
   });
 
-  it("opens each Local Desktop card in a new independently selectable tab", () => {
+  it("keeps exactly one Local Desktop tab and makes activation idempotent", () => {
     const store = useManagedEntityStore.getState();
     const first = store.openHomeDesktopTab();
     const second = useManagedEntityStore.getState().openHomeDesktopTab();
 
-    expect(first).not.toBe(second);
+    expect(first).toBe("local-desktop");
+    expect(second).toBe(first);
     expect(useManagedEntityStore.getState().homeDesktopTabs).toEqual([
-      { id: first, title: "Local Desktop" },
-      { id: second, title: "Local Desktop" },
+      { id: "local-desktop", title: "Local Desktop" },
     ]);
     expect(useManagedEntityStore.getState().activeHomeDesktopTabId).toBe(second);
     expect(useManagedEntityStore.getState().homeDirectoryOpen).toBe(false);
@@ -30,12 +30,16 @@ describe("Home desktop tabs", () => {
     expect(useManagedEntityStore.getState().activeHomeDesktopTabId).toBe(first);
   });
 
-  it("returns to the Home directory when the final Local Desktop tab closes", () => {
-    const tabId = useManagedEntityStore.getState().openHomeDesktopTab();
-    useManagedEntityStore.getState().closeHomeDesktopTab(tabId);
+  it("does not close the pinned Local Desktop tab", () => {
+    useManagedEntityStore.getState().closeHomeDesktopTab("local-desktop");
 
-    expect(useManagedEntityStore.getState().homeDesktopTabs).toEqual([]);
-    expect(useManagedEntityStore.getState().activeHomeDesktopTabId).toBeNull();
-    expect(useManagedEntityStore.getState().homeDirectoryOpen).toBe(true);
+    expect(useManagedEntityStore.getState().homeDesktopTabs).toEqual([
+      { id: "local-desktop", title: "Local Desktop" },
+    ]);
+  });
+
+  it("marks Local Desktop active when the Home local workspace is shown", () => {
+    useManagedEntityStore.getState().showHomeWorkspace();
+    expect(useManagedEntityStore.getState().activeHomeDesktopTabId).toBe("local-desktop");
   });
 });

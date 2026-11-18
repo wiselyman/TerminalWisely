@@ -17,7 +17,8 @@ test.describe("UI visual baselines", () => {
     await gotoApp(page);
     await (await twE2e(page)).openHomeDirectory();
     const directory = page.getByTestId("home-host-directory");
-    await expect(page.getByTestId("home-local-host-card")).toBeVisible();
+    await expect(page.getByTestId("home-local-host-card")).toHaveCount(0);
+    await expect(page.getByTestId("local-desktop-tab")).toBeVisible();
     await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
     const bounds = await directory.boundingBox();
     expect(bounds).not.toBeNull();
@@ -61,7 +62,8 @@ test.describe("UI visual baselines", () => {
     await gotoApp(page);
     await (await twE2e(page)).openHomeDirectory();
     await expect(page.getByTestId("home-host-directory")).toBeVisible();
-    await expect(page.getByTestId("home-local-host-card")).toBeVisible();
+    await expect(page.getByTestId("home-local-host-card")).toHaveCount(0);
+    await expect(page.getByTestId("local-desktop-tab")).toBeVisible();
     await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
     for (const theme of themes) {
       await setTheme(page, theme);

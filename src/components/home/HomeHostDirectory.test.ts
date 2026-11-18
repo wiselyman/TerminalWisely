@@ -13,7 +13,7 @@ const host = (id: string, name: string): SavedConnection => ({
 });
 
 describe("Home host directory sections", () => {
-  it("keeps Local first and preserves host group and entry order", () => {
+  it("shows only configured host groups and preserves host group and entry order", () => {
     const sections = buildHomeHostSections(
       [
         { key: "ops", name: "Operations", hostIds: ["host-b", "host-a"] },
@@ -27,11 +27,9 @@ describe("Home host directory sections", () => {
     );
 
     expect(sections).toEqual([
-      { key: "local", name: "Local", local: true, hosts: [] },
       {
         key: "ops",
         name: "Operations",
-        local: false,
         hosts: [
           host("host-b", "Beta"),
           host("host-a", "Alpha"),
@@ -40,15 +38,12 @@ describe("Home host directory sections", () => {
       {
         key: "__ungrouped__",
         name: "Ungrouped",
-        local: false,
         hosts: [host("host-c", "Gamma")],
       },
     ]);
   });
 
-  it("shows the Local section when there are no saved hosts", () => {
-    expect(buildHomeHostSections([], [])).toEqual([
-      { key: "local", name: "Local", local: true, hosts: [] },
-    ]);
+  it("shows no synthetic Local section when there are no saved hosts", () => {
+    expect(buildHomeHostSections([], [])).toEqual([]);
   });
 });

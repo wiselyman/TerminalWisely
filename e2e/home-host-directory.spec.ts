@@ -10,16 +10,19 @@ test.describe("Home host directory", () => {
     await api.resetMocks();
   });
 
-  test("uses a fixed Home tab and keeps the directory focused on host cards", async ({ page }) => {
+  test("uses an icon Home launcher and shows only saved host cards", async ({ page }) => {
     await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
-    await expectQuick(page.getByTestId("home-directory-tab")).toBeVisible();
+    await expectQuick(page.getByTestId("home-directory-button")).toBeVisible();
+    await expectQuick(page.getByTestId("home-directory-tab")).toHaveCount(0);
+    await expectQuick(page.getByTestId("local-desktop-tab")).toBeVisible();
     await expectQuick(page.getByTestId("chrome-sidebar-views")).toBeHidden();
     await expectQuick(page.getByTestId("sidebar-view-hosts")).toHaveCount(0);
     await expectQuick(page.getByTestId("sidebar-view-home")).toHaveCount(0);
-    await expectQuick(page.locator(".tab-bar > .tab").first()).toHaveAttribute("data-testid", "home-directory-tab");
+    await expectQuick(page.locator(".tab-bar > .tab").first()).toHaveAttribute("data-testid", "local-desktop-tab");
     await expectQuick(page.getByRole("heading", { name: "Hosts" })).toHaveCount(0);
     await expectQuick(page.getByText("Choose a computer to open its desktop workspace.")).toHaveCount(0);
-    await expectQuick(page.getByTestId("home-local-host-card")).toBeVisible();
+    await expectQuick(page.getByTestId("home-local-host-card")).toHaveCount(0);
+    await expectQuick(page.getByTestId("home-local-section")).toHaveCount(0);
     await expectQuick(page.getByTestId("home-directory-terminal")).toHaveCount(0);
     await expectQuick(page.getByTestId("home-directory-chat")).toHaveCount(0);
     await expectQuick(page.getByRole("button", { name: /collapse sidebar|收起侧栏/i })).toHaveCount(0);
@@ -27,14 +30,15 @@ test.describe("Home host directory", () => {
     await expectQuick(page.getByTestId("local-fs-tool")).toHaveCount(0);
   });
 
-  test("opens Local Desktop in a new tab without opening an SSH session", async ({ page }) => {
+  test("Local Desktop is pinned first and opens without creating an SSH session", async ({ page }) => {
     const api = await twE2e(page);
     const before = await api.getCreateSshCallCount();
-    await page.getByTestId("home-local-host-card").click();
     await expectQuick(page.getByTestId("local-desktop-tab")).toBeVisible();
+    await expectQuick(page.getByTestId("local-desktop-tab").locator(".tab-close")).toHaveCount(0);
+    await page.getByTestId("local-desktop-tab").click();
     await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
     await expectQuick(page.getByTestId("home-terminal-tab")).toHaveCount(0);
-    await page.getByTestId("home-directory-tab").click();
+    await page.getByTestId("home-directory-button").click();
     await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
     expect(await api.getCreateSshCallCount()).toBe(before);
   });
@@ -70,13 +74,21 @@ test.describe("Home host directory", () => {
     expect(await api.getCreateSshCallCount()).toBe(before + 1);
   });
 
-  test("switches directly between Local and SSH Desktop tabs", async ({ page }) => {
-    await page.getByTestId("home-local-host-card").click();
-    await expectQuick(page.getByRole("heading", { name: "This computer" })).toBeVisible();
-    await page.getByTestId("home-directory-tab").click();
-    await page.getByTestId("home-host-card-e2e-conn-1").click();
-    await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
+  test("switches between Home, pinned Local Desktop, and SSH Desktop", async ({ page }) => {
     await page.getByTestId("local-desktop-tab").click();
     await expectQuick(page.getByRole("heading", { name: "This computer" })).toBeVisible();
+    await page.getByTestId("home-directory-button").click();
+    await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
+    await page.getByTestId("home-host-card-e2e-conn-1").click();
+    await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
+    const workspaceTabs = await page.locator(".tab-bar > .tab").evaluateAll((items) =>
+      items.map((item) => item.getAttribute("data-testid") ?? item.getAttribute("data-tab-kind")),
+    );
+    expect(workspaceTabs[0]).toBe("local-desktop-tab");
+    expect(workspaceTabs.indexOf("local-desktop-tab")).toBeLessThan(workspaceTabs.indexOf("ssh"));
+    await page.getByTestId("local-desktop-tab").click();
+    await expectQuick(page.getByRole("heading", { name: "This computer" })).toBeVisible();
+    await page.getByTestId("home-directory-button").click();
+    await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
   });
 });

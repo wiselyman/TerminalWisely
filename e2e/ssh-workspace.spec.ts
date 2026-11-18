@@ -22,7 +22,7 @@ test.describe("SSH terminal workspace", () => {
   });
 
   test("shows saved connections in the Home directory", async ({ page }) => {
-    await page.getByTestId("home-directory-tab").click();
+    await page.getByTestId("home-directory-button").click();
     await expect(page.getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
   });
 });
