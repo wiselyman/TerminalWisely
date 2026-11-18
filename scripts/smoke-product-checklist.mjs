@@ -260,12 +260,13 @@ function readStyles() {
   const panel = read("src/components/ConnectionPanel.tsx");
   const sidebar = read("src/stores/sidebarViewStore.ts");
   if (
-    app.includes('data-testid="sidebar-view-home"') &&
+    app.includes('data-testid="home-directory-tab"') &&
+    !app.includes('data-testid="sidebar-view-home"') &&
     app.includes('data-testid="sidebar-view-hosts"') &&
     panel.includes('scope="hosts"') &&
     sidebar.includes('export type SidebarView = "hosts"')
   ) {
-    pass("product.home-hosts-only", "Home and SSH Hosts remain as the only management scopes");
+    pass("product.home-hosts-only", "Home uses a fixed titlebar tab and SSH Hosts remains the management scope");
   } else {
     fail("product.home-hosts-only", "Home/Hosts is missing or another management scope remains wired");
   }

@@ -88,7 +88,7 @@ test.describe("UI visual baselines", () => {
   test("Hosts navigation remains legible in both themes", async ({ page }) => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
-    await page.getByTestId("sidebar-view-hosts").click();
+    await (await twE2e(page)).openSshTab();
     await expect(page.locator(".sidebar-shell")).toBeVisible();
     await expect(page.locator(".terminal-view-connecting")).toHaveCount(0, { timeout: 10_000 });
     for (const theme of themes) {
@@ -132,7 +132,6 @@ test.describe("UI visual baselines", () => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
     const api = await twE2e(page);
-    await page.getByTestId("sidebar-view-hosts").click();
     await api.openSshTab();
     for (const theme of themes) {
       await setTheme(page, theme);
@@ -154,7 +153,6 @@ test.describe("UI visual baselines", () => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
     const api = await twE2e(page);
-    await page.getByTestId("sidebar-view-hosts").click();
     await api.openSshTab();
     await api.setHostMachineName("e2e-machine");
     await api.openLocalFsPanel();

@@ -9,6 +9,8 @@ test.describe("SSH connection UI", () => {
   });
 
   test("ungrouped hosts start expanded and new host can pick a group", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openSshTab();
     await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     const ungrouped = page.getByTestId("entity-group-__ungrouped__");
     await expect(ungrouped).toBeVisible();
@@ -24,10 +26,11 @@ test.describe("SSH connection UI", () => {
   });
 
   test("saved connection click triggers SSH connect invoke", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openSshTab();
     await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await expandUngroupedEntities(page);
     await page.getByRole("button", { name: /^E2E Test Host$/i }).click();
-    const api = await twE2e(page);
     await expect.poll(async () => api.getCreateSshCallCount()).toBeGreaterThan(0);
     const req = await api.getLastCreateSsh();
     expect(req).toBeTruthy();

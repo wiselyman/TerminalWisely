@@ -11,24 +11,23 @@ const toolsZh = JSON.parse(readFileSync(join(dir, "i18n/locales/zh-CN/tools.json
 const toolsEn = JSON.parse(readFileSync(join(dir, "i18n/locales/en/tools.json"), "utf8")) as Record<string, string>;
 
 describe("App Home tab", () => {
-  it("has no Home tab and keeps Home navigation in the space buttons", () => {
-    expect(app).not.toContain('data-tab-role="home"');
-    expect(app).not.toContain('t("homeTabTitle")');
-    expect(app).toContain('data-testid="sidebar-view-home"');
+  it("renders a fixed Home tab, removes the Home scope button, and keeps Hosts management", () => {
+    expect(app).toContain('data-testid="home-directory-tab"');
+    expect(app).toContain('t("homeDirectoryTab")');
+    expect(app).not.toContain('data-testid="sidebar-view-home"');
+    expect(app).toContain('data-testid="sidebar-view-hosts"');
     expect(app).not.toContain('data-testid="sidebar-view-k8s"');
     expect(app).not.toContain('data-testid="sidebar-view-db"');
-    expect(app).toContain("onClick={() => activateHome()}");
   });
 });
 
-describe("Home space navigation", () => {
-  it("places Home before Hosts and binds it to the existing Home activation", () => {
-    const homeButton = app.indexOf('data-testid="sidebar-view-home"');
-    const hostsButton = app.indexOf('data-testid="sidebar-view-hosts"');
-    expect(homeButton).toBeGreaterThan(-1);
-    expect(homeButton).toBeLessThan(hostsButton);
-    expect(app).toContain('aria-selected={homeOpen}');
-    expect(app).toContain('onClick={() => activateHome()}');
+describe("Home directory chrome", () => {
+  it("omits its heading and local Terminal/chat buttons", () => {
+    const directory = readFileSync(join(dir, "components/home/HomeHostDirectory.tsx"), "utf8");
+    expect(directory).not.toContain('t("homeDirectoryTitle")');
+    expect(directory).not.toContain('t("homeDirectorySubtitle")');
+    expect(directory).not.toContain('data-testid="home-directory-terminal"');
+    expect(directory).not.toContain('data-testid="home-directory-chat"');
   });
 });
 
@@ -42,7 +41,7 @@ describe("Home sidebar content", () => {
   });
 
   it("hides the sidebar collapse control only while Home is active", () => {
-    expect(app).toContain("!homeOpen ? <button");
+    expect(app).toContain("{!homeOpen ? <button");
     expect(app).toContain('className="chrome-sidebar-toggle"');
   });
 });

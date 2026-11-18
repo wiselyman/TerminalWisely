@@ -3,12 +3,11 @@
   inset: 0;
   z-index: 3;
   overflow: auto;
-  padding: clamp(24px, 4vw, 56px);
+  padding: clamp(24px, 4vw, 44px);
   color: var(--tw-fg);
   background: var(--tw-bg);
 }
 
-.home-host-directory-header,
 .home-host-section-header {
   display: flex;
   align-items: center;
@@ -16,37 +15,9 @@
   gap: 20px;
 }
 
-.home-host-directory-header {
-  margin: 0 auto 34px;
-  max-width: 1500px;
-}
-
-.home-host-directory-header h1,
 .home-host-section-header h2 {
   margin: 0;
   font-size: 1.35rem;
-}
-
-.home-host-directory-header p {
-  margin: 8px 0 0;
-  color: var(--tw-fg-muted);
-}
-
-.home-directory-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.home-directory-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
-  color: var(--tw-fg);
-  background: var(--tw-surface-1);
-  border: 1px solid var(--tw-border);
-  border-radius: 9px;
-  cursor: pointer;
 }
 
 .home-host-section {
@@ -139,10 +110,6 @@
     padding: 20px 16px;
   }
 
-  .home-host-directory-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 .home-local-chat {

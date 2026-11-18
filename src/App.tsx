@@ -942,17 +942,13 @@ function App() {
                   aria-hidden
                 />
               ) : null}
-              <div className="chrome-sidebar-controls">
+              <div className={`chrome-sidebar-controls${homeOpen ? " home-hidden-sidebar-controls" : ""}`}>
                 {!homeOpen ? <button
                   type="button"
                   className="chrome-sidebar-toggle"
                   onClick={() => setSidebarCollapsed((value) => !value)}
-                  aria-label={
-                    sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")
-                  }
-                  title={
-                    sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")
-                  }
+                  aria-label={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
+                  title={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
                 >
                   <SidebarToggleIcon />
                 </button> : null}
@@ -961,18 +957,6 @@ function App() {
                   role="tablist"
                   aria-label={t("sidebarViewsAria")}
                 >
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`chrome-sidebar-view-btn${homeOpen ? " active" : ""}`}
-                    aria-label={t("sidebarViewHome")}
-                    title={t("sidebarViewHome")}
-                    aria-selected={homeOpen}
-                    data-testid="sidebar-view-home"
-                    onClick={() => activateHome()}
-                  >
-                    <TabHomeIcon />
-                  </button>
                   <button
                     type="button"
                     role="tab"
@@ -1003,9 +987,18 @@ function App() {
                   event.preventDefault();
                 }}
               >
-                {!homeOpen && sidebarView === "hosts" ? (
-                  <>
-          {tabs.map((tab) => {
+                <div
+                  role="tab"
+                  aria-selected={homeDirectoryOpen}
+                  className={`tab home-directory-tab${homeDirectoryOpen ? " active" : ""}`}
+                  data-testid="home-directory-tab"
+                  onClick={() => activateHome()}
+                >
+                  {homeDirectoryOpen ? <><span className="tab-curve tab-curve-start" aria-hidden="true" /><span className="tab-curve tab-curve-end" aria-hidden="true" /></> : null}
+                  <span className="tab-kind home-terminal"><TabHomeIcon /></span>
+                  <span className="tab-title">{t("homeDirectoryTab")}</span>
+                </div>
+                {tabs.map((tab) => {
             const tabConnecting = (tab.connectionStatus ?? "ready") === "connecting";
             const tabOs = resolveSessionOsProfile(tab, savedConnections);
             return (
@@ -1029,6 +1022,7 @@ function App() {
                   return;
                 }
                 if (Date.now() < suppressTabClickUntilRef.current) return;
+                setSidebarView("hosts");
                 setActiveTab(tab.id);
               }}
               onPointerDown={(event) => {
@@ -1037,6 +1031,7 @@ function App() {
                   clearChromeClickSuppress();
                   suppressTabClickUntilRef.current = 0;
                   noteIntentionalTabLeftMouseDown(tab.id);
+                  setSidebarView("hosts");
                   setActiveTab(tab.id);
                   startTabReorder(tab.id, event);
                 }
@@ -1190,9 +1185,7 @@ function App() {
             </div>
             );
           })}
-                  </>
-              ) : null}
-              {homeOpen ? homeTerminalTabs.map((tab) => {
+              {homeTerminalTabs.map((tab) => {
                 const active = tab.id === activeHomeTerminalId;
                 const canClose = homeTerminalTabs[0]?.id !== tab.id;
                 return (
@@ -1202,6 +1195,7 @@ function App() {
                     data-testid="home-terminal-tab"
                     data-terminal-id={tab.id}
                     onClick={() => {
+                      activateHome();
                       setActiveHomeTerminalId(tab.id);
                       showHomeWorkspace();
                       useManagedEntityStore.getState().setHomeChatOpen(false);
@@ -1234,9 +1228,9 @@ function App() {
                     >×</button> : null}
                   </div>
                 );
-              }) : null}
+              })}
               {homeDesktopTabs.map((tab) => {
-                const active = tab.id === activeHomeDesktopTabId;
+                const active = homeOpen && !homeDirectoryOpen && tab.id === activeHomeDesktopTabId;
                 return (
                   <div
                     key={tab.id}
@@ -1395,16 +1389,6 @@ function App() {
                     loading={!savedConnectionsLoaded}
                     onOpenLocal={openLocalDesktopTab}
                     onOpenHost={(saved) => openSavedHostRef.current(saved)}
-                    onOpenTerminal={() => {
-                      if (useDesktopStore.getState().target?.kind === "local") closeDesktopRemembering();
-                      showHomeWorkspace();
-                      setActiveHomeTerminalId(homeTerminalTabs[0]?.id ?? "home-terminal-1");
-                    }}
-                    onOpenChat={() => {
-                      if (useDesktopStore.getState().target?.kind === "local") closeDesktopRemembering();
-                      showHomeWorkspace();
-                      useManagedEntityStore.getState().setHomeChatOpen(true);
-                    }}
                   />
                 ) : null}
                 {homeOpen && !homeDirectoryOpen ? (

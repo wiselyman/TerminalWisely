@@ -41,7 +41,7 @@
 | Home Terminal 留白、Home/Hosts 工作区标签隔离 | `homeSplit` | — | smoke | Playwright `app-shell` / `home-local-terminal-chat` | ✓ |
 | 自定义标题栏 / 窗口控制 | — | — | smoke | — | ✓ |
 | Home / Hosts 空间切换 | — | — | smoke | — | ✓ |
-| Home 主机目录（Local 固定置顶、SSH 沿用分组排序；卡片打开 Local/SSH Desktop 标签；本机 Terminal/聊天入口保留） | `HomeHostDirectory.test` + `managedEntityStore.test` | SSH 卡片沿用 `connectSaved` 与凭据提示 | smoke `ui.home-host-directory` | **✓** `home-host-directory` Local/SSH Desktop 打开与切换；`app-shell` Home 返回目录 | 0.1.3 |
+| Home 主机目录（固定 Home 标题栏标签；Local 置顶、SSH 沿用分组排序；卡片打开 Local/SSH Desktop 标签；隐藏页面标题、目录入口按钮和侧栏 scope 图标） | `HomeHostDirectory.test` + `managedEntityStore.test` | SSH 卡片沿用 `connectSaved` 与凭据提示 | smoke `ui.home-host-directory` | **✓** `home-host-directory` Local/SSH Desktop 打开与切换；`app-shell` Home 返回目录 | 0.1.3 |
 | 多 Tab SSH 会话 | Rust shell | — | smoke | — | ✓ |
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
@@ -200,7 +200,7 @@
 | Long-job exec idle 豁免 | Rust `ai_exec_limits` | — | timeout≥600 关 idle | — | ✓ |
 | Run stall 看门狗（冷启动 + 工具后无进度；**工具执行中 / 审批中不误杀**；FE idle abort 同） | `test_stall_watch` + `thinkingIdleAbort.test` | main stall wrap | smoke + run_stalled 清 busy | — | ✓ |
 | Wall-clock run 预算 | paths `max_run_wall_seconds` | loop `_check_budgets` | — | — | ✓ |
-| Home 本机终端 + 可折叠聊天（scope `local`；Windows PowerShell；Home 默认隐藏聊天，顶栏 AI 按钮或聊天面板按钮可展开/收起；展开后分隔条可调且持久化） | `homeSplit.test` | — | Home 空间按钮，无 Home tab | Playwright `home-local-terminal-chat` / `app-shell`（默认收起、展开/收起、比例拖动与重载恢复） | Windows 真机未测 |
+| Home 本机终端 + 可折叠聊天（scope `local`；Windows PowerShell；Home 默认隐藏聊天，顶栏 AI 按钮或聊天面板按钮可展开/收起；展开后分隔条可调且持久化） | `homeSplit.test` | — | 固定 Home 标题栏标签 | Playwright `home-local-terminal-chat` / `app-shell`（默认收起、展开/收起、比例拖动与重载恢复） | Windows 真机未测 |
 | Home Local Desktop 工作区（显式 `DesktopTarget.local`；Files/Processes/Browser/Terminal/AI Local/MarkWisely 本机能力；AI Local 复用 Home `LOCAL_CHAT_SESSION`，AI Linux 仅 SSH；Desktop Terminal 与 Home 共用 PTY；Local 与 SSH state 分桶；Terminal 页签关闭 Desktop 并收起聊天，图标应用名完整显示） | `desktopTarget.test` + `desktopApps.test` + `desktopStore.test` + Local FS/MarkWisely/Process/Browser store tests + `local_terminal` | Rust `fs_local` / local process / Browser commands | smoke `ui.home-local-desktop` + `windows.local-coreutils-resource` | `home-local-desktop`（本机 Files/Processes/Browser/MarkWisely 路径、单击切换、SSH 状态隔离）；`home-local-terminal-chat`（Terminal 页签从聊天或 Desktop 返回 PTY、图标标签不截断、Terminal PTY 复用、AI Local chat reuse） | Windows PowerShell/Coreutils 实际运行见 Windows CI |
 | Windows Home PowerShell Coreutils（Microsoft Coreutils 2026.9.3；x64/ARM64 资源；只注入应用子进程 PATH 并清理该 session 别名；不写 Profile/系统 PATH/注册表） | `local_terminal::tests` + `fetch-windows-coreutils.test.mjs` | Windows PowerShell 5.1 package smoke：`Get-Command ls`、PATH/Profile 不变；ARM64 包含资源 | smoke `windows.local-coreutils-resource` | Windows CI / Release matrix x64 运行、ARM64 资源检查 | Windows CI |
 

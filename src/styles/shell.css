@@ -29,6 +29,15 @@
   display: none;
 }
 
+.app-shell.home-space .chrome-sidebar-slot {
+  width: auto;
+  border-right: 0;
+}
+
+.app-shell.home-space .home-hidden-sidebar-controls {
+  display: none;
+}
+
 /* Collapsed: ConnectionPanel renders no sidebar cell — use a single column
    so workspace-frame is not auto-placed into a 0-width track. */
 .app-shell.sidebar-collapsed .app-body {

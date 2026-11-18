@@ -10,11 +10,18 @@ test.describe("Home host directory", () => {
     await api.resetMocks();
   });
 
-  test("shows Local first and keeps local Terminal and chat entry points", async ({ page }) => {
+  test("uses a fixed Home tab and keeps the directory focused on host cards", async ({ page }) => {
     await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
+    await expectQuick(page.getByTestId("home-directory-tab")).toBeVisible();
+    await expectQuick(page.getByTestId("chrome-sidebar-views")).toBeHidden();
+    await expectQuick(page.getByTestId("sidebar-view-hosts")).toBeHidden();
+    await expectQuick(page.getByTestId("sidebar-view-home")).toHaveCount(0);
+    await expectQuick(page.locator(".tab-bar > .tab").first()).toHaveAttribute("data-testid", "home-directory-tab");
+    await expectQuick(page.getByRole("heading", { name: "Hosts" })).toHaveCount(0);
+    await expectQuick(page.getByText("Choose a computer to open its desktop workspace.")).toHaveCount(0);
     await expectQuick(page.getByTestId("home-local-host-card")).toBeVisible();
-    await expectQuick(page.getByTestId("home-directory-terminal")).toBeVisible();
-    await expectQuick(page.getByTestId("home-directory-chat")).toBeVisible();
+    await expectQuick(page.getByTestId("home-directory-terminal")).toHaveCount(0);
+    await expectQuick(page.getByTestId("home-directory-chat")).toHaveCount(0);
     await expectQuick(page.getByRole("button", { name: /collapse sidebar|收起侧栏/i })).toHaveCount(0);
     await expectQuick(page.getByTestId("ai-engineer-tool")).toHaveCount(0);
     await expectQuick(page.getByTestId("local-fs-tool")).toHaveCount(0);
@@ -26,6 +33,8 @@ test.describe("Home host directory", () => {
     await page.getByTestId("home-local-host-card").click();
     await expectQuick(page.getByTestId("local-desktop-tab")).toBeVisible();
     await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
+    await page.getByTestId("home-directory-tab").click();
+    await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
     expect(await api.getCreateSshCallCount()).toBe(before);
   });
 
@@ -43,7 +52,7 @@ test.describe("Home host directory", () => {
   test("switches directly between Local and SSH Desktop tabs", async ({ page }) => {
     await page.getByTestId("home-local-host-card").click();
     await expectQuick(page.getByRole("heading", { name: "This computer" })).toBeVisible();
-    await page.getByTestId("sidebar-view-home").click();
+    await page.getByTestId("home-directory-tab").click();
     await page.getByTestId("home-host-card-e2e-conn-1").click();
     await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
     await page.getByTestId("local-desktop-tab").click();

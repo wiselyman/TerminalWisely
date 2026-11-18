@@ -1,4 +1,4 @@
-import { Computer, MessageSquareText, Terminal } from "lucide-react";
+import { Computer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SavedConnection } from "../../types";
 import { ServerOsIcon } from "../ServerOsIcon";
@@ -40,8 +40,6 @@ type Props = {
   loading?: boolean;
   onOpenLocal: () => void;
   onOpenHost: (saved: SavedConnection) => void;
-  onOpenTerminal: () => void;
-  onOpenChat: () => void;
 };
 
 export function HomeHostDirectory({
@@ -50,31 +48,12 @@ export function HomeHostDirectory({
   loading = false,
   onOpenLocal,
   onOpenHost,
-  onOpenTerminal,
-  onOpenChat,
 }: Props) {
   const { t } = useTranslation("shell");
   const sections = buildHomeHostSections(groups, savedConnections);
 
   return (
     <main className="home-host-directory" data-testid="home-host-directory">
-      <header className="home-host-directory-header">
-        <div>
-          <h1>{t("homeDirectoryTitle")}</h1>
-          <p>{t("homeDirectorySubtitle")}</p>
-        </div>
-        <div className="home-directory-actions">
-          <button type="button" onClick={onOpenTerminal} data-testid="home-directory-terminal">
-            <Terminal size={16} aria-hidden />
-            {t("homeDirectoryTerminal")}
-          </button>
-          <button type="button" onClick={onOpenChat} data-testid="home-directory-chat">
-            <MessageSquareText size={16} aria-hidden />
-            {t("homeDirectoryChat")}
-          </button>
-        </div>
-      </header>
-
       {loading ? <p className="home-host-directory-loading">{t("homeDirectoryLoading")}</p> : null}
 
       {sections.map((section) => (
