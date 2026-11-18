@@ -20,6 +20,7 @@ function wrapApi(page: Page): TwE2eApi {
 
   return {
     openHome: () => call("openHome"),
+    openHomeDirectory: () => call("openHomeDirectory"),
     openSshTab: async () => {
       await call("openSshTab");
       await page.getByTestId("terminal-view").waitFor({ state: "visible", timeout: 15_000 });
@@ -88,9 +89,10 @@ export async function twE2e(page: Page): Promise<TwE2eApi> {
   return wrapApi(page);
 }
 
-export async function gotoApp(page: Page) {
+export async function gotoApp(page: Page, homeSurface: "workspace" | "directory" = "workspace") {
   await page.goto("/");
   await waitForTwE2e(page);
+  if (homeSurface === "workspace") await (await twE2e(page)).openHome();
 }
 
 export async function clickMarkWiselyMenuControl(page: Page, testId: string) {

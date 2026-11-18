@@ -15,6 +15,7 @@ import { HostStatsStatusBar } from "./components/hostStats/HostStatsStatusBar";
 import { AiEngineerTool } from "./components/aiEngineer/AiEngineerTool";
 import { AiEngineerPanel } from "./components/aiEngineer/AiEngineerPanel";
 import { HomeWorkspace } from "./components/home/HomeWorkspace";
+import { HomeHostDirectory } from "./components/home/HomeHostDirectory";
 import { LocalFsTool } from "./components/LocalFsTool";
 import { BrowserPanel } from "./components/browser/BrowserPanel";
 import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
@@ -64,6 +65,7 @@ import { useTaskManagerStore } from "./stores/taskManagerStore";
 import { useLocalFsStore } from "./stores/localFsStore";
 import { useBrowserStore } from "./stores/browserStore";
 import { useDesktopStore } from "./stores/desktopStore";
+import { selectEntitySections, useEntityLayoutStore } from "./stores/entityLayoutStore";
 import { useMarkWiselyStore } from "./stores/markWiselyStore";
 import { createMarkdownOpenDrain } from "./lib/markdownOpenQueue";
 import { isSshDesktopTarget } from "./lib/desktopTarget";
@@ -115,6 +117,7 @@ function App() {
     tabs,
     activeTabId,
     savedConnections,
+    savedConnectionsLoaded,
     closeTab,
     closeOtherTabs,
     closeTabsToLeft,
@@ -380,6 +383,7 @@ function App() {
     };
     setHomeTerminalTabs((current) => [...current, tab]);
     setActiveHomeTerminalId(tab.id);
+    useManagedEntityStore.getState().showHomeWorkspace();
   }, [t]);
   const closeHomeTerminalTab = useCallback((terminalId: string) => {
     if (homeTerminalTabs.length <= 1 || homeTerminalTabs[0]?.id === terminalId) {
@@ -403,6 +407,10 @@ function App() {
   const sidebarView = useSidebarViewStore((s) => s.view);
   const setSidebarView = useSidebarViewStore((s) => s.setView);
   const homeOpen = useManagedEntityStore((s) => s.homeOpen);
+  const homeDirectoryOpen = useManagedEntityStore((s) => s.homeDirectoryOpen);
+  const homeDesktopTabs = useManagedEntityStore((s) => s.homeDesktopTabs);
+  const activeHomeDesktopTabId = useManagedEntityStore((s) => s.activeHomeDesktopTabId);
+  const showHomeWorkspace = useManagedEntityStore((s) => s.showHomeWorkspace);
   const homeChatOpen = useManagedEntityStore((s) => s.homeChatOpen);
   const toggleHomeChat = useManagedEntityStore((s) => s.toggleHomeChat);
   const homeWasOpen = useRef(false);
@@ -415,6 +423,27 @@ function App() {
     homeWasOpen.current = homeOpen;
   }, [homeOpen]);
   const leaveHome = useManagedEntityStore((s) => s.leaveHome);
+  const openSavedHostRef = useRef<(saved: (typeof savedConnections)[number]) => void>(() => {});
+  const registerOpenSavedHost = useCallback((open: (saved: (typeof savedConnections)[number]) => void) => {
+    openSavedHostRef.current = open;
+  }, []);
+  const openLocalDesktopTab = useCallback(() => {
+    const id = useManagedEntityStore.getState().openHomeDesktopTab();
+    useSessionStore.getState().activateHome();
+    useManagedEntityStore.getState().activateHomeDesktopTab(id);
+    useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+  }, []);
+  const hostEntityIds = useMemo(() => savedConnections.map((host) => host.id), [savedConnections]);
+  const hostLayout = useEntityLayoutStore((s) => s.layouts.hosts);
+  const ensureEntityScope = useEntityLayoutStore((s) => s.ensureScope);
+  useEffect(() => {
+    ensureEntityScope("hosts", hostEntityIds);
+  }, [ensureEntityScope, hostEntityIds]);
+  const homeHostSections = useMemo(
+    () => selectEntitySections(hostLayout, hostEntityIds, t("entityUngrouped"))
+      .map((section) => ({ key: section.key, name: section.group.name, hostIds: section.itemIds })),
+    [hostLayout, hostEntityIds, t],
+  );
   const showHostsSession = sidebarView === "hosts" && !homeOpen;
   const aiPanelSessionId = aiEngineerSessionId;
   const showAiEngineerPanel = shouldShowAiEngineerPanel({
@@ -478,7 +507,12 @@ function App() {
   const desktopMode =
     desktopOpen && (isSshDesktopTarget(desktopTarget)
       ? sidebarView === "hosts" && activeTabId === desktopTarget.sessionId
-      : desktopTarget?.kind === "local" && homeOpen);
+      : desktopTarget?.kind === "local" && homeOpen && !homeDirectoryOpen);
+  useEffect(() => {
+    if (!homeDirectoryOpen) return;
+    const desktop = useDesktopStore.getState();
+    if (desktop.open && desktop.target?.kind === "local") closeDesktopRemembering();
+  }, [homeDirectoryOpen]);
   const desktopTerminalShown =
     desktopMode && Boolean(desktopTarget) && desktopTerminalOpen && !desktopTerminalMinimized;
   const desktopAiShown = desktopMode && desktopAiOpen && !desktopAiMinimized;
@@ -1169,6 +1203,7 @@ function App() {
                     data-terminal-id={tab.id}
                     onClick={() => {
                       setActiveHomeTerminalId(tab.id);
+                      showHomeWorkspace();
                       useManagedEntityStore.getState().setHomeChatOpen(false);
                       const desktop = useDesktopStore.getState();
                       if (desktop.open && desktop.target?.kind === "local") {
@@ -1200,6 +1235,44 @@ function App() {
                   </div>
                 );
               }) : null}
+              {homeDesktopTabs.map((tab) => {
+                const active = tab.id === activeHomeDesktopTabId;
+                return (
+                  <div
+                    key={tab.id}
+                    className={`tab${active ? " active" : ""}`}
+                    data-testid="local-desktop-tab"
+                    data-desktop-tab-id={tab.id}
+                    onClick={() => {
+                      useSessionStore.getState().activateHome();
+                      closeDesktopRemembering();
+                      useManagedEntityStore.getState().activateHomeDesktopTab(tab.id);
+                      useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+                    }}
+                  >
+                    {active ? <><span className="tab-curve tab-curve-start" aria-hidden="true" /><span className="tab-curve tab-curve-end" aria-hidden="true" /></> : null}
+                    <span className="tab-kind home-terminal"><TerminalIcon /></span>
+                    <span className="tab-title" title={tab.title}>{tab.title}</span>
+                    <button
+                      type="button"
+                      className="tab-close"
+                      aria-label={t("closeTabAria", { title: tab.title })}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const store = useManagedEntityStore.getState();
+                        store.closeHomeDesktopTab(tab.id);
+                        const current = useManagedEntityStore.getState();
+                        if (active && current.activeHomeDesktopTabId) {
+                          useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+                        } else if (active) {
+                          useDesktopStore.getState().close();
+                        }
+                      }}
+                    >×</button>
+                  </div>
+                );
+              })}
               </div>
               <button
                   type="button"
@@ -1230,7 +1303,7 @@ function App() {
                   className="chrome-maximized-app-slot"
                   data-testid="desktop-maximized-app-controls-slot"
                 />
-                <AiEngineerTool
+                {!homeDirectoryOpen ? <AiEngineerTool
                   active={homeOpen ? homeChatOpen : showAiEngineerPanel}
                   disabled={!homeOpen && !activeTabReady}
                   onClick={() => {
@@ -1254,8 +1327,8 @@ function App() {
                       });
                     }
                   }}
-                />
-                {homeOpen || sidebarView === "hosts" ? (
+                /> : null}
+                {!homeDirectoryOpen && (homeOpen || sidebarView === "hosts") ? (
                 <LocalFsTool
                   active={desktopMode}
                   disabled={!homeOpen && !activeTabReady}
@@ -1294,6 +1367,7 @@ function App() {
           expandedWidth={sidebarExpandedWidth}
           onExpandedWidthChange={setSidebarExpandedWidth}
           onRegisterNewRemote={registerNewRemote}
+          onRegisterOpenSavedHost={registerOpenSavedHost}
         />
 
         <div className="workspace-frame">
@@ -1314,7 +1388,26 @@ function App() {
           <main className="workspace">
             <div className="workspace-split">
               <div className="terminal-stack">
-                {homeOpen ? (
+                {homeOpen && homeDirectoryOpen ? (
+                  <HomeHostDirectory
+                    groups={homeHostSections}
+                    savedConnections={savedConnections}
+                    loading={!savedConnectionsLoaded}
+                    onOpenLocal={openLocalDesktopTab}
+                    onOpenHost={(saved) => openSavedHostRef.current(saved)}
+                    onOpenTerminal={() => {
+                      if (useDesktopStore.getState().target?.kind === "local") closeDesktopRemembering();
+                      showHomeWorkspace();
+                      setActiveHomeTerminalId(homeTerminalTabs[0]?.id ?? "home-terminal-1");
+                    }}
+                    onOpenChat={() => {
+                      if (useDesktopStore.getState().target?.kind === "local") closeDesktopRemembering();
+                      showHomeWorkspace();
+                      useManagedEntityStore.getState().setHomeChatOpen(true);
+                    }}
+                  />
+                ) : null}
+                {homeOpen && !homeDirectoryOpen ? (
                   <HomeWorkspace
                     terminalTabs={homeTerminalTabs}
                     activeTerminalId={activeHomeTerminalId}

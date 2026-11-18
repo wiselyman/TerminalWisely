@@ -523,6 +523,7 @@ test.describe("Host desktop mode", () => {
     });
     await gotoApp(page);
     const api = await twE2e(page);
+    await api.openSshTab();
     await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();

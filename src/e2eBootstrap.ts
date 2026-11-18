@@ -45,6 +45,7 @@ import type { HostStatsSnapshot, TabSession } from "./types";
 
 export interface TwE2eApi {
   openHome: () => void;
+  openHomeDirectory: () => void;
   openSshTab: () => void;
   openSecondSshTab: () => void;
   closeTab: (sessionId: string) => Promise<void>;
@@ -117,6 +118,14 @@ const E2E_SSH_SESSION_ID_2 = "e2e-ssh-session-2";
 
 function openHome() {
   useSessionStore.getState().activateHome();
+  useManagedEntityStore.getState().showHomeWorkspace();
+  useAiEngineerStore.getState().close({ force: true });
+  useLocalFsStore.getState().close();
+}
+
+function openHomeDirectory() {
+  useSessionStore.getState().activateHome();
+  useManagedEntityStore.getState().showHomeDirectory();
   useAiEngineerStore.getState().close({ force: true });
   useLocalFsStore.getState().close();
 }
@@ -444,6 +453,7 @@ export function runE2eBootstrap(): void {
 
   const api: TwE2eApi = {
     openHome,
+    openHomeDirectory,
     openSshTab,
     openSecondSshTab,
     closeTab,

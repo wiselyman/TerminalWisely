@@ -8,7 +8,7 @@ test.describe("App shell & welcome", () => {
     await api.openHome();
   });
 
-  test("Home hides the sidebar and gives the full left pane to Terminal", async ({ page }) => {
+  test("Home returns to the host directory without the sidebar", async ({ page }) => {
     const api = await twE2e(page);
     await api.resetMocks();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
@@ -31,7 +31,8 @@ test.describe("App shell & welcome", () => {
     await page.getByTestId("sidebar-view-home").click();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "E2E Test Host" })).toHaveCount(0);
+    await expect(page.getByTestId("home-host-directory")).toBeVisible();
+    await expect(page.getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
   });
 
   test("isolates Home and SSH tabs while switching workspaces", async ({ page }) => {
@@ -69,7 +70,7 @@ test.describe("App shell & welcome", () => {
 
     await page.getByTestId("sidebar-view-home").click();
     await expect(page.getByTestId("home-work-chat")).toBeHidden();
-    await page.getByTestId("ai-engineer-tool").click();
+    await page.getByTestId("home-directory-chat").click();
     await expect(page.getByTestId("home-work-chat")).toBeVisible();
     await page.getByTestId("sidebar-view-hosts").click();
     await expect(hostsChat).toBeVisible();
