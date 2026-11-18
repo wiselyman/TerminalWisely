@@ -1,5 +1,5 @@
 const TAB_MENU_IGNORE_SELECTOR =
-  ".tab-shortcut-folder, .tab-close, .tab-home, .tab-shortcut-add, .tab-shortcut-wrap, .tab-shortcut-icons";
+  ".tab-close";
 
 export function resolveTabContextMenuTarget(
   target: EventTarget | null,

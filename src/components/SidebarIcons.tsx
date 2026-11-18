@@ -1,21 +1,3 @@
-export function TabFolderIcon() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2.5 4.25h4.25L7.75 6h6v7.25H2.5V4.25z" />
-    </svg>
-  );
-}
-
 /** lucide: home — same 16/1.5 weight as SidebarToggleIcon */
 export function TabHomeIcon() {
   return (

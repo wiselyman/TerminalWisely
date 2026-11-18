@@ -73,7 +73,6 @@ import { useToastStore } from "./stores/toastStore";
 import { splitStartupNotice } from "./lib/startupNotice";
 import type { TransferCompletePayload, TransferProgressPayload, SessionMetadataUpdatedPayload } from "./types";
 import { resolveSessionOsProfile } from "./lib/sessionOsProfile";
-import { TabDirectoryShortcuts } from "./components/TabShortcutMenu";
 import { TabContextMenu } from "./components/TabContextMenu";
 import { ServerOsIcon } from "./components/ServerOsIcon";
 import {
@@ -142,13 +141,6 @@ function App() {
   const quietUpdateCheck = useAppUpdateStore((s) => s.quietCheck);
   const manualUpdateCheck = useAppUpdateStore((s) => s.manualCheck);
 
-  const goToHomeDirectory = (sessionId: string) => {
-    void invoke("enter_directory", {
-      request: { session_id: sessionId, path: "~" },
-    }).catch((err) => {
-      pushToast(formatAppError(err), false);
-    });
-  };
   const sessionTitles = useMemo(
     () =>
       Object.fromEntries(tabs.map((tab) => [tab.id, tab.title])) as Record<
@@ -575,7 +567,7 @@ function App() {
     if (event.button !== 0) return;
     if (
       (event.target as HTMLElement).closest(
-        ".tab-close, .tab-home, .tab-shortcut-folder, .tab-shortcut-add, .tab-shortcut-wrap, .tab-shortcut-icons",
+        ".tab-close",
       )
     ) {
       return;
@@ -1083,30 +1075,6 @@ function App() {
                 ) : null}
                 {tab.title}
               </span>
-              {!homeOpen && tab.active && !tabConnecting ? (
-                <span className="tab-actions">
-                  <button
-                    type="button"
-                    className="tab-home"
-                    title={t("goHomeTitle")}
-                    aria-label={t("goHomeAria", { title: tab.title })}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setActiveTab(tab.id);
-                      goToHomeDirectory(tab.id);
-                    }}
-                  >
-                    <TabHomeIcon />
-                  </button>
-                  <TabDirectoryShortcuts
-                    sessionId={tab.id}
-                    tabKind={tab.kind}
-                    serverId={tab.server_id ?? tab.title}
-                    onActivateTab={() => setActiveTab(tab.id)}
-                  />
-                </span>
-              ) : null}
               <button
                 type="button"
                 className="tab-close"

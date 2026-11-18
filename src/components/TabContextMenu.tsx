@@ -88,7 +88,7 @@ export function TabContextMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="tab-shortcut-menu tab-context-menu"
+      className="tab-context-menu"
       role="menu"
       aria-label={t("tabContextMenuAria")}
       style={{

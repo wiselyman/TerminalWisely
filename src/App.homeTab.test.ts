@@ -21,6 +21,13 @@ describe("App Home navigation", () => {
     expect(app).not.toContain('data-testid="sidebar-view-k8s"');
     expect(app).not.toContain('data-testid="sidebar-view-db"');
   });
+
+  it("keeps per-tab folder navigation and directory shortcuts out of SSH tab chrome", () => {
+    expect(app).not.toContain('className="tab-home"');
+    expect(app).not.toContain("TabDirectoryShortcuts");
+    expect(app).not.toContain("goToHomeDirectory");
+    expect(app).toContain('data-testid="home-directory-button"');
+  });
 });
 
 describe("Home directory chrome", () => {

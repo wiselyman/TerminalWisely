@@ -298,6 +298,16 @@ function readStyles() {
   } else {
     fail("ui.home-host-directory", "Home directory, Local Desktop tabs, or saved-host Desktop routing is missing");
   }
+
+  if (
+    !app.includes("TabDirectoryShortcuts") &&
+    !app.includes('className="tab-home"') &&
+    !app.includes("goToHomeDirectory")
+  ) {
+    pass("ui.host-tabs-no-folder-shortcuts", "SSH tabs contain no folder navigation or shortcut controls");
+  } else {
+    fail("ui.host-tabs-no-folder-shortcuts", "per-tab folder navigation or directory shortcuts remain wired");
+  }
 }
 
 // --- AI interactive password fail-fast ---

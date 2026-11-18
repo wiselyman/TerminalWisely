@@ -1,16 +1,5 @@
 export type SessionKind = "ssh";
 
-/** `all` = 全部服务器；`server` = 当前服务器 */
-export type DirectoryShortcutScope = "all" | "server";
-
-export interface DirectoryShortcut {
-  id: string;
-  path: string;
-  scope: DirectoryShortcutScope;
-  /** Set when scope is `server`; typically `user@host:port`. */
-  server_id?: string | null;
-}
-
 export type AuthMethod = "password" | "privatekey";
 
 export interface SessionInfo {

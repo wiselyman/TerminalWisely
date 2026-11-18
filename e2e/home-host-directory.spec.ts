@@ -74,6 +74,17 @@ test.describe("Home host directory", () => {
     expect(await api.getCreateSshCallCount()).toBe(before + 1);
   });
 
+  test("active SSH tabs have no folder navigation or directory shortcut controls", async ({ page }) => {
+    await page.getByTestId("home-host-card-e2e-conn-1").click();
+    const activeTab = page
+      .locator('.tab[data-tab-kind="ssh"].active')
+      .filter({ hasText: "E2E Test Host" });
+    await expectQuick(activeTab).toBeVisible();
+    await expectQuick(activeTab.locator(".tab-home, .tab-shortcut-wrap, .tab-shortcut-icons")).toHaveCount(0);
+    await expectQuick(page.locator(".tab-context-menu")).toHaveCount(0);
+    await expectQuick(page.getByTestId("home-directory-button")).toBeVisible();
+  });
+
   test("switches between Home, pinned Local Desktop, and SSH Desktop", async ({ page }) => {
     await page.getByTestId("local-desktop-tab").click();
     await expectQuick(page.getByRole("heading", { name: "This computer" })).toBeVisible();
