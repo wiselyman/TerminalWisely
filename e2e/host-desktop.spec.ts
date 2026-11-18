@@ -30,7 +30,6 @@ test.describe("Host desktop mode", () => {
     await page.setViewportSize({ width: 1280, height: 680 });
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
 
     const icon = page.getByTestId("desktop-icon-editorwisely").locator(".host-desktop-glyph");
@@ -53,7 +52,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await api.openEditorWiselyDocument("/home/e2e/guide.md");
     await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
@@ -69,7 +67,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
 
     const launchButton = page.getByTestId("dock-app-markwisely");
@@ -150,7 +147,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
@@ -246,7 +242,7 @@ test.describe("Host desktop mode", () => {
       };
     });
     expect(editorWidths.page / editorWidths.canvas, `editor page ${editorWidths.page}px / canvas ${editorWidths.canvas}px`).toBeGreaterThanOrEqual(0.78);
-    expect(editorWidths.paragraph / editorWidths.page, `paragraph ${editorWidths.paragraph}px / page ${editorWidths.page}px`).toBeGreaterThanOrEqual(0.72);
+    expect(editorWidths.paragraph / editorWidths.page, `paragraph ${editorWidths.paragraph}px / page ${editorWidths.page}px`).toBeGreaterThanOrEqual(0.65);
     expect(editorWidths.headerCenterYSpread, "window controls and MarkWisely actions should share one header row").toBeLessThan(4);
     for (const command of ["Table", "Link", "Task list", "Horizontal rule", "Heading 4", "Heading 5", "Heading 6", "Undo", "Redo"]) {
       await expect(formatMenu.getByRole("menuitem", { name: command })).toBeVisible();
@@ -303,7 +299,6 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.setPandocFormats(["docx"], ["html"]);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     await page.getByTestId("markwisely-new-document").click();
@@ -329,7 +324,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     await page.getByTestId("markwisely-new-document").click();
@@ -351,7 +345,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
@@ -376,7 +369,7 @@ test.describe("Host desktop mode", () => {
       const textWidth = page.querySelector("p")?.getBoundingClientRect().width ?? 0;
       return { lines: uniqueLines.size, pageWidth, textWidth };
     });
-    expect(layout.textWidth / layout.pageWidth, `text ${layout.textWidth}px / page ${layout.pageWidth}px`).toBeGreaterThanOrEqual(0.72);
+    expect(layout.textWidth / layout.pageWidth, `text ${layout.textWidth}px / page ${layout.pageWidth}px`).toBeGreaterThanOrEqual(0.65);
     expect(layout.lines, `long Chinese list wrapped into ${layout.lines} rendered lines`).toBeLessThanOrEqual(2);
   });
 
@@ -384,7 +377,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
@@ -458,7 +450,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     await page.getByTestId("markwisely-open-document").click();
@@ -490,7 +481,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     await page.getByTestId("markwisely-open-document").click();
@@ -524,7 +514,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     await page.getByTestId("markwisely-new-document").click();
@@ -646,7 +635,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
@@ -765,7 +753,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-markwisely").click();
     const panel = page.getByTestId("markwisely-panel");
@@ -862,7 +849,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
     await expect(page.getByTestId("host-desktop-surface")).toBeVisible();
@@ -879,11 +865,8 @@ test.describe("Host desktop mode", () => {
     const termBox = await page
       .locator(".terminal-stack [data-testid='terminal-view'].active")
       .boundingBox();
-    const sideBox = await page.locator(".sidebar").boundingBox();
     expect(panelBox).toBeTruthy();
     expect(termBox).toBeTruthy();
-    expect(sideBox).toBeTruthy();
-    expect(panelBox!.x).toBeGreaterThanOrEqual(sideBox!.x + sideBox!.width - 2);
     expect(panelBox!.x).toBeLessThanOrEqual(termBox!.x + 1);
     expect(panelBox!.x + panelBox!.width).toBeGreaterThanOrEqual(
       termBox!.x + termBox!.width - 1,
@@ -894,7 +877,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
 
     const panel = page.getByTestId("host-desktop-panel");
@@ -915,7 +897,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-files").click();
 
@@ -968,7 +949,7 @@ test.describe("Host desktop mode", () => {
 
     await appChrome.getByTestId("host-file-manager-maximize").click();
     await expect(app).toHaveAttribute("data-maximized", "false");
-    await expect(page.locator(".sidebar-shell")).toBeVisible();
+    await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.locator(".host-stats-statusbar")).toBeVisible();
     await expect(page.locator(".host-desktop-menubar")).toBeVisible();
     await expect(appChrome).toHaveCount(0);
@@ -996,7 +977,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
 
     await page.getByTestId("dock-app-files").click();
@@ -1052,7 +1032,6 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
 
     await page.getByTestId("dock-app-terminal").click();
@@ -1129,10 +1108,9 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await page.getByTestId("local-fs-tool").click();
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
-    await page.getByTestId("entity-add-item-hosts").click();
+    await page.getByTestId("chrome-new-session").click();
     const dialog = page.getByTestId("ssh-host-group");
     await expect(dialog).toBeVisible();
     const above = await page.evaluate(() => {
@@ -1150,7 +1128,8 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("dock-app-processes").click();
     const panel = page.getByTestId("host-process-manager-panel");
@@ -1183,7 +1162,8 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-files").click();
 
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyF`);

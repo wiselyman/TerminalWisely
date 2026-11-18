@@ -12,33 +12,23 @@ async function setTheme(page: import("@playwright/test").Page, theme: (typeof th
 test.describe("UI visual baselines", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("shared theme tokens and keyboard focus remain legible at narrow widths", async ({ page }) => {
+  test("Home host directory remains usable at narrow widths", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 720 });
     await gotoApp(page);
-    await (await twE2e(page)).openHome();
-    const home = page.getByTestId("home-local-chat");
-    const splitter = page.getByTestId("home-split-resizer");
-    await expect(page.getByTestId("home-work-chat")).toBeHidden();
-    await page.getByTestId("ai-engineer-tool").click();
-    await expect(page.getByTestId("home-work-chat")).toBeVisible();
-    const bounds = await home.boundingBox();
+    await (await twE2e(page)).openHomeDirectory();
+    const directory = page.getByTestId("home-host-directory");
+    await expect(page.getByTestId("home-local-host-card")).toBeVisible();
+    await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
+    const bounds = await directory.boundingBox();
     expect(bounds).not.toBeNull();
     expect(Math.round(bounds!.y + bounds!.height)).toBe(720);
-    await splitter.evaluate((el) => (el as HTMLElement).focus({ focusVisible: true }));
-    await expect.poll(() => home.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-    const themeValues = await page.evaluate(() => ({
-      canvas: getComputedStyle(document.documentElement).getPropertyValue("--tw-canvas").trim(),
-      focus: getComputedStyle(document.querySelector(".home-local-splitter")!, "::after").backgroundColor,
-    }));
-    expect(themeValues).toEqual({ canvas: "#0c1118", focus: "rgb(78, 140, 247)" });
+    await expect.poll(() => directory.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const darkCanvas = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--tw-canvas").trim());
+    expect(darkCanvas).toBe("#0c1118");
 
     await setTheme(page, "light");
-    await splitter.evaluate((el) => (el as HTMLElement).focus({ focusVisible: true }));
-    const lightValues = await page.evaluate(() => ({
-      canvas: getComputedStyle(document.documentElement).getPropertyValue("--tw-canvas").trim(),
-      focus: getComputedStyle(document.querySelector(".home-local-splitter")!, "::after").backgroundColor,
-    }));
-    expect(lightValues).toEqual({ canvas: "#f3f5f8", focus: "rgb(40, 103, 215)" });
+    const lightCanvas = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--tw-canvas").trim());
+    expect(lightCanvas).toBe("#f3f5f8");
   });
 
   test("MarkWisely writing surface remains legible in both app themes", async ({ page }) => {
@@ -66,14 +56,13 @@ test.describe("UI visual baselines", () => {
     }
   });
 
-  test("Home terminal and local chat remain balanced in both themes", async ({ page }) => {
+  test("Home host directory remains legible in both themes", async ({ page }) => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
-    await (await twE2e(page)).openHome();
-    await expect(page.getByTestId("home-local-chat")).toBeVisible();
-    await expect(page.getByTestId("home-work-chat")).toBeHidden();
-    await page.getByTestId("ai-engineer-tool").click();
-    await expect(page.getByTestId("home-work-chat")).toBeVisible();
+    await (await twE2e(page)).openHomeDirectory();
+    await expect(page.getByTestId("home-host-directory")).toBeVisible();
+    await expect(page.getByTestId("home-local-host-card")).toBeVisible();
+    await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(page).toHaveScreenshot(`home-${theme}.png`, {
@@ -85,12 +74,17 @@ test.describe("UI visual baselines", () => {
     }
   });
 
-  test("Hosts navigation remains legible in both themes", async ({ page }) => {
+  test("SSH Desktop remains legible without a Hosts sidebar", async ({ page }) => {
     test.skip(process.platform !== "darwin", "Pixel baselines are maintained on the native macOS runner; cross-platform UI contracts still run everywhere.");
     await gotoApp(page);
     await (await twE2e(page)).openSshTab();
-    await expect(page.locator(".sidebar-shell")).toBeVisible();
+    await page.getByTestId("local-fs-tool").click();
+    await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
+    await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.locator(".terminal-view-connecting")).toHaveCount(0, { timeout: 10_000 });
+    await page.addStyleTag({
+      content: '[data-testid="host-desktop-panel"] .host-desktop-menubar time { visibility: hidden !important; }',
+    });
     for (const theme of themes) {
       await setTheme(page, theme);
       await expect(page).toHaveScreenshot(`hosts-${theme}.png`, {

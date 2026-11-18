@@ -14,7 +14,7 @@ test.describe("Home host directory", () => {
     await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
     await expectQuick(page.getByTestId("home-directory-tab")).toBeVisible();
     await expectQuick(page.getByTestId("chrome-sidebar-views")).toBeHidden();
-    await expectQuick(page.getByTestId("sidebar-view-hosts")).toBeHidden();
+    await expectQuick(page.getByTestId("sidebar-view-hosts")).toHaveCount(0);
     await expectQuick(page.getByTestId("sidebar-view-home")).toHaveCount(0);
     await expectQuick(page.locator(".tab-bar > .tab").first()).toHaveAttribute("data-testid", "home-directory-tab");
     await expectQuick(page.getByRole("heading", { name: "Hosts" })).toHaveCount(0);
@@ -33,9 +33,30 @@ test.describe("Home host directory", () => {
     await page.getByTestId("home-local-host-card").click();
     await expectQuick(page.getByTestId("local-desktop-tab")).toBeVisible();
     await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
+    await expectQuick(page.getByTestId("home-terminal-tab")).toHaveCount(0);
     await page.getByTestId("home-directory-tab").click();
     await expectQuick(page.getByTestId("home-host-directory")).toBeVisible();
     expect(await api.getCreateSshCallCount()).toBe(before);
+  });
+
+  test("plus opens the SSH host form instead of creating a Terminal tab", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.resetMocks();
+    await expectQuick(page.getByTestId("home-terminal-tab")).toHaveCount(0);
+    await page.getByTestId("chrome-new-session").click();
+    await expectQuick(page.locator(".connection-form")).toBeVisible();
+    await expectQuick(page.getByTestId("home-terminal-tab")).toHaveCount(0);
+  });
+
+  test("SSH Desktop has no left Hosts list or sidebar collapse control", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByTestId("local-fs-tool").click();
+    await expectQuick(page.getByTestId("host-desktop-panel")).toBeVisible();
+    await expectQuick(page.locator(".sidebar-shell")).toBeHidden();
+    await expectQuick(page.getByTestId("sidebar-view-hosts")).toHaveCount(0);
+    await expectQuick(page.locator(".chrome-sidebar-toggle")).toHaveCount(0);
+    await expectQuick(page.getByTestId("home-terminal-tab")).toHaveCount(0);
   });
 
   test("opens a saved SSH host in its Desktop workspace", async ({ page }) => {

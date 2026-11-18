@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expandUngroupedEntities, gotoApp, twE2e } from "./tw-e2e";
+import { gotoApp, twE2e } from "./tw-e2e";
 
 test.describe("SSH connection UI", () => {
   test.beforeEach(async ({ page }) => {
@@ -9,16 +9,7 @@ test.describe("SSH connection UI", () => {
   });
 
   test("ungrouped hosts start expanded and new host can pick a group", async ({ page }) => {
-    const api = await twE2e(page);
-    await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
-    const ungrouped = page.getByTestId("entity-group-__ungrouped__");
-    await expect(ungrouped).toBeVisible();
-    await expect(ungrouped.locator(".entity-group-collapse")).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    await page.getByTestId("entity-add-item-hosts").click();
+    await page.getByTestId("chrome-new-session").click();
     const group = page.getByTestId("ssh-host-group");
     await expect(group).toBeVisible();
     await expect(group).toHaveValue("__ungrouped__");
@@ -27,11 +18,10 @@ test.describe("SSH connection UI", () => {
 
   test("saved connection click triggers SSH connect invoke", async ({ page }) => {
     const api = await twE2e(page);
-    await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
-    await expandUngroupedEntities(page);
-    await page.getByRole("button", { name: /^E2E Test Host$/i }).click();
+    await api.openHomeDirectory();
+    await page.getByTestId("home-host-card-e2e-conn-1").click();
     await expect.poll(async () => api.getCreateSshCallCount()).toBeGreaterThan(0);
+    await expect(page.getByTestId("host-desktop-panel")).toBeVisible();
     const req = await api.getLastCreateSsh();
     expect(req).toBeTruthy();
   });

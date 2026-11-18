@@ -462,7 +462,7 @@ body,
 .app-shell.sidebar-collapsed .chrome-sidebar-slot,
 .chrome-sidebar-slot.chrome-sidebar-slot--collapsed {
   width: auto;
-  border-right: 1px solid var(--tab-divider);
+  border-right: 0;
 }
 
 .chrome-titlebar-macos-controls {

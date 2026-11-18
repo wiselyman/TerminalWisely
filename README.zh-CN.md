@@ -8,7 +8,7 @@
 
 **当前版本：0.1.3** · **最新版本：[下载最新版本](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
-**本机与远程终端、桌面，在同一个窗口。** Home 先显示本机，再按分组列出已保存 SSH 主机；选择主机即可打开对应 Desktop。本机 Terminal 和聊天仍可从对应工作区标签与工具中使用。变更要批准，随时可以 STOP。
+**本机与远程 Desktop，在同一个窗口。** Home 先显示本机，再按分组列出已保存 SSH 主机；选择主机即可打开对应 Desktop。Terminal 和聊天作为 Desktop 内的应用运行。变更要批准，随时可以 STOP。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 
@@ -23,9 +23,9 @@
 
 | 模块 | 能力 |
 |------|------|
-| **Home** | 本机交互式 Terminal 和聊天，以及状态隔离的本机 Desktop：Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理使用电脑自带的应用；Windows 使用 PowerShell |
+| **Home** | 分组主机目录和状态隔离的本机 Desktop：Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理使用电脑自带的应用；Windows 使用 PowerShell |
 | **Agent 运行时** | Cursor Agent / Codex / Claude Code 跟随当前本机或 SSH 主机；双平面 UX（本机 CLI 流 + 远端执行卡片） |
-| **终端** | 多标签 SSH、书签、断线重连、中英文界面 |
+| **终端** | Terminal 在本机或远程 Desktop 内运行；保存 SSH 主机、断线重连、中英文界面 |
 | **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
 | **文件** | 拖拽上传、`ls` 点击进目录或预览；MarkWisely Markdown 工作台与 EditorWisely 本机/远程文本源码编辑器；下载、压缩、跨服务器发送 |
@@ -38,9 +38,9 @@
 
 ## Home 本机 Desktop
 
-Home 打开后显示主机目录，Local 固定在最上方，已保存 SSH 主机沿用现有分组。点击主机卡片会使用现有 SSH 连接流程，并在新标题栏标签打开对应 Desktop；点击 Local 会打开独立的本机 Desktop 标签，不创建 SSH 会话。本机 Desktop Dock 提供 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理本机已有对应应用，因此不在 Home Dock 中重复提供。AI Local 会在桌面窗口中打开现有 Home 聊天，并保留对话和草稿；不会创建 SSH 会话。AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 会将当前 Home 终端移入窗口，切回后恢复原终端，不会再启动一份 Shell。本机桌面的窗口和 Markdown 最近文件都与各 SSH 主机分别保存。
+Home 打开后显示主机目录，Local 固定在最上方，已保存 SSH 主机沿用现有分组。点击主机卡片会使用现有 SSH 连接流程，并在新标题栏标签打开对应 Desktop；点击 Local 会打开独立的本机 Desktop 标签，不创建 SSH 会话。所有工作区标签都代表 Desktop，左侧 Hosts 列表和独立 Terminal 标签已移除。本机 Desktop Dock 提供 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理本机已有对应应用，因此不在 Home Dock 中重复提供。AI Local 会在桌面窗口中打开现有本机聊天，并保留对话和草稿；不会创建 SSH 会话。AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 使用现有本机 PTY，不创建独立标签。本机桌面的窗口和 Markdown 最近文件都与各 SSH 主机分别保存。
 
-Windows Home Terminal 继续使用 Windows PowerShell 5.1。Windows 安装包按 x64 或 ARM64 内置微软维护的 Coreutils for Windows v2026.9.3（Preview）。在应用终端里可直接按命令名调用 Coreutils；PowerShell 5.1 不包含完整的 PowerShell 7 通配符和管道集成。应用只在该终端子进程中调整 PATH 并移除冲突别名，不修改系统 PATH、PowerShell Profile 或注册表。
+Windows Local Desktop Terminal 继续使用 Windows PowerShell 5.1。Windows 安装包按 x64 或 ARM64 内置微软维护的 Coreutils for Windows v2026.9.3（Preview）。在应用终端里可直接按命令名调用 Coreutils；PowerShell 5.1 不包含完整的 PowerShell 7 通配符和管道集成。应用只在该终端子进程中调整 PATH 并移除冲突别名，不修改系统 PATH、PowerShell Profile 或注册表。
 
 ---
 

@@ -262,13 +262,15 @@ function readStyles() {
   if (
     app.includes('data-testid="home-directory-tab"') &&
     !app.includes('data-testid="sidebar-view-home"') &&
-    app.includes('data-testid="sidebar-view-hosts"') &&
+    !app.includes('data-testid="sidebar-view-hosts"') &&
+    app.includes('collapsed={true}') &&
+    !app.includes('data-testid="home-terminal-tab"') &&
     panel.includes('scope="hosts"') &&
     sidebar.includes('export type SidebarView = "hosts"')
   ) {
-    pass("product.home-hosts-only", "Home uses a fixed titlebar tab and SSH Hosts remains the management scope");
+    pass("product.home-hosts-only", "Home is a directory tab, host lists stay in Home, and workspace tabs omit standalone terminals");
   } else {
-    fail("product.home-hosts-only", "Home/Hosts is missing or another management scope remains wired");
+    fail("product.home-hosts-only", "Home/Desktop navigation or the no-sidebar/no-standalone-terminal contract is missing");
   }
 }
 
@@ -1827,7 +1829,7 @@ function readStyles() {
     read("src/components/aiEngineer/AiEngineerPanel.tsx").includes('desktopTarget?.kind === "local"') &&
     read("src/App.tsx").includes('openDesktopTarget({ kind: "local" })') &&
     read("src/i18n/locales/en/tools.json").includes('"desktop.appAiLocal": "AI Local"') &&
-    testMatrix.includes("Home Local Desktop 工作区")
+    testMatrix.includes("Local Desktop 工作区")
   ) {
     pass("ui.home-local-desktop", "Home Desktop names the local chat AI Local and keeps AI Linux SSH-only");
   } else {

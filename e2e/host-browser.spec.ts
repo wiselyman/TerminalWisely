@@ -19,7 +19,6 @@ test.describe("Host browser (SOCKS panel)", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await api.openBrowserPanel();
     await expect(page.getByTestId("host-browser-panel")).toBeVisible();
     await expect(page.getByTestId("host-browser-url")).toBeVisible();
@@ -38,7 +37,6 @@ test.describe("Host browser (SOCKS panel)", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
     await api.openBrowserPanel();
     await expect(page.getByTestId("host-browser-panel")).toBeVisible();
     await expect(page.getByTestId("host-browser-panel")).toHaveAttribute(

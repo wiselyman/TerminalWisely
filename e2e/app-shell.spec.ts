@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expandUngroupedEntities, gotoApp, twE2e } from "./tw-e2e";
+import { gotoApp, twE2e } from "./tw-e2e";
 
 test.describe("App shell & welcome", () => {
   test.beforeEach(async ({ page }) => {
@@ -16,20 +16,18 @@ test.describe("App shell & welcome", () => {
     await expect(page.locator(".host-stats-statusbar")).toHaveCount(0);
     await expect(page.locator(".app-shell")).not.toHaveClass(/has-host-stats-statusbar/);
     await expect(page.getByTestId("home-directory-tab")).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId("sidebar-view-hosts")).toBeHidden();
+    await expect(page.getByTestId("sidebar-view-hosts")).toHaveCount(0);
     await expect(page.getByTestId("sidebar-view-home")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Hosts" })).toHaveCount(0);
     await expect(page.getByTestId("home-directory-terminal")).toHaveCount(0);
     await api.openSshTab();
     await expect(page.locator('[data-tab-role="home"]')).toHaveCount(0);
-    await expect(page.locator(".sidebar-shell")).toBeVisible();
+    await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.locator(".host-stats-statusbar")).toBeVisible();
     await expect(page.locator(".app-shell")).toHaveClass(/has-host-stats-statusbar/);
-    await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
     await expect(page.getByTestId("home-local-chat")).toHaveCount(0);
-    await expandUngroupedEntities(page);
-    await expect(page.getByRole("button", { name: "E2E Test Host" })).toBeVisible();
     await page.getByTestId("home-directory-tab").click();
     await expect(page.locator(".sidebar-shell")).toBeHidden();
     await expect(page.getByRole("button", { name: /收起侧栏|collapse sidebar/i })).toHaveCount(0);
@@ -43,17 +41,17 @@ test.describe("App shell & welcome", () => {
     await expect(page.locator('[data-tab-kind="ssh"]')).toHaveCount(1);
 
     await page.getByTestId("home-directory-tab").click();
-    await page.getByTestId("home-terminal-tab").click();
-    await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
+    await page.getByTestId("home-local-host-card").click();
+    await expect(page.getByTestId("local-desktop-tab")).toBeVisible();
+    await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
     await expect(page.locator('[data-tab-kind="ssh"]')).toHaveCount(1);
 
     await page.locator('[data-tab-kind="ssh"]').click();
     await expect(page.locator('[data-tab-kind="ssh"]')).toHaveCount(1);
-    await expect(page.getByTestId("home-terminal-tab")).toHaveCount(1);
+    await expect(page.getByTestId("home-terminal-tab")).toHaveCount(0);
   });
 
   test("keeps the Home chat collapsed until opened from the titlebar", async ({ page }) => {
-    await page.getByTestId("home-terminal-tab").click();
     const home = page.getByTestId("home-local-chat");
     await expect(home).toBeVisible();
     await expect(page.getByTestId("home-work-chat")).toBeHidden();
@@ -64,24 +62,7 @@ test.describe("App shell & welcome", () => {
     await expect(page.getByTestId("workspace-welcome")).toHaveCount(0);
   });
 
-  test("Home chat toggle does not change the Hosts AI chat", async ({ page }) => {
-    const api = await twE2e(page);
-    await api.openSshTab();
-    await page.getByTestId("ai-engineer-tool").click();
-    const hostsChat = page.locator('.ai-engineer-panel:not(.is-home-workspace)');
-    await expect(hostsChat).toBeVisible();
-
-    await page.getByTestId("home-directory-tab").click();
-    await expect(page.getByTestId("home-work-chat")).toBeHidden();
-    await page.getByTestId("home-terminal-tab").click();
-    await page.getByTestId("ai-engineer-tool").click();
-    await expect(page.getByTestId("home-work-chat")).toBeVisible();
-    await page.locator('[data-tab-kind="ssh"]').click();
-    await expect(hostsChat).toBeVisible();
-  });
-
   test("switches locale en ↔ zh-CN", async ({ page }) => {
-    await page.getByTestId("home-terminal-tab").click();
     const localeTrigger = page.getByTestId("locale-switcher-trigger");
     const themeTrigger = page.getByTestId("theme-switcher-trigger");
     await localeTrigger.click();
@@ -146,7 +127,6 @@ test.describe("App shell & welcome", () => {
     await page.getByTestId("theme-switcher-trigger").click();
     await page.getByTestId("theme-option-light").click();
 
-    await page.getByTestId("home-terminal-tab").click();
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     const api = await twE2e(page);
@@ -155,7 +135,7 @@ test.describe("App shell & welcome", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 
-  test("sidebar width survives reload", async ({ page }) => {
+  test("workspace stays single-column after reload", async ({ page }) => {
     await page.evaluate(() => {
       localStorage.setItem("terminal-wisely.sidebar-width", "320");
     });
@@ -163,9 +143,7 @@ test.describe("App shell & welcome", () => {
     await page.waitForFunction(() => window.__TW_E2E__ != null, undefined, {
       timeout: 30_000,
     });
-    await expect(page.locator(".app-shell")).toHaveAttribute(
-      "style",
-      /--sidebar-width:\s*320px/,
-    );
+    await expect(page.locator(".app-shell")).toHaveClass(/sidebar-collapsed/);
+    await expect(page.locator(".sidebar-shell")).toBeHidden();
   });
 });

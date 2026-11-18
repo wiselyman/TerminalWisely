@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expandUngroupedEntities, gotoApp, twE2e } from "./tw-e2e";
+import { gotoApp, twE2e } from "./tw-e2e";
 
 test.describe("SSH terminal workspace", () => {
   test.beforeEach(async ({ page }) => {
@@ -21,9 +21,8 @@ test.describe("SSH terminal workspace", () => {
     });
   });
 
-  test("shows saved connection in hosts sidebar", async ({ page }) => {
-    await page.getByRole("tab", { name: /Hosts|主机/i }).click();
-    await expandUngroupedEntities(page);
-    await expect(page.getByRole("button", { name: /^E2E Test Host$/i })).toBeVisible();
+  test("shows saved connections in the Home directory", async ({ page }) => {
+    await page.getByTestId("home-directory-tab").click();
+    await expect(page.getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
   });
 });

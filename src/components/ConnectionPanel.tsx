@@ -234,7 +234,7 @@ export function ConnectionPanel({
         );
       }
       closeSshForm();
-      afterSuccessfulConnect();
+      afterSuccessfulConnect(true);
     } catch {
       // Error toast already shown; keep the form open.
     }

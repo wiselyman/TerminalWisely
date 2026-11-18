@@ -79,9 +79,8 @@ import { ServerOsIcon } from "./components/ServerOsIcon";
 import {
   TabHomeIcon,
   ChromePlusIcon,
-  SidebarToggleIcon,
 } from "./components/SidebarIcons";
-import { SystemInfoIcon, TerminalIcon } from "./components/WorkspaceToolIcons";
+import { SystemInfoIcon } from "./components/WorkspaceToolIcons";
 import { getPlatformShellClass, isMacHost } from "./lib/hostOs";
 import { isTauriRuntime } from "./lib/isTauri";
 import { showManualUpdateCheckResult } from "./lib/updateCheckFeedback";
@@ -91,12 +90,6 @@ import { WindowControls } from "./components/WindowControls";
 import { suppressBrowserContextMenu } from "./lib/suppressBrowserContextMenu";
 import { resolveTabContextMenuTarget } from "./lib/tabContextMenuTarget";
 import { bindOutsideTerminalMouseCleanup, armChromeClickSuppress, clearChromeClickSuppress, noteIntentionalTabLeftMouseDown, isIntentionalTabLeftClick } from "./lib/terminalSelectionDrag";
-import {
-  SIDEBAR_COLLAPSED_WIDTH,
-  SIDEBAR_WIDTH_STORAGE_KEY,
-  clampSidebarWidth,
-  loadSidebarWidth,
-} from "./lib/sidebarLayout";
 import "./App.css";
 import "./styles/tokens.css";
 import "./styles/primitives.css";
@@ -365,37 +358,12 @@ function App() {
   const suppressTabClickUntilRef = useRef(0);
   const tabPointerButtonRef = useRef(0);
   const skipTabBarContextMenuRef = useRef(false);
-  // Always open with the connection sidebar visible; collapse is session-only.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarExpandedWidth, setSidebarExpandedWidth] = useState(loadSidebarWidth);
   const [windowFullscreen, setWindowFullscreen] = useState(false);
   const [terminalSize, setTerminalSize] = useState({ cols: 120, rows: 32 });
-  const [homeTerminalTabs, setHomeTerminalTabs] = useState([
+  const homeTerminalTabs = [
     { id: "home-terminal-1", title: t("localTerminalTabTitle", { ns: "terminal", number: 1 }) },
-  ]);
-  const [activeHomeTerminalId, setActiveHomeTerminalId] = useState("home-terminal-1");
-  const homeTerminalSequence = useRef(1);
-  const addHomeTerminalTab = useCallback(() => {
-    homeTerminalSequence.current += 1;
-    const tab = {
-      id: `home-terminal-${homeTerminalSequence.current}`,
-      title: t("localTerminalTabTitle", { ns: "terminal", number: homeTerminalSequence.current }),
-    };
-    setHomeTerminalTabs((current) => [...current, tab]);
-    setActiveHomeTerminalId(tab.id);
-    useManagedEntityStore.getState().showHomeWorkspace();
-  }, [t]);
-  const closeHomeTerminalTab = useCallback((terminalId: string) => {
-    if (homeTerminalTabs.length <= 1 || homeTerminalTabs[0]?.id === terminalId) {
-      return;
-    }
-    const remaining = homeTerminalTabs.filter((tab) => tab.id !== terminalId);
-    if (activeHomeTerminalId === terminalId) {
-      const oldIndex = homeTerminalTabs.findIndex((tab) => tab.id === terminalId);
-      setActiveHomeTerminalId(remaining[Math.min(oldIndex, remaining.length - 1)].id);
-    }
-    setHomeTerminalTabs(remaining);
-  }, [activeHomeTerminalId, homeTerminalTabs]);
+  ];
+  const activeHomeTerminalId = "home-terminal-1";
   const tabBarRef = useRef<HTMLDivElement>(null);
   const openNewRemoteRef = useRef<() => void>(() => {});
   const registerNewRemote = useCallback((open: () => void) => {
@@ -410,7 +378,6 @@ function App() {
   const homeDirectoryOpen = useManagedEntityStore((s) => s.homeDirectoryOpen);
   const homeDesktopTabs = useManagedEntityStore((s) => s.homeDesktopTabs);
   const activeHomeDesktopTabId = useManagedEntityStore((s) => s.activeHomeDesktopTabId);
-  const showHomeWorkspace = useManagedEntityStore((s) => s.showHomeWorkspace);
   const homeChatOpen = useManagedEntityStore((s) => s.homeChatOpen);
   const toggleHomeChat = useManagedEntityStore((s) => s.toggleHomeChat);
   const homeWasOpen = useRef(false);
@@ -524,15 +491,12 @@ function App() {
   const workspacePanelOpen = showAiEngineerPanel && !desktopMode;
   const desktopAppChromeMode = desktopMode && desktopHasMaximizedApp;
 
-  const sidebarWidth = sidebarCollapsed
-    ? SIDEBAR_COLLAPSED_WIDTH
-    : sidebarExpandedWidth;
+  const sidebarWidth = 0;
 
   const terminalLayoutRevision = useMemo(
     () =>
-      `${sidebarCollapsed}-${sidebarWidth}-${workspacePanelOpen}-${workspacePanelWidth}-${desktopMode ? "desktop" : "term"}-${desktopTerminalShown ? "embed" : "stack"}`,
+      `no-sidebar-${workspacePanelOpen}-${workspacePanelWidth}-${desktopMode ? "desktop" : "term"}-${desktopTerminalShown ? "embed" : "stack"}`,
     [
-      sidebarCollapsed,
       sidebarWidth,
       workspacePanelOpen,
       workspacePanelWidth,
@@ -564,15 +528,6 @@ function App() {
       document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
-
-  useEffect(() => {
-    if (!sidebarCollapsed) {
-      localStorage.setItem(
-        SIDEBAR_WIDTH_STORAGE_KEY,
-        String(clampSidebarWidth(sidebarExpandedWidth)),
-      );
-    }
-  }, [sidebarCollapsed, sidebarExpandedWidth]);
 
   // Host tab changed while AI still bound to another session — soft-hide so
   // the previous host's transcript cannot paint over the new terminal.
@@ -922,7 +877,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell ${platformClass} ${homeOpen ? "home-space " : ""}${sidebarCollapsed ? "sidebar-collapsed" : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""}${desktopAppChromeMode ? " desktop-app-chrome-mode" : ""}${homeOpen ? "" : " has-host-stats-statusbar"}`}
+      className={`app-shell sidebar-collapsed ${platformClass} ${homeOpen ? "home-space " : ""}${windowFullscreen ? " window-fullscreen" : ""}${workspacePanelOpen ? " workspace-panel-open" : ""}${desktopMode ? " desktop-mode" : ""}${desktopAppChromeMode ? " desktop-app-chrome-mode" : ""}${homeOpen ? "" : " has-host-stats-statusbar"}`}
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -934,7 +889,7 @@ function App() {
     >
       <header className="chrome-titlebar">
             <div
-              className={`chrome-sidebar-slot${sidebarCollapsed ? " chrome-sidebar-slot--collapsed" : ""}`}
+              className="chrome-sidebar-slot chrome-sidebar-slot--collapsed"
             >
               {macWindowChrome ? (
                 <div
@@ -942,38 +897,6 @@ function App() {
                   aria-hidden
                 />
               ) : null}
-              <div className={`chrome-sidebar-controls${homeOpen ? " home-hidden-sidebar-controls" : ""}`}>
-                {!homeOpen ? <button
-                  type="button"
-                  className="chrome-sidebar-toggle"
-                  onClick={() => setSidebarCollapsed((value) => !value)}
-                  aria-label={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-                  title={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-                >
-                  <SidebarToggleIcon />
-                </button> : null}
-                <div
-                  className="chrome-sidebar-views"
-                  role="tablist"
-                  aria-label={t("sidebarViewsAria")}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    className={`chrome-sidebar-view-btn${!homeOpen && sidebarView === "hosts" ? " active" : ""}`}
-                    aria-label={t("sidebarViewHosts")}
-                    title={t("sidebarViewHosts")}
-                    aria-selected={!homeOpen && sidebarView === "hosts"}
-                    data-testid="sidebar-view-hosts"
-                    onClick={() => {
-                      setSidebarView("hosts");
-                      leaveHome();
-                    }}
-                  >
-                    <SystemInfoIcon />
-                  </button>
-                </div>
-              </div>
             </div>
             <div className="chrome-titlebar-main">
               <div
@@ -1185,50 +1108,6 @@ function App() {
             </div>
             );
           })}
-              {homeTerminalTabs.map((tab) => {
-                const active = tab.id === activeHomeTerminalId;
-                const canClose = homeTerminalTabs[0]?.id !== tab.id;
-                return (
-                  <div
-                    key={tab.id}
-                    className={`tab${active ? " active" : ""}`}
-                    data-testid="home-terminal-tab"
-                    data-terminal-id={tab.id}
-                    onClick={() => {
-                      activateHome();
-                      setActiveHomeTerminalId(tab.id);
-                      showHomeWorkspace();
-                      useManagedEntityStore.getState().setHomeChatOpen(false);
-                      const desktop = useDesktopStore.getState();
-                      if (desktop.open && desktop.target?.kind === "local") {
-                        desktop.close();
-                      }
-                    }}
-                  >
-                    {active ? (
-                      <>
-                        <span className="tab-curve tab-curve-start" aria-hidden="true" />
-                        <span className="tab-curve tab-curve-end" aria-hidden="true" />
-                      </>
-                    ) : null}
-                    <span className="tab-kind home-terminal" title={t("localTerminalTitle", { ns: "terminal" })}>
-                      <TerminalIcon />
-                    </span>
-                    <span className="tab-title" title={tab.title}>{tab.title}</span>
-                    {canClose ? <button
-                      type="button"
-                      className="tab-close"
-                      data-testid={`close-${tab.id}`}
-                      aria-label={t("closeTabAria", { title: tab.title })}
-                      onMouseDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        closeHomeTerminalTab(tab.id);
-                      }}
-                    >×</button> : null}
-                  </div>
-                );
-              })}
               {homeDesktopTabs.map((tab) => {
                 const active = homeOpen && !homeDirectoryOpen && tab.id === activeHomeDesktopTabId;
                 return (
@@ -1245,7 +1124,7 @@ function App() {
                     }}
                   >
                     {active ? <><span className="tab-curve tab-curve-start" aria-hidden="true" /><span className="tab-curve tab-curve-end" aria-hidden="true" /></> : null}
-                    <span className="tab-kind home-terminal"><TerminalIcon /></span>
+                    <span className="tab-kind desktop-tab-icon"><SystemInfoIcon /></span>
                     <span className="tab-title" title={tab.title}>{tab.title}</span>
                     <button
                       type="button"
@@ -1272,15 +1151,9 @@ function App() {
                   type="button"
                   className="chrome-new-session"
                   data-testid="chrome-new-session"
-                  aria-label={homeOpen ? t("newLocalTerminal", { ns: "terminal" }) : t("newSsh")}
-                  title={homeOpen ? t("newLocalTerminal", { ns: "terminal" }) : t("newSsh")}
-                  onClick={() => {
-                    if (homeOpen) {
-                      addHomeTerminalTab();
-                      return;
-                    }
-                    openNewRemoteRef.current();
-                  }}
+                  aria-label={t("newSsh")}
+                  title={t("newSsh")}
+                  onClick={() => openNewRemoteRef.current()}
                 >
                   <ChromePlusIcon />
                 </button>
@@ -1357,9 +1230,9 @@ function App() {
         <ConnectionPanel
           cols={terminalSize.cols}
           rows={terminalSize.rows}
-          collapsed={sidebarCollapsed}
-          expandedWidth={sidebarExpandedWidth}
-          onExpandedWidthChange={setSidebarExpandedWidth}
+          collapsed={true}
+          expandedWidth={240}
+          onExpandedWidthChange={() => {}}
           onRegisterNewRemote={registerNewRemote}
           onRegisterOpenSavedHost={registerOpenSavedHost}
         />
