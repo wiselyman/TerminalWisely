@@ -7,6 +7,7 @@ import { EntityListView } from "./management/EntityListView";
 import { EntityRow } from "./management/EntityRow";
 import type { AuthMethod, SavedConnection, SshConnectRequest } from "../types";
 import { useSessionStore } from "../stores/sessionStore";
+import { useSidebarViewStore } from "../stores/sidebarViewStore";
 import { useToastStore } from "../stores/toastStore";
 import { focusManagedEntity } from "../stores/managedEntityStore";
 import { switchWorkspacePanel } from "../stores/workspacePanelSwitch";
@@ -24,6 +25,7 @@ interface ConnectionPanelProps {
   expandedWidth: number;
   onExpandedWidthChange: (width: number) => void;
   onRegisterNewRemote?: (open: () => void) => void;
+  onRegisterOpenSavedHost?: (open: (saved: SavedConnection) => void) => void;
 }
 
 const defaultRequest: SshConnectRequest = {
@@ -51,6 +53,7 @@ export function ConnectionPanel({
   expandedWidth,
   onExpandedWidthChange,
   onRegisterNewRemote,
+  onRegisterOpenSavedHost,
 }: ConnectionPanelProps) {
   const { t } = useTranslation(["connection", "shell"]);
   const [sshFormMode, setSshFormMode] = useState<SshFormMode | null>(null);
@@ -59,6 +62,7 @@ export function ConnectionPanel({
   const [savedPasswordPrompt, setSavedPasswordPrompt] =
     useState<SavedConnection | null>(null);
   const [savedPassword, setSavedPassword] = useState("");
+  const [openDesktopAfterPassword, setOpenDesktopAfterPassword] = useState(false);
   const [rememberPassword, setRememberPassword] = useState(true);
   const [rememberSavedPassword, setRememberSavedPassword] = useState(true);
   const [hostGroupId, setHostGroupId] = useState(UNGROUPED_SECTION);
@@ -103,6 +107,10 @@ export function ConnectionPanel({
     onRegisterNewRemote?.(openCreateForm);
   }, [onRegisterNewRemote, openCreateForm]);
 
+  useEffect(() => {
+    onRegisterOpenSavedHost?.((saved) => void handleSavedConnect(saved, true));
+  });
+
   const openEditForm = (saved: SavedConnection) => {
     setSshFormMode({ kind: "edit", saved });
     setConnectionName(saved.name);
@@ -129,6 +137,7 @@ export function ConnectionPanel({
     setSavedPasswordPrompt(null);
     setSavedPassword("");
     setRememberSavedPassword(true);
+    setOpenDesktopAfterPassword(false);
   };
 
   const updateField = <K extends keyof SshConnectRequest>(
@@ -152,7 +161,25 @@ export function ConnectionPanel({
     switchWorkspacePanel("aiEngineer", activeTabId, tab?.server_id ?? undefined);
   };
 
-  const afterSuccessfulConnect = () => {
+  const afterSuccessfulConnect = (openDesktop = false, connectedSessionId?: string) => {
+    if (openDesktop) {
+      const session = useSessionStore.getState();
+      const sessionId = connectedSessionId ?? session.activeTabId;
+      const tab = session.tabs.find((item) => item.id === sessionId);
+      if (sessionId && tab) {
+        useSidebarViewStore.getState().setView("hosts");
+        focusManagedEntity({
+          kind: "server",
+          id: tab.server_id || tab.id,
+          label: tab.title,
+          sessionId: tab.id,
+          serverId: tab.server_id,
+        });
+        session.setActiveTab(sessionId);
+        switchWorkspacePanel("desktop", sessionId, tab.server_id ?? undefined);
+      }
+      return;
+    }
     autoOpenAiAfterConnect();
   };
 
@@ -213,15 +240,16 @@ export function ConnectionPanel({
     }
   };
 
-  const handleSavedConnect = async (saved: SavedConnection) => {
+  const handleSavedConnect = async (saved: SavedConnection, openDesktop = false) => {
     // Each host click opens a new SSH tab: bare name, then (1), (2), …
     if (saved.auth_method === "password" && !saved.has_password) {
       setSavedPasswordPrompt(saved);
+      setOpenDesktopAfterPassword(openDesktop);
       return;
     }
     const sessionId = await connectSaved(saved.id, null, false, cols, rows);
     if (sessionId) {
-      afterSuccessfulConnect();
+      afterSuccessfulConnect(openDesktop, sessionId);
       return;
     }
     if (saved.auth_method === "password") {
@@ -242,7 +270,7 @@ export function ConnectionPanel({
     );
     if (sessionId) {
       closePasswordPrompt();
-      afterSuccessfulConnect();
+      afterSuccessfulConnect(openDesktopAfterPassword, sessionId);
     }
   };
 

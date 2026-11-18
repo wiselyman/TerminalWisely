@@ -67,6 +67,7 @@ interface SessionState {
   tabs: TabSession[];
   activeTabId: string | null;
   savedConnections: SavedConnection[];
+  savedConnectionsLoaded: boolean;
   deviceHistory: DeviceRecord[];
   activeTransfers: Record<string, TransferProgressPayload>;
   statusMessage: string | null;
@@ -198,6 +199,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   tabs: [],
   activeTabId: null,
   savedConnections: [],
+  savedConnectionsLoaded: false,
   deviceHistory: [],
   activeTransfers: {},
   statusMessage: null,
@@ -469,7 +471,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   loadSavedConnections: async () => {
     const saved = await invoke<SavedConnection[]>("get_saved_connections");
-    set({ savedConnections: saved });
+    set({ savedConnections: saved, savedConnectionsLoaded: true });
   },
 
   loadDeviceHistory: async () => {
