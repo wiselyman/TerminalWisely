@@ -110,4 +110,4 @@
 - [x] **Step 2: 更新产品文档**：已更新 0.1.3 Home 主机目录、Local/SSH Desktop 流程、测试矩阵、发布说明和版本元数据。
 - [x] **Step 3: 验证静态检查**：`node scripts/check-no-agent-hardcoding.mjs` 与 `npm run test:smoke` 均通过。
 - [x] **Step 4: 全量验证**：`./scripts/run-all-tests.sh` 全部通过；执行 Home directory、Local/SSH Desktop、现有 SSH Terminal 的 Playwright 路径。
-- [ ] **Step 5: 提交**：每个实现任务各一提交，作者 `Yunfei Wang <wiselyman2008@gmail.com>`，不含 Cursor 署名；全量测试通过后按仓库要求推送 `main`。
+- [x] **Step 5: 提交**：4 个实现阶段各一提交，作者 `Yunfei Wang <wiselyman2008@gmail.com>`，不含 Cursor 署名；全量测试通过后推送至 `origin/main`。
