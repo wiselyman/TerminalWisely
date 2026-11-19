@@ -39,7 +39,7 @@ describe("local desktop filesystem API", () => {
       "write_local_bytes",
       "rename_local_path",
       "move_local_path",
-      "delete_local_path",
+      "trash_local_path",
       "get_local_path_size",
       "open_local_path",
       "reveal_local_path",
@@ -48,6 +48,15 @@ describe("local desktop filesystem API", () => {
       expect(payload === undefined ? "" : JSON.stringify(payload)).not.toContain("session_id");
     }
     expect(invoke.mock.calls[5][1]).toEqual({ request: { path: "/Users/test/export.docx", base64: "AQL/" } });
+  });
+
+  it("copies a local path to a destination directory", async () => {
+    const api = await import("./localFsApi");
+    invoke.mockResolvedValueOnce("/Users/test/Backup/docs");
+    await api.copyLocalPath("/Users/test/docs", "/Users/test/Backup");
+    expect(invoke).toHaveBeenCalledWith("copy_local_path", {
+      request: { path: "/Users/test/docs", dest_dir: "/Users/test/Backup", name: null },
+    });
   });
 
   it("keeps POSIX, drive-root, and UNC parent paths intact", async () => {

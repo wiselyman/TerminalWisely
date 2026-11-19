@@ -48,8 +48,12 @@ export function moveLocalPath(path: string, destDir: string): Promise<string> {
   return invoke("move_local_path", { request: { path, dest_dir: destDir } });
 }
 
+export function copyLocalPath(path: string, destDir: string, name?: string): Promise<string> {
+  return invoke("copy_local_path", { request: { path, dest_dir: destDir, name: name ?? null } });
+}
+
 export function deleteLocalPath(path: string): Promise<void> {
-  return invoke("delete_local_path", { request: { path } });
+  return invoke("trash_local_path", { request: { path } });
 }
 
 export function getLocalPathSize(path: string): Promise<LocalPathSizeResult> {

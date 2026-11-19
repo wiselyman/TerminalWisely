@@ -22,6 +22,12 @@ pub struct LocalFsEntry {
     pub size_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +72,14 @@ pub struct LocalRenameRequest {
 pub struct LocalMoveRequest {
     pub path: String,
     pub dest_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalCopyRequest {
+    pub path: String,
+    pub dest_dir: String,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,18 +167,46 @@ pub fn list_local_directory(path: Option<String>, show_hidden: bool) -> AppResul
             .as_ref()
             .filter(|m| m.is_file())
             .map(|m| m.len());
-        let modified_ms = meta.and_then(|m| {
+        let modified_ms = meta.as_ref().and_then(|m| {
             m.modified()
                 .ok()
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                 .map(|d| d.as_millis() as i64)
         });
+        #[cfg(unix)]
+        let (permissions, owner, group) = {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            let metadata = meta.as_ref();
+            (
+                metadata.map(|m| {
+                    let mode = m.permissions().mode();
+                    let file_type = if m.is_dir() { 'd' } else if m.file_type().is_symlink() { 'l' } else { '-' };
+                    let mut value = String::with_capacity(10);
+                    value.push(file_type);
+                    for (bit, yes, no) in [
+                        (0o400, 'r', '-'), (0o200, 'w', '-'), (0o100, 'x', '-'),
+                        (0o040, 'r', '-'), (0o020, 'w', '-'), (0o010, 'x', '-'),
+                        (0o004, 'r', '-'), (0o002, 'w', '-'), (0o001, 'x', '-'),
+                    ] {
+                        value.push(if mode & bit != 0 { yes } else { no });
+                    }
+                    value
+                }),
+                metadata.map(|m| m.uid().to_string()),
+                metadata.map(|m| m.gid().to_string()),
+            )
+        };
+        #[cfg(not(unix))]
+        let (permissions, owner, group) = (None, None, None);
         entries.push(LocalFsEntry {
             name,
             path: path_to_string(&entry_path),
             kind,
             size_bytes,
             modified_ms,
+            permissions,
+            owner,
+            group,
         });
     }
 
@@ -215,15 +257,50 @@ pub fn move_local_path(request: LocalMoveRequest) -> AppResult<String> {
     Ok(path_to_string(&dest))
 }
 
-pub fn delete_local_path(request: LocalPathRequest) -> AppResult<()> {
-    let path = PathBuf::from(&request.path);
-    let meta = std::fs::metadata(&path).map_err(AppError::from)?;
-    if meta.is_dir() {
-        std::fs::remove_dir_all(&path).map_err(AppError::from)?;
-    } else {
-        std::fs::remove_file(&path).map_err(AppError::from)?;
+fn copy_entry(source: &Path, destination: &Path) -> AppResult<()> {
+    let metadata = std::fs::symlink_metadata(source).map_err(AppError::from)?;
+    if metadata.file_type().is_symlink() {
+        return Err(AppError::msg("Copying symbolic links is not supported"));
     }
-    Ok(())
+    if metadata.is_dir() {
+        std::fs::create_dir(destination).map_err(AppError::from)?;
+        for child in std::fs::read_dir(source).map_err(AppError::from)? {
+            let child = child.map_err(AppError::from)?;
+            copy_entry(&child.path(), &destination.join(child.file_name()))?;
+        }
+        Ok(())
+    } else {
+        std::fs::copy(source, destination).map(|_| ()).map_err(AppError::from)
+    }
+}
+
+pub fn copy_local_path(request: LocalCopyRequest) -> AppResult<String> {
+    let source = normalize_path(&request.path)?;
+    if !source.exists() { return Err(AppError::msg("Source path does not exist")); }
+    let dest_dir = normalize_path(&request.dest_dir)?;
+    if !dest_dir.is_dir() { return Err(AppError::msg("Destination is not a directory")); }
+    let name = request.name.filter(|name| !name.trim().is_empty()).unwrap_or_else(|| {
+        source.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+    });
+    if name == "." || name == ".." || name.contains('/') || name.contains('\\') {
+        return Err(AppError::msg("Invalid name"));
+    }
+    let destination = dest_dir.join(name);
+    if destination.exists() { return Err(AppError::msg("Destination already exists")); }
+    copy_entry(&source, &destination)?;
+    Ok(path_to_string(&destination))
+}
+
+pub fn trash_local_path(request: LocalPathRequest) -> AppResult<()> {
+    let path = normalize_path(&request.path)?;
+    if !path.exists() {
+        return Err(AppError::msg("Path does not exist"));
+    }
+    trash::delete(&path).map_err(|error| AppError::msg(format!("Cannot move item to trash: {error}")))
+}
+
+pub fn delete_local_path(request: LocalPathRequest) -> AppResult<()> {
+    trash_local_path(request)
 }
 
 fn dir_size_recursive(path: &Path, total: &mut u64) -> AppResult<()> {
@@ -384,6 +461,59 @@ mod tests {
         assert!(Path::new(&moved).is_file());
         delete_local_path(LocalPathRequest { path: moved.clone() }).unwrap();
         assert!(!Path::new(&moved).exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn copies_local_files_and_directories_without_overwriting() {
+        let root = temp_dir("local-fs-copy");
+        let source = root.join("source");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::write(source.join("note.txt"), "copy body").unwrap();
+        let destination = root.join("destination");
+        std::fs::create_dir(&destination).unwrap();
+
+        let copied = copy_local_path(LocalCopyRequest {
+            path: path_to_string(&source),
+            dest_dir: path_to_string(&destination),
+            name: None,
+        }).unwrap();
+
+        assert_eq!(std::fs::read_to_string(Path::new(&copied).join("note.txt")).unwrap(), "copy body");
+        assert!(copy_local_path(LocalCopyRequest {
+            path: path_to_string(&source),
+            dest_dir: path_to_string(&destination),
+            name: None,
+        }).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_directory_entries_include_unix_metadata() {
+        let root = temp_dir("local-fs-metadata");
+        let file = root.join("metadata.txt");
+        std::fs::write(&file, "metadata").unwrap();
+
+        let result = list_local_directory(Some(path_to_string(&root)), true).unwrap();
+        let entry = result.entries.iter().find(|entry| entry.name == "metadata.txt").unwrap();
+
+        assert!(entry.permissions.is_some());
+        assert!(entry.owner.is_some());
+        assert!(entry.group.is_some());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn trash_local_path_moves_existing_item_out_of_place_and_rejects_missing_item() {
+        let root = temp_dir("local-fs-trash");
+        let file = root.join("delete-me.txt");
+        std::fs::write(&file, "trash me").unwrap();
+
+        trash_local_path(LocalPathRequest { path: path_to_string(&file) }).unwrap();
+
+        assert!(!file.exists());
+        assert!(trash_local_path(LocalPathRequest { path: path_to_string(&file) }).is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 

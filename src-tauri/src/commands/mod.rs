@@ -1499,8 +1499,18 @@ pub fn move_local_path(request: crate::fs_local::LocalMoveRequest) -> Result<Str
 }
 
 #[tauri::command]
+pub fn copy_local_path(request: crate::fs_local::LocalCopyRequest) -> Result<String, String> {
+    crate::fs_local::copy_local_path(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn delete_local_path(request: crate::fs_local::LocalPathRequest) -> Result<(), String> {
     crate::fs_local::delete_local_path(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn trash_local_path(request: crate::fs_local::LocalPathRequest) -> Result<(), String> {
+    crate::fs_local::trash_local_path(request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
