@@ -126,6 +126,7 @@ test.describe("Home host directory", () => {
   });
 
   test("Home supports group and host management", async ({ page }) => {
+    await page.getByTestId("home-host-card-e2e-conn-1").hover();
     await expectQuick(page.getByTestId("home-host-edit-e2e-conn-1")).toBeVisible();
     await expectQuick(page.getByTestId("home-host-delete-e2e-conn-1")).toBeVisible();
 
@@ -144,6 +145,7 @@ test.describe("Home host directory", () => {
     });
     const customGroup = page.getByTestId(`home-host-group-${boxes.id}`);
     const deleteGroup = customGroup.locator(`[data-testid="home-host-delete-group-${boxes.id}"]`);
+    await customGroup.locator(".home-host-section-header").hover();
     await customGroup.getByRole("button", { name: /edit Group/i }).click();
     await customGroup.getByRole("textbox", { name: "Group name" }).fill("QA group");
     await customGroup.getByRole("button", { name: "Save" }).click();
@@ -154,12 +156,43 @@ test.describe("Home host directory", () => {
     await page.mouse.up();
     await expectQuick(customGroup.getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
 
+    await customGroup.locator(".home-host-section-header").hover();
     await deleteGroup.click();
     await expectQuick(customGroup).toHaveCount(0);
     await expectQuick(page.getByTestId("home-host-group-__ungrouped__").getByTestId("home-host-card-e2e-conn-1")).toBeVisible();
 
+    await page.getByTestId("home-host-card-e2e-conn-1").hover();
     await page.getByTestId("home-host-delete-e2e-conn-1").click();
     await expectQuick(page.getByTestId("home-host-card-e2e-conn-1")).toHaveCount(0);
+  });
+
+  test("Home host and group actions appear on hover or keyboard focus", async ({ page }) => {
+    const hostEdit = page.getByTestId("home-host-edit-e2e-conn-1");
+    const hostDelete = page.getByTestId("home-host-delete-e2e-conn-1");
+    await expectQuick(hostEdit).toBeHidden();
+    await expectQuick(hostDelete).toBeHidden();
+    await expectQuick(page.getByTestId("home-add-group")).toBeVisible();
+
+    const hostCard = page.getByTestId("home-host-card-e2e-conn-1");
+    await hostCard.hover();
+    await expectQuick(hostEdit).toBeVisible();
+    await expectQuick(hostDelete).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expectQuick(hostEdit).toBeHidden();
+
+    await hostCard.focus();
+    await expectQuick(hostEdit).toBeVisible();
+    await page.getByTestId("home-add-group").click();
+    const group = page.locator(".home-host-section").filter({ has: page.getByRole("heading", { name: "Group", exact: true }) });
+    await expectQuick(group).toBeVisible();
+    const groupId = await group.getAttribute("data-entity-group-id");
+    const groupEdit = group.getByRole("button", { name: "Edit Group" });
+    const groupDelete = page.getByTestId(`home-host-delete-group-${groupId}`);
+    await expectQuick(groupEdit).toBeHidden();
+    await expectQuick(groupDelete).toBeHidden();
+    await group.locator(".home-host-section-header").hover();
+    await expectQuick(groupEdit).toBeVisible();
+    await expectQuick(groupDelete).toBeVisible();
   });
 
   test("active SSH tabs have no folder navigation or directory shortcut controls", async ({ page }) => {

@@ -90,7 +90,7 @@ export function HomeHostDirectory({
                 <button type="submit" aria-label={t("common:save")}><Check size={15} /></button>
                 <button type="button" aria-label={t("common:cancel")} onClick={() => setEditingGroup(null)}><X size={15} /></button>
               </form>
-            ) : <h2>{section.name}</h2>}
+            ) : <h2 tabIndex={0}>{section.name}</h2>}
             <div className="home-host-section-meta">
               <span>{t("homeDirectoryHostCount", { count: section.hosts.length })}</span>
               {section.key !== "__ungrouped__" ? (

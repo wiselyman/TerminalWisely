@@ -282,6 +282,7 @@ function readStyles() {
   const managed = read("src/stores/managedEntityStore.ts");
   const panel = read("src/components/ConnectionPanel.tsx");
   const app = read("src/App.tsx");
+  const homeStyles = read("src/styles/home.css");
   if (
     directory.includes('data-testid="home-host-directory"') &&
     directory.includes("buildHomeHostSections") &&
@@ -290,6 +291,11 @@ function readStyles() {
     directory.includes('data-testid={`home-host-delete-${host.id}`}') &&
     directory.includes("onDeleteGroup(section.key)") &&
     directory.includes('data-entity-group-id={section.key}') &&
+    directory.includes("<h2 tabIndex={0}>") &&
+    homeStyles.includes(".home-host-section-header:hover .home-host-group-actions") &&
+    homeStyles.includes(".home-host-card-shell:hover .home-host-card-actions") &&
+    homeStyles.includes(".home-host-section-header:focus-within .home-host-group-actions") &&
+    homeStyles.includes(".home-host-card-shell:focus-within .home-host-card-actions") &&
     !directory.includes("home-local-host-card") &&
     app.indexOf('data-testid="local-desktop-tab"') < app.indexOf("{tabs.map((tab)" ) &&
     managed.includes("openHomeDesktopTab") &&

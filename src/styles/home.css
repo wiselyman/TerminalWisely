@@ -80,7 +80,11 @@
 
 .home-host-section-header {
   margin-bottom: 12px;
-  color: var(--tw-fg-muted);
+  padding: 10px 12px;
+  color: var(--tw-fg);
+  background: color-mix(in srgb, var(--tw-fg) 7%, var(--tw-surface-1));
+  border: 1px solid color-mix(in srgb, var(--tw-fg) 8%, var(--tw-border));
+  border-radius: 10px;
 }
 
 .home-host-section-header span {
@@ -94,6 +98,29 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.home-host-group-actions,
+.home-host-card-actions {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+
+.home-host-section-header:hover .home-host-group-actions,
+.home-host-section-header:focus-within .home-host-group-actions,
+.home-host-card-shell:hover .home-host-card-actions,
+.home-host-card-shell:focus-within .home-host-card-actions {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.home-host-section-header h2:focus-visible {
+  outline: 2px solid var(--tw-accent);
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 .home-host-group-actions button,

@@ -41,7 +41,7 @@
 | Home 目录与 Local/SSH Desktop 工作区标签隔离（无 Hosts 左侧列表、无独立 Terminal 标签） | `homeDesktopTabs` | — | smoke | Playwright `app-shell` / `home-host-directory` / `home-local-terminal-chat` | ✓ |
 | 自定义标题栏 / 窗口控制 | — | — | smoke | — | ✓ |
 | Home / Hosts 空间切换 | — | — | smoke | — | ✓ |
-| Home 主机目录（标题栏 Home 图标；Local Desktop 固定在 SSH 标签前；目录只列已保存 SSH Hosts 并沿用分组排序；卡片沿用连接/凭据流程并支持编辑删除；分组支持新建改名删除，删除后主机归入 Ungrouped；整组区域可接收拖放） | `HomeHostDirectory.test` + `entityLayoutStore.test` + `managedEntityStore.test` | SSH 卡片沿用 `connectSaved` 与凭据提示；主机编辑/删除复用 saved connection API | smoke `ui.home-host-directory` | **✓** `home-host-directory` Home/Local/SSH Desktop 打开切换、卡片编辑删除、分组增删及全区域拖放 | 0.1.3 |
+| Home 主机目录（标题栏 Home 图标；Local Desktop 固定在 SSH 标签前；目录只列已保存 SSH Hosts 并沿用分组排序；分组有浅色标题栏；主机/分组编辑删除仅 hover/focus 时显示；分组支持新建改名删除，删除后主机归入 Ungrouped；整组区域可接收拖放） | `HomeHostDirectory.test` + `entityLayoutStore.test` + `managedEntityStore.test` | SSH 卡片沿用 `connectSaved` 与凭据提示；主机编辑/删除复用 saved connection API | smoke `ui.home-host-directory` | **✓** `home-host-directory` Home/Local/SSH Desktop 打开切换、卡片编辑删除、分组增删及全区域拖放/hover/focus；视觉快照覆盖浅色标题栏 | 0.1.3 |
 | 多 Tab SSH 会话 | Rust shell | — | smoke | — | ✓ |
 | Home 欢迎页 | — | — | smoke | — | ✓ |
 | i18n 中英文 | — | — | smoke | ✓ | ✓ |
