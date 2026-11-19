@@ -57,12 +57,12 @@ type EntryMenuProps = {
   onCutItems: () => void;
   onPasteItems?: () => void;
   onDuplicate: () => void;
-  onDownload: () => void;
+  onDownload?: () => void;
   onUpload?: () => void;
-  onSendToRemote: () => void;
+  onSendToRemote?: () => void;
   onPreview?: () => void;
   onOpenEditor?: () => void;
-  onCompress: () => void;
+  onCompress?: () => void;
   onExtract?: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -80,7 +80,7 @@ type BackgroundMenuProps = {
   canPaste: boolean;
   onClose: () => void;
   onRefresh: () => void;
-  onUploadLocal: () => void;
+  onUploadLocal?: () => void;
   onNewFile: () => void;
   onNewFolder: () => void;
   onPasteItems?: () => void;
@@ -192,12 +192,7 @@ export function LocalFsContextMenu(props: LocalFsContextMenuProps) {
           </ContextMenuItem>
         ) : null}
         <div className="tab-context-menu-separator" role="separator" />
-        <ContextMenuItem
-          icon={Upload}
-          onClick={() => run(props.onUploadLocal)}
-        >
-          {t("terminal:upload")}
-        </ContextMenuItem>
+        {props.onUploadLocal ? <ContextMenuItem icon={Upload} onClick={() => run(props.onUploadLocal!)}>{t("terminal:upload")}</ContextMenuItem> : null}
         <ContextMenuItem
           icon={RefreshCw}
           onClick={() => run(props.onRefresh)}
@@ -273,14 +268,7 @@ export function LocalFsContextMenu(props: LocalFsContextMenuProps) {
         {(pathKind === "directory" && (props.onNewFile || props.onNewFolder)) ? (
           <div className="tab-context-menu-separator" role="separator" />
         ) : null}
-        <ContextMenuItem
-          icon={Download}
-          onClick={() => run(props.onDownload)}
-        >
-          {pathKind === "directory"
-            ? t("terminal:downloadFolder")
-            : t("terminal:downloadFile")}
-        </ContextMenuItem>
+        {props.onDownload ? <ContextMenuItem icon={Download} onClick={() => run(props.onDownload!)}>{pathKind === "directory" ? t("terminal:downloadFolder") : t("terminal:downloadFile")}</ContextMenuItem> : null}
         {pathKind === "directory" && props.onUpload ? (
           <ContextMenuItem
             icon={Upload}
@@ -289,12 +277,7 @@ export function LocalFsContextMenu(props: LocalFsContextMenuProps) {
             {t("terminal:upload")}
           </ContextMenuItem>
         ) : null}
-        <ContextMenuItem
-          icon={Send}
-          onClick={() => run(props.onSendToRemote)}
-        >
-          {t("terminal:sendToRemote")}
-        </ContextMenuItem>
+        {props.onSendToRemote ? <ContextMenuItem icon={Send} onClick={() => run(props.onSendToRemote!)}>{t("terminal:sendToRemote")}</ContextMenuItem> : null}
         <div className="tab-context-menu-separator" role="separator" />
         {pathKind === "file" && props.onPreview ? (
           <ContextMenuItem
@@ -307,12 +290,7 @@ export function LocalFsContextMenu(props: LocalFsContextMenuProps) {
         {pathKind === "file" && props.onOpenEditor ? (
           <ContextMenuItem icon={Pencil} onClick={() => run(props.onOpenEditor!)}>{t("tools:editor.openWith")}</ContextMenuItem>
         ) : null}
-        <ContextMenuItem
-          icon={Archive}
-          onClick={() => run(props.onCompress)}
-        >
-          {t("terminal:compress")}
-        </ContextMenuItem>
+        {props.onCompress ? <ContextMenuItem icon={Archive} onClick={() => run(props.onCompress!)}>{t("terminal:compress")}</ContextMenuItem> : null}
         {showExtract ? (
           <ContextMenuItem
             icon={FolderArchive}

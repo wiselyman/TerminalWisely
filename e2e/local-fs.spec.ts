@@ -9,6 +9,49 @@ test.describe("Local FS panel", () => {
     await api.openLocalFsPanel();
   });
 
+  test("local Files uses Finder navigation, metadata columns, and local context actions", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openHome();
+    await api.openLocalDesktopFiles();
+    const panel = page.getByTestId("host-file-manager-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId("local-fs-tree")).toBeVisible();
+    await expect(panel.getByTestId("local-fs-contents")).toBeVisible();
+    for (const column of ["Name", "Permissions", "Owner", "Group", "Size", "Modified"]) {
+      await expect(panel.getByRole("columnheader", { name: column })).toBeVisible();
+    }
+
+    const original = panel.locator('[data-path="/tmp/e2e-file.txt"]');
+    await original.click({ button: "right" });
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Download file" })).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "Duplicate" }).click();
+    await expect(panel.locator('[data-path="/tmp/e2e-file copy.txt"]')).toBeVisible();
+
+    const copy = panel.locator('[data-path="/tmp/e2e-file copy.txt"]');
+    await copy.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    await page.getByTestId("local-files-action-input").fill("e2e-renamed.txt");
+    await page.getByTestId("local-files-action-confirm").click();
+    await expect(panel.locator('[data-path="/tmp/e2e-renamed.txt"]')).toBeVisible();
+
+    await panel.getByTestId("local-files-new-folder").click();
+    await page.getByTestId("local-files-action-input").fill("e2e-created-folder");
+    await page.getByTestId("local-files-action-confirm").click();
+    await expect(panel.locator('.local-fs-row[data-path="/tmp/e2e-created-folder"]')).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await panel.locator('[data-path="/tmp/e2e-renamed.txt"]').click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(panel.locator('[data-path="/tmp/e2e-renamed.txt"]')).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await panel.locator('[data-path="/tmp/e2e-renamed.txt"]').click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(panel.locator('[data-path="/tmp/e2e-renamed.txt"]')).toHaveCount(0);
+  });
+
   test("opens desktop + file manager float with file tree", async ({ page }) => {
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible({
       timeout: 15_000,

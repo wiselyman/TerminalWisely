@@ -581,7 +581,25 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     if (content != null) { localFsText.delete(path); localFsText.set(next, content); }
     return next;
   },
+  copy_local_path: (args) => {
+    const request = (args as { request: { path: string; dest_dir: string; name?: string | null } }).request;
+    const source = localFsEntries.find((entry) => entry.path === request.path);
+    if (!source) throw new Error("Source path does not exist");
+    const name = request.name || source.name;
+    const next = `${request.dest_dir.replace(/\/$/, "")}/${name}`;
+    if (localFsEntries.some((entry) => entry.path === next)) throw new Error("Destination already exists");
+    localFsEntries.push({ ...source, name, path: next });
+    const content = localFsText.get(request.path);
+    if (content != null) localFsText.set(next, content);
+    return next;
+  },
   delete_local_path: (args) => {
+    const path = (args as { request: { path: string } }).request.path;
+    localFsEntries = localFsEntries.filter((entry) => entry.path !== path && !entry.path.startsWith(`${path}/`));
+    localFsText.delete(path);
+    return null;
+  },
+  trash_local_path: (args) => {
     const path = (args as { request: { path: string } }).request.path;
     localFsEntries = localFsEntries.filter((entry) => entry.path !== path && !entry.path.startsWith(`${path}/`));
     localFsText.delete(path);

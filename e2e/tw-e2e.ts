@@ -32,6 +32,9 @@ function wrapApi(page: Page): TwE2eApi {
     openLocalFsPanel: async () => {
       await call("openLocalFsPanel");
     },
+    openLocalDesktopFiles: async () => {
+      await call("openLocalDesktopFiles");
+    },
     openBrowserPanel: async () => {
       await call("openBrowserPanel");
     },

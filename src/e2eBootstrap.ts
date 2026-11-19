@@ -52,6 +52,7 @@ export interface TwE2eApi {
   setActiveTab: (sessionId: string) => void;
   setHostMachineName: (hostname: string) => void;
   openLocalFsPanel: () => void;
+  openLocalDesktopFiles: () => void;
   openBrowserPanel: () => void;
   openAiChat: () => Promise<void>;
   openAiChatForSsh: () => Promise<void>;
@@ -217,6 +218,11 @@ function setHostMachineName(hostname: string) {
 
 function openLocalFsPanel() {
   switchWorkspacePanel("localFs", E2E_SSH_SESSION_ID, "e2e@127.0.0.1:22", "files");
+}
+
+function openLocalDesktopFiles() {
+  useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+  useDesktopStore.getState().launchApp("files");
 }
 
 function openBrowserPanel() {
@@ -460,6 +466,7 @@ export function runE2eBootstrap(): void {
     setActiveTab,
     setHostMachineName,
     openLocalFsPanel,
+    openLocalDesktopFiles,
     openBrowserPanel,
     openAiChat,
     openAiChatForSsh,
