@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listLocalDirectory, listLocalRoots } from "../lib/localFsApi";
 import { create } from "zustand";
 import { formatAppError } from "../lib/formatAppError";
 import {
@@ -16,6 +17,8 @@ import {
 const SHOW_HIDDEN_KEY = "tw.localFs.showHidden";
 const VIEW_MODE_KEY = "tw.localFs.viewMode";
 const SPLIT_TREE_WIDTH_KEY = "tw.localFs.splitTreeWidth";
+export const LOCAL_FS_SESSION_ID = "__local__";
+export const LAST_LOCAL_DIRECTORY_KEY = "tw.desktop.local.files.last-directory";
 
 export type LocalFsViewMode = "list" | "grid";
 
@@ -152,6 +155,7 @@ async function fetchDirectory(
   path?: string | null,
   showHidden = false,
 ): Promise<ListLocalDirectoryResult> {
+  if (sessionId === LOCAL_FS_SESSION_ID) return listLocalDirectory(path, showHidden);
   return invoke<ListLocalDirectoryResult>("list_remote_directory", {
     request: {
       session_id: sessionId,
@@ -236,7 +240,18 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
       loadingRoot: true,
       ...emptySessionBrowseState,
     });
-    void get().initTree("~");
+    if (sessionId === LOCAL_FS_SESSION_ID) {
+      const savedPath = (() => {
+        try { return localStorage.getItem(LAST_LOCAL_DIRECTORY_KEY); } catch { return null; }
+      })();
+      void (async () => {
+        const roots = await listLocalRoots();
+        const initial = savedPath && savedPath.trim() ? savedPath : roots[0];
+        if (initial && get().sessionId === LOCAL_FS_SESSION_ID) await get().initTree(initial);
+      })().catch((err) => set({ loadingRoot: false, error: formatAppError(err) }));
+    } else {
+      void get().initTree("~");
+    }
   },
 
   close: () => {
@@ -311,7 +326,7 @@ export const useLocalFsStore = create<LocalFsState>((set, get) => ({
     const sessionId = get().sessionId;
     if (!sessionId) return;
 
-    const label = path === "/" ? "/" : path === "~" ? "~" : path;
+    const label = sessionId === LOCAL_FS_SESSION_ID ? path : path === "/" ? "/" : path === "~" ? "~" : path;
     const showHidden = get().showHidden;
     set({
       loadingRoot: true,

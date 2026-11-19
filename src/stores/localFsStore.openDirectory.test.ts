@@ -133,6 +133,37 @@ describe("localFsStore.openDirectory / navigation", () => {
     expect(state.contentsHistory).toEqual(["/home/u"]);
   });
 
+  it("loads local directories without creating or invoking an SSH session", async () => {
+    const { useLocalFsStore } = await import("./localFsStore");
+    useLocalFsStore.setState({
+      open: true,
+      sessionId: "__local__",
+      rootPath: "/Users/test",
+      rootLabel: "Local",
+      childrenCache: {},
+      expandedPaths: ["/Users/test"],
+      loadingPaths: [],
+      loadingRoot: false,
+      error: null,
+      showHidden: false,
+      contentsPath: "/Users/test",
+      contentsHistory: [],
+      selectedPath: null,
+      selectedPaths: [],
+      selectionAnchor: null,
+    });
+    invoke.mockResolvedValueOnce({ path: "/Users/test/Downloads", entries: [] });
+
+    await useLocalFsStore.getState().openDirectory("/Users/test/Downloads");
+
+    expect(invoke).toHaveBeenCalledWith("list_local_directory", {
+      path: "/Users/test/Downloads",
+      showHidden: false,
+    });
+    expect(invoke.mock.calls[0][0]).not.toBe("list_remote_directory");
+    expect(useLocalFsStore.getState().contentsPath).toBe("/Users/test/Downloads");
+  });
+
   it("setViewMode persists to localStorage", async () => {
     const { useLocalFsStore } = await import("./localFsStore");
     useLocalFsStore.getState().setViewMode("grid");

@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Folder, FolderPlus, FilePlus2, ArrowLeft, ArrowUp, RefreshCw, Save, Pencil, MoveRight, Trash2, ExternalLink } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Folder, FolderPlus, FilePlus2, ArrowLeft, ArrowUp, RefreshCw, Save, Pencil, MoveRight, Trash2, ExternalLink } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { LocalFsEntry } from "../../types";
 import { formatAppError } from "../../lib/formatAppError";
 import { useDesktopStore } from "../../stores/desktopStore";
 import { useEditorWiselyStore } from "../../stores/editorWiselyStore";
+import { useLocalFsStore, LOCAL_FS_SESSION_ID } from "../../stores/localFsStore";
+import { LocalFsTreeView } from "../LocalFsTreeView";
+import { LocalFsContentsView } from "../LocalFsContentsView";
+import { LocalFsPathBreadcrumb } from "../LocalFsPathBreadcrumb";
+import { PathInput } from "../PathInput";
+import { LocalFsContextMenu, type LocalFsContextMenuProps } from "../LocalFsContextMenu";
 import {
+  copyLocalPath,
   createLocalPath,
   deleteLocalPath,
   listLocalDirectory,
@@ -13,13 +20,13 @@ import {
   moveLocalPath,
   openLocalPath,
   parentLocalPath,
-  readLocalText,
   renameLocalPath,
   revealLocalPath,
   writeLocalText,
 } from "../../lib/localFsApi";
 
 type FileAction = "file" | "folder" | "rename" | "move";
+type LocalMenuState = { kind: "entry"; x: number; y: number; entry: LocalFsEntry } | { kind: "background"; x: number; y: number; path: string };
 const LAST_LOCAL_DIRECTORY_KEY = "tw.desktop.local.files.last-directory";
 
 function readLastLocalDirectory(): string | null {
@@ -27,31 +34,13 @@ function readLastLocalDirectory(): string | null {
   catch { return null; }
 }
 
-function modifiedLabel(timestamp?: number | null, language?: string) {
-  if (!timestamp) return "—";
-  return new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp));
-}
-
-function sizeLabel(size?: number | null) {
-  if (size == null) return "—";
-  if (size < 1024) return `${size} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = size / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
-}
-
 export function LocalDesktopFileManager() {
-  const { t, i18n } = useTranslation(["tools", "common"]);
+  const { t } = useTranslation(["tools", "common"]);
   const openEditor = useEditorWiselyStore((s) => s.open);
   const launchApp = useDesktopStore((s) => s.launchApp);
+  const fs = useLocalFsStore();
   const [roots, setRoots] = useState<string[]>([]);
   const [path, setPath] = useState<string | null>(readLastLocalDirectory);
-  const [pathDraft, setPathDraft] = useState("");
   const [entries, setEntries] = useState<LocalFsEntry[]>([]);
   const [selected, setSelected] = useState<LocalFsEntry | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,6 +50,28 @@ export function LocalDesktopFileManager() {
   const [text, setText] = useState<string | null>(null);
   const [textDirty, setTextDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [menu, setMenu] = useState<LocalMenuState | null>(null);
+  const [addressEditing, setAddressEditing] = useState(false);
+  const [addressDraft, setAddressDraft] = useState("");
+
+  useEffect(() => {
+    fs.activateSession(LOCAL_FS_SESSION_ID);
+  // Activate the local file tree when the Files window opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!fs.contentsPath || fs.sessionId !== LOCAL_FS_SESSION_ID) return;
+    setPath(fs.contentsPath);
+    try { localStorage.setItem("tw.desktop.local.files.last-directory", fs.contentsPath); } catch { /* ignored */ }
+  }, [fs.contentsPath, fs.sessionId]);
+
+  useEffect(() => {
+    if (!fs.selectedPath) return;
+    const entry = fs.getEntryByPath(fs.selectedPath);
+    if (entry) setSelected(entry);
+  }, [fs.selectedPath, fs.childrenCache, fs.getEntryByPath]);
 
   const refresh = useCallback(async (directory = path) => {
     if (!directory) return;
@@ -69,8 +80,8 @@ export function LocalDesktopFileManager() {
     try {
       const result = await listLocalDirectory(directory);
       setPath(result.path);
-      setPathDraft(result.path);
       setEntries(result.entries);
+      if (fs.sessionId === LOCAL_FS_SESSION_ID) void fs.reloadDirectory(result.path, { ensureExpanded: true });
       setSelected((current) => current && result.entries.some((entry) => entry.path === current.path)
         ? result.entries.find((entry) => entry.path === current.path) ?? null
         : null);
@@ -79,7 +90,7 @@ export function LocalDesktopFileManager() {
     } finally {
       setLoading(false);
     }
-  }, [path]);
+  }, [path, fs.sessionId, fs.reloadDirectory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +100,6 @@ export function LocalDesktopFileManager() {
       const initial = readLastLocalDirectory() ?? available[0];
       if (initial) {
         setPath(initial);
-        setPathDraft(initial);
       }
     }).catch((err) => {
       if (!cancelled) setError(formatAppError(err));
@@ -132,22 +142,6 @@ export function LocalDesktopFileManager() {
     }
   };
 
-  const openEntry = async (entry: LocalFsEntry) => {
-    setSelected(entry);
-    setText(null);
-    setTextDirty(false);
-    if (entry.kind === "directory") {
-      setPath(entry.path);
-      return;
-    }
-    try {
-      const contents = await readLocalText(entry.path);
-      setText(contents);
-    } catch (err) {
-      setError(formatAppError(err));
-    }
-  };
-
   const saveText = async () => {
     if (!selected || text == null) return;
     setSaving(true);
@@ -164,28 +158,129 @@ export function LocalDesktopFileManager() {
   };
 
   const deleteSelected = async () => {
-    if (!selected || !window.confirm(t("localFs.deleteConfirmLocal", { name: selected.name }))) return;
+    await deletePaths(selected ? [selected.path] : []);
+  };
+
+  const menuPaths = (entry?: LocalFsEntry) => {
+    const paths = fs.selectedPaths;
+    if (entry && paths.includes(entry.path)) return paths;
+    return entry ? [entry.path] : paths;
+  };
+
+  const copyPathsToClipboard = async (paths: string[]) => {
+    fs.setClipboard({ sessionId: LOCAL_FS_SESSION_ID, op: "copy", paths });
+  };
+
+  const pastePaths = async (destDir: string) => {
+    const clipboard = fs.clipboard;
+    if (!clipboard || clipboard.sessionId !== LOCAL_FS_SESSION_ID) return;
     try {
-      await deleteLocalPath(selected.path);
-      setSelected(null);
-      setText(null);
-      await refresh(path);
+      for (const source of clipboard.paths) {
+        if (clipboard.op === "cut") await moveLocalPath(source, destDir);
+        else await copyLocalPath(source, destDir);
+      }
+      if (clipboard.op === "cut") fs.setClipboard(null);
+      await refresh(destDir);
+      await fs.reloadDirectory(destDir, { ensureExpanded: true });
+      setError(null);
     } catch (err) {
       setError(formatAppError(err));
     }
   };
 
+  const duplicatePath = async (entry: LocalFsEntry) => {
+    const parentDir = parentLocalPath(entry.path);
+    const extensionIndex = entry.name.lastIndexOf(".");
+    const copyName = extensionIndex > 0
+      ? `${entry.name.slice(0, extensionIndex)} copy${entry.name.slice(extensionIndex)}`
+      : `${entry.name} copy`;
+    try {
+      await copyLocalPath(entry.path, parentDir, copyName);
+      await refresh(parentDir);
+      await fs.reloadDirectory(parentDir, { ensureExpanded: true });
+    } catch (err) { setError(formatAppError(err)); }
+  };
+
+  const deletePaths = async (paths: string[]) => {
+    if (!paths.length) return;
+    const label = paths.length === 1 ? paths[0].split(/[\\/]/).pop() ?? paths[0] : `${paths.length} items`;
+    if (!window.confirm(t("localFs.deleteConfirmLocal", { name: label }))) return;
+    try {
+      for (const filePath of paths) await deleteLocalPath(filePath);
+      setSelected(null);
+      setText(null);
+      await refresh(path);
+      if (path) await fs.reloadDirectory(path, { ensureExpanded: true });
+    } catch (err) { setError(formatAppError(err)); }
+  };
+
+  const openEntryMenu = (event: ReactMouseEvent, entry: LocalFsEntry) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!fs.selectedPaths.includes(entry.path)) fs.setSelectedPath(entry.path);
+    setSelected(entry);
+    setMenu({ kind: "entry", x: event.clientX, y: event.clientY, entry });
+  };
+
+  const openBackgroundMenu = (event: ReactMouseEvent, targetPath: string | null) => {
+    event.preventDefault();
+    setMenu({ kind: "background", x: event.clientX, y: event.clientY, path: targetPath ?? path ?? "" });
+  };
+
+  const runLocalMenuAction = (actionName: string) => {
+    if (actionName === "newFile") beginAction("file");
+    if (actionName === "newFolder") beginAction("folder");
+    if (actionName === "rename") beginAction("rename");
+    if (actionName === "move") beginAction("move");
+  };
+
+  const localMenuProps: LocalFsContextMenuProps | null = menu ? menu.kind === "entry" ? {
+    kind: "entry",
+    x: menu.x,
+    y: menu.y,
+    entry: menu.entry,
+    canPaste: Boolean(fs.clipboard?.sessionId === LOCAL_FS_SESSION_ID && fs.clipboard.paths.length),
+    onClose: () => setMenu(null),
+    onCopyName: () => { void navigator.clipboard.writeText(menu.entry.name).catch((err) => setError(formatAppError(err))); },
+    onCopyPath: () => { void navigator.clipboard.writeText(menu.entry.path).catch((err) => setError(formatAppError(err))); },
+    onCopyItems: () => { void copyPathsToClipboard(menuPaths(menu.entry)); },
+    onCutItems: () => fs.setClipboard({ sessionId: LOCAL_FS_SESSION_ID, op: "cut", paths: menuPaths(menu.entry) }),
+    onPasteItems: () => { void pastePaths(menu.entry.kind === "directory" ? menu.entry.path : parentLocalPath(menu.entry.path)); },
+    onDuplicate: () => { void duplicatePath(menu.entry); },
+    onPreview: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
+    onOpenEditor: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
+    onRename: () => runLocalMenuAction("rename"),
+    onDelete: () => { void deletePaths(menuPaths(menu.entry)); },
+    onMove: () => runLocalMenuAction("move"),
+    onNewFile: menu.entry.kind === "directory" ? () => runLocalMenuAction("newFile") : undefined,
+    onNewFolder: menu.entry.kind === "directory" ? () => runLocalMenuAction("newFolder") : undefined,
+  } : {
+    kind: "background",
+    x: menu.x,
+    y: menu.y,
+    canPaste: Boolean(fs.clipboard?.sessionId === LOCAL_FS_SESSION_ID && fs.clipboard.paths.length),
+    onClose: () => setMenu(null),
+    onRefresh: () => { void refresh(menu.path); void fs.reloadDirectory(menu.path, { ensureExpanded: true }); },
+    onNewFile: () => { setPath(menu.path); runLocalMenuAction("newFile"); },
+    onNewFolder: () => { setPath(menu.path); runLocalMenuAction("newFolder"); },
+    onPasteItems: () => { void pastePaths(menu.path); },
+  } : null;
+
   const parent = useMemo(() => path ? parentLocalPath(path) : null, [path]);
 
   return (
-    <section className="local-desktop-files" data-testid="local-desktop-files">
+    <section className="local-desktop-files local-fs-embedded" data-testid="local-desktop-files">
       <div className="local-desktop-files-toolbar">
-        <button type="button" className="preview-toolbar-icon" aria-label={t("localFs.goBack")} disabled={!parent || parent === path} onClick={() => parent && setPath(parent)}><ArrowLeft /></button>
+        <button type="button" className="preview-toolbar-icon" aria-label={t("localFs.goBack")} disabled={fs.contentsHistory.length === 0} onClick={() => { void fs.goBack(); }}><ArrowLeft /></button>
         <button type="button" className="preview-toolbar-icon" aria-label={t("localFs.goUp")} disabled={!parent || parent === path} onClick={() => parent && setPath(parent)}><ArrowUp /></button>
-        <form className="local-desktop-files-location" onSubmit={(event) => { event.preventDefault(); setPath(pathDraft); }}>
-          <input aria-label={t("localFs.locationAria")} value={pathDraft} onChange={(event) => setPathDraft(event.target.value)} />
-        </form>
-        <button type="button" className="preview-toolbar-icon" aria-label={t("localFs.refresh")} onClick={() => void refresh()}><RefreshCw /></button>
+        <div className="local-fs-address-bar local-desktop-files-location">
+          {addressEditing ? <form onSubmit={(event) => { event.preventDefault(); const next = addressDraft.trim(); if (next) { setPath(next); void fs.openDirectory(next); } setAddressEditing(false); }}><PathInput sessionId={LOCAL_FS_SESSION_ID} value={addressDraft} onChange={setAddressDraft} autoFocus onSubmit={(next) => { setPath(next); void fs.openDirectory(next); setAddressEditing(false); }} /></form> : <LocalFsPathBreadcrumb path={path ?? "/"} onNavigate={(next) => { setPath(next); void fs.openDirectory(next); }} onEdit={() => { setAddressDraft(path ?? ""); setAddressEditing(true); }} />}
+        </div>
+        <button type="button" className="preview-toolbar-icon" aria-label={t("localFs.refresh")} onClick={() => { void refresh(); void fs.refreshTree(); }}><RefreshCw /></button>
+        <button type="button" className={`local-fs-tool-btn${fs.showHidden ? " is-active" : ""}`} aria-label={fs.showHidden ? t("localFs.hideHidden") : t("localFs.showHidden")} aria-pressed={fs.showHidden} onClick={() => fs.setShowHidden(!fs.showHidden)}><span aria-hidden>◉</span></button>
+        <button type="button" className={`local-fs-tool-btn${fs.viewMode === "list" ? " is-active" : ""}`} aria-label={t("localFs.viewList")} onClick={() => fs.setViewMode("list")}><span aria-hidden>☷</span></button>
+        <button type="button" className={`local-fs-tool-btn${fs.viewMode === "grid" ? " is-active" : ""}`} aria-label={t("localFs.viewGrid")} onClick={() => fs.setViewMode("grid")}><span aria-hidden>▦</span></button>
+        <input type="search" data-testid="file-manager-search" aria-label={t("find.nameAria")} placeholder={t("find.namePlaceholder")} value={filter} onChange={(event) => setFilter(event.target.value)} />
         <span className="local-desktop-files-toolbar-divider" />
         <button type="button" className="preview-toolbar-icon" data-testid="local-files-new-folder" aria-label={t("localFs.newFolderLocal")} onClick={() => beginAction("folder")}><FolderPlus /></button>
         <button type="button" className="preview-toolbar-icon" data-testid="local-files-new-file" aria-label={t("localFs.newFileLocal")} onClick={() => beginAction("file")}><FilePlus2 /></button>
@@ -204,23 +299,21 @@ export function LocalDesktopFileManager() {
         </form>
       ) : null}
       {error ? <div className="local-desktop-files-error" role="alert">{error}</div> : null}
-      <div className="local-desktop-files-content">
-        <div className="local-desktop-files-list">
-          <table>
-            <thead><tr><th>{t("localFs.colName")}</th><th>{t("localFs.colModified")}</th><th>{t("localFs.colSize")}</th></tr></thead>
-            <tbody>
-              {entries.map((entry) => {
-                const Icon = entry.kind === "directory" ? Folder : FileText;
-                return <tr key={entry.path} data-testid="local-file-row" className={selected?.path === entry.path ? "is-selected" : ""} onClick={() => { setSelected(entry); setText(null); }} onDoubleClick={() => { if (entry.kind === "file") { void openEditor({ kind: "local" }, entry.path); launchApp("editorwisely"); } else void openEntry(entry); }}>
-                  <td><span className={`local-desktop-files-entry-icon is-${entry.kind}`}><Icon size={17} /></span><span className="local-desktop-files-entry-name" title={entry.name}>{entry.name}</span></td>
-                  <td>{modifiedLabel(entry.modified_ms, i18n.language)}</td>
-                  <td>{entry.kind === "directory" ? "—" : sizeLabel(entry.size_bytes)}</td>
-                </tr>;
-              })}
-              {!loading && entries.length === 0 ? <tr><td colSpan={3} className="local-desktop-files-empty">{t("localFs.empty")}</td></tr> : null}
-            </tbody>
-          </table>
-          {loading ? <div className="local-desktop-files-loading" role="status">{t("localFs.loading")}</div> : null}
+      <div className="local-fs-split local-desktop-files-content" data-testid="local-fs-split">
+        <div className="local-fs-split-tree">
+          <LocalFsTreeView onEntryContextMenu={openEntryMenu} onBackgroundContextMenu={(event) => openBackgroundMenu(event, path)} onMovePaths={(paths, dest) => { for (const source of paths) void moveLocalPath(source, dest).then(() => refresh(path)); }} />
+        </div>
+        <div className="local-fs-split-resizer" role="separator" aria-orientation="vertical" aria-label={t("localFs.splitResizeAria")} />
+        <div className="local-fs-split-contents">
+          <LocalFsContentsView
+            onEntryContextMenu={openEntryMenu}
+            onBackgroundContextMenu={(event) => openBackgroundMenu(event, path)}
+            onOpenFile={(entry) => { setSelected(entry); void openEditor({ kind: "local" }, entry.path); launchApp("editorwisely"); }}
+            onMovePaths={(paths, dest) => { for (const source of paths) void moveLocalPath(source, dest).then(() => refresh(path)); }}
+            entriesOverride={filter.trim() ? entries.filter((entry) => entry.name.toLowerCase().includes(filter.trim().toLowerCase())) : null}
+            loadingOverride={loading}
+            emptyLabel={filter.trim() ? t("find.empty") : t("localFs.empty")}
+          />
         </div>
         {selected?.kind === "file" ? <div className="local-desktop-files-selected-actions"><button type="button" data-testid="local-files-open-editorwisely" onClick={() => { void openEditor({ kind: "local" }, selected.path); launchApp("editorwisely"); }}>{t("editor.openWith")}</button></div> : null}
         {text != null && selected ? (
@@ -234,6 +327,7 @@ export function LocalDesktopFileManager() {
           </section>
         ) : null}
       </div>
+      {localMenuProps ? <LocalFsContextMenu {...localMenuProps} /> : null}
     </section>
   );
 }
