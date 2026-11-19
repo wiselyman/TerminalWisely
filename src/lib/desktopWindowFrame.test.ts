@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   browserDesktopIsFront,
   centerDesktopFrame,
+  desktopWindowDragBounds,
   moveDesktopFrame,
   resizeDesktopFrame,
 } from "./desktopWindowFrame";
@@ -29,6 +30,16 @@ describe("desktopWindowFrame", () => {
     expect(grown.height).toBe(moved.height + 30);
     expect(grown.x + grown.width).toBeLessThanOrEqual(bounds.width);
     expect(grown.y + grown.height).toBeLessThanOrEqual(bounds.height);
+  });
+
+  it("moves a window into an extended visible area without resizing it", () => {
+    const start = { x: 40, y: 20, width: 600, height: 500 };
+    const bounds = desktopWindowDragBounds(
+      { width: 900, height: 600, top: 100 },
+      { bottom: 860 },
+    );
+    const moved = moveDesktopFrame(start, 0, 900, bounds);
+    expect(moved).toEqual({ x: 40, y: 260, width: 600, height: 500 });
   });
 
   it("treats the browser as front only when it is the top open window", () => {

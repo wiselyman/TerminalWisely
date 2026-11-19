@@ -446,7 +446,7 @@
   min-height: 120px;
   border: none;
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
   background: transparent;
   box-shadow: none;
 }
@@ -5039,5 +5039,9 @@ body.cmd-nav-panel-resizing {
 }
 
 .host-desktop-dock {
-  background: color-mix(in srgb, var(--tw-surface) 88%, transparent);
+  background: color-mix(in srgb, var(--tw-surface) 62%, transparent);
+}
+
+[data-theme="dark"] .host-desktop-dock {
+  background: color-mix(in srgb, var(--tw-surface) 62%, transparent);
 }

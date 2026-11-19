@@ -102,7 +102,7 @@
 
 | 功能 | 单元 | 集成 | 功能 | E2E | 用户 |
 |------|:----:|:----:|:----:|:---:|:----:|
-| Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面；任一内部 App 最大化时覆盖完整 TerminalWisely 内容区并隐藏外部导航/状态栏，还原后恢复；短窗口下 Dock 上方图标换列，EditorWisely 完整可见） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` | — | smoke `ui.host-desktop` | **✓** `host-desktop`：MarkWisely、Files、Processes 全窗口边界及还原、短窗口 EditorWisely 图标边界回归 | ✓ |
+| Host Desktop 铺满工作区 + Dock（图标标题栏、Terminal / AI Linux 复用会话；标题栏 AI 退出桌面打开右侧聊天；新建主机弹层高于桌面；普通窗口可拖入 Dock 后方且 stage 内受限，Dock 半透明并覆盖窗口；任一内部 App 最大化时覆盖完整 TerminalWisely 内容区并隐藏外部导航/状态栏，还原后恢复；短窗口下 Dock 上方图标换列，EditorWisely 完整可见） | `workspacePanelSwitch` + `desktopStore` + `desktopSurfaceHost` + `desktopWindowFrame.test` | — | smoke `ui.host-desktop` | **✓** `host-desktop`：MarkWisely、Files、Processes 窗口边界/还原、穿入 Dock 与叠层命中、透明度、短窗口 EditorWisely 图标边界回归 | ✓ |
 | Dock → 文件管理器浮窗（含检索） | — | — | smoke | **✓** `local-fs` | ✓ |
 | 文件列表 Name/Size/Modified 表头可键盘聚焦、点击升降序排序；目录优先、元数据缺失项置后、并列值稳定；切目录回默认顺序 | `localFsSort.test` | — | — | **✓** `local-fs` Name/Size/Modified 排序顺序与 ARIA 状态 | ✓ |
 | Dock → MarkWisely（远程 Markdown 新建/打开/编辑/自动保存/最近文件；图标化文件夹选择操作和工具栏悬浮说明；HTML/PDF/Word 高质量直接导出到本机并强制匹配实际文件扩展名；最大化恢复布局） | `markWiselyStore.test`, `markWiselyExport.test`, `markWiselyExportPath.test`, `markWiselyPdf.test`, `localFsApi.test` | SSH `preview_open` / `preview_save` / `create_path`; 本机 HTML/PDF/DOCX 文件写入 | `host-desktop` 文件夹图标与 hover 标签、工具栏悬浮标签、导出菜单、本机保存框、错误扩展名校正、PDF 可解析与文本提取 | **✓** `host-desktop` | ✓ |

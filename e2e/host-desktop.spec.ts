@@ -1025,6 +1025,51 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("host-desktop-dock")).toBeVisible();
   });
 
+  test("desktop windows can slide behind the translucent Dock", async ({ page }) => {
+    await gotoApp(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("dock-app-files").click();
+
+    const app = page.getByTestId("host-file-manager-panel");
+    const float = page.getByTestId("host-file-manager-float");
+    const dock = page.getByTestId("host-desktop-dock");
+    const dockApp = page.getByTestId("dock-app-files");
+    const head = app.locator(".desktop-app-window-head");
+    const before = await float.boundingBox();
+    const headBox = await head.boundingBox();
+    const dockBox = await dock.boundingBox();
+    const stageBox = await page.locator(".host-desktop-stage").boundingBox();
+    expect(before && headBox && dockBox && stageBox).toBeTruthy();
+
+    await page.mouse.move(headBox!.x + headBox!.width / 2, headBox!.y + headBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(headBox!.x + headBox!.width / 2, headBox!.y + headBox!.height / 2 + 700, { steps: 8 });
+    await page.mouse.up();
+
+    const moved = await float.boundingBox();
+    expect(moved).toBeTruthy();
+    expect(moved!.y + moved!.height).toBeGreaterThan(dockBox!.y);
+    expect(moved!.y).toBeGreaterThan(before!.y);
+    expect(moved!.y).toBeLessThan(stageBox!.y + stageBox!.height);
+    const dockHit = await dockApp.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        ?.closest(".host-desktop-dock") != null;
+    });
+    expect(dockHit).toBe(true);
+
+    const dockAlpha = await dock.evaluate((element) => {
+      const value = getComputedStyle(element).backgroundColor;
+      const rgba = value.match(/rgba?\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+      const slash = value.match(/\/\s*([\d.]+)\s*\)/);
+      return rgba ? Number(rgba[1]) : slash ? Number(slash[1]) : 1;
+    });
+    expect(dockAlpha).toBeLessThan(0.8);
+  });
+
   test("Terminal and AI Linux reuse the session and exit restores the terminal", async ({
     page,
   }) => {

@@ -33,6 +33,16 @@ export const DESKTOP_RESIZE_EDGES: DesktopResizeEdge[] = [
 
 type Bounds = { width: number; height: number };
 
+export function desktopWindowDragBounds(
+  surface: { width: number; height: number; top: number },
+  stage: { bottom: number } | null,
+): Bounds {
+  return {
+    width: surface.width,
+    height: stage ? Math.max(surface.height, stage.bottom - surface.top) : surface.height,
+  };
+}
+
 export function clampDesktopFrame(
   frame: DesktopWindowFrame,
   bounds: Bounds,

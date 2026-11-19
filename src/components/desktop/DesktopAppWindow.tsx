@@ -17,6 +17,7 @@ import {
 import {
   centerDesktopFrame,
   DESKTOP_RESIZE_EDGES,
+  desktopWindowDragBounds,
   moveDesktopFrame,
   resizeDesktopFrame,
   type DesktopResizeEdge,
@@ -63,6 +64,12 @@ type Props = {
 function surfaceBounds(surface: HTMLElement) {
   const rect = surface.getBoundingClientRect();
   return { width: rect.width, height: rect.height };
+}
+
+function desktopDragBounds(surface: HTMLElement) {
+  const surfaceRect = surface.getBoundingClientRect();
+  const stageRect = surface.closest<HTMLElement>(".host-desktop-stage")?.getBoundingClientRect();
+  return desktopWindowDragBounds(surfaceRect, stageRect ?? null);
 }
 
 export function DesktopAppWindow({
@@ -206,6 +213,7 @@ export function DesktopAppWindow({
   const trackPointer = (
     event: ReactPointerEvent,
     onMove: (dx: number, dy: number, bounds: { width: number; height: number }) => void,
+    boundsForMove = surfaceBounds,
   ) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -214,7 +222,7 @@ export function DesktopAppWindow({
     const originX = event.clientX;
     const originY = event.clientY;
     const move = (ev: PointerEvent) => {
-      onMove(ev.clientX - originX, ev.clientY - originY, surfaceBounds(surface));
+      onMove(ev.clientX - originX, ev.clientY - originY, boundsForMove(surface));
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
@@ -230,7 +238,7 @@ export function DesktopAppWindow({
     const start = liveFrame;
     trackPointer(event, (dx, dy, bounds) => {
       setAppFrame(appId, moveDesktopFrame(start, dx, dy, bounds));
-    });
+    }, desktopDragBounds);
   }
 
   const onResizeStart = (edge: DesktopResizeEdge, event: ReactPointerEvent) => {
