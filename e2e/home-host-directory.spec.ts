@@ -54,6 +54,39 @@ test.describe("Home host directory", () => {
     await expectQuick(page.getByTestId("local-fs-tool")).toHaveCount(0);
   });
 
+  test("Home groups have a distinct compact header and tighter vertical rhythm", async ({ page }) => {
+    const metrics = await page.evaluate(() => {
+      const directory = document.querySelector<HTMLElement>(".home-host-directory");
+      const section = document.querySelector<HTMLElement>(".home-host-section");
+      const header = document.querySelector<HTMLElement>(".home-host-section-header");
+      const card = document.querySelector<HTMLElement>(".home-host-card");
+      if (!directory || !section || !header || !card) return null;
+      const directoryStyle = getComputedStyle(directory);
+      const sectionStyle = getComputedStyle(section);
+      const headerStyle = getComputedStyle(header);
+      const cardStyle = getComputedStyle(card);
+      return {
+        directoryPadding: parseFloat(directoryStyle.paddingTop),
+        sectionGap: parseFloat(sectionStyle.marginBottom),
+        sectionPadding: parseFloat(sectionStyle.paddingTop),
+        headerHeight: header.getBoundingClientRect().height,
+        headerAccentWidth: parseFloat(headerStyle.borderLeftWidth),
+        headerBackground: headerStyle.backgroundColor,
+        sectionBackground: sectionStyle.backgroundColor,
+        cardHeight: card.getBoundingClientRect().height,
+      };
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics!.headerAccentWidth).toBeGreaterThanOrEqual(3);
+    expect(metrics!.headerBackground).not.toBe(metrics!.sectionBackground);
+    expect(metrics!.directoryPadding).toBeLessThanOrEqual(24);
+    expect(metrics!.sectionGap).toBeLessThanOrEqual(14);
+    expect(metrics!.sectionPadding).toBeLessThanOrEqual(12);
+    expect(metrics!.headerHeight).toBeLessThanOrEqual(58);
+    expect(metrics!.cardHeight).toBeLessThanOrEqual(84);
+  });
+
   test("Local Desktop is pinned first and opens without creating an SSH session", async ({ page }) => {
     const api = await twE2e(page);
     const before = await api.getCreateSshCallCount();
