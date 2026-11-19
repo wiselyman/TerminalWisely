@@ -87,6 +87,22 @@ test.describe("Home host directory", () => {
     expect(metrics!.cardHeight).toBeLessThanOrEqual(84);
   });
 
+  test("Home offers New host before New group and opens the SSH create form", async ({ page }) => {
+    const newHost = page.getByTestId("home-add-host");
+    const newGroup = page.getByTestId("home-add-group");
+    await expectQuick(newHost).toBeVisible();
+    await expectQuick(newGroup).toBeVisible();
+    const hostBox = await newHost.boundingBox();
+    const groupBox = await newGroup.boundingBox();
+    expect(hostBox).not.toBeNull();
+    expect(groupBox).not.toBeNull();
+    expect(hostBox!.x).toBeLessThan(groupBox!.x);
+
+    await newHost.click();
+    await expectQuick(page.locator(".connection-form")).toBeVisible();
+    await expectQuick(page.locator(".connection-form input").first()).toBeVisible();
+  });
+
   test("Local Desktop is pinned first and opens without creating an SSH session", async ({ page }) => {
     const api = await twE2e(page);
     const before = await api.getCreateSshCallCount();

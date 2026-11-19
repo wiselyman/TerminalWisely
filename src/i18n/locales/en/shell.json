@@ -14,6 +14,7 @@
   "resizeSidebar": "Resize sidebar",
   "emptyBookmarks": "No SSH bookmarks yet",
   "entityAddGroup": "New group",
+  "entityAddHost": "New host",
   "entityGroupDefaultName": "Group",
   "entityGroupNameLabel": "Group name",
   "entityUngrouped": "Ungrouped",

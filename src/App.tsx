@@ -1222,6 +1222,7 @@ function App() {
                     onOpenHost={(saved) => openSavedHostRef.current(saved)}
                     onEditHost={(saved) => editSavedHostRef.current(saved)}
                     onDeleteHost={(saved) => deleteSavedHostRef.current(saved)}
+                    onAddHost={() => openNewRemoteRef.current()}
                     onAddGroup={() => addEntityGroup("hosts", hostEntityIds, t("entityGroupDefaultName"))}
                     onRenameGroup={(groupId, name) => renameEntityGroup("hosts", hostEntityIds, groupId, name)}
                     onDeleteGroup={(groupId) => deleteEntityGroup("hosts", hostEntityIds, groupId, undefined, t("entityUngrouped"))}

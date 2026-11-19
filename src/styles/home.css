@@ -25,9 +25,11 @@
   display: flex;
   max-width: 1500px;
   justify-content: flex-end;
+  gap: 8px;
   margin: 0 auto 12px;
 }
 
+.home-host-add-host,
 .home-host-add-group,
 .home-host-group-actions button,
 .home-host-group-rename button,
@@ -37,18 +39,20 @@
   justify-content: center;
   gap: 7px;
   color: var(--tw-fg-muted);
-  background: var(--tw-surface-1);
+  background: var(--tw-surface);
   border: 1px solid var(--tw-border);
   border-radius: 8px;
   cursor: pointer;
 }
 
+.home-host-add-host,
 .home-host-add-group {
   min-height: 36px;
   padding: 0 12px;
   color: var(--tw-fg);
 }
 
+.home-host-add-host:hover,
 .home-host-add-group:hover,
 .home-host-group-actions button:hover,
 .home-host-group-rename button:hover,

@@ -14,6 +14,7 @@
   "resizeSidebar": "调整侧栏宽度",
   "emptyBookmarks": "暂无 SSH 书签",
   "entityAddGroup": "新建分组",
+  "entityAddHost": "新建主机",
   "entityGroupDefaultName": "分组",
   "entityGroupNameLabel": "分组名称",
   "entityUngrouped": "未分组",

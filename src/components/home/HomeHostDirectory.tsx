@@ -1,6 +1,6 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, FolderPlus, Pencil, Trash2, X } from "lucide-react";
+import { Check, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { startEntityPointerReorder } from "../../lib/entityPointerReorder";
 import type { EntityDropTarget } from "../../lib/entityPointerReorder";
 import type { SavedConnection } from "../../types";
@@ -40,6 +40,7 @@ type Props = {
   onItemDrop: (dragId: string, target: EntityDropTarget) => void;
   onEditHost: (saved: SavedConnection) => void;
   onDeleteHost: (saved: SavedConnection) => void;
+  onAddHost: () => void;
   onAddGroup: () => void;
   onRenameGroup: (groupId: string, name: string) => void;
   onDeleteGroup: (groupId: string) => void;
@@ -53,6 +54,7 @@ export function HomeHostDirectory({
   onItemDrop,
   onEditHost,
   onDeleteHost,
+  onAddHost,
   onAddGroup,
   onRenameGroup,
   onDeleteGroup,
@@ -65,6 +67,10 @@ export function HomeHostDirectory({
   return (
     <main className="home-host-directory" data-testid="home-host-directory" ref={listRef}>
       <div className="home-host-directory-toolbar">
+        <button type="button" className="home-host-add-host" data-testid="home-add-host" onClick={onAddHost}>
+          <Plus size={16} aria-hidden="true" />
+          {t("entityAddHost")}
+        </button>
         <button type="button" className="home-host-add-group" data-testid="home-add-group" onClick={onAddGroup}>
           <FolderPlus size={16} aria-hidden="true" />
           {t("entityAddGroup")}
