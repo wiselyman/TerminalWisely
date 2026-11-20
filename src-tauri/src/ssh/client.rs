@@ -1,18 +1,15 @@
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use std::io::Cursor;
 
 use russh::client;
-use russh::ChannelMsg;
 use russh_keys::key::PublicKey;
+use russh::ChannelMsg;
 use russh_keys::load_secret_key;
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{mpsc, watch, Mutex};
 use tokio::time::{sleep, timeout, Duration};
 
@@ -20,12 +17,12 @@ use crate::error::{AppError, AppResult};
 use crate::preview_sudo;
 use crate::session::{expand_path, SessionManager};
 use crate::ssh::{probe, sftp};
-use crate::types::{AuthMethod, InsertLocalPathsRequest};
 use crate::types::{
     DownloadFileRequest, SessionInfo, SessionKind, SessionLifecyclePayload, SshConnectRequest,
-    TerminalOutputPayload, TransferCompletePayload, TransferProgressPayload, UploadFileResult,
-    UploadFilesRequest,
+    TerminalOutputPayload,
+    TransferCompletePayload, TransferProgressPayload, UploadFileResult, UploadFilesRequest,
 };
+use crate::types::{AuthMethod, InsertLocalPathsRequest};
 
 /// Optional per-chunk callback while reading an SSH exec channel (stdout/stderr).
 pub type ExecOutputCallback = Arc<dyn Fn(&str, &str) + Send + Sync>;
@@ -102,248 +99,8 @@ pub struct SshSessionSnapshot {
 }
 
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
-const SSH_PROXY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const SSH_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(400);
 const SSH_CONNECT_MAX_ATTEMPTS: usize = 3;
-
-fn ssh_connect_policy(uses_proxy: bool) -> (Duration, usize) {
-    if uses_proxy {
-        (SSH_PROXY_CONNECT_TIMEOUT, 1)
-    } else {
-        (SSH_CONNECT_TIMEOUT, SSH_CONNECT_MAX_ATTEMPTS)
-    }
-}
-
-#[cfg(unix)]
-struct ProxyStream {
-    stdout: tokio::process::ChildStdout,
-    stdin: tokio::process::ChildStdin,
-    _child: tokio::process::Child,
-}
-
-#[cfg(unix)]
-impl AsyncRead for ProxyStream {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        Pin::new(&mut this.stdout).poll_read(cx, buf)
-    }
-}
-
-#[cfg(unix)]
-impl AsyncWrite for ProxyStream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        Pin::new(&mut this.stdin).poll_write(cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        Pin::new(&mut this.stdin).poll_flush(cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let this = self.get_mut();
-        Pin::new(&mut this.stdin).poll_shutdown(cx)
-    }
-}
-
-fn parse_proxy_command(ssh_config: &str) -> Option<String> {
-    ssh_config.lines().find_map(|line| {
-        let (key, value) = line.split_once(char::is_whitespace)?;
-        if !key.eq_ignore_ascii_case("proxycommand") {
-            return None;
-        }
-        let value = value.trim();
-        if value.is_empty() || value.eq_ignore_ascii_case("none") {
-            None
-        } else {
-            Some(value.to_string())
-        }
-    })
-}
-
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
-fn expand_proxy_command(command: &str, host: &str, port: u16, username: &str) -> AppResult<String> {
-    let mut expanded = String::with_capacity(command.len() + host.len() + username.len());
-    let mut chars = command.chars();
-    while let Some(ch) = chars.next() {
-        if ch != '%' {
-            expanded.push(ch);
-            continue;
-        }
-        match chars.next() {
-            Some('%') => expanded.push('%'),
-            Some('h') => expanded.push_str(&shell_quote(host)),
-            Some('p') => expanded.push_str(&port.to_string()),
-            Some('r') => expanded.push_str(&shell_quote(username)),
-            Some(token) => {
-                return Err(AppError::msg(format!(
-                    "Unsupported SSH ProxyCommand token: %{token}"
-                )));
-            }
-            None => return Err(AppError::msg("Incomplete SSH ProxyCommand token")),
-        }
-    }
-    Ok(expanded)
-}
-
-#[cfg(unix)]
-async fn configured_proxy_command(
-    host: &str,
-    port: u16,
-    username: &str,
-) -> AppResult<Option<String>> {
-    let output = match tokio::process::Command::new("ssh")
-        .arg("-G")
-        .arg("-p")
-        .arg(port.to_string())
-        .arg("-l")
-        .arg(username)
-        .arg(host)
-        .output()
-        .await
-    {
-        Ok(output) => output,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(err.into()),
-    };
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(AppError::msg(if detail.is_empty() {
-            "Could not read effective SSH configuration".to_string()
-        } else {
-            detail
-        }));
-    }
-    Ok(parse_proxy_command(&String::from_utf8_lossy(
-        &output.stdout,
-    )))
-}
-
-#[cfg(not(unix))]
-async fn configured_proxy_command(
-    _host: &str,
-    _port: u16,
-    _username: &str,
-) -> AppResult<Option<String>> {
-    Ok(None)
-}
-
-#[cfg(unix)]
-async fn spawn_proxy_stream(command: &str) -> AppResult<ProxyStream> {
-    use std::process::Stdio;
-
-    let mut child = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(command)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .kill_on_drop(true)
-        .spawn()?;
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| AppError::msg("SSH ProxyCommand stdin was unavailable"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| AppError::msg("SSH ProxyCommand stdout was unavailable"))?;
-    Ok(ProxyStream {
-        stdin,
-        stdout,
-        _child: child,
-    })
-}
-
-#[cfg(unix)]
-async fn connect_transport_stream(
-    host: &str,
-    port: u16,
-    username: &str,
-    proxy_command: Option<&str>,
-) -> AppResult<ProxyStreamOrTcp> {
-    if let Some(command) = proxy_command {
-        let command = expand_proxy_command(&command, host, port, username)?;
-        return Ok(ProxyStreamOrTcp::Proxy(spawn_proxy_stream(&command).await?));
-    }
-    Ok(ProxyStreamOrTcp::Tcp(
-        tokio::net::TcpStream::connect((host, port)).await?,
-    ))
-}
-
-#[cfg(not(unix))]
-async fn connect_transport_stream(
-    host: &str,
-    port: u16,
-    _username: &str,
-    _proxy_command: Option<&str>,
-) -> AppResult<ProxyStreamOrTcp> {
-    Ok(ProxyStreamOrTcp::Tcp(
-        tokio::net::TcpStream::connect((host, port)).await?,
-    ))
-}
-
-enum ProxyStreamOrTcp {
-    #[cfg(unix)]
-    Proxy(ProxyStream),
-    Tcp(tokio::net::TcpStream),
-}
-
-impl AsyncRead for ProxyStreamOrTcp {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        match self.get_mut() {
-            #[cfg(unix)]
-            Self::Proxy(stream) => Pin::new(stream).poll_read(cx, buf),
-            Self::Tcp(stream) => Pin::new(stream).poll_read(cx, buf),
-        }
-    }
-}
-
-impl AsyncWrite for ProxyStreamOrTcp {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        match self.get_mut() {
-            #[cfg(unix)]
-            Self::Proxy(stream) => Pin::new(stream).poll_write(cx, buf),
-            Self::Tcp(stream) => Pin::new(stream).poll_write(cx, buf),
-        }
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        match self.get_mut() {
-            #[cfg(unix)]
-            Self::Proxy(stream) => Pin::new(stream).poll_flush(cx),
-            Self::Tcp(stream) => Pin::new(stream).poll_flush(cx),
-        }
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        match self.get_mut() {
-            #[cfg(unix)]
-            Self::Proxy(stream) => Pin::new(stream).poll_shutdown(cx),
-            Self::Tcp(stream) => Pin::new(stream).poll_shutdown(cx),
-        }
-    }
-}
 
 fn ssh_client_config() -> Arc<client::Config> {
     // Keepalive-only traffic does not always reset russh's inactivity timer; for
@@ -380,25 +137,25 @@ fn remap_home_prefix(path: &str, stale_home: &str, real_home: &str) -> String {
     path.to_string()
 }
 
+async fn connect_ssh_tcp(host: &str, port: u16) -> AppResult<tokio::net::TcpStream> {
+    Ok(tokio::net::TcpStream::connect((host, port)).await?)
+}
+
 async fn connect_ssh_transport(
     host: &str,
     port: u16,
-    username: &str,
 ) -> AppResult<(client::Handle<ClientHandler>, Option<String>)> {
     let config = ssh_client_config();
-    let proxy_command = configured_proxy_command(host, port, username).await?;
-    let (connect_timeout, max_attempts) = ssh_connect_policy(proxy_command.is_some());
     let mut last_err: Option<AppError> = None;
 
-    for attempt in 0..max_attempts {
+    for attempt in 0..SSH_CONNECT_MAX_ATTEMPTS {
         if attempt > 0 {
             sleep(SSH_CONNECT_RETRY_DELAY).await;
         }
 
         let fingerprint_slot = Arc::new(std::sync::Mutex::new(None));
-        match timeout(connect_timeout, async {
-            let stream =
-                connect_transport_stream(host, port, username, proxy_command.as_deref()).await?;
+        match timeout(SSH_CONNECT_TIMEOUT, async {
+            let stream = connect_ssh_tcp(host, port).await?;
             client::connect_stream(
                 config.clone(),
                 stream,
@@ -407,8 +164,7 @@ async fn connect_ssh_transport(
             .await
             .map_err(AppError::from)
         })
-        .await
-        {
+        .await {
             Ok(Ok(handle)) => {
                 let fp = fingerprint_slot.lock().ok().and_then(|g| g.clone());
                 return Ok((handle, fp));
@@ -495,7 +251,10 @@ pub async fn exec_command_with_stdin_capture_with_limits(
             .map_err(AppError::from)?
     };
 
-    channel.exec(true, command).await.map_err(AppError::from)?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(AppError::from)?;
 
     if !stdin_data.is_empty() {
         channel
@@ -516,8 +275,10 @@ pub async fn exec_command_with_stdin_capture_with_limits(
     let total_deadline = limits.total.map(|d| started + d);
 
     loop {
-        let idle_deadline = idle_deadline_for(saw_output, exit_at, last_output_at, &limits);
-        let sleep_for = next_limit_sleep(saw_output, first_deadline, total_deadline, idle_deadline);
+        let idle_deadline =
+            idle_deadline_for(saw_output, exit_at, last_output_at, &limits);
+        let sleep_for =
+            next_limit_sleep(saw_output, first_deadline, total_deadline, idle_deadline);
         let apply_data = |data: &[u8],
                           stdout: &mut Vec<u8>,
                           saw_output: &mut bool,
@@ -676,8 +437,7 @@ pub async fn exec_command_with_stdin(
     max_stdout_bytes: usize,
 ) -> AppResult<Vec<u8>> {
     let (stdout, stderr, code) =
-        exec_command_with_stdin_capture(handle, command, stdin_data, max_stdout_bytes, None)
-            .await?;
+        exec_command_with_stdin_capture(handle, command, stdin_data, max_stdout_bytes, None).await?;
     if code == 0 {
         return Ok(stdout);
     }
@@ -753,11 +513,7 @@ fn idle_deadline_for(
     None
 }
 
-fn should_abort_for_password_prompt(
-    limits: &ExecCaptureLimits,
-    stdout: &str,
-    stderr: &str,
-) -> bool {
+fn should_abort_for_password_prompt(limits: &ExecCaptureLimits, stdout: &str, stderr: &str) -> bool {
     if !limits.abort_on_interactive_password {
         return false;
     }
@@ -796,7 +552,10 @@ pub async fn exec_command_capture_with_limits(
             .map_err(AppError::from)?
     };
 
-    channel.exec(true, command).await.map_err(AppError::from)?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(AppError::from)?;
 
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -809,8 +568,10 @@ pub async fn exec_command_capture_with_limits(
     let total_deadline = limits.total.map(|d| started + d);
 
     loop {
-        let idle_deadline = idle_deadline_for(saw_output, exit_at, last_output_at, &limits);
-        let sleep_for = next_limit_sleep(saw_output, first_deadline, total_deadline, idle_deadline);
+        let idle_deadline =
+            idle_deadline_for(saw_output, exit_at, last_output_at, &limits);
+        let sleep_for =
+            next_limit_sleep(saw_output, first_deadline, total_deadline, idle_deadline);
         if let Some(dur) = sleep_for {
             if dur.is_zero() {
                 let _ = channel.close().await;
@@ -1031,8 +792,7 @@ pub async fn open_transfer_connection(
     check_cancel(cancel)?;
 
     let connect = async {
-        let (mut handle, _fp) =
-            connect_ssh_transport(&request.host, request.port, &request.username).await?;
+        let (mut handle, _fp) = connect_ssh_transport(&request.host, request.port).await?;
         authenticate_handle(&mut handle, request).await?;
         Ok::<_, AppError>(Arc::new(Mutex::new(handle)))
     };
@@ -1069,7 +829,7 @@ impl SshSession {
         rows: u16,
     ) -> AppResult<(Self, Option<probe::ServerOsProfile>)> {
         let (mut handle, host_fingerprint) =
-            connect_ssh_transport(&request.host, request.port, &request.username).await?;
+            connect_ssh_transport(&request.host, request.port).await?;
 
         authenticate_handle(&mut handle, &request).await?;
 
@@ -1209,7 +969,11 @@ impl SshSession {
     }
 
     pub async fn reconnect(&mut self, app: AppHandle, cols: u16, rows: u16) -> AppResult<()> {
-        SessionManager::emit_terminal_message(&app, &self.info.id, "TW_STATUS:RECONNECTING");
+        SessionManager::emit_terminal_message(
+            &app,
+            &self.info.id,
+            "TW_STATUS:RECONNECTING",
+        );
 
         let _ = self.shutdown_tx.send(true);
         sleep(Duration::from_millis(150)).await;
@@ -1217,7 +981,6 @@ impl SshSession {
         let (mut handle, host_fingerprint) = connect_ssh_transport(
             &self.connect_request.host,
             self.connect_request.port,
-            &self.connect_request.username,
         )
         .await?;
         authenticate_handle(&mut handle, &self.connect_request).await?;
@@ -1319,28 +1082,29 @@ impl SshSession {
         }
 
         let resolved = self.resolve_remote_path(&cd_target).await?;
-        let (cd_target, resolved) = match sftp::remote_path_kind(&self.handle(), &resolved).await? {
-            Some(true) => (cd_target, resolved),
-            Some(false) => {
-                return Err(AppError::msg(format!("Not a directory: {resolved}")));
-            }
-            None => {
-                // Soft-wrap recovery sometimes inserts a space mid-segment
-                // (`droi` + `d_sample` → `droi d_sample`). Retry without those.
-                let repaired = repair_soft_wrap_spaces(&cd_target);
-                if repaired != cd_target {
-                    let repaired_resolved = self.resolve_remote_path(&repaired).await?;
-                    match sftp::remote_path_kind(&self.handle(), &repaired_resolved).await? {
-                        Some(true) => (repaired, repaired_resolved),
-                        _ => {
-                            return Err(AppError::msg(format!("No such file: {resolved}")));
-                        }
-                    }
-                } else {
-                    return Err(AppError::msg(format!("No such file: {resolved}")));
+        let (cd_target, resolved) =
+            match sftp::remote_path_kind(&self.handle(), &resolved).await? {
+                Some(true) => (cd_target, resolved),
+                Some(false) => {
+                    return Err(AppError::msg(format!("Not a directory: {resolved}")));
                 }
-            }
-        };
+                None => {
+                    // Soft-wrap recovery sometimes inserts a space mid-segment
+                    // (`droi` + `d_sample` → `droi d_sample`). Retry without those.
+                    let repaired = repair_soft_wrap_spaces(&cd_target);
+                    if repaired != cd_target {
+                        let repaired_resolved = self.resolve_remote_path(&repaired).await?;
+                        match sftp::remote_path_kind(&self.handle(), &repaired_resolved).await? {
+                            Some(true) => (repaired, repaired_resolved),
+                            _ => {
+                                return Err(AppError::msg(format!("No such file: {resolved}")));
+                            }
+                        }
+                    } else {
+                        return Err(AppError::msg(format!("No such file: {resolved}")));
+                    }
+                }
+            };
 
         let cmd = format!(
             "cd {} && ls -F\r",
@@ -1413,7 +1177,8 @@ impl SshSessionSnapshot {
             None => self.remote_cwd.lock().await.clone(),
         };
 
-        let transfer = open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
+        let transfer =
+            open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
         let handle = transfer.handle();
 
         // Expand ~ with the transfer connection's real $HOME (not a stale guess).
@@ -1625,7 +1390,8 @@ impl SshSessionSnapshot {
             std::fs::create_dir_all(parent)?;
         }
 
-        let transfer = open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
+        let transfer =
+            open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
         let handle = transfer.handle();
         let session_id = self.info.id.clone();
         let fname = file_name.to_string();
@@ -1695,7 +1461,8 @@ impl SshSessionSnapshot {
             std::fs::create_dir_all(parent)?;
         }
 
-        let transfer = open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
+        let transfer =
+            open_transfer_connection(&self.connect_request, cancel.as_deref()).await?;
         let handle = transfer.handle();
         let session_id = self.info.id.clone();
         let archive_name = format!("{dir_name}.tar.gz");
@@ -2049,7 +1816,9 @@ pub async fn insert_local_paths(
         })
         .collect();
     let payload = format!("{} ", quoted.join(" "));
-    sessions.write_input(&request.session_id, &payload).await?;
+    sessions
+        .write_input(&request.session_id, &payload)
+        .await?;
     Ok(payload)
 }
 
@@ -2135,7 +1904,10 @@ fn sanitize_shell_path(path: &str) -> String {
     let chars: Vec<char> = trimmed.chars().collect();
     let mut i = 0;
     while i < chars.len() {
-        if chars[i] == '/' && i + 1 < chars.len() && (chars[i + 1] == '\'' || chars[i + 1] == '"') {
+        if chars[i] == '/'
+            && i + 1 < chars.len()
+            && (chars[i + 1] == '\'' || chars[i + 1] == '"')
+        {
             let quote = chars[i + 1];
             out.push('/');
             i += 2;
@@ -2177,66 +1949,26 @@ fn sanitize_shell_path(path: &str) -> String {
 #[cfg(test)]
 mod path_tests {
     use super::{
-        expand_proxy_command, normalize_remote_path_input, parse_proxy_command,
-        repair_soft_wrap_spaces, sanitize_shell_path, ssh_client_config, ssh_connect_policy,
-        SSH_CONNECT_MAX_ATTEMPTS, SSH_CONNECT_TIMEOUT, SSH_PROXY_CONNECT_TIMEOUT,
+        normalize_remote_path_input, repair_soft_wrap_spaces, sanitize_shell_path,
+        ssh_client_config,
     };
-    #[cfg(unix)]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    #[cfg(unix)]
     #[tokio::test]
-    async fn proxy_process_stream_bridges_stdin_and_stdout() {
-        let mut stream = super::connect_transport_stream("ignored", 22, "user", Some("cat"))
-            .await
-            .unwrap();
-        stream.write_all(b"proxy-stream-check").await.unwrap();
-        let mut echoed = [0; 18];
-        tokio::time::timeout(
-            tokio::time::Duration::from_secs(2),
-            stream.read_exact(&mut echoed),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        assert_eq!(&echoed, b"proxy-stream-check");
-    }
+    async fn ssh_transport_connects_directly_to_the_saved_host() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            socket.write_all(b"direct-ssh").await.unwrap();
+        });
 
-    #[test]
-    fn parses_effective_proxy_command_from_ssh_config_output() {
-        assert_eq!(
-            parse_proxy_command("user testuser\nproxycommand /usr/bin/proxy %h %p\n"),
-            Some("/usr/bin/proxy %h %p".to_string())
-        );
-        assert_eq!(parse_proxy_command("proxycommand none\n"), None);
-    }
+        let mut stream = super::connect_ssh_tcp("127.0.0.1", port).await.unwrap();
+        let mut response = [0; 10];
+        stream.read_exact(&mut response).await.unwrap();
+        server.await.unwrap();
 
-    #[test]
-    fn expands_proxy_command_tokens_with_shell_quoting() {
-        assert_eq!(
-            expand_proxy_command(
-                "proxy %h %p --user %r %%",
-                "host; touch /tmp/not-run",
-                22,
-                "user's name",
-            )
-            .unwrap(),
-            "proxy 'host; touch /tmp/not-run' 22 --user 'user'\\''s name' %"
-        );
-    }
-
-    #[test]
-    fn rejects_unknown_proxy_command_tokens() {
-        assert!(expand_proxy_command("proxy %C", "host", 22, "user").is_err());
-    }
-
-    #[test]
-    fn proxy_connections_wait_for_authentication_without_retries() {
-        assert_eq!(ssh_connect_policy(true), (SSH_PROXY_CONNECT_TIMEOUT, 1));
-        assert_eq!(
-            ssh_connect_policy(false),
-            (SSH_CONNECT_TIMEOUT, SSH_CONNECT_MAX_ATTEMPTS)
-        );
+        assert_eq!(&response, b"direct-ssh");
     }
 
     #[test]
@@ -2252,17 +1984,16 @@ mod path_tests {
     #[test]
     fn repairs_soft_wrap_space_in_droid_sample() {
         assert_eq!(
-            repair_soft_wrap_spaces("~/Isaac-GR00T/demo_data/droi d_sample/videos"),
+            repair_soft_wrap_spaces(
+                "~/Isaac-GR00T/demo_data/droi d_sample/videos"
+            ),
             "~/Isaac-GR00T/demo_data/droid_sample/videos"
         );
     }
 
     #[test]
     fn quoted_absolute_segment() {
-        assert_eq!(
-            sanitize_shell_path("/'My Dir'/file.txt"),
-            "/My Dir/file.txt"
-        );
+        assert_eq!(sanitize_shell_path("/'My Dir'/file.txt"), "/My Dir/file.txt");
     }
 
     #[test]
