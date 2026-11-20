@@ -1,7 +1,5 @@
 # Honor configured SSH ProxyCommand
 
-> **Superseded:** This automatic proxy behavior caused TW to start the system proxy's browser authentication flow for saved hosts. The user confirmed direct password SSH works in Terminal and expects TW to do the same. See [the follow-up plan](./2026-11-20-ssh-direct-connect-no-implicit-proxy.md); automatic ProxyCommand execution has been removed.
-
 ## 要保住的旧行为
 
 - 没有配置 SSH 代理的主机仍通过当前 russh TCP transport 连接。
