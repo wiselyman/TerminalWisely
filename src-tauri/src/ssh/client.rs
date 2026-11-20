@@ -111,7 +111,9 @@ fn ssh_client_config() -> Arc<client::Config> {
         keepalive_interval: Some(Duration::from_secs(10)),
         keepalive_max: 30,
         window_size: 16 * 1024 * 1024,
-        maximum_packet_size: 64 * 1024,
+        // Stay within russh's TCP packet bound; larger values are rejected by
+        // some SSH servers and trigger russh's "larger than a TCP packet" error.
+        maximum_packet_size: 32 * 1024,
         ..Default::default()
     })
 }
@@ -1938,7 +1940,15 @@ fn sanitize_shell_path(path: &str) -> String {
 
 #[cfg(test)]
 mod path_tests {
-    use super::{normalize_remote_path_input, repair_soft_wrap_spaces, sanitize_shell_path};
+    use super::{
+        normalize_remote_path_input, repair_soft_wrap_spaces, sanitize_shell_path,
+        ssh_client_config,
+    };
+
+    #[test]
+    fn advertises_packet_size_within_tcp_packet_limit() {
+        assert!(ssh_client_config().maximum_packet_size <= 65_535);
+    }
 
     #[test]
     fn quoted_segment_after_tilde() {
