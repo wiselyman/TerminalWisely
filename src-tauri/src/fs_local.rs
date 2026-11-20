@@ -382,6 +382,22 @@ pub fn read_local_bytes(request: LocalPathRequest) -> AppResult<Vec<u8>> {
     std::fs::read(path).map_err(AppError::from)
 }
 
+pub fn read_local_file_prefix(request: LocalPathRequest) -> AppResult<String> {
+    use std::io::Read;
+    let path = normalize_path(&request.path)?.canonicalize().map_err(AppError::from)?;
+    if !path.is_file() {
+        return Err(AppError::msg("Not a file"));
+    }
+    let mut prefix = Vec::with_capacity(256);
+    std::fs::File::open(path)
+        .map_err(AppError::from)?
+        .take(256)
+        .read_to_end(&mut prefix)
+        .map_err(AppError::from)?;
+    let line = prefix.split(|byte| *byte == b'\n').next().unwrap_or_default();
+    Ok(String::from_utf8_lossy(line).trim_end_matches('\r').to_string())
+}
+
 pub fn write_local_text(request: LocalTextWriteRequest) -> AppResult<()> {
     let path = normalize_path(&request.path)?;
     if !path.is_file() {
@@ -416,6 +432,15 @@ pub fn save_local_bytes_as(request: LocalBytesWriteRequest) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_only_the_first_line_for_script_detection() {
+        let root = temp_dir("local-script-header");
+        let file = root.join("job.unknown");
+        std::fs::write(&file, "#!/usr/bin/env python3 -u\n".to_string() + &"x".repeat(512)).unwrap();
+        assert_eq!(read_local_file_prefix(LocalPathRequest { path: path_to_string(&file) }).unwrap(), "#!/usr/bin/env python3 -u");
+        std::fs::remove_dir_all(root).unwrap();
+    }
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);

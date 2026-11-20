@@ -39,7 +39,8 @@ import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
 import { useWorkspacePanelEnter } from "../lib/useWorkspacePanelEnter";
 import { openAppSettings } from "../stores/downloadSettingsStore";
-import { buildRunShellScriptCommand, isShellScriptPath } from "../lib/runShellScript";
+import { buildRunScriptCommand, isRunnableScriptPath } from "../lib/runShellScript";
+import { readRemoteFilePrefix } from "../lib/previewRemoteBytes";
 
 type Props = {
   sessionId: string;
@@ -502,7 +503,7 @@ export function LocalFsPanel({
       });
   };
 
-  const openEntryMenu = (event: ReactMouseEvent, entry: LocalFsEntry) => {
+  const openEntryMenu = async (event: ReactMouseEvent, entry: LocalFsEntry) => {
     event.preventDefault();
     event.stopPropagation();
     window.getSelection()?.removeAllRanges();
@@ -510,6 +511,10 @@ export function LocalFsPanel({
       useLocalFsStore.getState().setSelectedPath(entry.path);
     }
     const pathKind = entry.kind === "directory" ? "directory" : "file";
+    let shebang: string | null = null;
+    if (pathKind === "file") {
+      try { shebang = await readRemoteFilePrefix(sessionId, entry.path); } catch { /* Preserve regular file actions if the host cannot provide a header. */ }
+    }
     const paths = operationPaths(entry);
     const canPaste = Boolean(
       clipboard && clipboard.sessionId === sessionId && clipboard.paths.length,
@@ -579,11 +584,13 @@ export function LocalFsPanel({
           ? () => { void openEditorWisely(desktopTarget, entry.path); launchDesktopApp("editorwisely"); }
           : undefined,
       onRunInTerminal:
-        pathKind === "file" && isShellScriptPath(entry.path)
+        pathKind === "file" && isRunnableScriptPath(entry.path, entry.permissions, shebang, "unix")
           ? () => {
               launchDesktopApp("terminal");
+              const command = buildRunScriptCommand(entry.path, entry.permissions, shebang, "unix");
+              if (!command) return;
               void invoke("insert_terminal_command", {
-                request: { session_id: sessionId, command: buildRunShellScriptCommand(entry.path) },
+                request: { session_id: sessionId, command },
               }).catch((error) => useToastStore.getState().pushToast(formatAppError(error), false));
             }
           : undefined,

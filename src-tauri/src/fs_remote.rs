@@ -50,6 +50,43 @@ pub struct ListRemoteDirectoryRequest {
     pub show_hidden: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReadRemoteFilePrefixRequest {
+    pub session_id: String,
+    pub path: String,
+}
+
+pub async fn read_remote_file_prefix(
+    sessions: &SessionManager,
+    request: ReadRemoteFilePrefixRequest,
+) -> AppResult<String> {
+    let ssh = sessions.ssh_snapshot(&request.session_id).await?;
+    let resolved = ssh.resolve_remote_path(&request.path).await?;
+    let quoted = shell_quote_remote_path(&resolved);
+    let command = format!("head -c 256 -- {quoted}");
+    let (stdout, stderr, code) = exec_command_capture(&ssh.handle(), &command, None).await?;
+    if code != 0 {
+        let detail = if stderr.trim().is_empty() { stdout.trim() } else { stderr.trim() };
+        return Err(AppError::msg(if detail.is_empty() { "Failed to read file header".to_string() } else { detail.to_string() }));
+    }
+    Ok(first_line_from_prefix(&stdout).to_string())
+}
+
+fn first_line_from_prefix(prefix: &str) -> &str {
+    prefix.split(['\r', '\n']).next().unwrap_or_default()
+}
+
+#[cfg(test)]
+mod prefix_tests {
+    use super::first_line_from_prefix;
+
+    #[test]
+    fn remote_prefix_returns_only_first_line_without_carriage_return() {
+        assert_eq!(first_line_from_prefix("#!/usr/bin/env python3\r\nbody"), "#!/usr/bin/env python3");
+        assert_eq!(first_line_from_prefix("plain text\nbody"), "plain text");
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RemoteDirEntry {
     pub name: String,

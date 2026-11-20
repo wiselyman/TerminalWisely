@@ -11,7 +11,9 @@ import { LocalFsContentsView } from "../LocalFsContentsView";
 import { LocalFsPathBreadcrumb } from "../LocalFsPathBreadcrumb";
 import { PathInput } from "../PathInput";
 import { LocalFsContextMenu, type LocalFsContextMenuProps } from "../LocalFsContextMenu";
-import { buildRunShellScriptCommand, isShellScriptPath } from "../../lib/runShellScript";
+import { buildRunScriptCommand, isRunnableScriptPath } from "../../lib/runShellScript";
+import { readLocalFilePrefix } from "../../lib/localFsApi";
+import { isWindowsHost } from "../../lib/hostOs";
 import { queueLocalTerminalCommand } from "../../lib/localTerminalCommandBridge";
 import {
   copyLocalPath,
@@ -28,7 +30,7 @@ import {
 } from "../../lib/localFsApi";
 
 type FileAction = "file" | "folder" | "rename" | "move";
-type LocalMenuState = { kind: "entry"; x: number; y: number; entry: LocalFsEntry } | { kind: "background"; x: number; y: number; path: string };
+type LocalMenuState = { kind: "entry"; x: number; y: number; entry: LocalFsEntry; shebang: string | null } | { kind: "background"; x: number; y: number; path: string };
 const LAST_LOCAL_DIRECTORY_KEY = "tw.desktop.local.files.last-directory";
 
 function readLastLocalDirectory(): string | null {
@@ -216,12 +218,16 @@ export function LocalDesktopFileManager() {
     } catch (err) { setError(formatAppError(err)); }
   };
 
-  const openEntryMenu = (event: ReactMouseEvent, entry: LocalFsEntry) => {
+  const openEntryMenu = async (event: ReactMouseEvent, entry: LocalFsEntry) => {
     event.preventDefault();
     event.stopPropagation();
     if (!fs.selectedPaths.includes(entry.path)) fs.setSelectedPath(entry.path);
     setSelected(entry);
-    setMenu({ kind: "entry", x: event.clientX, y: event.clientY, entry });
+    let shebang: string | null = null;
+    if (entry.kind === "file") {
+      try { shebang = await readLocalFilePrefix(entry.path); } catch { /* Keep ordinary file actions available when header probing is unsupported. */ }
+    }
+    setMenu({ kind: "entry", x: event.clientX, y: event.clientY, entry, shebang });
   };
 
   const openBackgroundMenu = (event: ReactMouseEvent, targetPath: string | null) => {
@@ -251,7 +257,7 @@ export function LocalDesktopFileManager() {
     onDuplicate: () => { void duplicatePath(menu.entry); },
     onPreview: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
     onOpenEditor: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
-    onRunInTerminal: menu.entry.kind === "file" && isShellScriptPath(menu.entry.path) ? () => { launchApp("terminal"); queueLocalTerminalCommand(buildRunShellScriptCommand(menu.entry.path)); } : undefined,
+    onRunInTerminal: menu.entry.kind === "file" && isRunnableScriptPath(menu.entry.path, menu.entry.permissions, menu.shebang, isWindowsHost() ? "powershell" : "unix") ? () => { const command = buildRunScriptCommand(menu.entry.path, menu.entry.permissions, menu.shebang, isWindowsHost() ? "powershell" : "unix"); if (command) { launchApp("terminal"); queueLocalTerminalCommand(command); } } : undefined,
     onRename: () => runLocalMenuAction("rename"),
     onDelete: () => { void deletePaths(menuPaths(menu.entry)); },
     onMove: () => runLocalMenuAction("move"),

@@ -1457,6 +1457,11 @@ pub fn read_local_text(request: crate::fs_local::LocalPathRequest) -> Result<Str
 }
 
 #[tauri::command]
+pub fn read_local_file_prefix(request: crate::fs_local::LocalPathRequest) -> Result<String, String> {
+    crate::fs_local::read_local_file_prefix(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn read_local_bytes(request: crate::fs_local::LocalPathRequest) -> Result<Vec<u8>, String> {
     crate::fs_local::read_local_bytes(request).map_err(|e| e.to_string())
 }
@@ -1482,6 +1487,16 @@ pub async fn list_remote_directory(
     sessions: State<'_, SessionManager>,
 ) -> Result<crate::fs_remote::ListRemoteDirectoryResult, String> {
     crate::fs_remote::list_remote_directory(&sessions, request)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn read_remote_file_prefix(
+    request: crate::fs_remote::ReadRemoteFilePrefixRequest,
+    sessions: State<'_, SessionManager>,
+) -> Result<String, String> {
+    crate::fs_remote::read_remote_file_prefix(&sessions, request)
         .await
         .map_err(|e| e.to_string())
 }

@@ -59,6 +59,16 @@ describe("local desktop filesystem API", () => {
     });
   });
 
+  it("reads only a bounded file prefix for script metadata", async () => {
+    const api = await import("./localFsApi");
+    invoke.mockResolvedValueOnce("#!/usr/bin/env python3");
+    await expect(api.readLocalFilePrefix("/tmp/job"))
+      .resolves.toBe("#!/usr/bin/env python3");
+    expect(invoke).toHaveBeenCalledWith("read_local_file_prefix", {
+      request: { path: "/tmp/job" },
+    });
+  });
+
   it("keeps POSIX, drive-root, and UNC parent paths intact", async () => {
     const { parentLocalPath } = await import("./localFsApi");
     expect(parentLocalPath("/Users/wangyunfei/Documents")).toBe("/Users/wangyunfei");

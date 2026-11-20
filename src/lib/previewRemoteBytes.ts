@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export function readRemoteFilePrefix(sessionId: string, remotePath: string): Promise<string> {
+  return invoke("read_remote_file_prefix", { request: { session_id: sessionId, path: remotePath } });
+}
+
 export function suggestPasteImageName(
   originalName: string,
   nowMs: number,

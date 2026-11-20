@@ -19,6 +19,10 @@ export function readLocalText(path: string): Promise<string> {
   return invoke("read_local_text", { request: { path } });
 }
 
+export function readLocalFilePrefix(path: string): Promise<string> {
+  return invoke("read_local_file_prefix", { request: { path } });
+}
+
 export async function readLocalBytes(path: string): Promise<Uint8Array> {
   const bytes = await invoke<number[]>("read_local_bytes", { request: { path } });
   return Uint8Array.from(bytes);
