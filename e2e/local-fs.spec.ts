@@ -125,7 +125,8 @@ test.describe("Local FS panel", () => {
     await expect(menu.getByRole("menuitem", { name: "Rename" })).toBeVisible({ timeout: 1_000 });
     await expect(menu.getByRole("menuitem", { name: "Delete" })).toBeVisible({ timeout: 1_000 });
     await expect(menu.getByRole("menuitem", { name: "Move to directory" })).toBeVisible({ timeout: 1_000 });
-    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menuitem", { name: "Run in Terminal" })).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "Copy file name" }).click();
     await panel.locator('[data-testid="local-fs-contents"]').click({ button: "right", position: { x: 20, y: 20 } });
     await expect(page.getByRole("menuitem", { name: "Upload" })).toBeVisible({ timeout: 1_000 });
   });
@@ -142,9 +143,27 @@ test.describe("Local FS panel", () => {
     await expect(script).toBeVisible();
     await script.click({ button: "right" });
     await page.getByRole("menuitem", { name: "Run in Terminal" }).click();
-    await expect.poll(() => api.getLastTerminalCommand()).toEqual({
+    await expect.poll(() => api.getLastTerminalCommand(), { timeout: 5_000 }).toEqual({
       session_id: "e2e-ssh-session-1",
-      command: `cd -- '${directory}' && bash -- './run me.sh'\r`,
+      command: `cd -- '${directory}' && '/bin/bash' './run me.sh'\r`,
+    });
+  });
+
+  test("runs an unknown-extension file from its shebang", async ({ page }) => {
+    const api = await twE2e(page);
+    const openedDirectory = await api.getLastEnterDirectory();
+    const directory = String(openedDirectory?.remote_path ?? "/home/e2e");
+    const scriptPath = `${directory.replace(/\/$/, "")}/job.task`;
+    await api.seedRemotePath(scriptPath);
+    const panel = page.getByTestId("host-file-manager-panel");
+    await panel.getByRole("button", { name: "Refresh" }).click();
+    const script = panel.locator(`[data-path="${scriptPath}"]`);
+    await expect(script).toBeVisible();
+    await script.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Run in Terminal" }).click();
+    await expect.poll(() => api.getLastTerminalCommand(), { timeout: 5_000 }).toEqual({
+      session_id: "e2e-ssh-session-1",
+      command: `cd -- '${directory}' && '/usr/bin/env' 'node' './job.task'\r`,
     });
   });
 

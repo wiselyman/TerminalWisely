@@ -537,6 +537,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     if (!localFsText.has(path)) throw new Error("Not a text file");
     return localFsText.get(path);
   },
+  read_local_file_prefix: (args) => {
+    const path = (args as { request: { path: string } }).request.path;
+    return (localFsText.get(path) ?? "").split(/\r?\n/, 1)[0].slice(0, 256);
+  },
   read_local_bytes: async (args) => {
     const path = (args as { request: { path: string } }).request.path;
     if (localReadDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, localReadDelayMs));
@@ -573,6 +577,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
         size_bytes: 0,
       }));
     return { path, parent: path === "/" ? null : "/home", entries: [...e2eRemoteDir, ...createdEntries] };
+  },
+  read_remote_file_prefix: (args) => {
+    const path = (args as { request: { path: string } }).request.path;
+    return path.endsWith(".sh") ? "#!/bin/bash" : path.endsWith(".task") ? "#!/usr/bin/env node" : "";
   },
   rename_local_path: (args) => {
     const request = (args as { request: { path: string; new_name: string } }).request;
