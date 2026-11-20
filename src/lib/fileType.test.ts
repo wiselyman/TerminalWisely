@@ -34,7 +34,9 @@ describe("canPreviewPath", () => {
     expect(canPreviewPath("/tmp/report.docx")).toBe(true);
     expect(canPreviewPath("/tmp/bundle.zip")).toBe(true);
     expect(canPreviewPath("/tmp/clip.mp4")).toBe(true);
-    expect(canPreviewPath("/tmp/note.unknown")).toBe(false);
+    expect(canPreviewPath("/tmp/note.unknown")).toBe(true);
+    expect(canPreviewPath("/tmp/large.unknown", 3 * 1024 * 1024)).toBe(false);
+    expect(canPreviewPath("/tmp/image.img")).toBe(true);
   });
 });
 

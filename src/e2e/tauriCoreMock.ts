@@ -62,6 +62,7 @@ let localFsText = new Map<string, string>([["/tmp/e2e-file.txt", "local test con
 let lastAiTerminalExec: Record<string, unknown> | null = null;
 let lastAiLease: Record<string, unknown> | null = null;
 let lastKillProcess: Record<string, unknown> | null = null;
+let lastTerminalCommand: Record<string, unknown> | null = null;
 let createSshCallCount = 0;
 let e2eSavedConnections: SavedConnection[] = [{ ...e2eSavedConnection }];
 
@@ -90,6 +91,7 @@ export function __e2eResetMocks() {
   lastAiTerminalExec = null;
   lastAiLease = null;
   lastKillProcess = null;
+  lastTerminalCommand = null;
   createSshCallCount = 0;
   e2eSavedConnections = [{ ...e2eSavedConnection }];
 }
@@ -177,6 +179,14 @@ export function __e2eLastAiLease() {
 
 export function __e2eLastKillProcess() {
   return lastKillProcess;
+}
+
+export function __e2eLastTerminalCommand() {
+  return lastTerminalCommand;
+}
+
+export function __e2eSeedRemotePath(path: string) {
+  createdRemotePaths.push(path);
 }
 
 async function sidecarHttpProxy(args: InvokeArgs): Promise<{
@@ -415,7 +425,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   browser_bookmark_remove: () => null,
   terminal_input: () => null,
   resize_terminal: () => null,
-  insert_terminal_command: () => null,
+  insert_terminal_command: (args) => {
+    lastTerminalCommand = (args as { request?: Record<string, unknown> }).request ?? null;
+    return null;
+  },
   insert_local_paths_command: () => null,
   get_session_cwd: () => "/home/e2e",
   "plugin:dialog|save": (args) => {
@@ -553,7 +566,6 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     const request = (args as { request?: { path?: string } }).request;
     const path = request?.path === "/" ? "/" : request?.path ?? "/home/e2e";
     const createdEntries = createdRemotePaths
-      .filter((filePath) => filePath.slice(0, filePath.lastIndexOf("/")) === path)
       .map((filePath) => ({
         name: filePath.split("/").pop() ?? filePath,
         path: filePath,

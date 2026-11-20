@@ -149,14 +149,16 @@ export function previewKindFromExtension(
   return "unsupported";
 }
 
-/** Whether a path should open the preview panel (matches Send-to-chat whitelist spirit). */
+/** Whether a path may be sent to preview. Unknown small files are candidates;
+ * the backend checks their bytes before deciding whether they are text or binary. */
 export function canPreviewPath(
   path: string,
   totalSize?: number | null,
 ): boolean {
   const size =
     totalSize != null && Number.isFinite(totalSize) ? Number(totalSize) : 0;
-  return previewKindFromExtension(extensionOfPath(path), size) !== "unsupported";
+  return previewKindFromExtension(extensionOfPath(path), size) !== "unsupported" ||
+    size <= MAX_TEXT_PREVIEW_BYTES;
 }
 
 export function isReadonlyBinaryPreviewKind(kind: string): boolean {

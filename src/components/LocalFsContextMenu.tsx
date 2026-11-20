@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Pencil,
   RefreshCw,
+  SquareTerminal,
   Scissors,
   Send,
   Trash2,
@@ -62,6 +63,7 @@ type EntryMenuProps = {
   onSendToRemote?: () => void;
   onPreview?: () => void;
   onOpenEditor?: () => void;
+  onRunInTerminal?: () => void;
   onCompress?: () => void;
   onExtract?: () => void;
   onRename: () => void;
@@ -289,6 +291,11 @@ export function LocalFsContextMenu(props: LocalFsContextMenuProps) {
         ) : null}
         {pathKind === "file" && props.onOpenEditor ? (
           <ContextMenuItem icon={Pencil} onClick={() => run(props.onOpenEditor!)}>{t("tools:editor.openWith")}</ContextMenuItem>
+        ) : null}
+        {pathKind === "file" && props.onRunInTerminal ? (
+          <ContextMenuItem icon={SquareTerminal} onClick={() => run(props.onRunInTerminal!)}>
+            {t("terminal:runInTerminal")}
+          </ContextMenuItem>
         ) : null}
         {props.onCompress ? <ContextMenuItem icon={Archive} onClick={() => run(props.onCompress!)}>{t("terminal:compress")}</ContextMenuItem> : null}
         {showExtract ? (

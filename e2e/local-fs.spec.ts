@@ -130,6 +130,24 @@ test.describe("Local FS panel", () => {
     await expect(page.getByRole("menuitem", { name: "Upload" })).toBeVisible({ timeout: 1_000 });
   });
 
+  test("runs a shell script from the current SSH session context menu", async ({ page }) => {
+    const api = await twE2e(page);
+    const openedDirectory = await api.getLastEnterDirectory();
+    const directory = String(openedDirectory?.remote_path ?? "/home/e2e");
+    const scriptPath = `${directory.replace(/\/$/, "")}/run me.sh`;
+    await api.seedRemotePath(scriptPath);
+    const panel = page.getByTestId("host-file-manager-panel");
+    await panel.getByRole("button", { name: "Refresh" }).click();
+    const script = panel.locator(`[data-path="${scriptPath}"]`);
+    await expect(script).toBeVisible();
+    await script.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Run in Terminal" }).click();
+    await expect.poll(() => api.getLastTerminalCommand()).toEqual({
+      session_id: "e2e-ssh-session-1",
+      command: `cd -- '${directory}' && bash -- './run me.sh'\r`,
+    });
+  });
+
   test("file manager has path-bar search and chrome", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel).toBeVisible();

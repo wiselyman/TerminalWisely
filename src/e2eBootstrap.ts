@@ -8,6 +8,8 @@ import {
   __e2eLastCreateSshRequest,
   __e2eLastEnterDirectory,
   __e2eLastKillProcess,
+  __e2eLastTerminalCommand,
+  __e2eSeedRemotePath,
   __e2eLastPreviewOpen,
   __e2eLastPreviewSave,
   __e2eLastLocalBytesWrite,
@@ -53,6 +55,8 @@ export interface TwE2eApi {
   setHostMachineName: (hostname: string) => void;
   openLocalFsPanel: () => void;
   openLocalDesktopFiles: () => void;
+  seedRemotePath: (path: string) => void;
+  getLastTerminalCommand: () => Record<string, unknown> | null;
   openBrowserPanel: () => void;
   openAiChat: () => Promise<void>;
   openAiChatForSsh: () => Promise<void>;
@@ -467,6 +471,8 @@ export function runE2eBootstrap(): void {
     setHostMachineName,
     openLocalFsPanel,
     openLocalDesktopFiles,
+    seedRemotePath: __e2eSeedRemotePath,
+    getLastTerminalCommand: __e2eLastTerminalCommand,
     openBrowserPanel,
     openAiChat,
     openAiChatForSsh,

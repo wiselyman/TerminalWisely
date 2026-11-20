@@ -6,6 +6,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getAppTheme, subscribeAppTheme, terminalThemeFor } from "../../lib/appTheme";
 import { isTauriRuntime } from "../../lib/isTauri";
+import { registerLocalTerminalCommandSink } from "../../lib/localTerminalCommandBridge";
 import { getDesktopTerminalHost, subscribeDesktopEmbedHosts } from "../../lib/desktopEmbedHost";
 import { useDesktopStore } from "../../stores/desktopStore";
 import {
@@ -54,6 +55,7 @@ export function LocalTerminal({ active = true }: { active?: boolean }) {
     let disposed = false;
     let terminalId: string | null = null;
     let unlistenOutput: UnlistenFn | undefined;
+    let unregisterCommandSink: (() => void) | undefined;
     const terminal = new Terminal({
       allowProposedApi: true,
       cursorBlink: true,
@@ -128,6 +130,13 @@ export function LocalTerminal({ active = true }: { active?: boolean }) {
             void invoke("local_terminal_stop", { id: terminalId });
             return;
           }
+          unregisterCommandSink = registerLocalTerminalCommandSink((data) => {
+            if (terminalId) {
+              void invoke("local_terminal_input", { id: terminalId, data }).catch((error) => {
+                terminal.write(`\r\n${String(error)}\r\n`);
+              });
+            }
+          });
           terminal.onData((data) => {
             if (terminalId) {
               void invoke("local_terminal_input", { id: terminalId, data }).catch((error) => {
@@ -149,6 +158,7 @@ export function LocalTerminal({ active = true }: { active?: boolean }) {
       unsubscribeFontSize();
       unsubscribeTheme();
       unlistenOutput?.();
+      unregisterCommandSink?.();
       if (terminalId) void invoke("local_terminal_stop", { id: terminalId });
       terminal.dispose();
     };

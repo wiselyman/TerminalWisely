@@ -236,7 +236,7 @@ impl PreviewManager {
             return Err(AppError::code("ERR_PREVIEW_IS_DIRECTORY"));
         }
 
-        let preview_kind = resolve_preview_kind(&extension, total_size);
+        let preview_kind = resolve_preview_kind(&extension);
         if is_text_preview_kind(&preview_kind) {
             let fetch =
                 fetch_remote_text_preview(&ssh.handle(), &resolved, sudo_password).await?;
@@ -265,7 +265,35 @@ impl PreviewManager {
         }
 
         if preview_kind == "unsupported" {
-            return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
+            if total_size > MAX_TEXT_PREVIEW_BYTES {
+                return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
+            }
+            let fetch = fetch_remote_text_preview(&ssh.handle(), &resolved, sudo_password).await?;
+            if !is_likely_text_bytes(fetch.text.as_bytes()) {
+                return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
+            }
+            self.entries.lock().await.insert(
+                handle_id.clone(),
+                PreviewEntry {
+                    session_id: session_id.clone(),
+                    source_path: resolved.clone(),
+                    local_path: path_buf.clone(),
+                    kind: "text".to_string(),
+                    uses_sudo: fetch.uses_sudo,
+                },
+            );
+            return Ok(text_preview_result(
+                handle_id,
+                "text".to_string(),
+                session_id,
+                resolved,
+                filename,
+                extension,
+                fetch.size.max(fetch.text.len() as u64),
+                fetch.truncated,
+                fetch.text,
+                fetch.uses_sudo,
+            ));
         }
 
         if !is_binary_preview_kind(&preview_kind) {
@@ -352,16 +380,22 @@ fn classify_preview_kind(extension: &str) -> String {
     }
 }
 
-fn resolve_preview_kind(extension: &str, total_size: u64) -> String {
+fn resolve_preview_kind(extension: &str) -> String {
     let kind = classify_preview_kind(extension);
     if kind != "unsupported" {
         return kind;
     }
-    // Extensionless only (README, Dockerfile, /etc/hosts) — never guess `.img` etc. as text.
-    if extension.is_empty() && total_size <= MAX_TEXT_PREVIEW_BYTES {
-        return "text".to_string();
-    }
+    // Unknown types are bounded content candidates; preview_open validates bytes.
     "unsupported".to_string()
+}
+
+fn is_likely_text_bytes(bytes: &[u8]) -> bool {
+    if std::str::from_utf8(bytes).is_err() {
+        return false;
+    }
+    !bytes.iter().any(|byte| {
+        matches!(*byte, 0x00..=0x08 | 0x0b | 0x0e..=0x1f | 0x7f)
+    })
 }
 
 fn is_text_preview_kind(kind: &str) -> bool {
@@ -531,6 +565,14 @@ mod preview_fetch_tests {
         let out = "F\t10\t0\nhello\n";
         let parsed = parse_remote_text_preview(out, false).unwrap();
         assert!(parsed.uses_sudo);
+    }
+
+    #[test]
+    fn unknown_extension_content_is_classified_without_name_rules() {
+        assert!(is_likely_text_bytes(b"FROM alpine:latest\nRUN echo hello\n"));
+        assert!(is_likely_text_bytes(b"cmake_minimum_required(VERSION 3.20)\n"));
+        assert!(!is_likely_text_bytes(b"\x00\x01\x02\xff"));
+        assert!(!is_likely_text_bytes(b"header\x00payload"));
     }
 }
 

@@ -39,6 +39,7 @@ import { WorkspacePanelBackdrop } from "./WorkspacePanelBackdrop";
 import { WorkspacePanelHeadActions } from "./WorkspacePanelHeadActions";
 import { useWorkspacePanelEnter } from "../lib/useWorkspacePanelEnter";
 import { openAppSettings } from "../stores/downloadSettingsStore";
+import { buildRunShellScriptCommand, isShellScriptPath } from "../lib/runShellScript";
 
 type Props = {
   sessionId: string;
@@ -576,6 +577,15 @@ export function LocalFsPanel({
       onOpenEditor:
         pathKind === "file" && desktopTarget
           ? () => { void openEditorWisely(desktopTarget, entry.path); launchDesktopApp("editorwisely"); }
+          : undefined,
+      onRunInTerminal:
+        pathKind === "file" && isShellScriptPath(entry.path)
+          ? () => {
+              launchDesktopApp("terminal");
+              void invoke("insert_terminal_command", {
+                request: { session_id: sessionId, command: buildRunShellScriptCommand(entry.path) },
+              }).catch((error) => useToastStore.getState().pushToast(formatAppError(error), false));
+            }
           : undefined,
       onCompress: () => {
         handleCompress(entry.path);

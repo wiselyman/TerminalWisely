@@ -11,6 +11,8 @@ import { LocalFsContentsView } from "../LocalFsContentsView";
 import { LocalFsPathBreadcrumb } from "../LocalFsPathBreadcrumb";
 import { PathInput } from "../PathInput";
 import { LocalFsContextMenu, type LocalFsContextMenuProps } from "../LocalFsContextMenu";
+import { buildRunShellScriptCommand, isShellScriptPath } from "../../lib/runShellScript";
+import { queueLocalTerminalCommand } from "../../lib/localTerminalCommandBridge";
 import {
   copyLocalPath,
   createLocalPath,
@@ -249,6 +251,7 @@ export function LocalDesktopFileManager() {
     onDuplicate: () => { void duplicatePath(menu.entry); },
     onPreview: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
     onOpenEditor: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
+    onRunInTerminal: menu.entry.kind === "file" && isShellScriptPath(menu.entry.path) ? () => { launchApp("terminal"); queueLocalTerminalCommand(buildRunShellScriptCommand(menu.entry.path)); } : undefined,
     onRename: () => runLocalMenuAction("rename"),
     onDelete: () => { void deletePaths(menuPaths(menu.entry)); },
     onMove: () => runLocalMenuAction("move"),
