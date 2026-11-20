@@ -4,7 +4,9 @@ export type TextFormat = { bom: boolean; newline: "\n" | "\r\n" };
 
 export function decodeEditorText(bytes: Uint8Array): { text: string; format: TextFormat } {
   if (bytes.byteLength > EDITOR_WISELY_MAX_BYTES) throw new Error("file_too_large");
-  if (bytes.includes(0)) throw new Error("binary_file");
+  if (bytes.some((byte) => byte === 0 || (byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0c && byte !== 0x0d) || byte === 0x7f)) {
+    throw new Error("binary_file");
+  }
   const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
   const payload = bom ? bytes.subarray(3) : bytes;
   let text: string;

@@ -10,6 +10,7 @@ describe("EditorWisely text formats", () => {
   });
   it("rejects binary, invalid UTF-8, and oversized content", () => {
     expect(() => decodeEditorText(new Uint8Array([97, 0, 98]))).toThrow("binary_file");
+    expect(() => decodeEditorText(new Uint8Array([97, 1, 98]))).toThrow("binary_file");
     expect(() => decodeEditorText(new Uint8Array([0xff]))).toThrow("unsupported_encoding");
     expect(() => decodeEditorText(new Uint8Array(2 * 1024 * 1024 + 1))).toThrow("file_too_large");
   });
@@ -27,5 +28,13 @@ describe("EditorWisely text formats", () => {
     expect(editorLanguageForPath("/tmp/config.toml")).toBe("toml");
     expect(editorLanguageForPath("/tmp/Makefile")).toBe("makefile");
     expect(editorLanguageForPath("notes.unknown")).toBe("text");
+    expect(editorLanguageForPath("Dockerfile.dev")).toBe("dockerfile");
+    expect(editorLanguageForPath("FindOpenCV.cmake")).toBe("text");
+  });
+  it("opens Docker and CMake content as plain text regardless of filename", () => {
+    expect(decodeEditorText(new TextEncoder().encode("FROM alpine:latest\nRUN echo ready\n")).text)
+      .toBe("FROM alpine:latest\nRUN echo ready\n");
+    expect(decodeEditorText(new TextEncoder().encode("cmake_minimum_required(VERSION 3.20)\n")).text)
+      .toBe("cmake_minimum_required(VERSION 3.20)\n");
   });
 });

@@ -268,10 +268,14 @@ impl PreviewManager {
             if total_size > MAX_TEXT_PREVIEW_BYTES {
                 return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
             }
-            let fetch = fetch_remote_text_preview(&ssh.handle(), &resolved, sudo_password).await?;
-            if !is_likely_text_bytes(fetch.text.as_bytes()) {
-                return Err(AppError::code("ERR_PREVIEW_UNSUPPORTED"));
-            }
+            let (bytes, uses_sudo) = read_unknown_preview_bytes(
+                &ssh.handle(),
+                &resolved,
+                sudo_password,
+            )
+            .await?;
+            let text = decode_unknown_text_bytes(&bytes)
+                .ok_or_else(|| AppError::code("ERR_PREVIEW_UNSUPPORTED"))?;
             self.entries.lock().await.insert(
                 handle_id.clone(),
                 PreviewEntry {
@@ -279,7 +283,7 @@ impl PreviewManager {
                     source_path: resolved.clone(),
                     local_path: path_buf.clone(),
                     kind: "text".to_string(),
-                    uses_sudo: fetch.uses_sudo,
+                    uses_sudo,
                 },
             );
             return Ok(text_preview_result(
@@ -289,10 +293,10 @@ impl PreviewManager {
                 resolved,
                 filename,
                 extension,
-                fetch.size.max(fetch.text.len() as u64),
-                fetch.truncated,
-                fetch.text,
-                fetch.uses_sudo,
+                total_size.max(bytes.len() as u64),
+                total_size > MAX_TEXT_PREVIEW_BYTES,
+                text,
+                uses_sudo,
             ));
         }
 
@@ -396,6 +400,31 @@ fn is_likely_text_bytes(bytes: &[u8]) -> bool {
     !bytes.iter().any(|byte| {
         matches!(*byte, 0x00..=0x08 | 0x0b | 0x0e..=0x1f | 0x7f)
     })
+}
+
+fn decode_unknown_text_bytes(bytes: &[u8]) -> Option<String> {
+    is_likely_text_bytes(bytes).then(|| std::str::from_utf8(bytes).ok().map(str::to_string)).flatten()
+}
+
+async fn read_unknown_preview_bytes(
+    handle: &Arc<Mutex<russh::client::Handle<ClientHandler>>>,
+    path: &str,
+    sudo_password: Option<&str>,
+) -> AppResult<(Vec<u8>, bool)> {
+    match sftp::read_remote_file_bytes(handle, path, MAX_TEXT_PREVIEW_BYTES as usize).await {
+        Ok((bytes, _)) => Ok((bytes, false)),
+        Err(err) if preview_sudo::is_permission_denied(&err) => Ok((
+            preview_sudo::read_remote_bytes_sudo(
+                handle,
+                path,
+                sudo_password,
+                MAX_TEXT_PREVIEW_BYTES as usize,
+            )
+            .await?,
+            true,
+        )),
+        Err(err) => Err(err),
+    }
 }
 
 fn is_text_preview_kind(kind: &str) -> bool {
@@ -573,6 +602,12 @@ mod preview_fetch_tests {
         assert!(is_likely_text_bytes(b"cmake_minimum_required(VERSION 3.20)\n"));
         assert!(!is_likely_text_bytes(b"\x00\x01\x02\xff"));
         assert!(!is_likely_text_bytes(b"header\x00payload"));
+    }
+
+    #[test]
+    fn unknown_preview_keeps_raw_utf8_validation_before_string_conversion() {
+        assert_eq!(decode_unknown_text_bytes(b"cmake_minimum_required(VERSION 3.20)\n").as_deref(), Some("cmake_minimum_required(VERSION 3.20)\n"));
+        assert!(decode_unknown_text_bytes(b"looks printable\xff").is_none());
     }
 }
 
