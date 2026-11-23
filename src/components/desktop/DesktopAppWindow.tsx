@@ -51,6 +51,8 @@ type Props = {
   headerLeadingActions?: ReactNode;
   /** Hide title/subtitle text; aria-label still uses `title`. */
   hideTitleText?: boolean;
+  /** Show the app name in a normal floating window titlebar. */
+  showWindowTitle?: boolean;
   panelTestId: string;
   floatTestId: string;
   minimizeTestId: string;
@@ -80,6 +82,7 @@ export function DesktopAppWindow({
   leading,
   headerActions,
   headerLeadingActions,
+  showWindowTitle = false,
   panelTestId,
   floatTestId,
   minimizeTestId,
@@ -143,7 +146,7 @@ export function DesktopAppWindow({
     <header
       className={`preview-panel-head desktop-app-window-head is-compact${
         maximized ? " is-maximized" : ""
-      }${centerTitle ? " has-centered-title" : ""}${headerTabs ? " has-header-tabs" : ""}`}
+      }${centerTitle ? " has-centered-title" : ""}${headerTabs ? " has-header-tabs" : ""}${showWindowTitle ? " has-visible-title" : ""}`}
       data-tauri-drag-region={maximized ? "" : undefined}
       onPointerDown={onDragStart}
     >
@@ -154,6 +157,11 @@ export function DesktopAppWindow({
           aria-hidden
         >
           {mark}
+        </span>
+      ) : null}
+      {showWindowTitle && !maximized ? (
+        <span className="desktop-app-window-title" data-testid="desktop-app-window-title">
+          {title}
         </span>
       ) : null}
       {headerLeadingActions}

@@ -1168,3 +1168,116 @@ body.preview-float-resizing {
   border-color: var(--tw-border);
   background: var(--tw-surface);
 }
+
+/* Files surfaces share a calmer Finder-like hierarchy in local and SSH views. */
+.desktop-app-window-head.has-visible-title {
+  min-height: 36px;
+  height: 36px;
+  padding-inline: 10px;
+  background: var(--tw-surface-2);
+}
+
+.desktop-app-window-head.has-visible-title .desktop-app-window-title {
+  color: var(--tw-fg);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.local-fs-toolbar,
+.local-desktop-files-toolbar {
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--tw-surface-2);
+}
+
+.local-fs-tool-group {
+  gap: 3px;
+  padding: 3px;
+  border-color: color-mix(in srgb, var(--tw-border) 78%, transparent);
+  border-radius: 10px;
+  background: var(--tw-surface);
+}
+
+.local-fs-path-breadcrumb {
+  min-height: 36px;
+  padding-inline: 10px;
+  border-radius: 10px;
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--tw-shadow) 7%, transparent);
+}
+
+.local-fs-split-tree,
+.local-fs-split > .local-fs-split-tree {
+  background: color-mix(in srgb, var(--tw-surface-2) 52%, var(--tw-bg));
+}
+
+.local-fs-tree-root {
+  min-height: 34px;
+  background: color-mix(in srgb, var(--tw-surface-2) 70%, var(--tw-bg));
+}
+
+.local-fs-tree-root.is-selected {
+  background: color-mix(in srgb, var(--tw-accent) 12%, var(--tw-surface));
+}
+
+.local-fs-tree-row {
+  min-height: 29px;
+  margin: 1px 5px;
+  border-radius: 6px;
+}
+
+.local-fs-tree-row:hover {
+  background: color-mix(in srgb, var(--tw-accent) 7%, var(--tw-surface));
+}
+
+.local-fs-tree-row.is-selected {
+  background: color-mix(in srgb, var(--tw-accent) 13%, var(--tw-surface));
+  box-shadow: inset 2px 0 0 var(--tw-accent);
+}
+
+.local-fs-list-header {
+  min-height: 34px;
+  padding-block: 8px;
+  background: color-mix(in srgb, var(--tw-surface-2) 72%, var(--tw-bg));
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+
+.local-fs-row {
+  min-height: 36px;
+  padding-block: 7px;
+  border-radius: 7px;
+}
+
+.local-fs-row:hover {
+  background: color-mix(in srgb, var(--tw-accent) 6%, var(--tw-surface));
+}
+
+.local-fs-row.is-selected {
+  background: color-mix(in srgb, var(--tw-accent) 13%, var(--tw-surface));
+  box-shadow: inset 2px 0 0 var(--tw-accent);
+}
+
+.local-fs-grid {
+  gap: 10px;
+  padding: 14px;
+}
+
+.local-fs-grid-item {
+  min-height: 104px;
+  padding: 12px 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.local-fs-grid-item:hover {
+  border-color: var(--tw-border);
+  background: var(--tw-surface);
+}
+
+.local-fs-grid-item.is-selected {
+  border-color: color-mix(in srgb, var(--tw-accent) 36%, var(--tw-border));
+  background: color-mix(in srgb, var(--tw-accent) 11%, var(--tw-surface));
+  box-shadow: none;
+}

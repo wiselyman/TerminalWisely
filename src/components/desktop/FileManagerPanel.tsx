@@ -24,6 +24,7 @@ export function FileManagerPanel({ target, sessionId, sessionTitle }: Props) {
       maximizeTestId="host-file-manager-maximize"
       closeTestId="host-file-manager-close"
       bodyClassName="local-fs-float-body"
+      showWindowTitle
     >
       {target.kind === "local" ? <LocalDesktopFileManager /> : sessionId ? (
         <LocalFsPanel

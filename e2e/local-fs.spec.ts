@@ -56,7 +56,9 @@ test.describe("Local FS panel", () => {
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByTestId("host-file-manager-panel")).toBeVisible();
+    const panel = page.getByTestId("host-file-manager-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(".desktop-app-window-title")).toHaveText("Files");
     await expect(page.getByTestId("host-file-manager-minimize")).toBeVisible();
     await expect(page.getByTestId("host-file-manager-close")).toBeVisible();
     await expect(page.getByTestId("local-fs-split")).toBeVisible();
