@@ -64,6 +64,40 @@ test.describe("Local FS panel", () => {
     await expect(page.getByTestId("local-fs-split")).toBeVisible();
   });
 
+  test("local Files can be dragged into the Dock area while the Dock stays clickable", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const api = await twE2e(page);
+    await api.openHome();
+    await api.openLocalDesktopFiles();
+
+    const app = page.getByTestId("host-file-manager-panel");
+    const float = page.getByTestId("host-file-manager-float");
+    const title = app.getByTestId("desktop-app-window-title");
+    const dock = page.getByTestId("host-desktop-dock");
+    const dockApp = page.getByTestId("dock-app-ai-local");
+    const before = await float.boundingBox();
+    const titleBox = await title.boundingBox();
+    const dockBox = await dock.boundingBox();
+    expect(before && titleBox && dockBox).toBeTruthy();
+
+    await page.mouse.move(titleBox!.x + titleBox!.width / 2, titleBox!.y + titleBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(titleBox!.x + titleBox!.width / 2, titleBox!.y + titleBox!.height / 2 + 700, { steps: 8 });
+    await page.mouse.up();
+
+    const moved = await float.boundingBox();
+    expect(moved).toBeTruthy();
+    expect(moved!.y + moved!.height).toBeGreaterThan(dockBox!.y);
+    const dockHit = await dockApp.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)
+        ?.closest(".host-desktop-dock") != null;
+    });
+    expect(dockHit).toBe(true);
+    await dockApp.click();
+    await expect(dockApp).toHaveAttribute("data-state", "open");
+  });
+
   test("Linux file metadata stays in list view and icon view shows filenames only", async ({ page }) => {
     const panel = page.getByTestId("host-file-manager-panel");
     await expect(panel.getByText("Permissions")).toBeVisible();
