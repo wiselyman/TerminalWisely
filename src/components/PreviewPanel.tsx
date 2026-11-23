@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { formatAppError } from "../lib/formatAppError";
@@ -21,6 +22,7 @@ import { NativePdfPreview } from "./preview/NativePdfPreview";
 import { OfvReadonlyPreview } from "./preview/OfvReadonlyPreview";
 import { UnsupportedPreview } from "./preview/UnsupportedPreview";
 import { isReadonlyBinaryPreviewKind } from "../lib/fileType";
+import type { MarkdownLinkTarget } from "../lib/markdownLink";
 import {
   markdownModeFromViewMode,
   viewModeForMarkdownToggle,
@@ -462,10 +464,6 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
               </button>
               </div>
             </>
-          ) : data?.kind === "markdown" ? (
-            <span className="preview-wysiwyg-search-hint">
-              {t("wysiwygSearchHint")}
-            </span>
           ) : (
             <div className="preview-panel-head-spacer" aria-hidden="true" />
           )
@@ -553,6 +551,13 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             searchOptions={searchOptions}
             editable={canEditMarkdown}
             onChange={setEditedContent}
+            onLinkClick={(target: Exclude<MarkdownLinkTarget, { kind: "fragment" }>) => {
+              if (target.kind === "file") {
+                void usePreviewStore.getState().openPreview(activeTab.sessionId, target.path);
+              } else {
+                void openUrl(target.href).catch((err) => pushToast(formatAppError(err), false));
+              }
+            }}
           />
         ) : null}
         {!loading && !error && data?.kind === "html" ? (

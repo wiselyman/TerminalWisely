@@ -37,7 +37,6 @@
   "formatUndo": "Undo",
   "formatRedo": "Redo",
   "formatInsertImage": "Insert image",
-  "wysiwygSearchHint": "Switch to Source for advanced search",
   "searchPlaceholder": "Search…",
   "searchRegexPlaceholder": "Regex…",
   "searchAria": "Search file contents",

@@ -659,7 +659,9 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
       truncated: false,
       editable: true,
       text_content: isMd
-        ? previewMarkdownByPath.get(path) ?? "# E2E Markdown\n\nUNIQUE_WYSIWYG_MARKER_42\n"
+        ? previewMarkdownByPath.get(path) ?? (path.endsWith("/links.md")
+          ? "# Link test\n\n[Related document](related.md)\n\n## Details\n\n[Jump to details](#details)\n"
+          : "# E2E Markdown\n\nUNIQUE_WYSIWYG_MARKER_42\n")
         : "e2e text content\n",
       local_cache_path: null,
       uses_sudo: false,

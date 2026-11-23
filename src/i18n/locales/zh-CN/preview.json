@@ -37,7 +37,6 @@
   "formatUndo": "撤销",
   "formatRedo": "重做",
   "formatInsertImage": "插入图片",
-  "wysiwygSearchHint": "高级搜索请切换到源码模式",
   "searchPlaceholder": "搜索…",
   "searchRegexPlaceholder": "正则…",
   "searchAria": "搜索文件内容",

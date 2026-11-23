@@ -24,6 +24,11 @@ import i18n from "../../i18n";
 import { createLocalPath, writeLocalBytes } from "../../lib/localFsApi";
 import { listLocalDirectory, parentLocalPath } from "../../lib/localFsApi";
 import type { ListLocalDirectoryResult } from "../../types";
+import {
+  markdownFragmentHeadingIndex,
+  resolveMarkdownLink,
+  type MarkdownLinkTarget,
+} from "../../lib/markdownLink";
 import { MarkWiselyCompatibilityNode } from "./MarkWiselyCompatibilityNode";
 import { MarkWiselyFormatContextMenu, type MarkWiselyFormatCommand } from "./MarkWiselyFormatContextMenu";
 import {
@@ -56,6 +61,7 @@ export interface MarkdownWysiwygEditorProps {
     icon: string;
     onClick: () => void;
   }>;
+  onLinkClick?: (target: Exclude<MarkdownLinkTarget, { kind: "fragment" }>) => void;
 }
 
 /** Self-hosted assets copied to public/vditor by vite.vditor.ts */
@@ -128,6 +134,7 @@ export function MarkdownWysiwygEditor({
   spellcheck = false,
   onChange,
   toolbarActions,
+  onLinkClick,
 }: MarkdownWysiwygEditorProps) {
   const { t } = useTranslation("preview");
   const roundTripModel = preserveCompatibility ? createRoundTripDocument(text) : null;
@@ -142,6 +149,7 @@ export function MarkdownWysiwygEditor({
   const onChangeRef = useRef(onChange);
   const publishChangeRef = useRef<(value: string) => void>(() => undefined);
   const toolbarActionsRef = useRef(toolbarActions);
+  const onLinkClickRef = useRef(onLinkClick);
   const typewriterModeRef = useRef(typewriterMode);
   const spellcheckRef = useRef(spellcheck);
   const editorGenerationRef = useRef(0);
@@ -151,6 +159,7 @@ export function MarkdownWysiwygEditor({
   textRef.current = text;
   onChangeRef.current = onChange;
   toolbarActionsRef.current = toolbarActions;
+  onLinkClickRef.current = onLinkClick;
   typewriterModeRef.current = typewriterMode;
   spellcheckRef.current = spellcheck;
 
@@ -326,6 +335,22 @@ export function MarkdownWysiwygEditor({
         value: projectionRef.current.projection?.source ?? textRef.current,
         cache: { enable: false },
         toolbarConfig: { pin: !hideToolbar, hide: hideToolbar },
+        link: onLinkClick ? {
+          isOpen: false,
+          click: (marker) => {
+            const target = resolveMarkdownLink(filePath, marker.textContent ?? "");
+            if (!target) return;
+            if (target.kind === "fragment") {
+              const headingIndex = markdownFragmentHeadingIndex(textRef.current, target.fragment);
+              const headings = el.querySelectorAll<HTMLElement>(
+                ".vditor-ir .vditor-reset h1, .vditor-ir .vditor-reset h2, .vditor-ir .vditor-reset h3, .vditor-ir .vditor-reset h4, .vditor-ir .vditor-reset h5, .vditor-ir .vditor-reset h6",
+              );
+              headings.item(headingIndex)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              return;
+            }
+            onLinkClickRef.current?.(target);
+          },
+        } : undefined,
         preview: {
           math: { engine: "KaTeX", inlineDigit: true },
           markdown: {

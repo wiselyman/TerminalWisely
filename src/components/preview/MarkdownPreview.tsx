@@ -5,6 +5,7 @@ import {
 } from "../../lib/previewMarkdownMode";
 import { EditableTextPreview } from "./EditableTextPreview";
 import { MarkdownWysiwygEditor } from "./MarkdownWysiwygEditor";
+import type { MarkdownLinkTarget } from "../../lib/markdownLink";
 
 interface MarkdownPreviewProps {
   text: string;
@@ -18,6 +19,7 @@ interface MarkdownPreviewProps {
   sessionId?: string;
   filePath?: string;
   onChange?: (value: string) => void;
+  onLinkClick?: (target: Exclude<MarkdownLinkTarget, { kind: "fragment" }>) => void;
 }
 
 export function MarkdownPreview({
@@ -32,6 +34,7 @@ export function MarkdownPreview({
   sessionId,
   filePath,
   onChange,
+  onLinkClick,
 }: MarkdownPreviewProps) {
   const mdMode = markdownModeFromViewMode(mode);
 
@@ -66,6 +69,7 @@ export function MarkdownPreview({
       text={text}
       editable={editable}
       onChange={onChange}
+      onLinkClick={onLinkClick}
     />
   );
 }

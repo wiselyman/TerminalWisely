@@ -712,15 +712,6 @@ body.preview-float-resizing {
   opacity: 0.6;
 }
 
-.preview-wysiwyg-search-hint {
-  flex: 1;
-  min-width: 0;
-  padding: 0 10px;
-  font-size: 0.8rem;
-  color: var(--tw-fg-muted);
-  align-self: center;
-}
-
 .browser-panel {
   display: flex;
   flex-direction: column;
