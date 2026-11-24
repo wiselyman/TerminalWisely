@@ -47,10 +47,6 @@
   box-shadow: none;
 }
 
-.preview-float-window.maximized .preview-panel-title {
-  max-width: min(420px, 40vw);
-}
-
 .preview-dock {
   position: fixed;
   left: 0;
@@ -79,6 +75,17 @@
   min-width: 0;
   overflow-x: auto;
 }
+
+.preview-panel-title-tabs {
+  flex: 0 1 min(42vw, 560px);
+  width: min(42vw, 560px);
+  max-width: min(42vw, 560px);
+  min-width: 0;
+  padding: 0 2px;
+  scrollbar-width: none;
+}
+
+.preview-panel-title-tabs::-webkit-scrollbar { display: none; }
 
 .preview-dock-tab {
   display: inline-flex;
@@ -175,15 +182,7 @@
 }
 
 .preview-float-resizer::after {
-  content: "";
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid var(--tw-accent);
-  border-bottom: 2px solid var(--tw-accent);
-  opacity: 0.85;
+  display: none;
 }
 
 body.preview-float-resizing {
@@ -203,17 +202,6 @@ body.preview-float-resizing {
   border-bottom: 1px solid var(--tw-surface-2);
   background: var(--tw-surface);
   min-width: 0;
-}
-
-.preview-panel-title {
-  flex: 0 1 auto;
-  max-width: min(220px, 24vw);
-  font-size: 0.88rem;
-  line-height: 1.25;
-  color: var(--tw-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .preview-panel-dirty {
@@ -385,6 +373,41 @@ body.preview-float-resizing {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.preview-markdown-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-markdown-tree {
+  display: flex;
+  flex: 0 0 248px;
+  min-width: 210px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-markdown-tree > .markwisely-sidebar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preview-markdown-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-markdown-main > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .preview-editor-wrap {
@@ -1271,4 +1294,41 @@ body.preview-float-resizing {
   border-color: color-mix(in srgb, var(--tw-accent) 36%, var(--tw-border));
   background: color-mix(in srgb, var(--tw-accent) 11%, var(--tw-surface));
   box-shadow: none;
+}
+
+/* The preview titlebar shares its remaining space between document tabs. */
+.preview-panel-head { min-width: 0; }
+:root:has(.app-shell.platform-macos:not(.window-fullscreen)) .preview-float-window.maximized .preview-panel-head { padding-left: 88px; }
+.preview-panel-title-tabs {
+  flex: 1 1 0;
+  width: auto;
+  max-width: none;
+  gap: 2px;
+}
+.preview-panel-title-tabs .preview-dock-tab {
+  flex: 1 1 0;
+  min-width: 48px;
+  max-width: 240px;
+  border-color: transparent;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+}
+.preview-panel-title-tabs .preview-dock-tab.active {
+  background: var(--tw-surface-2);
+  border-color: var(--tw-border);
+}
+.preview-panel-title-tabs .preview-dock-tab:hover { background: var(--tw-surface-2); }
+.preview-panel-title-tabs .preview-dock-tab-main { flex: 1; overflow: hidden; }
+.preview-panel-title-tabs .preview-dock-tab-close { flex-shrink: 0; border-left: 0; }
+.preview-panel-head .preview-panel-head-spacer { display: none; }
+.preview-panel-head > .preview-toolbar-icon,
+.preview-panel-head > .preview-panel-toolbar-cluster,
+.preview-panel-head > .preview-panel-actions { flex-shrink: 0; }
+
+.preview-markdown-main .vditor-toolbar {
+  padding-inline: 10px !important;
+}
+.preview-markdown-main .vditor-ir .vditor-reset {
+  padding-inline: clamp(20px, 4vw, 64px) !important;
+  max-width: none;
 }

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.3] - 2026-11-18
+## [0.1.3] - 2026-11-24
 
 Restore the Home host directory with Local pinned first and saved SSH hosts shown in their current groups.
 
@@ -8,6 +8,9 @@ Restore the Home host directory with Local pinned first and saved SSH hosts show
 - Open a saved SSH host through the existing credential and session flow, then show its Desktop in the new session tab
 - Keep Home Terminal and local chat available from the directory; remove Home-only AI/Desktop titlebar shortcuts
 - Preserve the existing Hosts sidebar group layout and target-specific Desktop state
+- Open Markdown documents from local and SSH Files in an integrated MarkWisely workspace with titlebar document tabs, a Markdown file tree, and a document outline
+- Use available window space for Markdown content and its formatting toolbar; close the workspace from its window control without treating that action as a tab close
+- Simplify MarkWisely file navigation and search controls
 
 恢复 Home 主机目录，Local 固定置顶，已保存 SSH 主机沿用当前分组显示。
 
@@ -15,6 +18,9 @@ Restore the Home host directory with Local pinned first and saved SSH hosts show
 - 点击已保存 SSH 主机沿用原凭据和会话流程，并在新会话标签中显示 Desktop
 - Home 目录保留本机 Terminal 和聊天入口；移除 Home 目录专用的 AI/Desktop 标题栏快捷按钮
 - 保留 Hosts 侧栏分组布局和按目标隔离的 Desktop 状态
+- 从本机和 SSH Files 打开的 Markdown 使用集成的 MarkWisely 工作区，提供标题栏文档标签、Markdown 文件树和文档大纲
+- Markdown 正文与格式工具栏按窗口可用空间布局；窗口关闭按钮关闭整个工作区，不会误关为关闭文档标签
+- 简化 MarkWisely 文件导航与搜索控件
 
 ## [0.1.2] - 2026-11-18
 

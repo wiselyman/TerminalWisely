@@ -38,6 +38,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [folderReady, setFolderReady] = useState(false);
   const [name, setName] = useState("未命名.md");
   const [busy, setBusy] = useState(false);
+  const [openingDocument, setOpeningDocument] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [pandocFormats, setPandocFormats] = useState<string[]>([]);
@@ -182,24 +183,23 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     return () => { cancelled = true; };
   }, [activeTarget.kind, sessionId]);
 
-  const handleCloseRequest = useCallback(async () => {
+  const handleCloseRequest = async () => {
     const latest = flushPreviewEditor(flushId);
     const current = useMarkWiselyStore.getState().getDocument(targetKey);
     if (latest !== null && current) setEditorValue(targetKey, latest, current.documentId);
-    const documents = useMarkWiselyStore.getState().getDocuments(targetKey);
-    for (const document of documents) {
-      if (document.text === document.savedText) continue;
+    for (const item of useMarkWiselyStore.getState().getDocuments(targetKey)) {
+      if (item.text === item.savedText) continue;
       try {
-        await saveDocument(targetKey, document.documentId);
+        await saveDocument(targetKey, item.documentId);
       } catch (cause) {
-        setError(cause instanceof Error && cause.message ? cause.message : document.error ?? t("markwisely.saveFailed"));
+        setError(cause instanceof Error && cause.message ? cause.message : item.error ?? t("markwisely.saveFailed"));
         return false;
       }
     }
     await closeDocument(targetKey);
     setView("start");
     return true;
-  }, [closeDocument, flushId, saveDocument, setEditorValue, t, targetKey]);
+  };
 
   const activateTab = async (documentId: string) => {
     const current = useMarkWiselyStore.getState().getDocument(targetKey);
@@ -242,6 +242,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
 
   const openPath = async (path: string) => {
     setBusy(true);
+    setOpeningDocument(true);
     setError(null);
     try {
       await openDocument({ sessionId, target: activeTarget, hostKey: activeHostKey, path });
@@ -249,6 +250,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
+      setOpeningDocument(false);
       setBusy(false);
     }
   };
@@ -511,6 +513,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
     >
       {view === "edit" && document ? (
         <div className={`markwisely-editor-view editor-theme-${editorPreferences.theme}${editorPreferences.focusMode ? " is-focus-mode" : ""}${editorPreferences.typewriterMode ? " is-typewriter-mode" : ""}${editorPreferences.sidebarVisible ? " is-sidebar-visible" : ""}`} data-editor-theme={editorPreferences.theme} data-testid="markwisely-editor-view">
+          {openingDocument ? <div className="markwisely-opening-status" role="status" data-testid="markwisely-opening-status">{t("markwisely.opening")}</div> : null}
           {scopedEditorCss ? <style id="markwisely-custom-editor-css">{scopedEditorCss}</style> : null}
           {document.recoveryText !== null ? (
             <div className="markwisely-recovery-banner" role="alert" data-testid="markwisely-recovery-banner">

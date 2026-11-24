@@ -426,6 +426,7 @@
   "markwisely.parentFolder": "上级文件夹",
   "markwisely.quickOpen": "快速打开 Markdown 文件",
   "markwisely.quickOpenPlaceholder": "筛选文件…",
+  "markwisely.opening": "正在打开 Markdown…",
   "markwisely.outlineTitle": "文档大纲",
   "markwisely.outlineFilter": "筛选标题…",
   "markwisely.outlineEmpty": "没有匹配的标题。",

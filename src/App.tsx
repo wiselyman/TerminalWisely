@@ -167,6 +167,7 @@ function App() {
         useSidebarViewStore.getState().setView("hosts");
         useDesktopStore.getState().openDesktopTarget({ kind: "local" });
         useDesktopStore.getState().launchApp("markwisely");
+        useDesktopStore.getState().setAppMaximized("markwisely", true);
         try {
           await useMarkWiselyStore.getState().openDocument({
             target: { kind: "local" },

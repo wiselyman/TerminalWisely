@@ -444,6 +444,13 @@ test.describe("Host desktop mode", () => {
     });
     expect(narrowHeaderLayout).toEqual({ tabsInsideHeader: true, tabsBeforeActions: true });
     await expect(tabs.filter({ hasText: "first.md" })).toBeVisible();
+    await tabStrip.getByRole("button", { name: "Close guide.md" }).click();
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("first.md");
+    await panel.getByTestId("markwisely-maximize").click();
+    await expect(panel).toHaveAttribute("data-maximized", "true");
+    await page.getByTestId("desktop-maximized-app-controls").getByTestId("markwisely-close").click();
+    await expect(panel).toHaveCount(0);
   });
 
   test("MarkWisely browses, quick-opens, and searches Markdown within the selected host root", async ({ page }) => {
@@ -460,9 +467,9 @@ test.describe("Host desktop mode", () => {
     await clickMarkWiselyMenuControl(page, "markwisely-sidebar-toggle");
     const sidebar = panel.getByTestId("markwisely-sidebar");
     await expect(sidebar.getByTestId("markwisely-sidebar-file").filter({ hasText: "guide.md" })).toBeVisible();
-    await sidebar.getByTestId("markwisely-quick-open").fill("gmd");
+    await sidebar.getByTestId("markwisely-search").fill("gmd");
     await expect(sidebar.getByTestId("markwisely-sidebar-file").filter({ hasText: "guide.md" })).toBeVisible();
-    await sidebar.getByTestId("markwisely-content-search").fill("UNIQUE_WYSIWYG_MARKER_42");
+    await sidebar.getByTestId("markwisely-search").fill("UNIQUE_WYSIWYG_MARKER_42");
     await sidebar.getByTestId("markwisely-search-start").click();
     await expect(sidebar.getByTestId("markwisely-search-result").filter({ hasText: "guide.md" })).toBeVisible({ timeout: 30_000 });
     await expect(sidebar.getByTestId("markwisely-search-result").filter({ hasText: "UNIQUE_WYSIWYG_MARKER_42" })).toBeVisible();
@@ -473,7 +480,7 @@ test.describe("Host desktop mode", () => {
     const folderDialog = page.getByRole("dialog", { name: "Choose folder" });
     await folderDialog.getByTestId("markwisely-folder-entry").filter({ hasText: "logs" }).click();
     await folderDialog.getByRole("button", { name: "Use this folder" }).click();
-    await expect(sidebar.locator(".markwisely-sidebar-path")).toHaveText("/home/e2e/logs");
+    await expect(sidebar.locator(".markwisely-sidebar-path")).toHaveText("e2e/logs");
     await expect(sidebar.getByTestId("markwisely-sidebar-file").filter({ hasText: "guide.md" })).toHaveCount(0);
   });
 
@@ -489,7 +496,7 @@ test.describe("Host desktop mode", () => {
 
     const sidebar = page.getByTestId("markwisely-sidebar");
     await clickMarkWiselyMenuControl(page, "markwisely-sidebar-toggle");
-    await sidebar.getByTestId("markwisely-content-search").fill("UNIQUE_WYSIWYG_MARKER_42");
+    await sidebar.getByTestId("markwisely-search").fill("UNIQUE_WYSIWYG_MARKER_42");
     await sidebar.getByTestId("markwisely-search-start").click();
     await expect(sidebar.getByTestId("markwisely-search-result")).toHaveCount(1);
 

@@ -140,7 +140,7 @@ test.describe("UI visual baselines", () => {
         caret: "hide",
         maxDiffPixels: 100,
       });
-      await preview.getByRole("button", { name: "Close" }).click();
+      await preview.getByRole("button", { name: /^Close$/ }).click();
       await expect(preview).toBeHidden();
     }
   });

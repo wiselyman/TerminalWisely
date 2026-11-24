@@ -90,6 +90,7 @@ interface PreviewState {
   ) => Promise<void>;
   savePreview: (sudoPassword?: string) => Promise<void>;
   closePreview: () => Promise<void>;
+  closePreviewWindow: (sessionId: string) => Promise<void>;
   closeTab: (tabId: string) => Promise<void>;
 }
 
@@ -566,6 +567,15 @@ export const usePreviewStore = create<PreviewState>((set, get) => ({
     const { activeTabId } = get();
     if (!activeTabId) return;
     await get().closeTab(activeTabId);
+  },
+
+  closePreviewWindow: async (sessionId) => {
+    const tabIds = previewTabsForSession(get().tabs, sessionId).map((tab) => tab.id);
+    for (const tabId of tabIds) {
+      await get().closeTab(tabId);
+      // 用户取消未保存确认时 closeTab 会保留该页签；此时停止关闭，避免误关后续文档。
+      if (get().tabs.some((tab) => tab.id === tabId)) return;
+    }
   },
 }));
 

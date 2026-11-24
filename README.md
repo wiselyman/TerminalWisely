@@ -28,7 +28,7 @@
 | **Terminal** | Local and remote Terminal apps inside Desktop workspaces, saved SSH hosts, reconnect, English / 中文 UI |
 | **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
-| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; MarkWisely Markdown workbench and EditorWisely local/remote source and text editor; download, compress, cross-server send |
+| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; MarkWisely local/remote Markdown workspace with document tabs, file navigation, and outline; EditorWisely source and text editor; download, compress, cross-server send |
 | **AI Engineer** | Local chat in Home; follows the active SSH host elsewhere. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
@@ -54,6 +54,10 @@ EditorWisely is the text and source editor included in both the Home and SSH Hos
 - **Preserve text format** — UTF-8 files, UTF-8 BOM, and LF/CRLF line endings are retained when saving. Binary files and unsupported encodings are reported instead of silently rewritten.
 
 EditorWisely and MarkWisely are separate Desktop apps: EditorWisely handles plain text and source files, while MarkWisely remains the Markdown writing workspace.
+
+## MarkWisely
+
+MarkWisely opens Markdown documents from local or SSH-host Files in a workspace that fills its TerminalWisely window. Keep several documents open in titlebar tabs, browse Markdown files from the left tree, and open the document outline on the right to jump between headings. Closing a document tab leaves the workspace open; the window close button closes the MarkWisely workspace.
 
 ---
 

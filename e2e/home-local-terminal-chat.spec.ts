@@ -309,7 +309,7 @@ test("Home MarkWisely browses and searches Markdown only in the local workspace"
   const sidebar = page.getByTestId("markwisely-sidebar");
   await clickMarkWiselyMenuControl(page, "markwisely-sidebar-toggle");
   await expect(sidebar.getByTestId("markwisely-sidebar-file").filter({ hasText: "local-search.md" })).toBeVisible();
-  await sidebar.getByTestId("markwisely-content-search").fill("LOCAL_SEARCH_PHRASE");
+  await sidebar.getByTestId("markwisely-search").fill("LOCAL_SEARCH_PHRASE");
   await sidebar.getByTestId("markwisely-search-start").click();
   await expect(sidebar.getByTestId("markwisely-search-result").filter({ hasText: "local-search.md" })).toBeVisible({ timeout: 30_000 });
   await expect(sidebar.getByTestId("markwisely-search-result").filter({ hasText: "Home workspace phrase" })).toBeVisible();
@@ -330,7 +330,7 @@ test("Home MarkWisely cancels an in-flight workspace search without showing part
 
   const sidebar = page.getByTestId("markwisely-sidebar");
   await clickMarkWiselyMenuControl(page, "markwisely-sidebar-toggle");
-  await sidebar.getByTestId("markwisely-content-search").fill("CANCEL_SEARCH_MATCH");
+  await sidebar.getByTestId("markwisely-search").fill("CANCEL_SEARCH_MATCH");
   await sidebar.getByTestId("markwisely-search-start").click();
   await expect(sidebar.getByTestId("markwisely-search-progress")).toContainText("Searching");
   await sidebar.getByTestId("markwisely-search-cancel").click();

@@ -475,9 +475,10 @@ function readStyles() {
     rust.includes("take_pending_markdown_opens") &&
     lib.includes("tauri_plugin_single_instance::init") &&
     app.includes("tw://markdown-open-files") &&
+    app.includes('setAppMaximized("markwisely", true)') &&
     app.includes("openDocument({")
   ) {
-    pass("markwisely.os-file-open", "md/markdown association + single-instance queue + Home open bridge");
+    pass("markwisely.os-file-open", "md/markdown association + single-instance queue + maximized Home open bridge");
   } else {
     fail("markwisely.os-file-open", "OS Markdown association or delivery wiring incomplete");
   }
@@ -490,7 +491,9 @@ function readStyles() {
   const window = read("src/components/desktop/MarkWiselyWindow.tsx");
   const outline = read("src/components/desktop/MarkWiselyOutlinePanel.tsx");
   if (
-    sidebar.includes('data-testid="markwisely-content-search"') &&
+    sidebar.includes('data-testid="markwisely-search"') &&
+    sidebar.includes('data-testid="markwisely-search-start"') &&
+    !sidebar.includes('data-testid="markwisely-content-search"') &&
     sidebar.includes('data-testid="markwisely-search-cancel"') &&
     sidebar.includes('markwisely-sidebar-directory') &&
     !sidebar.includes('data-testid="markwisely-outline-filter"') &&

@@ -426,6 +426,7 @@
   "markwisely.parentFolder": "Parent folder",
   "markwisely.quickOpen": "Quick open Markdown files",
   "markwisely.quickOpenPlaceholder": "Filter files…",
+  "markwisely.opening": "Opening Markdown…",
   "markwisely.outlineTitle": "Outline",
   "markwisely.outlineFilter": "Filter headings…",
   "markwisely.outlineEmpty": "No matching headings.",

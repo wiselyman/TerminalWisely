@@ -13,6 +13,29 @@ interface PreviewDockProps {
 export function PreviewDock({ sessionId }: PreviewDockProps) {
   const { t } = useTranslation("preview");
   const tabs = usePreviewTabsForSession(sessionId);
+  const minimized = usePreviewStore((s) => s.minimized);
+  const restorePreview = usePreviewStore((s) => s.restorePreview);
+
+  if (tabs.length === 0) return null;
+  if (!minimized) return null;
+
+  return (
+    <div className="preview-dock minimized">
+      <PreviewTabStrip sessionId={sessionId} />
+      <button
+        type="button"
+        className="preview-dock-restore"
+        onClick={restorePreview}
+      >
+        {t("dockExpand")}
+      </button>
+    </div>
+  );
+}
+
+export function PreviewTabStrip({ sessionId, className = "" }: PreviewDockProps & { className?: string }) {
+  const { t } = useTranslation("preview");
+  const tabs = usePreviewTabsForSession(sessionId);
   const activeTabId = usePreviewStore((s) => s.activeTabId);
   const minimized = usePreviewStore((s) => s.minimized);
   const activateTab = usePreviewStore((s) => s.activateTab);
@@ -20,68 +43,57 @@ export function PreviewDock({ sessionId }: PreviewDockProps) {
   const restorePreview = usePreviewStore((s) => s.restorePreview);
 
   if (tabs.length === 0) return null;
-  if (tabs.length === 1 && !minimized) return null;
 
   return (
     <div
-      className={`preview-dock${minimized ? " minimized" : ""}`}
+      className={`preview-dock-tabs${className ? ` ${className}` : ""}`}
       role="tablist"
       aria-label={t("dockAria")}
+      data-testid="preview-file-tabs"
     >
-      <div className="preview-dock-tabs">
-        {tabs.map((tab) => {
-          const active = tab.id === activeTabId;
-          const dirty = isPreviewTabDirty(tab);
-          const label = previewTabLabel(tab);
-          return (
-            <div
-              key={tab.id}
-              className={`preview-dock-tab${active ? " active" : ""}${tab.loading ? " loading" : ""}`}
-              role="tab"
-              aria-selected={active}
-              title={tab.data?.resolved_path ?? tab.path}
+      {tabs.map((tab) => {
+        const active = tab.id === activeTabId;
+        const dirty = isPreviewTabDirty(tab);
+        const label = previewTabLabel(tab);
+        return (
+          <div
+            key={tab.id}
+            className={`preview-dock-tab${active ? " active" : ""}${tab.loading ? " loading" : ""}`}
+            role="tab"
+            aria-selected={active}
+            title={tab.data?.resolved_path ?? tab.path}
+          >
+            <button
+              type="button"
+              className="preview-dock-tab-main"
+              onClick={() => {
+                activateTab(tab.id);
+                if (minimized) restorePreview();
+              }}
             >
-              <button
-                type="button"
-                className="preview-dock-tab-main"
-                onClick={() => {
-                  activateTab(tab.id);
-                  if (minimized) restorePreview();
-                }}
-              >
-                <span className="preview-dock-tab-label">
-                  {label}
-                  {dirty ? <span className="preview-panel-dirty"> *</span> : null}
-                </span>
-                {tab.saving ? (
-                  <span className="preview-dock-tab-status">{t("common:saving")}</span>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                className="preview-dock-tab-close"
-                aria-label={t("dockCloseAria", { label })}
-                title={t("dockCloseAria", { label })}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void closeTab(tab.id);
-                }}
-              >
-                <PreviewCloseIcon />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      {minimized ? (
-        <button
-          type="button"
-          className="preview-dock-restore"
-          onClick={restorePreview}
-        >
-          {t("dockExpand")}
-        </button>
-      ) : null}
+              <span className="preview-dock-tab-label">
+                {label}
+                {dirty ? <span className="preview-panel-dirty"> *</span> : null}
+              </span>
+              {tab.saving ? (
+                <span className="preview-dock-tab-status">{t("common:saving")}</span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              className="preview-dock-tab-close"
+              aria-label={t("dockCloseAria", { label })}
+              title={t("dockCloseAria", { label })}
+              onClick={(event) => {
+                event.stopPropagation();
+                void closeTab(tab.id);
+              }}
+            >
+              <PreviewCloseIcon />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

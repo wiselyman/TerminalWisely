@@ -6,16 +6,23 @@ import "./MarkWiselyOutlinePanel.css";
 type Props = {
   documentText: string;
   onNavigateToHeading: (index: number) => void;
+  contentSelector?: string;
+  testId?: string;
 };
 
 const VDITOR_HEADING_SELECTOR = "h1, h2, h3, h4, h5, h6";
 
-function activeVditorContent(): HTMLElement | null {
-  return Array.from(document.querySelectorAll<HTMLElement>(".markwisely-editor .vditor-ir .vditor-reset[contenteditable='true']"))
+function activeVditorContent(contentSelector: string): HTMLElement | null {
+  return Array.from(document.querySelectorAll<HTMLElement>(`${contentSelector} .vditor-ir .vditor-reset[contenteditable='true']`))
     .find((element) => element.getClientRects().length > 0) ?? null;
 }
 
-export function MarkWiselyOutlinePanel({ documentText, onNavigateToHeading }: Props) {
+export function MarkWiselyOutlinePanel({
+  documentText,
+  onNavigateToHeading,
+  contentSelector = ".markwisely-editor",
+  testId = "markwisely-outline-panel",
+}: Props) {
   const { t } = useTranslation("tools");
   const [outlineFilter, setOutlineFilter] = useState("");
   const [activeHeadingIndex, setActiveHeadingIndex] = useState(-1);
@@ -24,7 +31,7 @@ export function MarkWiselyOutlinePanel({ documentText, onNavigateToHeading }: Pr
 
   useEffect(() => {
     const syncCurrentHeading = () => {
-      const content = activeVditorContent();
+      const content = activeVditorContent(contentSelector);
       const elements = Array.from(content?.querySelectorAll<HTMLElement>(VDITOR_HEADING_SELECTOR) ?? []);
       const bounds = content?.getBoundingClientRect();
       let current = -1;
@@ -39,7 +46,7 @@ export function MarkWiselyOutlinePanel({ documentText, onNavigateToHeading }: Pr
       setActiveHeadingIndex(elements.length ? current : -1);
     };
     document.addEventListener("scroll", syncCurrentHeading, true);
-    const editor = activeVditorContent();
+    const editor = activeVditorContent(contentSelector);
     editor?.addEventListener("scroll", syncCurrentHeading);
     const observer = editor ? new MutationObserver(syncCurrentHeading) : null;
     observer?.observe(editor!, { childList: true, subtree: true, characterData: true });
@@ -49,10 +56,10 @@ export function MarkWiselyOutlinePanel({ documentText, onNavigateToHeading }: Pr
       editor?.removeEventListener("scroll", syncCurrentHeading);
       observer?.disconnect();
     };
-  }, [documentText]);
+  }, [contentSelector, documentText]);
 
   return (
-    <aside className="markwisely-outline-panel" aria-label={t("markwisely.outlineTitle")} data-testid="markwisely-outline-panel">
+    <aside className="markwisely-outline-panel" aria-label={t("markwisely.outlineTitle")} data-testid={testId}>
       <div className="markwisely-outline-panel-head">{t("markwisely.outlineTitle")}</div>
       <input
         aria-label={t("markwisely.outlineFilter")}

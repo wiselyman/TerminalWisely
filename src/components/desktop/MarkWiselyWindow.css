@@ -929,3 +929,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+.markwisely-opening-status {
+  position: absolute;
+  z-index: 5;
+  top: 8px;
+  right: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--tw-border);
+  border-radius: 7px;
+  color: var(--tw-fg-muted);
+  background: var(--tw-surface);
+  font-size: 0.78rem;
+  pointer-events: none;
+}

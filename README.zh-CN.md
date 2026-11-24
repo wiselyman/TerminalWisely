@@ -28,7 +28,7 @@
 | **终端** | Terminal 在本机或远程 Desktop 内运行；保存 SSH 主机、断线重连、中英文界面 |
 | **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
-| **文件** | 拖拽上传、`ls` 点击进目录或预览；MarkWisely Markdown 工作台与 EditorWisely 本机/远程文本源码编辑器；下载、压缩、跨服务器发送 |
+| **文件** | 拖拽上传、`ls` 点击进目录或预览；MarkWisely 本机/SSH Markdown 工作台，支持文档标签、文件导航和大纲；EditorWisely 文本源码编辑器；下载、压缩、跨服务器发送 |
 | **AI 工程师** | Home 使用本机聊天；Hosts 跟随当前 SSH 主机。长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
@@ -54,6 +54,10 @@ EditorWisely 是 Home 与 SSH 主机 Desktop 内置的文本和源码编辑器�
 - **保留文本格式** — 保存时保留 UTF-8、UTF-8 BOM 以及 LF/CRLF 换行。二进制文件和不支持的编码会显示错误，不会被静默改写。
 
 EditorWisely 与 MarkWisely 是两个独立的 Desktop 应用：EditorWisely 用于纯文本和源码，MarkWisely 继续作为 Markdown 写作工作台。
+
+## MarkWisely
+
+在本机或 SSH 主机的 Files 中打开 Markdown，即可在铺满 TerminalWisely 窗口的工作区编辑。标题栏标签可同时打开多份文档；左侧文件树浏览 Markdown，右侧大纲可跳转到各级标题。关闭文档标签只关闭该文档；窗口右上角的关闭按钮关闭整个 MarkWisely 工作区。
 
 ---
 

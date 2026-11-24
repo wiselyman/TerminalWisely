@@ -18,6 +18,7 @@ interface MarkdownPreviewProps {
   tabId?: string;
   sessionId?: string;
   filePath?: string;
+  layoutRevision?: string | number;
   onChange?: (value: string) => void;
   onLinkClick?: (target: Exclude<MarkdownLinkTarget, { kind: "fragment" }>) => void;
 }
@@ -33,6 +34,7 @@ export function MarkdownPreview({
   tabId,
   sessionId,
   filePath,
+  layoutRevision,
   onChange,
   onLinkClick,
 }: MarkdownPreviewProps) {
@@ -66,6 +68,7 @@ export function MarkdownPreview({
       tabId={tabId}
       sessionId={sessionId}
       filePath={filePath}
+      layoutRevision={layoutRevision}
       text={text}
       editable={editable}
       onChange={onChange}

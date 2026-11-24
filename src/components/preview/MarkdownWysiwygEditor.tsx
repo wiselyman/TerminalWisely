@@ -50,6 +50,7 @@ export interface MarkdownWysiwygEditorProps {
   enableContextMenu?: boolean;
   storeClipboardImages?: boolean;
   filePath: string;
+  layoutRevision?: string | number;
   text: string;
   editable: boolean;
   typewriterMode?: boolean;
@@ -128,6 +129,7 @@ export function MarkdownWysiwygEditor({
   enableContextMenu = false,
   storeClipboardImages = false,
   filePath,
+  layoutRevision,
   text,
   editable,
   typewriterMode = false,
@@ -153,6 +155,7 @@ export function MarkdownWysiwygEditor({
   const typewriterModeRef = useRef(typewriterMode);
   const spellcheckRef = useRef(spellcheck);
   const editorGenerationRef = useRef(0);
+  const resizeEditorRef = useRef<(() => void) | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [formatContextMenu, setFormatContextMenu] = useState<{ x: number; y: number; disabledCommands: string[] } | null>(null);
   const selectionRangeRef = useRef<Range | null>(null);
@@ -403,7 +406,6 @@ export function MarkdownWysiwygEditor({
           "undo",
           "redo",
           "outline",
-          "fullscreen",
         ],
         upload: {
           accept: "image/*",
@@ -470,6 +472,7 @@ export function MarkdownWysiwygEditor({
               }
             });
           };
+          resizeEditorRef.current = scheduleResize;
           if (typeof ResizeObserver !== "undefined") {
             sizeObserver = new ResizeObserver(scheduleResize);
             sizeObserver.observe(el);
@@ -527,6 +530,7 @@ export function MarkdownWysiwygEditor({
       sizeObserver?.disconnect();
       if (resizeListener) window.removeEventListener("resize", resizeListener);
       if (resizeFrame) cancelAnimationFrame(resizeFrame);
+      resizeEditorRef.current = null;
       unsubTheme();
       unregisterPreviewEditorFlush(tabId);
       try {
@@ -541,6 +545,12 @@ export function MarkdownWysiwygEditor({
     // Re-create when tab/file/session identity changes — not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [tabId, sessionId, localFileSystem, filePath, viewMode, hideToolbar, storeClipboardImages, editable]);
+
+  useEffect(() => {
+    if (layoutRevision == null) return;
+    const frame = requestAnimationFrame(() => resizeEditorRef.current?.());
+    return () => cancelAnimationFrame(frame);
+  }, [layoutRevision]);
 
   useEffect(() => {
     const root = hostRef.current;

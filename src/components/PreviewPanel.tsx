@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { PanelLeft, PanelRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import { formatAppError } from "../lib/formatAppError";
@@ -18,6 +19,10 @@ import { Modal } from "./Modal";
 import { EditableTextPreview } from "./preview/EditableTextPreview";
 import { HtmlPreview } from "./preview/HtmlPreview";
 import { MarkdownPreview } from "./preview/MarkdownPreview";
+import { MarkWiselySidebar } from "./desktop/MarkWiselySidebar";
+import { MarkWiselyOutlinePanel } from "./desktop/MarkWiselyOutlinePanel";
+import { PreviewTabStrip } from "./PreviewDock";
+import { parentLocalPath } from "../lib/localFsApi";
 import { NativePdfPreview } from "./preview/NativePdfPreview";
 import { OfvReadonlyPreview } from "./preview/OfvReadonlyPreview";
 import { UnsupportedPreview } from "./preview/UnsupportedPreview";
@@ -48,6 +53,8 @@ interface PreviewPanelProps {
 
 export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: PreviewPanelProps) {
   const { t } = useTranslation("preview");
+  const [markdownTreeOpen, setMarkdownTreeOpen] = useState(false);
+  const [markdownOutlineOpen, setMarkdownOutlineOpen] = useState(false);
   const sessionTabs = usePreviewTabsForSession(sessionId);
   const activeTab = useActivePreviewTab(sessionId);
   const {
@@ -68,6 +75,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
     setEditedContent,
     savePreview,
     closePreview,
+    closePreviewWindow,
     sudoPrompt,
     sudoPassword,
     setSudoPassword,
@@ -92,6 +100,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
       setEditedContent: s.setEditedContent,
       savePreview: s.savePreview,
       closePreview: s.closePreview,
+      closePreviewWindow: s.closePreviewWindow,
       sudoPrompt: s.sudoPrompt,
       sudoPassword: s.sudoPassword,
       setSudoPassword: s.setSudoPassword,
@@ -126,6 +135,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
     startWidth: number;
     startHeight: number;
   } | null>(null);
+  const previewMarkdownMainRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onMouseMove = (event: MouseEvent) => {
@@ -175,6 +185,13 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
   const savedContent = data?.text_content ?? "";
   const displayContent = editedContent ?? savedContent;
   const dirty = activeTab ? isPreviewTabDirty(activeTab) : false;
+  const previewTarget = useMemo(() => ({ kind: "ssh" as const, sessionId }), [sessionId]);
+  const markdownRecents = useMemo(
+    () => sessionTabs
+      .filter((tab) => tab.data?.kind === "markdown")
+      .map((tab) => ({ path: tab.path, lastOpened: 0 })),
+    [sessionTabs],
+  );
 
   const canEditSource =
     Boolean(data?.editable) &&
@@ -286,16 +303,6 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
     }).catch((err) => pushToast(formatAppError(err), false));
   };
 
-  const titleHint = useMemo(() => {
-    if (!data) return undefined;
-    const parts: string[] = [];
-    if (data.resolved_path) parts.push(data.resolved_path);
-    if (dirty) parts.push(t("statusUnsaved"));
-    if (data.truncated) parts.push(t("statusTruncated"));
-    if (data.uses_sudo) parts.push(t("statusNeedsSudo"));
-    return parts.length > 0 ? parts.join("\n") : undefined;
-  }, [data, dirty, t]);
-
   if (sessionTabs.length === 0) return null;
 
   const showFloat = !minimized && activeTab != null;
@@ -322,10 +329,18 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
         >
     <aside className="preview-panel" aria-label={t("panelAria")}>
       <div className="preview-panel-head">
-        <strong className="preview-panel-title" title={titleHint}>
-          {data?.filename ?? t("fallbackTitle")}
-          {dirty ? <span className="preview-panel-dirty"> *</span> : null}
-        </strong>
+
+        {data?.kind === "markdown" ? (
+          <button
+            type="button"
+            className={`preview-toolbar-icon${markdownTreeOpen ? " active" : ""}`}
+            title={markdownTreeOpen ? t("hideMarkdownTree") : t("showMarkdownTree")}
+            aria-label={markdownTreeOpen ? t("hideMarkdownTree") : t("showMarkdownTree")}
+            aria-pressed={markdownTreeOpen}
+            data-testid="preview-markdown-tree-toggle"
+            onClick={() => setMarkdownTreeOpen((open) => !open)}
+          ><PanelLeft aria-hidden="true" size={16} /></button>
+        ) : null}
 
         {data && (data.kind === "markdown" || data.kind === "html") ? (
           <div className="preview-panel-toolbar-cluster preview-panel-mode-cluster">
@@ -383,6 +398,8 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             </button>
           </div>
         ) : null}
+
+        <PreviewTabStrip sessionId={sessionId} className="preview-panel-title-tabs" />
 
         {searchable ? (
           panelSearchEnabled ? (
@@ -469,6 +486,18 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
           )
         ) : null}
 
+        {data?.kind === "markdown" ? (
+          <button
+            type="button"
+            className={`preview-toolbar-icon${markdownOutlineOpen ? " active" : ""}`}
+            title={markdownOutlineOpen ? t("hideMarkdownOutline") : t("showMarkdownOutline")}
+            aria-label={markdownOutlineOpen ? t("hideMarkdownOutline") : t("showMarkdownOutline")}
+            aria-pressed={markdownOutlineOpen}
+            data-testid="preview-markdown-outline-toggle"
+            onClick={() => setMarkdownOutlineOpen((open) => !open)}
+          ><PanelRight aria-hidden="true" size={16} /></button>
+        ) : null}
+
         <div className="preview-panel-actions">
           {canSave || canEditSource || canEditMarkdown ? (
             <button
@@ -516,7 +545,7 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
             className="preview-toolbar-icon"
             title={t("closeFileTitle")}
             aria-label={t("common:close")}
-            onClick={() => void closePreview()}
+            onClick={() => void closePreviewWindow(sessionId)}
           >
             <PreviewCloseIcon />
           </button>
@@ -539,26 +568,84 @@ export function PreviewPanel({ sessionId, sessionTitle: _sessionTitle }: Preview
           />
         ) : null}
         {!loading && !error && data?.kind === "markdown" ? (
-          <MarkdownPreview
-            tabId={activeTab.id}
-            sessionId={activeTab.sessionId}
-            filePath={data.resolved_path || activeTab.path}
-            text={displayContent}
-            extension={data.extension}
-            mode={markdownMode}
-            query={searchQuery}
-            activeMatchIndex={activeMatchIndex}
-            searchOptions={searchOptions}
-            editable={canEditMarkdown}
-            onChange={setEditedContent}
-            onLinkClick={(target: Exclude<MarkdownLinkTarget, { kind: "fragment" }>) => {
-              if (target.kind === "file") {
-                void usePreviewStore.getState().openPreview(activeTab.sessionId, target.path);
-              } else {
-                void openUrl(target.href).catch((err) => pushToast(formatAppError(err), false));
-              }
-            }}
-          />
+          <div className="preview-markdown-layout" data-testid="preview-markdown-layout">
+            {markdownTreeOpen ? (
+              <div className="preview-markdown-tree" data-testid="preview-markdown-tree">
+                <MarkWiselySidebar
+                  key={`${activeTab.sessionId}:${activeTab.path}`}
+                  target={previewTarget}
+                  sessionId={activeTab.sessionId}
+                  root={parentLocalPath(data.resolved_path || activeTab.path)}
+                  recents={markdownRecents}
+                  onChooseRoot={() => undefined}
+                  onOpen={(path) => void usePreviewStore.getState().openPreview(activeTab.sessionId, path)}
+                  showWorkspacePicker={false}
+                />
+              </div>
+            ) : null}
+            <div className="preview-markdown-main" ref={previewMarkdownMainRef}>
+              <MarkdownPreview
+                tabId={activeTab.id}
+                sessionId={activeTab.sessionId}
+                filePath={data.resolved_path || activeTab.path}
+                text={displayContent}
+                extension={data.extension}
+                mode={markdownMode}
+                query={searchQuery}
+                activeMatchIndex={activeMatchIndex}
+                searchOptions={searchOptions}
+                editable={canEditMarkdown}
+                layoutRevision={`${width}:${height}:${maximized}:${markdownTreeOpen}:${markdownOutlineOpen}`}
+                onChange={setEditedContent}
+                onLinkClick={(target: Exclude<MarkdownLinkTarget, { kind: "fragment" }>) => {
+                  if (target.kind === "file") {
+                    void usePreviewStore.getState().openPreview(activeTab.sessionId, target.path);
+                  } else {
+                    void openUrl(target.href).catch((err) => pushToast(formatAppError(err), false));
+                  }
+                }}
+              />
+            </div>
+            {markdownOutlineOpen ? (
+              <MarkWiselyOutlinePanel
+                documentText={displayContent}
+                contentSelector=".preview-markdown-main"
+                testId="preview-markdown-outline"
+                onNavigateToHeading={(index) => {
+                  const content = previewMarkdownMainRef.current?.querySelector<HTMLElement>(".vditor-ir .vditor-reset[contenteditable='true']");
+                  const heading = content?.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")[index];
+                  if (heading) {
+                    heading.scrollIntoView({ block: "start", behavior: "smooth" });
+                    return;
+                  }
+                  const source = previewMarkdownMainRef.current?.querySelector<HTMLTextAreaElement>("textarea.preview-text-editor");
+                  if (source) {
+                    const lines = displayContent.replace(/\r\n?/g, "\n").split("\n");
+                    let fence: { character: string; length: number } | null = null;
+                    let headingIndex = -1;
+                    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+                      const fenceLine = lines[lineIndex].match(/^\s*(`{3,}|~{3,})/);
+                      if (fenceLine) {
+                        const marker = fenceLine[1];
+                        if (!fence) fence = { character: marker[0], length: marker.length };
+                        else if (marker[0] === fence.character && marker.length >= fence.length) fence = null;
+                        continue;
+                      }
+                      if (fence) continue;
+                      if (/^ {0,3}#{1,6}\s+\S/.test(lines[lineIndex]) && ++headingIndex === index) {
+                        const style = getComputedStyle(source);
+                        const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.5;
+                        source.scrollTop = lineIndex * lineHeight;
+                        source.setSelectionRange(source.value.split("\n").slice(0, lineIndex).join("\n").length, source.value.split("\n").slice(0, lineIndex).join("\n").length);
+                        source.focus();
+                        break;
+                      }
+                    }
+                  }
+                }}
+              />
+            ) : null}
+          </div>
         ) : null}
         {!loading && !error && data?.kind === "html" ? (
           <HtmlPreview
