@@ -671,29 +671,32 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
     const req = (args as { request?: Record<string, unknown> }).request ?? (args as Record<string, unknown>);
     lastPreviewOpen = req;
     const path = String(req.path ?? "/tmp/e2e-file.txt");
+    if (path.endsWith("/broken.pdf")) throw new Error("Mock preview load failed");
     const filename = path.split(/[/\\]/).pop() ?? "file";
     const extension = filename.includes(".")
       ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase()
       : "";
     const isMd = extension === "md" || extension === "markdown";
+    const isPdf = extension === "pdf";
+    const isImage = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension);
     const handleId = `preview-${previewHandleSeq}`;
     previewPathsByHandle.set(handleId, path);
     return {
       handle_id: handleId,
-      kind: isMd ? "markdown" : "text",
+      kind: isPdf ? "pdf" : isImage ? "image" : isMd ? "markdown" : "text",
       session_id: String(req.session_id ?? "e2e-ssh-session"),
       resolved_path: path,
       filename,
       extension,
       total_size: 32,
       truncated: false,
-      editable: true,
+      editable: !isPdf && !isImage,
       text_content: isMd
         ? previewMarkdownByPath.get(path) ?? (path.endsWith("/links.md")
           ? "# Link test\n\n[Related document](related.md)\n\n## Details\n\n[Jump to details](#details)\n"
           : "# E2E Markdown\n\nUNIQUE_WYSIWYG_MARKER_42\n")
         : "e2e text content\n",
-      local_cache_path: null,
+      local_cache_path: isPdf || isImage ? `/tmp/e2e-preview/${filename}` : null,
       uses_sudo: false,
     };
   },

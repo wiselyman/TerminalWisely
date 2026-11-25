@@ -60,6 +60,24 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("markwisely-panel")).toHaveCount(0);
   });
 
+  test("FileWisely previews PDF and image files without hiding the directory tree", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("desktop-icon-editorwisely").click();
+
+    await page.getByTestId("editorwisely-tree-file").filter({ hasText: "manual.pdf" }).click();
+    await expect(page.getByTestId("filewisely-native-pdf")).toBeVisible();
+    await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
+    await page.getByTestId("editorwisely-tree-file").filter({ hasText: "photo.png" }).click();
+    await expect(page.getByTestId("filewisely-image-preview")).toBeVisible();
+    await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
+    await page.getByTestId("editorwisely-tree-file").filter({ hasText: "broken.pdf" }).click();
+    await expect(page.getByRole("alert")).toContainText("Mock preview load failed");
+    await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
+  });
+
   test("EditorWisely desktop icon stays fully visible above the dock in a short window", async ({ page }) => {
     await gotoApp(page);
     await page.setViewportSize({ width: 1280, height: 680 });
