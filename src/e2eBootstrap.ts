@@ -473,7 +473,6 @@ async function simulateLocalFileOpen(path: string) {
     },
     showEditorWisely: () => {
       useDesktopStore.getState().launchApp("editorwisely");
-      useDesktopStore.getState().setAppMaximized("editorwisely", true);
     },
     openText: async (filePath) => {
       await useEditorWiselyStore.getState().open({ kind: "local" }, filePath);

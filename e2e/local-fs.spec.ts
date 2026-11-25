@@ -52,7 +52,7 @@ test.describe("Local FS panel", () => {
     await expect(panel.locator('[data-path="/tmp/e2e-renamed.txt"]')).toHaveCount(0);
   });
 
-  test("double-clicking local text opens it in maximized EditorWisely with the file tree", async ({ page }) => {
+  test("double-clicking local text opens it in a normal EditorWisely window", async ({ page }) => {
     const api = await twE2e(page);
     await api.openHome();
     await api.seedLocalText("/tmp/e2e-open-in-editor.txt", "opened from local Files");
@@ -65,13 +65,13 @@ test.describe("Local FS panel", () => {
 
     const editor = page.getByTestId("editorwisely-window");
     await expect(editor).toBeVisible();
-    await expect(editor).toHaveAttribute("data-maximized", "true");
+    await expect(editor).toHaveAttribute("data-maximized", "false");
     await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
     await expect(editor.getByTestId("editorwisely-editor").locator(".cm-content"))
       .toHaveText("opened from local Files");
   });
 
-  test("double-clicking SSH text opens it in maximized EditorWisely with the file tree", async ({ page }) => {
+  test("double-clicking SSH text opens it in a normal EditorWisely window", async ({ page }) => {
     const files = page.getByTestId("host-file-manager-panel");
     const file = files.locator('[data-path="/var/log/app.log"]');
     await expect(file).toBeVisible();
@@ -79,7 +79,7 @@ test.describe("Local FS panel", () => {
 
     const editor = page.getByTestId("editorwisely-window");
     await expect(editor).toBeVisible();
-    await expect(editor).toHaveAttribute("data-maximized", "true");
+    await expect(editor).toHaveAttribute("data-maximized", "false");
     await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
     await expect(editor.getByTestId("editorwisely-editor").locator(".cm-content"))
       .toHaveText("remote text");

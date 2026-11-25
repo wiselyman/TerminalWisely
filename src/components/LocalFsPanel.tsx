@@ -94,7 +94,6 @@ export function LocalFsPanel({
   const openPreview = usePreviewStore((s) => s.openPreview);
   const openEditorWisely = useEditorWiselyStore((s) => s.open);
   const launchDesktopApp = useDesktopStore((s) => s.launchApp);
-  const setAppMaximized = useDesktopStore((s) => s.setAppMaximized);
   const desktopTarget = useDesktopStore((s) => s.target);
   const openSendTo = useSessionStore((s) => s.openSendTo);
   const transferCount = useSessionStore(
@@ -249,7 +248,6 @@ export function LocalFsPanel({
       const target = desktopTarget ?? { kind: "ssh" as const, sessionId };
       void openEditorWisely(target, entry.path);
       launchDesktopApp("editorwisely");
-      setAppMaximized("editorwisely", true);
       return;
     }
     void openPreview(sessionId, entry.path, undefined, entry.size_bytes).catch(

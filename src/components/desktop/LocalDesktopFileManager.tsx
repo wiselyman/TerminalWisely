@@ -42,7 +42,6 @@ export function LocalDesktopFileManager() {
   const { t } = useTranslation(["tools", "common"]);
   const openEditor = useEditorWiselyStore((s) => s.open);
   const launchApp = useDesktopStore((s) => s.launchApp);
-  const setAppMaximized = useDesktopStore((s) => s.setAppMaximized);
   const fs = useLocalFsStore();
   const [roots, setRoots] = useState<string[]>([]);
   const [path, setPath] = useState<string | null>(readLastLocalDirectory);
@@ -63,7 +62,6 @@ export function LocalDesktopFileManager() {
   const openInEditorWisely = (filePath: string) => {
     void openEditor({ kind: "local" }, filePath);
     launchApp("editorwisely");
-    setAppMaximized("editorwisely", true);
   };
 
   useEffect(() => {
