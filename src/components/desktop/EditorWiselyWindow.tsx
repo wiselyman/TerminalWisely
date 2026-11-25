@@ -7,7 +7,7 @@ import { closeBrackets } from "@codemirror/autocomplete";
 import { defaultHighlightStyle, syntaxHighlighting, indentOnInput } from "@codemirror/language";
 import { search, searchKeymap, openSearchPanel } from "@codemirror/search";
 import { useTranslation } from "react-i18next";
-import { Save, Search, FolderOpen } from "lucide-react";
+import { Save, Search, FolderOpen, PanelLeft } from "lucide-react";
 import type { DesktopTarget } from "../../lib/desktopTarget";
 import { desktopTargetKey } from "../../lib/desktopTarget";
 import { editorLanguageExtension } from "../../lib/editorWiselyLanguages";
@@ -39,6 +39,7 @@ export function EditorWiselyWindow({ target }: { target: DesktopTarget }) {
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
   const [recentPaths, setRecentPaths] = useState(() => readEditorWiselyRecents(target));
   const dirty = docs.some((d) => d.text !== d.savedText);
 
@@ -72,9 +73,9 @@ export function EditorWiselyWindow({ target }: { target: DesktopTarget }) {
   }, [active?.id, active?.text, active?.savedText, active?.saving, active?.error, target, save]);
 
   const requestClose = (id: string) => { const doc = docs.find((d) => d.id === id); if (doc && doc.text !== doc.savedText) setConfirmClose(id); else close(target, id); };
-  return <DesktopAppWindow appId="editorwisely" title="EditorWisely" leading={<EditorWiselyIcon />} panelTestId="editorwisely-window" floatTestId="editorwisely-window-float" minimizeTestId="editorwisely-minimize" maximizeTestId="editorwisely-maximize" closeTestId="editorwisely-close" bodyClassName="editorwisely-window" onCloseRequest={() => { if (dirty) { const id = active?.id; if (id) setConfirmClose(id); return false; } closeApp("editorwisely"); return true; }} headerLeadingActions={<div className="editorwisely-tabs" role="tablist">{docs.map((doc) => <span className={`editorwisely-tab${doc.id === activeId ? " active" : ""}`} key={doc.id}><button role="tab" aria-selected={doc.id === activeId} onClick={() => activate(target, doc.id)}>{doc.path.split(/[\\/]/).pop()} {doc.text !== doc.savedText ? "●" : ""}</button><button aria-label={t("editor.closeDocument", { name: doc.path.split(/[\\/]/).pop() })} onClick={() => requestClose(doc.id)}>×</button></span>)}</div>} headerActions={<><button className="preview-toolbar-icon" title={t("editor.find")} aria-label={t("editor.find")} onClick={() => { if (viewRef.current) openSearchPanel(viewRef.current); }}><Search size={16}/></button><button className="preview-toolbar-icon" title={t("editor.save")} aria-label={t("editor.save")} onClick={() => void save(target)} disabled={!active || active.text === active.savedText}><Save size={16}/></button></>}>
+  return <DesktopAppWindow appId="editorwisely" title="EditorWisely" leading={<EditorWiselyIcon />} panelTestId="editorwisely-window" floatTestId="editorwisely-window-float" minimizeTestId="editorwisely-minimize" maximizeTestId="editorwisely-maximize" closeTestId="editorwisely-close" bodyClassName="editorwisely-window" onCloseRequest={() => { if (dirty) { const id = active?.id; if (id) setConfirmClose(id); return false; } closeApp("editorwisely"); return true; }} headerLeadingActions={<div className="editorwisely-tabs" role="tablist">{docs.map((doc) => <span className={`editorwisely-tab${doc.id === activeId ? " active" : ""}`} key={doc.id}><button role="tab" aria-selected={doc.id === activeId} onClick={() => activate(target, doc.id)}>{doc.path.split(/[\\/]/).pop()} {doc.text !== doc.savedText ? "●" : ""}</button><button aria-label={t("editor.closeDocument", { name: doc.path.split(/[\\/]/).pop() })} onClick={() => requestClose(doc.id)}>×</button></span>)}</div>} headerActions={<><button type="button" className="preview-toolbar-icon" title={t(treeOpen ? "editor.hideTree" : "editor.showTree")} aria-label={t(treeOpen ? "editor.hideTree" : "editor.showTree")} aria-pressed={treeOpen} data-testid="editorwisely-tree-toggle" onClick={() => setTreeOpen((open) => !open)}><PanelLeft size={16}/></button><button className="preview-toolbar-icon" title={t("editor.find")} aria-label={t("editor.find")} onClick={() => { if (viewRef.current) openSearchPanel(viewRef.current); }}><Search size={16}/></button><button className="preview-toolbar-icon" title={t("editor.save")} aria-label={t("editor.save")} onClick={() => void save(target)} disabled={!active || active.text === active.savedText}><Save size={16}/></button></>}>
     <div className="editorwisely-workspace">
-      <EditorWiselyTree target={target} activePath={active?.path ?? null} onOpen={(path) => void openPath(path)} />
+      {treeOpen ? <EditorWiselyTree target={target} activePath={active?.path ?? null} onOpen={(path) => void openPath(path)} /> : null}
       <main className="editorwisely-main">
         <div className="editorwisely-toolbar"><span>{active?.path ?? t("editor.empty")}</span><span>{active?.loading ? t("editor.loading") : active?.saving ? t("editor.saving") : active && active.text === active.savedText ? t("editor.saved") : t("editor.unsaved")}</span></div>
         {active?.error ? <div role="alert" className="editorwisely-error">{t(`editor.error.${active.error}`, { defaultValue: active.error })}{target.kind === "local" ? <button type="button" data-testid="editorwisely-save-as" onClick={() => void saveAs(active)}>{t("editor.saveAs")}</button> : null}</div> : null}

@@ -392,6 +392,8 @@
   "editor.subtitle": "Edit text and source files on this computer or an SSH host.",
   "editor.recentTitle": "Recent files",
   "editor.treeTitle": "Files",
+  "editor.showTree": "Show file tree",
+  "editor.hideTree": "Hide file tree",
   "editor.noRecentFiles": "Files you open will appear here.",
   "editor.empty": "Open a text file from Files to start editing",
   "editor.find": "Find and replace",
