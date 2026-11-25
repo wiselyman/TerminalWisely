@@ -490,6 +490,25 @@ function readStyles() {
   }
 }
 
+// --- FileWisely product display name ---
+{
+  const packageJson = JSON.parse(read("package.json"));
+  const tauri = JSON.parse(read("src-tauri/tauri.conf.json"));
+  const enWelcome = JSON.parse(read("src/i18n/locales/en/welcome.json"));
+  const zhWelcome = JSON.parse(read("src/i18n/locales/zh-CN/welcome.json"));
+  const enTools = JSON.parse(read("src/i18n/locales/en/tools.json"));
+  const zhTools = JSON.parse(read("src/i18n/locales/zh-CN/tools.json"));
+  const brandingMatches = packageJson.productName === "FileWisely"
+    && tauri.productName === "FileWisely"
+    && tauri.app?.windows?.[0]?.title === "FileWisely"
+    && enWelcome.productName === "FileWisely"
+    && zhWelcome.productName === "全能文件台"
+    && enTools["desktop.appFileWisely"] === "FileWisely"
+    && zhTools["desktop.appFileWisely"] === "全能文件台";
+  if (brandingMatches) pass("app.filewisely-brand", "Package, Tauri bundle, window, and welcome UI use FileWisely");
+  else fail("app.filewisely-brand", "User-facing product names must consistently use FileWisely");
+}
+
 // --- MarkWisely: local/remote Markdown workspace search ---
 {
   const sidebar = read("src/components/desktop/MarkWiselySidebar.tsx");

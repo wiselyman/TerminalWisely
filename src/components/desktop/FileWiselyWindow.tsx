@@ -61,7 +61,7 @@ export function FileWiselyWindow({ target }: { target: DesktopTarget }) {
   return (
     <DesktopAppWindow
       appId="editorwisely"
-      title="FileWisely"
+      title={t("desktop.appFileWisely")}
       panelTestId="editorwisely-window"
       floatTestId="editorwisely-window-float"
       minimizeTestId="editorwisely-minimize"

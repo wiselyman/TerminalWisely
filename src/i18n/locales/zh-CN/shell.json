@@ -67,7 +67,7 @@
   "updateProgressPct": "{{pct}}%",
   "updateProgressIndeterminate": "下载中…",
   "updateInstalledTitle": "更新已就绪",
-  "updateInstalledBody": "更新已安装。请重启 TerminalWisely 以完成升级。",
+  "updateInstalledBody": "更新已安装。请重启 全能文件台 以完成升级。",
   "updateRelaunch": "立即重启",
   "updateRelaunchLater": "稍后重启",
   "updateErrorTitle": "更新失败",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TerminalWisely",
+  "productName": "FileWisely",
   "version": "0.1.4",
   "identifier": "com.wangyunfei.terminalwisely",
   "build": {
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "TerminalWisely",
+        "title": "FileWisely",
         "width": 1400,
         "height": 860,
         "minWidth": 800,

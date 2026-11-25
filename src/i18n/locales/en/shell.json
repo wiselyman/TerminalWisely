@@ -67,7 +67,7 @@
   "updateProgressPct": "{{pct}}%",
   "updateProgressIndeterminate": "Downloading…",
   "updateInstalledTitle": "Update ready",
-  "updateInstalledBody": "The update was installed. Restart TerminalWisely to finish.",
+  "updateInstalledBody": "The update was installed. Restart FileWisely to finish.",
   "updateRelaunch": "Restart now",
   "updateRelaunchLater": "Restart later",
   "updateErrorTitle": "Update failed",

@@ -1,7 +1,7 @@
 {
   "sectionAria": "Welcome",
   "eyebrow": "v0.0.6",
-  "productName": "TerminalWisely",
+  "productName": "FileWisely",
   "tagline": "Local and remote terminals and desktops in one window",
   "summary": "Home provides a local Terminal and chat. Hosts connect over SSH and open remote Terminals, files, and desktop apps. Changes wait for approval, and STOP is always there.",
   "quickStart": "Quick start",

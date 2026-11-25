@@ -1,7 +1,7 @@
 {
   "sectionAria": "欢迎",
   "eyebrow": "v0.0.6",
-  "productName": "TerminalWisely",
+  "productName": "全能文件台",
   "tagline": "本机与远程终端和桌面，在同一个窗口",
   "summary": "Home 提供本机 Terminal 和本机聊天；Hosts 连接 SSH 主机，并打开远程 Terminal、文件和桌面应用。变更要批准，随时可以 STOP。",
   "quickStart": "快速开始",

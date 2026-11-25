@@ -1,14 +1,14 @@
-# TerminalWisely
+# FileWisely（全能文件台）
 
 <p align="center">
-  <img src="./docs/images/app-icon.svg" alt="TerminalWisely" width="160" height="160" />
+  <img src="./docs/images/app-icon.svg" alt="全能文件台" width="160" height="160" />
 </p>
 
 [English](./README.md) | **中文**
 
-**当前版本：0.1.3** · **最新版本：[下载最新版本](https://github.com/wiselyman/TerminalWisely/releases/latest)**
+**当前版本：0.1.4** · **最新版本：[下载最新版本](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
-**本机与远程 Desktop，在同一个窗口。** Home 先显示本机，再按分组列出已保存 SSH 主机；选择主机即可打开对应 Desktop。Terminal 和聊天作为 Desktop 内的应用运行。变更要批准，随时可以 STOP。
+**文本编辑、Markdown 写作和 PDF/图片预览，集中在一个工作区。** 全能文件台融合 EditorWisely 与 MarkWisely，左侧目录树可收起并跟随当前文件。可打开本机或 SSH 文件，同时保留应用内的终端和聊天工具。
 
 [下载安装包](https://github.com/wiselyman/TerminalWisely/releases) · [自行构建](./BUILD.md)
 

@@ -58,7 +58,7 @@ export const DESKTOP_APPS: {
     labelKey: "desktop.appMarkWisely",
     testId: "dock-app-markwisely",
   },
-  { id: "editorwisely", icon: EditorWiselyIcon, labelKey: "desktop.appEditorWisely", testId: "dock-app-editorwisely" },
+  { id: "editorwisely", icon: EditorWiselyIcon, labelKey: "desktop.appFileWisely", testId: "dock-app-editorwisely" },
 ];
 
 export function getDesktopAppsForTarget(target: DesktopTarget | null) {

@@ -12,7 +12,7 @@
 - 文本编辑阶段复用 Editor store 的 `open(target,path)` 和现有 CodeMirror；后续 Markdown 阶段再将 Mark store 的 `openDocument({target,sessionId,hostKey,path})` 内容嵌入同一窗口。
 - PDF/图片阶段通过 PreviewPanel 已用的预览 store/API 打开；统一窗口保持树可见。
 - `App.tsx` 的 EditorWisely desktop 入口改由 FileWiselyWindow 承载。MarkWisely 仍作为兼容独立入口，后续 Markdown 集成完成后从主工作台启动。
-- `fileWiselyRouting.ts` 只组合既有文件分类结果；`package.json`、Tauri 用户显示名和中英文文案改为 FileWisely / 全能文件台，内部 crate、更新源和数据目录保持稳定。
+- `fileWiselyRouting.ts` 只组合既有文件分类结果；`package.json`、Tauri 用户显示名、中英文文案和 README 产品标题改为 FileWisely / 全能文件台，内部 crate、更新源和数据目录保持稳定。
 - 更新 smoke 检查及 `docs/TEST_MATRIX.md`。
 
 # 设计

@@ -1,14 +1,14 @@
-# TerminalWisely
+# FileWisely
 
 <p align="center">
-  <img src="./docs/images/app-icon.svg" alt="TerminalWisely" width="160" height="160" />
+  <img src="./docs/images/app-icon.svg" alt="FileWisely" width="160" height="160" />
 </p>
 
 **English** | [中文](./README.zh-CN.md)
 
-**Current version: 0.1.3** · **Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
+**Current version: 0.1.4** · **Latest release: [Download the latest version](https://github.com/wiselyman/TerminalWisely/releases/latest)**
 
-**Local and remote desktops in one window.** The Home icon opens saved SSH hosts in their groups, while Local Desktop stays pinned as the first workspace tab. Select a host to open its Desktop workspace. Terminal and chat run as apps inside their Desktop. Changes wait for approval, and STOP is always there.
+**Text editing, Markdown authoring, and rich file previews in one workspace.** FileWisely brings together EditorWisely and MarkWisely, with a collapsible file tree that follows the active document. Open local or SSH files and keep your terminal and chat tools in the same app.
 
 [Download](https://github.com/wiselyman/TerminalWisely/releases) · [Build from source](./BUILD.md)
 
