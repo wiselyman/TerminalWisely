@@ -48,6 +48,18 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" })).toHaveClass(/is-active/);
   });
 
+  test("FileWisely opens Markdown in the MarkWisely editor inside its workspace", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("desktop-icon-editorwisely").click();
+
+    await page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" }).click();
+    await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
+    await expect(page.getByTestId("markwisely-panel")).toHaveCount(0);
+  });
+
   test("EditorWisely desktop icon stays fully visible above the dock in a short window", async ({ page }) => {
     await gotoApp(page);
     await page.setViewportSize({ width: 1280, height: 680 });
@@ -76,13 +88,13 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await api.openEditorWiselyDocument("/home/e2e/guide.md");
+    await api.openEditorWiselyDocument("/home/e2e/guide.txt");
     await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
     await page.getByTestId("editorwisely-editor").locator(".cm-content").click();
     await page.keyboard.press("Meta+A");
     await page.keyboard.type("updated remote text");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect.poll(async () => (await api.getLastRemoteBytesWrite())?.path).toBe("/home/e2e/guide.md");
+    await expect.poll(async () => (await api.getLastRemoteBytesWrite())?.path).toBe("/home/e2e/guide.txt");
     await expect(page.getByTestId("dock-app-markwisely")).toBeVisible();
   });
 

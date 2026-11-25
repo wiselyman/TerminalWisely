@@ -1,7 +1,87 @@
+import { useEffect, useMemo, useState } from "react";
+import { PanelLeft, Save } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { DesktopTarget } from "../../lib/desktopTarget";
+import { desktopTargetKey } from "../../lib/desktopTarget";
+import { fileWiselyViewForPath } from "../../lib/fileWiselyRouting";
+import { useEditorWiselyStore, type EditorDocument } from "../../stores/editorWiselyStore";
+import { useMarkWiselyStore } from "../../stores/markWiselyStore";
+import { DesktopAppWindow } from "./DesktopAppWindow";
+import { EditorWiselyTree } from "./EditorWiselyTree";
 import { EditorWiselyWindow } from "./EditorWiselyWindow";
+import { MarkWiselyWindow } from "./MarkWiselyWindow";
 
-/** FileWisely's text editing surface, backed by the existing EditorWisely store. */
+const EMPTY_EDITOR_DOCUMENTS: EditorDocument[] = [];
+
+/** Unified file workspace that routes into the existing editor document stores. */
 export function FileWiselyWindow({ target }: { target: DesktopTarget }) {
-  return <EditorWiselyWindow target={target} unified />;
+  const { t } = useTranslation("tools");
+  const key = desktopTargetKey(target);
+  const editorDocs = useEditorWiselyStore((state) => state.docs[key] ?? EMPTY_EDITOR_DOCUMENTS);
+  const editorActiveId = useEditorWiselyStore((state) => state.active[key] ?? null);
+  const markdownDocument = useMarkWiselyStore((state) => {
+    const activeId = state.activeDocumentIds[key];
+    return state.openDocuments[key]?.find((document) => document.documentId === activeId) ?? null;
+  });
+  const activeEditorPath = editorDocs.find((document) => document.id === editorActiveId)?.path ?? null;
+  const [activePath, setActivePath] = useState<string | null>(activeEditorPath ?? markdownDocument?.path ?? null);
+  const [treeOpen, setTreeOpen] = useState(true);
+  const view = useMemo(() => activePath ? fileWiselyViewForPath(activePath) : "editor", [activePath]);
+
+  useEffect(() => {
+    const storePath = view === "markdown" ? markdownDocument?.path : activeEditorPath;
+    if (storePath && storePath !== activePath) setActivePath(storePath);
+  }, [activeEditorPath, activePath, markdownDocument?.path, view]);
+
+  const openPath = async (path: string) => {
+    setActivePath(path);
+    const nextView = fileWiselyViewForPath(path);
+    if (nextView === "markdown") {
+      await useMarkWiselyStore.getState().openDocument({
+        target,
+        sessionId: target.kind === "ssh" ? target.sessionId : undefined,
+        hostKey: target.kind === "local" ? "local" : target.sessionId,
+        path,
+      });
+    } else if (nextView === "editor") {
+      await useEditorWiselyStore.getState().open(target, path);
+    }
+  };
+
+  return (
+    <DesktopAppWindow
+      appId="editorwisely"
+      title="FileWisely"
+      panelTestId="editorwisely-window"
+      floatTestId="editorwisely-window-float"
+      minimizeTestId="editorwisely-minimize"
+      maximizeTestId="editorwisely-maximize"
+      closeTestId="editorwisely-close"
+      bodyClassName="filewisely-window"
+      showWindowTitle
+      headerActions={(
+        <>
+          <button
+            type="button"
+            className="preview-toolbar-icon"
+            title={t(treeOpen ? "editor.hideTree" : "editor.showTree")}
+            aria-label={t(treeOpen ? "editor.hideTree" : "editor.showTree")}
+            aria-pressed={treeOpen}
+            data-testid="editorwisely-tree-toggle"
+            onClick={() => setTreeOpen((open) => !open)}
+          ><PanelLeft size={16} /></button>
+          {view === "editor" ? <button type="button" className="preview-toolbar-icon" title={t("editor.save")} aria-label={t("editor.save")} onClick={() => void useEditorWiselyStore.getState().save(target)} disabled={!activeEditorPath || editorDocs.find((document) => document.path === activeEditorPath)?.text === editorDocs.find((document) => document.path === activeEditorPath)?.savedText}><Save size={16} /></button> : null}
+        </>
+      )}
+    >
+      <div className="filewisely-workspace" data-testid="filewisely-workspace">
+        {treeOpen ? <EditorWiselyTree target={target} activePath={activePath} onOpen={(path) => void openPath(path)} /> : null}
+        <main className="filewisely-content" data-file-kind={view}>
+          {view === "editor" ? <EditorWiselyWindow target={target} embedded /> : null}
+          {view === "markdown" ? <MarkWiselyWindow target={target} sessionId={target.kind === "ssh" ? target.sessionId : undefined} hostKey={target.kind === "ssh" ? target.sessionId : "local"} embedded /> : null}
+          {view === "unsupported" ? <div className="filewisely-message" role="status">无法预览此文件</div> : null}
+        </main>
+      </div>
+    </DesktopAppWindow>
+  );
 }

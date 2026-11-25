@@ -23,12 +23,12 @@ import { countMarkdown } from "../../lib/markdownStatistics";
 import { scopeEditorCss } from "../../lib/markdownEditor/preferences";
 import { useMarkWiselyPreferencesStore } from "../../stores/markWiselyPreferencesStore";
 
-type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null };
+type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null; embedded?: boolean };
 type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "workspace-folder" | "save-as-folder" | "save-as" | "edit";
 const EMPTY_RECENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getRecentFiles"]> = [];
 const EMPTY_DOCUMENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getDocuments"]> = [];
 
-export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: Props) {
+export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, embedded = false }: Props) {
   const activeTarget = target ?? { kind: "ssh" as const, sessionId: sessionId ?? "" };
   const targetKey = desktopTargetKey(activeTarget);
   const activeHostKey = activeTarget.kind === "local" ? "local" : hostKey ?? sessionId ?? "";
@@ -500,6 +500,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
 
   return (
     <DesktopAppWindow
+      embedded={embedded}
       appId="markwisely"
       title={t("desktop.appMarkWisely")}
       headerTabs={editorHeaderTabs}

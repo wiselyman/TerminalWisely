@@ -60,6 +60,8 @@ type Props = {
   closeTestId: string;
   bodyClassName?: string;
   onCloseRequest?: () => boolean | Promise<boolean>;
+  /** Render this app's existing body inside another desktop window. */
+  embedded?: boolean;
   children: ReactNode;
 };
 
@@ -90,6 +92,7 @@ export function DesktopAppWindow({
   closeTestId,
   bodyClassName,
   onCloseRequest,
+  embedded = false,
   children,
 }: Props) {
   const { t } = useTranslation(["tools", "common"]);
@@ -113,12 +116,14 @@ export function DesktopAppWindow({
   );
 
   useLayoutEffect(() => {
+    if (embedded) return;
     if (!surface || !win.open || win.minimized || win.maximized || frame) return;
     const bounds = surfaceBounds(surface);
     if (bounds.width < 32 || bounds.height < 32) return;
     setAppFrame(appId, centerDesktopFrame(bounds));
   }, [
     appId,
+    embedded,
     frame,
     setAppFrame,
     surface,
@@ -127,6 +132,7 @@ export function DesktopAppWindow({
     win.open,
   ]);
 
+  if (embedded) return <div className={`desktop-app-embedded-body${bodyClassName ? ` ${bodyClassName}` : ""}`}>{children}</div>;
   if (!win.open || win.minimized || !surface) return null;
 
   const maximized = win.maximized;
