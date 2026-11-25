@@ -46,7 +46,7 @@ The Local Desktop Terminal on Windows uses Windows PowerShell 5.1. Windows packa
 
 ## EditorWisely
 
-EditorWisely is the text and source editor included in both the Home and SSH Host Desktops. Open it from the Desktop Dock, or choose a text file in the corresponding file manager and open it with EditorWisely. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
+EditorWisely is the text and source editor included in both the Home and SSH Host Desktops. Browse local or remote files in its directory tree and keep multiple documents open in tabs. Open local plain-text files with EditorWisely from the operating system to show the file in a workspace that fills the TerminalWisely window. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
 
 - **Syntax highlighting** — JavaScript/TypeScript, Python, Go, Rust, Shell, C/C++, Java, PHP, JSON, YAML, TOML, XML, HTML, CSS/Sass, SQL, Markdown, Kotlin, Swift, Ruby, properties, Dockerfiles, and Makefiles.
 - **Editing tools** — multiple document tabs, line numbers, find and replace, undo and redo, indentation, and a status bar with language, cursor position, encoding, and line endings.
@@ -57,7 +57,7 @@ EditorWisely and MarkWisely are separate Desktop apps: EditorWisely handles plai
 
 ## MarkWisely
 
-MarkWisely opens Markdown documents from local or SSH-host Files in a workspace that fills its TerminalWisely window. Keep several documents open in titlebar tabs, browse Markdown files from the left tree, and open the document outline on the right to jump between headings. Closing a document tab leaves the workspace open; the window close button closes the MarkWisely workspace.
+MarkWisely opens Markdown documents from local or SSH-host Files in a workspace that fills its TerminalWisely window. Opening a local Markdown file with TerminalWisely now opens that document directly in MarkWisely instead of showing only its home screen. Keep several documents open in titlebar tabs, browse Markdown files from the left tree, and open the document outline on the right to jump between headings. Closing a document tab leaves the workspace open; the window close button closes the MarkWisely workspace.
 
 ---
 

@@ -46,7 +46,7 @@ Windows Local Desktop Terminal 继续使用 Windows PowerShell 5.1。Windows 安
 
 ## EditorWisely
 
-EditorWisely 是 Home 与 SSH 主机 Desktop 内置的文本和源码编辑器。可从 Desktop Dock 打开，也可在对应文件管理器中选择文本文件并交给 EditorWisely 打开。本机文件使用 Home 文件系统；远程文件沿用当前 SSH 会话。
+EditorWisely 是 Home 与 SSH 主机 Desktop 内置的文本和源码编辑器。可在目录树中浏览本机或远程文件，并通过多个标签同时打开文档。使用操作系统将本机纯文本文件交给 EditorWisely 打开后，文件会显示在铺满 TerminalWisely 窗口的工作区中。本机文件使用 Home 文件系统；远程文件沿用当前 SSH 会话。
 
 - **语法高亮** — JavaScript/TypeScript、Python、Go、Rust、Shell、C/C++、Java、PHP、JSON、YAML、TOML、XML、HTML、CSS/Sass、SQL、Markdown、Kotlin、Swift、Ruby、properties、Dockerfile 和 Makefile。
 - **编辑工具** — 多文档标签、行号、查找替换、撤销重做、缩进；状态栏显示语言、光标位置、编码和换行格式。
@@ -57,7 +57,7 @@ EditorWisely 与 MarkWisely 是两个独立的 Desktop 应用：EditorWisely 用
 
 ## MarkWisely
 
-在本机或 SSH 主机的 Files 中打开 Markdown，即可在铺满 TerminalWisely 窗口的工作区编辑。标题栏标签可同时打开多份文档；左侧文件树浏览 Markdown，右侧大纲可跳转到各级标题。关闭文档标签只关闭该文档；窗口右上角的关闭按钮关闭整个 MarkWisely 工作区。
+在本机或 SSH 主机的 Files 中打开 Markdown，即可在铺满 TerminalWisely 窗口的工作区编辑。通过操作系统打开本机 Markdown 文件时，也会直接显示对应文档，不再只显示 MarkWisely 主界面。标题栏标签可同时打开多份文档；左侧文件树浏览 Markdown，右侧大纲可跳转到各级标题。关闭文档标签只关闭该文档；窗口右上角的关闭按钮关闭整个 MarkWisely 工作区。
 
 ---
 

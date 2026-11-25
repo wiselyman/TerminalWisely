@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.4] - 2026-11-25
+
+Expand EditorWisely into a local and remote file workspace, and open operating-system file requests directly in the matching editor.
+
+- Add a lazy-loaded directory tree to EditorWisely and keep multiple files open in tabs
+- Route OS-opened local text files to EditorWisely in a full-window workspace
+- Route OS-opened Markdown files directly to the requested document in MarkWisely
+- Preserve the Home workspace while activating the appropriate Desktop app for an incoming file
+
+扩展 EditorWisely 的本机和远程文件工作区，并让操作系统的文件打开请求直接进入对应编辑器。
+
+- EditorWisely 新增按需加载的目录树，支持通过多个标签同时打开文件
+- 操作系统打开的本机文本文件直接进入铺满窗口的 EditorWisely 工作区
+- 操作系统打开的 Markdown 文件直接显示在 MarkWisely 对应文档中
+- 收到文件打开请求时保留 Home 工作区，并激活对应 Desktop 应用
+
 ## [0.1.3] - 2026-11-24
 
 Restore the Home host directory with Local pinned first and saved SSH hosts shown in their current groups.
