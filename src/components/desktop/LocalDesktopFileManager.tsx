@@ -42,6 +42,7 @@ export function LocalDesktopFileManager() {
   const { t } = useTranslation(["tools", "common"]);
   const openEditor = useEditorWiselyStore((s) => s.open);
   const launchApp = useDesktopStore((s) => s.launchApp);
+  const setAppMaximized = useDesktopStore((s) => s.setAppMaximized);
   const fs = useLocalFsStore();
   const [roots, setRoots] = useState<string[]>([]);
   const [path, setPath] = useState<string | null>(readLastLocalDirectory);
@@ -58,6 +59,12 @@ export function LocalDesktopFileManager() {
   const [menu, setMenu] = useState<LocalMenuState | null>(null);
   const [addressEditing, setAddressEditing] = useState(false);
   const [addressDraft, setAddressDraft] = useState("");
+
+  const openInEditorWisely = (filePath: string) => {
+    void openEditor({ kind: "local" }, filePath);
+    launchApp("editorwisely");
+    setAppMaximized("editorwisely", true);
+  };
 
   useEffect(() => {
     fs.activateSession(LOCAL_FS_SESSION_ID);
@@ -255,8 +262,8 @@ export function LocalDesktopFileManager() {
     onCutItems: () => fs.setClipboard({ sessionId: LOCAL_FS_SESSION_ID, op: "cut", paths: menuPaths(menu.entry) }),
     onPasteItems: () => { void pastePaths(menu.entry.kind === "directory" ? menu.entry.path : parentLocalPath(menu.entry.path)); },
     onDuplicate: () => { void duplicatePath(menu.entry); },
-    onPreview: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
-    onOpenEditor: () => { void openEditor({ kind: "local" }, menu.entry.path); launchApp("editorwisely"); },
+    onPreview: () => openInEditorWisely(menu.entry.path),
+    onOpenEditor: () => openInEditorWisely(menu.entry.path),
     onRunInTerminal: menu.entry.kind === "file" && isRunnableScriptPath(menu.entry.path, menu.entry.permissions, menu.shebang, isWindowsHost() ? "powershell" : "unix") ? () => { const command = buildRunScriptCommand(menu.entry.path, menu.entry.permissions, menu.shebang, isWindowsHost() ? "powershell" : "unix"); if (command) { launchApp("terminal"); queueLocalTerminalCommand(command); } } : undefined,
     onRename: () => runLocalMenuAction("rename"),
     onDelete: () => { void deletePaths(menuPaths(menu.entry)); },
@@ -317,14 +324,14 @@ export function LocalDesktopFileManager() {
           <LocalFsContentsView
             onEntryContextMenu={openEntryMenu}
             onBackgroundContextMenu={(event) => openBackgroundMenu(event, path)}
-            onOpenFile={(entry) => { setSelected(entry); void openEditor({ kind: "local" }, entry.path); launchApp("editorwisely"); }}
+            onOpenFile={(entry) => { setSelected(entry); openInEditorWisely(entry.path); }}
             onMovePaths={(paths, dest) => { for (const source of paths) void moveLocalPath(source, dest).then(() => refresh(path)); }}
             entriesOverride={filter.trim() ? entries.filter((entry) => entry.name.toLowerCase().includes(filter.trim().toLowerCase())) : null}
             loadingOverride={loading}
             emptyLabel={filter.trim() ? t("find.empty") : t("localFs.empty")}
           />
         </div>
-        {selected?.kind === "file" ? <div className="local-desktop-files-selected-actions"><button type="button" data-testid="local-files-open-editorwisely" onClick={() => { void openEditor({ kind: "local" }, selected.path); launchApp("editorwisely"); }}>{t("editor.openWith")}</button></div> : null}
+        {selected?.kind === "file" ? <div className="local-desktop-files-selected-actions"><button type="button" data-testid="local-files-open-editorwisely" onClick={() => openInEditorWisely(selected.path)}>{t("editor.openWith")}</button></div> : null}
         {text != null && selected ? (
           <section className="local-desktop-files-editor" aria-label={selected.name}>
             <header><strong>{selected.name}</strong><div>

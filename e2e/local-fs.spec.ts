@@ -52,6 +52,25 @@ test.describe("Local FS panel", () => {
     await expect(panel.locator('[data-path="/tmp/e2e-renamed.txt"]')).toHaveCount(0);
   });
 
+  test("double-clicking local text opens it in maximized EditorWisely with the file tree", async ({ page }) => {
+    const api = await twE2e(page);
+    await api.openHome();
+    await api.seedLocalText("/tmp/e2e-open-in-editor.txt", "opened from local Files");
+    await api.openLocalDesktopFiles();
+
+    const files = page.getByTestId("host-file-manager-panel");
+    const file = files.locator('[data-path="/tmp/e2e-open-in-editor.txt"]');
+    await expect(file).toBeVisible();
+    await file.dblclick();
+
+    const editor = page.getByTestId("editorwisely-window");
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveAttribute("data-maximized", "true");
+    await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
+    await expect(editor.getByTestId("editorwisely-editor").locator(".cm-content"))
+      .toHaveText("opened from local Files");
+  });
+
   test("opens desktop + file manager float with file tree", async ({ page }) => {
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible({
       timeout: 15_000,
