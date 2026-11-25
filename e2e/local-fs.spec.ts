@@ -99,6 +99,26 @@ test.describe("Local FS panel", () => {
       .toHaveText("remote text");
   });
 
+  test("EditorWisely tree expands to the active SSH file directory", async ({ page }) => {
+    const api = await twE2e(page);
+    api.enableNestedEditorTreeFixture();
+    await api.openEditorWiselyDocument("/home/e2e/editor-tree-fixture/src/vision/vision_pipeline.cpp");
+
+    const editor = page.getByTestId("editorwisely-window");
+    await expect(editor).toBeVisible();
+    await expect(editor.getByTestId("editorwisely-tree")).toHaveCount(0);
+    await editor.getByTestId("editorwisely-tree-toggle").click();
+
+    const tree = editor.getByTestId("editorwisely-tree");
+    for (const directory of ["editor-tree-fixture", "src", "vision"]) {
+      await expect(tree.getByTestId("editorwisely-tree-directory").filter({ hasText: directory }))
+        .toHaveAttribute("aria-expanded", "true");
+    }
+    const activeFile = tree.getByTestId("editorwisely-tree-file").filter({ hasText: "vision_pipeline.cpp" });
+    await expect(activeFile).toBeVisible();
+    await expect(activeFile).toHaveClass(/is-active/);
+  });
+
   test("opens desktop + file manager float with file tree", async ({ page }) => {
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible({
       timeout: 15_000,

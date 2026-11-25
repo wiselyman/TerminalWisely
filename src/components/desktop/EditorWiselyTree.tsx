@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
-import { listLocalDirectory, listLocalRoots } from "../../lib/localFsApi";
+import { listLocalDirectory, listLocalRoots, parentLocalPath } from "../../lib/localFsApi";
 import type { DesktopTarget } from "../../lib/desktopTarget";
 import type { ListLocalDirectoryResult, LocalFsEntry } from "../../types";
 import { useSessionStore } from "../../stores/sessionStore";
@@ -16,6 +16,7 @@ export function EditorWiselyTree({ target, activePath, onOpen }: Props) {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [loading, setLoading] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const entriesByPathRef = useRef<Record<string, LocalFsEntry[]>>({});
 
   const listDirectory = useCallback(async (path: string | null): Promise<ListLocalDirectoryResult> => {
     if (target.kind === "local") return listLocalDirectory(path, false);
@@ -31,11 +32,18 @@ export function EditorWiselyTree({ target, activePath, onOpen }: Props) {
         const remoteHome = target.kind === "ssh"
           ? useSessionStore.getState().tabs.find((tab) => tab.id === target.sessionId)?.remote_home ?? null
           : null;
-        const initialPath = target.kind === "local" ? (await listLocalRoots())[0] ?? null : remoteHome;
+        const roots = target.kind === "local" ? await listLocalRoots() : [remoteHome ?? "/", "/"];
+        const initialPath = chooseTreeRoot(roots, activePath) ?? remoteHome;
+        entriesByPathRef.current = {};
+        setEntriesByPath({});
+        setExpanded([]);
+        setRootPath(null);
         const result = await listDirectory(initialPath);
         if (cancelled) return;
         setRootPath(result.path);
-        setEntriesByPath({ [result.path]: sortEntries(result.entries) });
+        const rootEntries = sortEntries(result.entries);
+        entriesByPathRef.current = { [result.path]: rootEntries };
+        setEntriesByPath(entriesByPathRef.current);
         setError(null);
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
@@ -43,7 +51,43 @@ export function EditorWiselyTree({ target, activePath, onOpen }: Props) {
     };
     void initialize();
     return () => { cancelled = true; };
-  }, [listDirectory, target]);
+  }, [activePath, listDirectory, target]);
+
+  useEffect(() => {
+    if (!rootPath || !activePath) return;
+    const directoryNames = directoryNamesBetween(rootPath, activePath);
+    if (!directoryNames) return;
+    let cancelled = false;
+    const expandActivePath = async () => {
+      let currentEntries = entriesByPathRef.current[rootPath] ?? [];
+      for (const name of directoryNames) {
+        if (cancelled) return;
+        const directory = currentEntries.find((entry) => entry.kind === "directory" && entry.name === name);
+        if (!directory) return;
+        setExpanded((current) => current.includes(directory.path) ? current : [...current, directory.path]);
+        let children = entriesByPathRef.current[directory.path];
+        if (!children) {
+          setLoading((current) => current.includes(directory.path) ? current : [...current, directory.path]);
+          try {
+            const result = await listDirectory(directory.path);
+            if (cancelled) return;
+            children = sortEntries(result.entries);
+            entriesByPathRef.current = { ...entriesByPathRef.current, [result.path]: children };
+            setEntriesByPath(entriesByPathRef.current);
+            setError(null);
+          } catch (reason) {
+            if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+            return;
+          } finally {
+            setLoading((current) => current.filter((path) => path !== directory.path));
+          }
+        }
+        currentEntries = children;
+      }
+    };
+    void expandActivePath();
+    return () => { cancelled = true; };
+  }, [activePath, listDirectory, rootPath]);
 
   const toggleDirectory = async (entry: LocalFsEntry) => {
     if (expanded.includes(entry.path)) {
@@ -51,11 +95,13 @@ export function EditorWiselyTree({ target, activePath, onOpen }: Props) {
       return;
     }
     setExpanded((current) => [...current, entry.path]);
-    if (entriesByPath[entry.path]) return;
+    if (entriesByPathRef.current[entry.path]) return;
     setLoading((current) => [...current, entry.path]);
     try {
       const result = await listDirectory(entry.path);
-      setEntriesByPath((current) => ({ ...current, [result.path]: sortEntries(result.entries) }));
+      const children = sortEntries(result.entries);
+      entriesByPathRef.current = { ...entriesByPathRef.current, [result.path]: children };
+      setEntriesByPath(entriesByPathRef.current);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -94,6 +140,41 @@ export function EditorWiselyTree({ target, activePath, onOpen }: Props) {
     {!rootPath && !error ? <div className="editorwisely-tree-message" role="status">{t("editor.loading")}</div> : null}
     {rootPath ? <div className="editorwisely-tree-list">{renderEntries(rootPath, 0)}</div> : null}
   </aside>;
+}
+
+function chooseTreeRoot(roots: string[], activePath: string | null): string | null {
+  if (!roots.length) return null;
+  if (!activePath) return roots[0];
+  const matchingRoots = roots.filter((root) => isSameOrDescendantPath(activePath, root));
+  if (matchingRoots.length) return matchingRoots.sort((left, right) => right.length - left.length)[0];
+  return parentLocalPath(activePath);
+}
+
+function directoryNamesBetween(rootPath: string, filePath: string): string[] | null {
+  if (!isSameOrDescendantPath(filePath, rootPath)) return null;
+  const rootParts = normalizedPathParts(rootPath);
+  const fileParts = normalizedPathParts(filePath);
+  if (rootParts.length >= fileParts.length) return null;
+  return fileParts.slice(rootParts.length, -1);
+}
+
+function isSameOrDescendantPath(path: string, root: string): boolean {
+  const normalizedPath = normalizePath(path);
+  const normalizedRoot = normalizePath(root);
+  if (normalizedPath === normalizedRoot) return true;
+  const prefix = normalizedRoot.endsWith("/") ? normalizedRoot : `${normalizedRoot}/`;
+  return normalizedPath.startsWith(prefix);
+}
+
+function normalizedPathParts(path: string): string[] {
+  return normalizePath(path).split("/").filter(Boolean);
+}
+
+function normalizePath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  const keepDriveRoot = /^[a-z]:\/$/i.test(normalized);
+  const trimmed = normalized.length > 1 && !keepDriveRoot ? normalized.replace(/\/+$/, "") : normalized;
+  return /^[a-z]:/i.test(trimmed) ? trimmed.toLowerCase() : trimmed;
 }
 
 function sortEntries(entries: LocalFsEntry[]) {

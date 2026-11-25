@@ -480,11 +480,11 @@ function readStyles() {
     lib.includes("tauri_plugin_single_instance::init") &&
     app.includes("tw://local-file-open") &&
     app.includes("openLocalFileInDesktop") &&
-    app.includes('setAppMaximized("editorwisely", true)') &&
+    !app.includes('setAppMaximized("editorwisely", true)') &&
     app.includes('setAppMaximized("markwisely", true)') &&
     app.includes("openDocument({")
   ) {
-    pass("editorwisely.os-file-open", "plain text/Markdown associations + generic file queue + maximized local editor routing");
+    pass("editorwisely.os-file-open", "plain text/Markdown associations + generic file queue + windowed local editor routing");
   } else {
     fail("editorwisely.os-file-open", "plain text/Markdown association or native open routing is incomplete");
   }

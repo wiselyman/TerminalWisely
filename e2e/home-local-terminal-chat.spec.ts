@@ -566,6 +566,7 @@ test("EditorWisely tree opens multiple files as tabs without losing the active d
   await page.getByTestId("local-fs-tool").click();
   await page.getByTestId("dock-app-editorwisely").click();
 
+  await page.getByTestId("editorwisely-tree-toggle").click();
   const tree = page.getByTestId("editorwisely-tree");
   await expect(tree).toBeVisible();
   await tree.getByRole("button", { name: "e2e-dir" }).click();

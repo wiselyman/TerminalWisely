@@ -46,7 +46,7 @@ The Local Desktop Terminal on Windows uses Windows PowerShell 5.1. Windows packa
 
 ## EditorWisely
 
-EditorWisely is the text and source editor included in both the Home and SSH Host Desktops. Browse local or remote files in its directory tree and keep multiple documents open in tabs. Double-click a local text file in Local Desktop Files, or open it with TerminalWisely from the operating system, to show it in EditorWisely in a workspace that fills the TerminalWisely window. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
+EditorWisely is the text and source editor included in both the Home and SSH Host Desktops. Browse local or remote files in its directory tree and keep multiple documents open in tabs. Double-click a text file in Local Desktop Files or SSH Files, or open it with TerminalWisely from the operating system, to show it in a normal EditorWisely window. Its file tree starts hidden; use the titlebar sidebar button to show it, and the tree expands to the active file's directory. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
 
 - **Syntax highlighting** — JavaScript/TypeScript, Python, Go, Rust, Shell, C/C++, Java, PHP, JSON, YAML, TOML, XML, HTML, CSS/Sass, SQL, Markdown, Kotlin, Swift, Ruby, properties, Dockerfiles, and Makefiles.
 - **Editing tools** — multiple document tabs, line numbers, find and replace, undo and redo, indentation, and a status bar with language, cursor position, encoding, and line endings.

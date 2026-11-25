@@ -25,6 +25,7 @@ import {
   __e2eSetLocalReadDelay,
   __e2eLastUploadRequest,
   __e2eResetMocks,
+  __e2eEnableNestedEditorTreeFixture,
   __e2eResetUploadRequest,
 } from "./e2e/tauriCoreMock";
 import { invoke } from "@tauri-apps/api/core";
@@ -59,6 +60,7 @@ export interface TwE2eApi {
   openLocalFsPanel: () => void;
   openLocalDesktopFiles: () => void;
   seedRemotePath: (path: string) => void;
+  enableNestedEditorTreeFixture: () => void;
   getLastTerminalCommand: () => Record<string, unknown> | null;
   openBrowserPanel: () => void;
   openAiChat: () => Promise<void>;
@@ -505,6 +507,7 @@ export function runE2eBootstrap(): void {
     openLocalFsPanel,
     openLocalDesktopFiles,
     seedRemotePath: __e2eSeedRemotePath,
+    enableNestedEditorTreeFixture: __e2eEnableNestedEditorTreeFixture,
     getLastTerminalCommand: __e2eLastTerminalCommand,
     openBrowserPanel,
     openAiChat,

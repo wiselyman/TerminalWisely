@@ -66,6 +66,11 @@ let lastKillProcess: Record<string, unknown> | null = null;
 let lastTerminalCommand: Record<string, unknown> | null = null;
 let createSshCallCount = 0;
 let e2eSavedConnections: SavedConnection[] = [{ ...e2eSavedConnection }];
+let nestedEditorTreeFixtureEnabled = false;
+
+export function __e2eEnableNestedEditorTreeFixture() {
+  nestedEditorTreeFixtureEnabled = true;
+}
 
 export function __e2eResetMocks() {
   lastUploadRequest = null;
@@ -96,6 +101,7 @@ export function __e2eResetMocks() {
   lastTerminalCommand = null;
   createSshCallCount = 0;
   e2eSavedConnections = [{ ...e2eSavedConnection }];
+  nestedEditorTreeFixtureEnabled = false;
 }
 
 export function __e2eResetUploadRequest() {
@@ -576,6 +582,20 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   list_remote_directory: (args) => {
     const request = (args as { request?: { path?: string } }).request;
     const path = request?.path === "/" ? "/" : request?.path ?? "/home/e2e";
+    const nestedTree: Record<string, Array<{ name: string; path: string; kind: "directory" | "file"; size_bytes: number }>> = {
+      "/home/e2e/editor-tree-fixture": [
+        { name: "src", path: "/home/e2e/editor-tree-fixture/src", kind: "directory", size_bytes: 0 },
+      ],
+      "/home/e2e/editor-tree-fixture/src": [
+        { name: "vision", path: "/home/e2e/editor-tree-fixture/src/vision", kind: "directory", size_bytes: 0 },
+      ],
+      "/home/e2e/editor-tree-fixture/src/vision": [
+        { name: "vision_pipeline.cpp", path: "/home/e2e/editor-tree-fixture/src/vision/vision_pipeline.cpp", kind: "file", size_bytes: 32 },
+      ],
+    };
+    if (nestedTree[path] && nestedEditorTreeFixtureEnabled) {
+      return { path, parent: path.slice(0, path.lastIndexOf("/")) || "/", entries: nestedTree[path] };
+    }
     const createdEntries = createdRemotePaths
       .map((filePath) => ({
         name: filePath.split("/").pop() ?? filePath,
@@ -583,7 +603,10 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
         kind: "file" as const,
         size_bytes: 0,
       }));
-    return { path, parent: path === "/" ? null : "/home", entries: [...e2eRemoteDir, ...createdEntries] };
+    const fixtureRoot = path === "/home/e2e" && nestedEditorTreeFixtureEnabled
+      ? [{ name: "editor-tree-fixture", path: "/home/e2e/editor-tree-fixture", kind: "directory" as const, size_bytes: 0 }]
+      : [];
+    return { path, parent: path === "/" ? null : "/home", entries: [...e2eRemoteDir, ...createdEntries, ...fixtureRoot] };
   },
   read_remote_file_prefix: (args) => {
     const path = (args as { request: { path: string } }).request.path;

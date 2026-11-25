@@ -46,7 +46,7 @@ Windows Local Desktop Terminal 继续使用 Windows PowerShell 5.1。Windows 安
 
 ## EditorWisely
 
-EditorWisely 是 Home 与 SSH 主机 Desktop 内置的文本和源码编辑器。可在目录树中浏览本机或远程文件，并通过多个标签同时打开文档。在 Local Desktop 的 Files 中双击本机文本文件，或通过操作系统选择 TerminalWisely 打开，都会在铺满 TerminalWisely 窗口的 EditorWisely 工作区中显示文件。本机文件使用 Home 文件系统；远程文件沿用当前 SSH 会话。
+EditorWisely 是 Home 与 SSH 主机 Desktop 内置的文本和源码编辑器。可在目录树中浏览本机或远程文件，并通过多个标签同时打开文档。在本机 Files 或 SSH Files 中双击文本文件，或通过操作系统选择 TerminalWisely 打开本机文件，都会在普通窗口中显示文件。文件树默认隐藏，可通过标题栏侧栏图标显示；打开后会展开到当前文件所在目录。本机文件使用 Home 文件系统；远程文件沿用当前 SSH 会话。
 
 - **语法高亮** — JavaScript/TypeScript、Python、Go、Rust、Shell、C/C++、Java、PHP、JSON、YAML、TOML、XML、HTML、CSS/Sass、SQL、Markdown、Kotlin、Swift、Ruby、properties、Dockerfile 和 Makefile。
 - **编辑工具** — 多文档标签、行号、查找替换、撤销重做、缩进；状态栏显示语言、光标位置、编码和换行格式。

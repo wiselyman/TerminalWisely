@@ -38,8 +38,9 @@
 - `src/components/desktop/LocalDesktopFileManager.tsx`、`src/components/LocalFsPanel.tsx`、`src/App.tsx`：移除文本文件打开时的自动最大化动作；README 与 0.1.4 release notes 同步描述普通窗口行为。
 - `src/e2eBootstrap.ts`：让模拟 OS 文件打开流程与生产窗口尺寸一致。
 - `src/components/desktop/EditorWiselyWindow.tsx`、`EditorWiselyTree.tsx`：增加默认关闭的树开关，并按当前文档路径逐级加载目录。
-- `src/e2e/tauriCoreMock.ts`：为一个深层 SSH 文件路径提供目录树数据，供端到端验证。
+- `src/e2e/tauriCoreMock.ts`、`src/e2eBootstrap.ts`、`e2e/tw-e2e.ts`：提供仅由树聚焦测试显式启用的隔离深层 SSH 目录夹具，避免改变 MarkWisely 的共享目录数据。
 - `e2e/local-fs.spec.ts` 和 `e2e/home-local-terminal-chat.spec.ts`：覆盖本机/SSH/OS 打开、树开关与路径聚焦。
+- `scripts/smoke-product-checklist.mjs`：验证 OS 打开的 EditorWisely 文件使用普通窗口。
 - `src/i18n/locales/{zh-CN,en}/tools.json`：提供 EditorWisely 树按钮显隐文案。
 - 不新增共享状态或耦合 MarkWisely 偏好；树开关属于 EditorWisely 窗口状态。
 
@@ -70,8 +71,8 @@
 
 ### Task 3: Focus the active document's parent in the tree
 
-**Files:** `src/components/desktop/EditorWiselyTree.tsx`, `src/e2e/tauriCoreMock.ts`, `e2e/local-fs.spec.ts`
+**Files:** `src/components/desktop/EditorWiselyTree.tsx`, `src/e2e/tauriCoreMock.ts`, `src/e2eBootstrap.ts`, `e2e/tw-e2e.ts`, `e2e/local-fs.spec.ts`, `scripts/smoke-product-checklist.mjs`
 
-- [ ] Add a nested SSH path test; after opening the tree, assert each ancestor is expanded and the active file row is visible/highlighted. Run and confirm it fails because the current tree stops at its root.
-- [ ] Extend the E2E remote directory fixture with the nested path and sequentially list/expand ancestors of `activePath`, canceling stale expansions when the active path changes or the tree unmounts.
-- [ ] Run the full `./scripts/run-all-tests.sh` plus `node scripts/check-no-agent-hardcoding.mjs`.
+- [x] Add a nested SSH path test; after opening the tree, assert each ancestor is expanded and the active file row is visible/highlighted. Run and confirm it fails because the current tree stops at its root.
+- [x] Extend the E2E remote directory fixture with the nested path and sequentially list/expand ancestors of `activePath`, canceling stale expansions when the active path changes or the tree unmounts.
+- [x] Run the full `./scripts/run-all-tests.sh` plus `node scripts/check-no-agent-hardcoding.mjs`.

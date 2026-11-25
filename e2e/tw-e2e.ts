@@ -36,6 +36,7 @@ function wrapApi(page: Page): TwE2eApi {
       await call("openLocalDesktopFiles");
     },
     seedRemotePath: (path) => call("seedRemotePath", path),
+    enableNestedEditorTreeFixture: () => call("enableNestedEditorTreeFixture"),
     getLastTerminalCommand: () => call("getLastTerminalCommand") as Promise<Record<string, unknown> | null>,
     openBrowserPanel: async () => {
       await call("openBrowserPanel");
