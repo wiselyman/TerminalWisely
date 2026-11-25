@@ -71,6 +71,20 @@ test.describe("Local FS panel", () => {
       .toHaveText("opened from local Files");
   });
 
+  test("double-clicking SSH text opens it in maximized EditorWisely with the file tree", async ({ page }) => {
+    const files = page.getByTestId("host-file-manager-panel");
+    const file = files.locator('[data-path="/var/log/app.log"]');
+    await expect(file).toBeVisible();
+    await file.dblclick();
+
+    const editor = page.getByTestId("editorwisely-window");
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveAttribute("data-maximized", "true");
+    await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
+    await expect(editor.getByTestId("editorwisely-editor").locator(".cm-content"))
+      .toHaveText("remote text");
+  });
+
   test("opens desktop + file manager float with file tree", async ({ page }) => {
     await expect(page.getByTestId("host-desktop-panel")).toBeVisible({
       timeout: 15_000,
