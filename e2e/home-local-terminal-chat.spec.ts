@@ -557,6 +557,33 @@ test("EditorWisely opens files through its own MarkWisely-style picker", async (
   await expect(page.getByTestId("editorwisely-file-picker")).toBeVisible();
 });
 
+test("EditorWisely tree opens multiple files as tabs without losing the active document", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/e2e-dir/tree-first.txt", "first tree document");
+  await api.seedLocalText("/tmp/e2e-dir/tree-second.txt", "second tree document");
+  await page.getByTestId("local-fs-tool").click();
+  await page.getByTestId("dock-app-editorwisely").click();
+
+  const tree = page.getByTestId("editorwisely-tree");
+  await expect(tree).toBeVisible();
+  await tree.getByRole("button", { name: "e2e-dir" }).click();
+  await tree.getByRole("button", { name: "tree-first.txt" }).click();
+  await expect(page.getByRole("tab", { name: "tree-first.txt" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content")).toHaveText("first tree document");
+
+  await tree.getByRole("button", { name: "tree-second.txt" }).click();
+  await expect(page.getByRole("tab", { name: "tree-second.txt" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content")).toHaveText("second tree document");
+  await page.getByRole("tab", { name: "tree-first.txt" }).click();
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content")).toHaveText("first tree document");
+
+  await page.getByRole("button", { name: "Close tree-second.txt" }).click();
+  await expect(page.getByRole("tab", { name: "tree-second.txt" })).toHaveCount(0);
+  await expect(page.getByTestId("editorwisely-editor").locator(".cm-content")).toHaveText("first tree document");
+});
+
 test("EditorWisely displays existing file contents after its asynchronous read finishes", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);

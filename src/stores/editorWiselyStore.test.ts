@@ -49,6 +49,26 @@ describe("EditorWisely document store", () => {
     await opening;
     expect(store.getState().docs.local[0]).toMatchObject({ text: "content from disk", savedText: "content from disk", loading: false });
   });
+  it("keeps multiple open paths as tabs and activates a path without replacing its dirty buffer", async () => {
+    const { useEditorWiselyStore: store } = await import("./editorWiselyStore");
+    const target = { kind: "local" as const };
+    await store.getState().open(target, "/tmp/first.txt");
+    await store.getState().open(target, "/tmp/second.txt");
+    store.getState().edit(target, "/tmp/first.txt", "unsaved first contents");
+
+    await store.getState().open(target, "/tmp/first.txt");
+
+    expect(store.getState().docs.local.map((doc) => doc.path)).toEqual([
+      "/tmp/first.txt",
+      "/tmp/second.txt",
+    ]);
+    expect(store.getState().active.local).toBe("/tmp/first.txt");
+    expect(store.getState().docs.local[0]).toMatchObject({
+      text: "unsaved first contents",
+      savedText: "local\n",
+    });
+    expect(readLocalBytes).toHaveBeenCalledTimes(2);
+  });
   it("does not replace user edits when a pending local read finishes late", async () => {
     const { useEditorWiselyStore: store } = await import("./editorWiselyStore");
     let resolveRead!: (bytes: Uint8Array) => void;

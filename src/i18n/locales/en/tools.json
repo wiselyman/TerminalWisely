@@ -391,6 +391,7 @@
   "editor.openDocument": "Open a text file",
   "editor.subtitle": "Edit text and source files on this computer or an SSH host.",
   "editor.recentTitle": "Recent files",
+  "editor.treeTitle": "Files",
   "editor.noRecentFiles": "Files you open will appear here.",
   "editor.empty": "Open a text file from Files to start editing",
   "editor.find": "Find and replace",

@@ -391,6 +391,7 @@
   "editor.openDocument": "打开文本文件",
   "editor.subtitle": "编辑这台电脑或 SSH 主机上的文本和源码文件。",
   "editor.recentTitle": "最近文件",
+  "editor.treeTitle": "文件",
   "editor.noRecentFiles": "打开过的文件会显示在这里。",
   "editor.empty": "从文件管理器打开文本文件开始编辑",
   "editor.find": "查找和替换",
