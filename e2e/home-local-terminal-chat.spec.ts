@@ -566,7 +566,6 @@ test("EditorWisely tree opens multiple files as tabs without losing the active d
   await page.getByTestId("local-fs-tool").click();
   await page.getByTestId("dock-app-editorwisely").click();
 
-  await page.getByTestId("editorwisely-tree-toggle").click();
   const tree = page.getByTestId("editorwisely-tree");
   await expect(tree).toBeVisible();
   await tree.getByRole("button", { name: "e2e-dir" }).click();
@@ -631,10 +630,10 @@ test("EditorWisely displays existing file contents after its asynchronous read f
   await gotoApp(page);
   const api = await twE2e(page);
   await api.openHome();
-  await api.seedLocalText("/tmp/editor-reopen.md", "content from disk");
+  await api.seedLocalText("/tmp/editor-reopen.txt", "content from disk");
   await api.setLocalReadDelay(100);
   await page.getByTestId("local-fs-tool").click();
-  await api.openEditorWiselyDocument("/tmp/editor-reopen.md");
+  await api.openEditorWiselyDocument("/tmp/editor-reopen.txt");
   await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
     .toHaveText("content from disk", { timeout: 3000 });
 });
@@ -643,21 +642,21 @@ test("EditorWisely keeps saved contents when the document is closed and reopened
   await gotoApp(page);
   const api = await twE2e(page);
   await api.openHome();
-  await api.seedLocalText("/tmp/editor-persist.md", "before");
+  await api.seedLocalText("/tmp/editor-persist.txt", "before");
   await page.getByTestId("local-fs-tool").click();
-  await api.openEditorWiselyDocument("/tmp/editor-persist.md");
+  await api.openEditorWiselyDocument("/tmp/editor-persist.txt");
   const editor = page.getByTestId("editorwisely-editor").locator(".cm-content");
   await expect(editor).toHaveText("before", { timeout: 3000 });
   await editor.click();
   await page.keyboard.press("Meta+A");
   await page.keyboard.type("after save");
   await expect(page.locator(".editorwisely-toolbar")).toContainText("Saved", { timeout: 3000 });
-  await expect.poll(() => api.getLocalText("/tmp/editor-persist.md"))
+  await expect.poll(() => api.getLocalText("/tmp/editor-persist.txt"))
     .toBe("after save");
 
-  await page.getByRole("button", { name: "Close editor-persist.md" }).click();
+  await page.getByRole("button", { name: "Close editor-persist.txt" }).click();
   await expect(page.getByTestId("editorwisely-home")).toBeVisible();
-  await api.openEditorWiselyDocument("/tmp/editor-persist.md");
+  await api.openEditorWiselyDocument("/tmp/editor-persist.txt");
   await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
     .toHaveText("after save", { timeout: 3000 });
 });

@@ -66,15 +66,14 @@ test.describe("Local FS panel", () => {
     const editor = page.getByTestId("editorwisely-window");
     await expect(editor).toBeVisible();
     await expect(editor).toHaveAttribute("data-maximized", "false");
-    await expect(editor.getByTestId("editorwisely-tree")).toHaveCount(0, { timeout: 1_000 });
-    const treeToggle = editor.getByTestId("editorwisely-tree-toggle");
-    await expect(treeToggle).toHaveAttribute("aria-pressed", "false");
-    await treeToggle.click();
-    await expect(treeToggle).toHaveAttribute("aria-pressed", "true");
     await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
+    const treeToggle = editor.getByTestId("editorwisely-tree-toggle");
+    await expect(treeToggle).toHaveAttribute("aria-pressed", "true");
     await treeToggle.click();
     await expect(treeToggle).toHaveAttribute("aria-pressed", "false");
     await expect(editor.getByTestId("editorwisely-tree")).toHaveCount(0);
+    await treeToggle.click();
+    await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
     await editor.getByTestId("editorwisely-maximize").click();
     await expect(editor).toHaveAttribute("data-maximized", "true");
     await page.getByTestId("editorwisely-maximize").click();
@@ -92,8 +91,6 @@ test.describe("Local FS panel", () => {
     const editor = page.getByTestId("editorwisely-window");
     await expect(editor).toBeVisible();
     await expect(editor).toHaveAttribute("data-maximized", "false");
-    await expect(editor.getByTestId("editorwisely-tree")).toHaveCount(0, { timeout: 1_000 });
-    await editor.getByTestId("editorwisely-tree-toggle").click();
     await expect(editor.getByTestId("editorwisely-tree")).toBeVisible();
     await expect(editor.getByTestId("editorwisely-editor").locator(".cm-content"))
       .toHaveText("remote text");
@@ -106,9 +103,6 @@ test.describe("Local FS panel", () => {
 
     const editor = page.getByTestId("editorwisely-window");
     await expect(editor).toBeVisible();
-    await expect(editor.getByTestId("editorwisely-tree")).toHaveCount(0);
-    await editor.getByTestId("editorwisely-tree-toggle").click();
-
     const tree = editor.getByTestId("editorwisely-tree");
     for (const directory of ["editor-tree-fixture", "src", "vision"]) {
       await expect(tree.getByTestId("editorwisely-tree-directory").filter({ hasText: directory }))

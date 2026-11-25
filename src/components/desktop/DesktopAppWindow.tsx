@@ -132,7 +132,13 @@ export function DesktopAppWindow({
     win.open,
   ]);
 
-  if (embedded) return <div className={`desktop-app-embedded-body${bodyClassName ? ` ${bodyClassName}` : ""}`}>{children}</div>;
+  if (embedded) return (
+    <div className={`desktop-app-embedded-body${bodyClassName ? ` ${bodyClassName}` : ""}`}>
+      {headerLeadingActions || headerTabs ? <div className="desktop-app-embedded-tabs">{headerLeadingActions}{headerTabs}</div> : null}
+      {headerActions ? <div className="desktop-app-embedded-actions">{headerActions}</div> : null}
+      {children}
+    </div>
+  );
   if (!win.open || win.minimized || !surface) return null;
 
   const maximized = win.maximized;

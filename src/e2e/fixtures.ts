@@ -21,24 +21,6 @@ export const e2eLocalDir = [
 
 export const e2eRemoteDir = [
   {
-    name: "manual.pdf",
-    path: "/home/e2e/manual.pdf",
-    kind: "file",
-    size_bytes: 128,
-  },
-  {
-    name: "photo.png",
-    path: "/home/e2e/photo.png",
-    kind: "file",
-    size_bytes: 64,
-  },
-  {
-    name: "broken.pdf",
-    path: "/home/e2e/broken.pdf",
-    kind: "file",
-    size_bytes: 0,
-  },
-  {
     name: "guide.md",
     path: "/home/e2e/guide.md",
     kind: "file",

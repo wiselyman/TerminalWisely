@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PanelLeft, Save } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { DesktopTarget } from "../../lib/desktopTarget";
 import { desktopTargetKey } from "../../lib/desktopTarget";
@@ -80,7 +80,6 @@ export function FileWiselyWindow({ target }: { target: DesktopTarget }) {
             data-testid="editorwisely-tree-toggle"
             onClick={() => setTreeOpen((open) => !open)}
           ><PanelLeft size={16} /></button>
-          {view === "editor" ? <button type="button" className="preview-toolbar-icon" title={t("editor.save")} aria-label={t("editor.save")} onClick={() => void useEditorWiselyStore.getState().save(target)} disabled={!activeEditorPath || editorDocs.find((document) => document.path === activeEditorPath)?.text === editorDocs.find((document) => document.path === activeEditorPath)?.savedText}><Save size={16} /></button> : null}
         </>
       )}
     >

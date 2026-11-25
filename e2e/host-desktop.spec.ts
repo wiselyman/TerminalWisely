@@ -29,23 +29,25 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
+    await api.seedRemotePath("/home/e2e/guide.txt");
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("desktop-icon-editorwisely").click();
 
     await expect(page.locator(".filewisely-window")).toBeVisible();
+    await expect(page.getByTestId("desktop-app-window-title")).toHaveText("FileWisely");
     await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
     await expect(page.getByTestId("markwisely-window")).toHaveCount(0);
 
-    await api.openEditorWiselyDocument("/home/e2e/guide.md");
+    await api.openEditorWiselyDocument("/home/e2e/guide.txt");
     await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
-    const activeFile = page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" });
+    const activeFile = page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.txt" });
     await expect(activeFile).toHaveClass(/is-active/);
     await page.getByTestId("editorwisely-tree-toggle").click();
     await expect(page.getByTestId("editorwisely-tree")).toHaveCount(0);
     await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
     await page.getByTestId("editorwisely-tree-toggle").click();
     await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
-    await expect(page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" })).toHaveClass(/is-active/);
+    await expect(page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.txt" })).toHaveClass(/is-active/);
   });
 
   test("FileWisely opens Markdown in the MarkWisely editor inside its workspace", async ({ page }) => {
@@ -64,6 +66,9 @@ test.describe("Host desktop mode", () => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
+    await api.seedRemotePath("/home/e2e/manual.pdf");
+    await api.seedRemotePath("/home/e2e/photo.png");
+    await api.seedRemotePath("/home/e2e/broken.pdf");
     await page.getByTestId("local-fs-tool").click();
     await page.getByTestId("desktop-icon-editorwisely").click();
 
