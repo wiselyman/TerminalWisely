@@ -21,6 +21,7 @@ import { BrowserPanel } from "./components/browser/BrowserPanel";
 import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
 import { MarkWiselyWindow } from "./components/desktop/MarkWiselyWindow";
 import { EditorWiselyWindow } from "./components/desktop/EditorWiselyWindow";
+import { FileWiselyWindow } from "./components/desktop/FileWiselyWindow";
 import { DesktopPanel } from "./components/desktop/DesktopPanel";
 import { DesktopTerminalWindow } from "./components/desktop/DesktopTerminalWindow";
 import { FileManagerPanel } from "./components/desktop/FileManagerPanel";
@@ -1340,7 +1341,7 @@ function App() {
           sessionTitle={activeSessionTitle}
         />
       ) : null}
-      {editorWiselyOpen && desktopMode && desktopTarget ? <EditorWiselyWindow target={desktopTarget} /> : sidebarView === "hosts" && activeTabId && editorWiselyOpen ? <EditorWiselyWindow target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId }} /> : null}
+      {editorWiselyOpen && desktopMode && desktopTarget ? <FileWiselyWindow target={desktopTarget} /> : sidebarView === "hosts" && activeTabId && editorWiselyOpen ? <EditorWiselyWindow target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId }} /> : null}
       {desktopMode && desktopTarget && desktopFilesOpen && (
         desktopTarget.kind === "local" || (sidebarView === "hosts" && activeTabId)
       ) ? (

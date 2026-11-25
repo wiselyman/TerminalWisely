@@ -25,6 +25,29 @@ async function expectMaximizedDesktopAppToFillWindow(page: Page, app: Locator) {
 }
 
 test.describe("Host desktop mode", () => {
+  test("FileWisely opens one unified workspace from the desktop file editor icon", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByTestId("local-fs-tool").click();
+    await page.getByTestId("desktop-icon-editorwisely").click();
+
+    await expect(page.locator(".filewisely-window")).toBeVisible();
+    await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
+    await expect(page.getByTestId("markwisely-window")).toHaveCount(0);
+
+    await api.openEditorWiselyDocument("/home/e2e/guide.md");
+    await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
+    const activeFile = page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" });
+    await expect(activeFile).toHaveClass(/is-active/);
+    await page.getByTestId("editorwisely-tree-toggle").click();
+    await expect(page.getByTestId("editorwisely-tree")).toHaveCount(0);
+    await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
+    await page.getByTestId("editorwisely-tree-toggle").click();
+    await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
+    await expect(page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" })).toHaveClass(/is-active/);
+  });
+
   test("EditorWisely desktop icon stays fully visible above the dock in a short window", async ({ page }) => {
     await gotoApp(page);
     await page.setViewportSize({ width: 1280, height: 680 });
