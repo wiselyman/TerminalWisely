@@ -48,6 +48,7 @@ let previewMarkdownByPath = new Map<string, string>();
 let lastLocalBytesWrite: Record<string, unknown> | null = null;
 let lastRemoteBytesWrite: Record<string, unknown> | null = null;
 let localReadDelayMs = 0;
+let failNextLocalRead = false;
 let nextDialogSaveResult: string | null | undefined;
 let nextDialogOpenResult: string | null | undefined;
 let nextDialogAskResult: boolean | undefined;
@@ -77,6 +78,7 @@ export function __e2eResetMocks() {
   lastLocalBytesWrite = null;
   lastRemoteBytesWrite = null;
   localReadDelayMs = 0;
+  failNextLocalRead = false;
   nextDialogSaveResult = undefined;
   nextDialogOpenResult = undefined;
   nextDialogAskResult = undefined;
@@ -167,6 +169,10 @@ export function __e2eSeedLocalText(path: string, text: string) {
 
 export function __e2eSetLocalReadDelay(milliseconds: number) {
   localReadDelayMs = Math.max(0, milliseconds);
+}
+
+export function __e2eFailNextLocalRead() {
+  failNextLocalRead = true;
 }
 
 export function __e2eLastAiTerminalExec() {
@@ -543,6 +549,7 @@ const handlers: Record<string, (args: InvokeArgs) => unknown | Promise<unknown>>
   },
   read_local_bytes: async (args) => {
     const path = (args as { request: { path: string } }).request.path;
+    if (failNextLocalRead) { failNextLocalRead = false; throw new Error("Mock local read failed"); }
     if (localReadDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, localReadDelayMs));
     return Array.from(new TextEncoder().encode(localFsText.get(path) ?? ""));
   },

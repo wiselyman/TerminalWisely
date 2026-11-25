@@ -108,6 +108,19 @@ describe("markWiselyStore", () => {
     expect(useMarkWiselyStore.getState().getDocument("local")?.text).toBe("# Unsaved edit\n");
   });
 
+  it("publishes each successful file-open request so the window enters its document view", async () => {
+    const { useMarkWiselyStore } = await import("./markWiselyStore");
+    invoke.mockImplementation(async (command: string) => command === "read_local_text" ? "# Disk version\n" : null);
+    const options = { target: { kind: "local" as const }, hostKey: "local", path: "/Users/test/window-request.md" };
+
+    await useMarkWiselyStore.getState().openDocument(options);
+    const firstRevision = useMarkWiselyStore.getState().openRevisions.local;
+    await useMarkWiselyStore.getState().openDocument(options);
+
+    expect(firstRevision).toBe(1);
+    expect(useMarkWiselyStore.getState().openRevisions.local).toBe(2);
+  });
+
   it("offers a recovered draft without replacing the source until restored", async () => {
     const { useMarkWiselyStore } = await import("./markWiselyStore");
     saveMarkWiselyDraft(localStorage, "server-a", "/home/e2e/note.md", "# Recovery draft\n", 1);

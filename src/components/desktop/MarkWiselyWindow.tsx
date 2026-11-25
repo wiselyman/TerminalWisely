@@ -56,6 +56,8 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const [folderDialogReturnView, setFolderDialogReturnView] = useState<"start" | "create">("start");
   const [filePickerReturnView, setFilePickerReturnView] = useState<"start" | "edit">("start");
   const [workspaceRoots, setWorkspaceRoots] = useState<Record<string, string>>({});
+  const openRevision = useMarkWiselyStore((state) => state.openRevisions[targetKey] ?? 0);
+  const seenOpenRevision = useRef(openRevision);
   const document = useMarkWiselyStore((state) => state.documents[targetKey]);
   const openDocuments = useMarkWiselyStore((state) => state.openDocuments[targetKey] ?? EMPTY_DOCUMENTS);
   const activeDocumentId = useMarkWiselyStore((state) => state.activeDocumentIds[targetKey] ?? null);
@@ -78,6 +80,12 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle }: P
   const workspaceRoot = workspaceRoots[targetKey] ?? (document ? parentLocalPath(document.path) : parentDir);
 
   useEffect(() => { setSourceMode(false); }, [activeDocumentId]);
+
+  useEffect(() => {
+    if (seenOpenRevision.current === openRevision) return;
+    seenOpenRevision.current = openRevision;
+    setView("edit");
+  }, [openRevision]);
 
   useEffect(() => {
     const previous = previousSaveRef.current;

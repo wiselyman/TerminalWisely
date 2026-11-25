@@ -584,6 +584,48 @@ test("EditorWisely tree opens multiple files as tabs without losing the active d
   await expect(page.getByTestId("editorwisely-editor").locator(".cm-content")).toHaveText("first tree document");
 });
 
+test("opening a local text file through the OS path shows its document in maximized EditorWisely", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.seedLocalText("/tmp/native-open.conf", "native text document content");
+
+  await api.simulateLocalFileOpen("/tmp/native-open.conf");
+
+  const editorWindow = page.getByTestId("editorwisely-window");
+  await expect(editorWindow).toHaveAttribute("data-maximized", "true");
+  await expect(editorWindow.getByTestId("editorwisely-editor").locator(".cm-content"))
+    .toHaveText("native text document content");
+  await expect(page.getByTestId("markwisely-panel")).toHaveCount(0);
+});
+
+test("opening a local Markdown file through the OS path enters MarkWisely with that document", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.seedLocalText("/tmp/native-open.md", "# Native Markdown marker\n\nOpened document body.");
+
+  await api.simulateLocalFileOpen("/tmp/native-open.md");
+
+  const markWindow = page.getByTestId("markwisely-panel");
+  await expect(markWindow).toHaveAttribute("data-maximized", "true");
+  await expect(markWindow.getByTestId("markwisely-editor-view")).toBeVisible();
+  await expect(markWindow.getByTestId("markwisely-home")).toBeHidden();
+  await expect(markWindow.locator(".markwisely-editor .vditor-ir .vditor-reset[contenteditable='true']"))
+    .toContainText("Native Markdown marker");
+  await expect(page.getByTestId("editorwisely-window")).toHaveCount(0);
+});
+
+test("a failed local text read remains visible in EditorWisely", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.failNextLocalRead();
+
+  await api.simulateLocalFileOpen("/tmp/unreadable.conf");
+
+  await expect(page.getByTestId("editorwisely-window")).toHaveAttribute("data-maximized", "true");
+  await expect(page.getByTestId("editorwisely-window").getByRole("alert"))
+    .toContainText("Mock local read failed");
+});
+
 test("EditorWisely displays existing file contents after its asynchronous read finishes", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);

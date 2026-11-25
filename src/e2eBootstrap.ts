@@ -19,6 +19,7 @@ import {
   __e2eSetPandocFormats,
   __e2eLastPandocImport,
   __e2eFailNextLocalWrite,
+  __e2eFailNextLocalRead,
   __e2eLocalText,
   __e2eSeedLocalText,
   __e2eSetLocalReadDelay,
@@ -35,7 +36,9 @@ import { useSessionStore } from "./stores/sessionStore";
 import { useHostStatsStore } from "./stores/hostStatsStore";
 import { useMarkWiselyStore } from "./stores/markWiselyStore";
 import { useEditorWiselyStore } from "./stores/editorWiselyStore";
+import { openLocalFileInDesktop } from "./lib/localFileOpen";
 import { useDesktopStore } from "./stores/desktopStore";
+import { useToastStore } from "./stores/toastStore";
 import { useAppUpdateStore } from "./stores/appUpdateStore";
 import { switchWorkspacePanel } from "./stores/workspacePanelSwitch";
 import { openAppSettings } from "./stores/downloadSettingsStore";
@@ -83,6 +86,7 @@ export interface TwE2eApi {
   invokeEnterDirectory: (path: string) => Promise<string>;
   invokePreviewOpen: (path: string) => Promise<unknown>;
   openMarkdownPreview: (path?: string) => Promise<void>;
+  simulateLocalFileOpen: (path: string) => Promise<void>;
   openEditorWiselyDocument: (path: string, target?: { kind: "local" } | { kind: "ssh"; sessionId: string }) => Promise<void>;
   resetMocks: () => void;
   getLastUpload: () => Record<string, unknown> | null;
@@ -99,6 +103,7 @@ export interface TwE2eApi {
   getLastPandocImport: () => Record<string, unknown> | null;
   getMarkWiselyDocument: (path: string) => { text: string } | null;
   failNextLocalWrite: () => void;
+  failNextLocalRead: () => void;
   getLocalText: (path: string) => string | null;
   seedLocalText: (path: string, text: string) => void;
   setLocalReadDelay: (milliseconds: number) => void;
@@ -447,6 +452,35 @@ async function openMarkdownPreview(path = "/tmp/e2e-note.md") {
   usePreviewStore.getState().restorePreview();
 }
 
+async function simulateLocalFileOpen(path: string) {
+  await openLocalFileInDesktop(path, {
+    activateLocalDesktop: () => {
+      useSessionStore.getState().activateHome();
+      useManagedEntityStore.getState().showHomeWorkspace();
+      useSidebarViewStore.getState().setView("hosts");
+      useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+    },
+    showMarkWisely: () => {
+      useDesktopStore.getState().launchApp("markwisely");
+      useDesktopStore.getState().setAppMaximized("markwisely", true);
+    },
+    openMarkdown: async (filePath) => {
+      try {
+        await useMarkWiselyStore.getState().openDocument({ target: { kind: "local" }, hostKey: "local", path: filePath });
+      } catch (error) {
+        useToastStore.getState().pushToast(error instanceof Error ? error.message : String(error), false);
+      }
+    },
+    showEditorWisely: () => {
+      useDesktopStore.getState().launchApp("editorwisely");
+      useDesktopStore.getState().setAppMaximized("editorwisely", true);
+    },
+    openText: async (filePath) => {
+      await useEditorWiselyStore.getState().open({ kind: "local" }, filePath);
+    },
+  });
+}
+
 function openSettings() {
   openAppSettings();
 }
@@ -492,6 +526,7 @@ export function runE2eBootstrap(): void {
     invokeEnterDirectory,
     invokePreviewOpen,
     openMarkdownPreview,
+    simulateLocalFileOpen,
     resetMocks: __e2eResetMocks,
     getLastUpload: __e2eLastUploadRequest,
     getLastCreateSsh: __e2eLastCreateSshRequest,
@@ -508,6 +543,7 @@ export function runE2eBootstrap(): void {
     getMarkWiselyDocument: (path) => useMarkWiselyStore.getState().getDocuments("local").find((document) => document.path === path) ?? null,
     openEditorWiselyDocument: async (path, target) => { const activeTarget = target ?? useDesktopStore.getState().target ?? { kind: "local" as const }; useDesktopStore.getState().launchApp("editorwisely"); await useEditorWiselyStore.getState().open(activeTarget, path); },
     failNextLocalWrite: __e2eFailNextLocalWrite,
+    failNextLocalRead: __e2eFailNextLocalRead,
     getLocalText: __e2eLocalText,
     seedLocalText: __e2eSeedLocalText,
     setLocalReadDelay: __e2eSetLocalReadDelay,

@@ -456,7 +456,7 @@ function readStyles() {
   }
 }
 
-// --- MarkWisely: OS Markdown file association and open-file delivery ---
+// --- Native text/Markdown file association and editor routing ---
 {
   const config = JSON.parse(read("src-tauri/tauri.conf.json"));
   const associations = config.bundle?.fileAssociations ?? [];
@@ -467,20 +467,26 @@ function readStyles() {
   const rust = read("src-tauri/src/markdown_open.rs");
   const lib = read("src-tauri/src/lib.rs");
   const app = read("src/App.tsx");
+  const textAssociation = associations.find((entry) =>
+    entry.ext?.includes("txt") && entry.contentTypes?.includes("public.text"),
+  );
   if (
     markdownAssociation?.mimeType === "text/markdown" &&
     markdownAssociation.role === "Editor" &&
-    desktop.includes("MimeType=text/markdown;text/x-markdown;") &&
-    rust.includes("markdown_paths_from_args") &&
-    rust.includes("take_pending_markdown_opens") &&
+    textAssociation?.mimeType === "text/plain" &&
+    desktop.includes("MimeType=text/plain;text/markdown;text/x-markdown;") &&
+    rust.includes("file_paths_from_args") &&
+    rust.includes("take_pending_file_opens") &&
     lib.includes("tauri_plugin_single_instance::init") &&
-    app.includes("tw://markdown-open-files") &&
+    app.includes("tw://local-file-open") &&
+    app.includes("openLocalFileInDesktop") &&
+    app.includes('setAppMaximized("editorwisely", true)') &&
     app.includes('setAppMaximized("markwisely", true)') &&
     app.includes("openDocument({")
   ) {
-    pass("markwisely.os-file-open", "md/markdown association + single-instance queue + maximized Home open bridge");
+    pass("editorwisely.os-file-open", "plain text/Markdown associations + generic file queue + maximized local editor routing");
   } else {
-    fail("markwisely.os-file-open", "OS Markdown association or delivery wiring incomplete");
+    fail("editorwisely.os-file-open", "plain text/Markdown association or native open routing is incomplete");
   }
 }
 

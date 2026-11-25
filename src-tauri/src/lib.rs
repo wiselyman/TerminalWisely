@@ -194,7 +194,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-            let paths = markdown_open::markdown_paths_from_args(
+            let paths = markdown_open::file_paths_from_args(
                 args.iter().skip(1).map(String::as_str),
                 cwd,
             );
@@ -209,7 +209,7 @@ pub fn run() {
         .manage(SessionManager::new())
         .manage(preview::PreviewManager::new())
         .manage(browser::BrowserManager::new())
-        .manage(markdown_open::MarkdownOpenQueue::default())
+        .manage(markdown_open::LocalFileOpenQueue::default())
         .setup(|app| {
             let startup_args: Vec<String> = std::env::args_os()
                 .skip(1)
@@ -218,7 +218,7 @@ pub fn run() {
             let cwd = std::env::current_dir().unwrap_or_default();
             markdown_open::enqueue(
                 app.handle(),
-                markdown_open::markdown_paths_from_args(startup_args.iter().map(String::as_str), cwd),
+                markdown_open::file_paths_from_args(startup_args.iter().map(String::as_str), cwd),
             );
             durable::startup(app.handle());
             apply_window_icon(app)?;
@@ -290,7 +290,7 @@ pub fn run() {
             commands::insert_terminal_command,
             commands::get_saved_connections,
             commands::take_catalog_restore_notice,
-            markdown_open::take_pending_markdown_opens,
+            markdown_open::take_pending_file_opens,
             commands::save_entity_layout,
             commands::load_entity_layout,
             commands::save_connection,
@@ -400,7 +400,7 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Opened { urls } => {
                     let paths = urls.into_iter().filter_map(|url| url.to_file_path().ok())
-                        .filter(|path| markdown_open::is_markdown_path(path)).collect();
+                        .filter(|path| path.is_file()).collect();
                     markdown_open::enqueue(&app, paths);
                 }
                 _ => {}

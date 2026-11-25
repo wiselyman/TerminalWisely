@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMarkdownOpenDrain } from "./markdownOpenQueue";
+import { createFileOpenDrain } from "./markdownOpenQueue";
 
-describe("createMarkdownOpenDrain", () => {
+describe("createFileOpenDrain", () => {
   it("delivers every batch even when another batch arrives during delivery", async () => {
     const take = vi.fn()
       .mockResolvedValueOnce(["/tmp/one.md"])
@@ -10,7 +10,7 @@ describe("createMarkdownOpenDrain", () => {
     const delivered: string[] = [];
     let release!: () => void;
     const waitForFirst = new Promise<void>((resolve) => { release = resolve; });
-    const drain = createMarkdownOpenDrain(take, async (path) => {
+    const drain = createFileOpenDrain(take, async (path) => {
       delivered.push(path);
       if (path.endsWith("one.md")) await waitForFirst;
     });

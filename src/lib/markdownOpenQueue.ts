@@ -1,4 +1,4 @@
-export function createMarkdownOpenDrain(
+export function createFileOpenDrain(
   takePending: () => Promise<string[]>,
   deliver: (path: string) => Promise<void>,
 ): () => Promise<void> {

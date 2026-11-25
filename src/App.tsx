@@ -67,7 +67,9 @@ import { useBrowserStore } from "./stores/browserStore";
 import { useDesktopStore } from "./stores/desktopStore";
 import { selectEntitySections, useEntityLayoutStore } from "./stores/entityLayoutStore";
 import { useMarkWiselyStore } from "./stores/markWiselyStore";
-import { createMarkdownOpenDrain } from "./lib/markdownOpenQueue";
+import { useEditorWiselyStore } from "./stores/editorWiselyStore";
+import { createFileOpenDrain } from "./lib/markdownOpenQueue";
+import { openLocalFileInDesktop } from "./lib/localFileOpen";
 import { isSshDesktopTarget } from "./lib/desktopTarget";
 import { useToastStore } from "./stores/toastStore";
 import { splitStartupNotice } from "./lib/startupNotice";
@@ -158,33 +160,46 @@ function App() {
     if (!isTauriRuntime()) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    const drainPendingMarkdown = createMarkdownOpenDrain(
-      () => invoke<string[]>("take_pending_markdown_opens"),
+    const drainPendingFiles = createFileOpenDrain(
+      () => invoke<string[]>("take_pending_file_opens"),
       async (path) => {
         if (cancelled) return;
-        useSessionStore.getState().activateHome();
-        useManagedEntityStore.getState().openHome();
-        useSidebarViewStore.getState().setView("hosts");
-        useDesktopStore.getState().openDesktopTarget({ kind: "local" });
-        useDesktopStore.getState().launchApp("markwisely");
-        useDesktopStore.getState().setAppMaximized("markwisely", true);
-        try {
-          await useMarkWiselyStore.getState().openDocument({
-            target: { kind: "local" },
-            hostKey: "local",
-            path,
-          });
-        } catch (error) {
-          pushToast(formatAppError(error), false);
-        }
+        await openLocalFileInDesktop(path, {
+          activateLocalDesktop: () => {
+            useSessionStore.getState().activateHome();
+            useManagedEntityStore.getState().showHomeWorkspace();
+            useSidebarViewStore.getState().setView("hosts");
+            useDesktopStore.getState().openDesktopTarget({ kind: "local" });
+          },
+          showMarkWisely: () => {
+            useDesktopStore.getState().launchApp("markwisely");
+            useDesktopStore.getState().setAppMaximized("markwisely", true);
+          },
+          openMarkdown: async (filePath) => {
+            try {
+              await useMarkWiselyStore.getState().openDocument({
+                target: { kind: "local" }, hostKey: "local", path: filePath,
+              });
+            } catch (error) {
+              pushToast(formatAppError(error), false);
+            }
+          },
+          showEditorWisely: () => {
+            useDesktopStore.getState().launchApp("editorwisely");
+            useDesktopStore.getState().setAppMaximized("editorwisely", true);
+          },
+          openText: async (filePath) => {
+            await useEditorWiselyStore.getState().open({ kind: "local" }, filePath);
+          },
+        });
       },
     );
     void (async () => {
-      unlisten = await listen("tw://markdown-open-files", () => {
-        void drainPendingMarkdown().catch(() => undefined);
+      unlisten = await listen("tw://local-file-open", () => {
+        void drainPendingFiles().catch(() => undefined);
       });
       try {
-        await drainPendingMarkdown();
+        await drainPendingFiles();
       } catch {
         // The command is unavailable in browser previews and older dev builds.
       }

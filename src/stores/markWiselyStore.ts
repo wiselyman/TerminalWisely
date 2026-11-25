@@ -70,6 +70,7 @@ interface MarkWiselyState {
   documents: Record<string, MarkWiselyDocument | null>;
   openDocuments: Record<string, MarkWiselyDocument[]>;
   activeDocumentIds: Record<string, string | null>;
+  openRevisions: Record<string, number>;
   recentFiles: RecentFilesByHost;
   openDocument: (options: OpenDocumentOptions) => Promise<void>;
   createDocument: (options: CreateDocumentOptions) => Promise<void>;
@@ -157,6 +158,7 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
   documents: {},
   openDocuments: {},
   activeDocumentIds: {},
+  openRevisions: {},
   recentFiles: readRecentFiles(),
 
   openDocument: async (options) => {
@@ -166,6 +168,7 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
     const alreadyOpen = (get().openDocuments[key] ?? []).find((document) => document.path === path);
     if (alreadyOpen) {
       get().activateDocument(key, alreadyOpen.documentId);
+      set((state) => ({ openRevisions: { ...state.openRevisions, [key]: (state.openRevisions[key] ?? 0) + 1 } }));
       return;
     }
     let resolvedPath = path;
@@ -212,6 +215,7 @@ export const useMarkWiselyStore = create<MarkWiselyState>((set, get) => ({
       },
       openDocuments: { ...state.openDocuments, [key]: documents },
       activeDocumentIds: { ...state.activeDocumentIds, [key]: documentId },
+      openRevisions: { ...state.openRevisions, [key]: (state.openRevisions[key] ?? 0) + 1 },
       recentFiles: withRecentFile(state.recentFiles, target.kind === "local" ? "local" : hostKey, resolvedPath),
     }));
   },
