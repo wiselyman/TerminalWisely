@@ -39,7 +39,7 @@ test.describe("UI visual baselines", () => {
     await api.seedLocalText("/tmp/visual-markdown.md", "# A calm writing surface\n\nA short paragraph with readable line length and comfortable spacing.");
     await api.openHome();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-open-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-entry").filter({ hasText: "visual-markdown.md" }).click();

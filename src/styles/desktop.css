@@ -589,12 +589,8 @@
   background: linear-gradient(160deg, #8b8df8 0%, #5142c8 100%);
 }
 
-.host-desktop-glyph.is-markwisely {
-  background: linear-gradient(160deg, #7197f4 0%, #3f62cf 100%);
-}
-
-.host-desktop-glyph.is-editorwisely {
-  background: linear-gradient(160deg, #5268d8 0%, #293c9d 100%);
+.host-desktop-glyph.is-filewisely {
+  background: linear-gradient(160deg, #7188ee 0%, #3f4fc4 100%);
 }
 
 .host-desktop-dock {

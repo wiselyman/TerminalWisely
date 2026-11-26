@@ -247,7 +247,7 @@ export function LocalFsPanel({
     if (!/\.(?:md|markdown)$/i.test(entry.path)) {
       const target = desktopTarget ?? { kind: "ssh" as const, sessionId };
       void openEditorWisely(target, entry.path);
-      launchDesktopApp("editorwisely");
+      launchDesktopApp("filewisely");
       return;
     }
     void openPreview(sessionId, entry.path, undefined, entry.size_bytes).catch(
@@ -587,7 +587,7 @@ export function LocalFsPanel({
           : undefined,
       onOpenEditor:
         pathKind === "file" && desktopTarget
-          ? () => { void openEditorWisely(desktopTarget, entry.path); launchDesktopApp("editorwisely"); }
+          ? () => { void openEditorWisely(desktopTarget, entry.path); launchDesktopApp("filewisely"); }
           : undefined,
       onRunInTerminal:
         pathKind === "file" && isRunnableScriptPath(entry.path, entry.permissions, shebang, "unix")

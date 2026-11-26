@@ -103,6 +103,11 @@ export function EditorWiselyIcon() {
   return <svg viewBox="0 0 24 24" {...iconProps} strokeWidth={1.8}><path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M8 12h8M8 16h8"/></svg>;
 }
 
+/** Unified FileWisely document workspace. */
+export function FileWiselyIcon() {
+  return <svg viewBox="0 0 24 24" {...iconProps} strokeWidth={1.8}><path d="M5 3h10l4 4v14H5z"/><path d="M14 3v5h5M8 12h8M8 16h5"/><circle cx="18" cy="18" r="3"/></svg>;
+}
+
 /** lucide: monitor — host workspace / this computer */
 export function HostWorkspaceIcon() {
   return (

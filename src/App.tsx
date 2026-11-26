@@ -19,8 +19,6 @@ import { HomeHostDirectory } from "./components/home/HomeHostDirectory";
 import { LocalFsTool } from "./components/LocalFsTool";
 import { BrowserPanel } from "./components/browser/BrowserPanel";
 import { DesktopAiWindow } from "./components/desktop/DesktopAiWindow";
-import { MarkWiselyWindow } from "./components/desktop/MarkWiselyWindow";
-import { EditorWiselyWindow } from "./components/desktop/EditorWiselyWindow";
 import { FileWiselyWindow } from "./components/desktop/FileWiselyWindow";
 import { DesktopPanel } from "./components/desktop/DesktopPanel";
 import { DesktopTerminalWindow } from "./components/desktop/DesktopTerminalWindow";
@@ -173,8 +171,8 @@ function App() {
             useDesktopStore.getState().openDesktopTarget({ kind: "local" });
           },
           showMarkWisely: () => {
-            useDesktopStore.getState().launchApp("markwisely");
-            useDesktopStore.getState().setAppMaximized("markwisely", true);
+            useDesktopStore.getState().launchApp("filewisely");
+            useDesktopStore.getState().setAppMaximized("filewisely", true);
           },
           openMarkdown: async (filePath) => {
             try {
@@ -186,7 +184,7 @@ function App() {
             }
           },
           showEditorWisely: () => {
-            useDesktopStore.getState().launchApp("editorwisely");
+            useDesktopStore.getState().launchApp("filewisely");
           },
           openText: async (filePath) => {
             await useEditorWiselyStore.getState().open({ kind: "local" }, filePath);
@@ -467,8 +465,7 @@ function App() {
   const desktopAiLocalOpen = useDesktopStore((s) => s.apps.aiLocal.open);
   const desktopAiLocalMinimized = useDesktopStore((s) => s.apps.aiLocal.minimized);
   const desktopFilesOpen = useDesktopStore((s) => s.apps.files.open);
-  const markWiselyOpen = useDesktopStore((s) => s.apps.markwisely.open);
-  const editorWiselyOpen = useDesktopStore((s) => s.apps.editorwisely.open);
+  const fileWiselyOpen = useDesktopStore((s) => s.apps.filewisely.open);
   const desktopFilesMinimized = useDesktopStore((s) => s.apps.files.minimized);
   const desktopProcessesOpen = useDesktopStore((s) => s.apps.processes.open);
   const desktopProcessesMinimized = useDesktopStore(
@@ -1326,22 +1323,9 @@ function App() {
       {desktopAiLocalShown ? (
         <DesktopAiWindow target="local" subtitle={t("desktop.localComputer", { ns: "tools" })} />
       ) : null}
-      {markWiselyOpen && desktopMode && desktopTarget ? (
-        <MarkWiselyWindow
-          target={desktopTarget}
-          sessionId={desktopTarget.kind === "ssh" ? activeTabId ?? undefined : undefined}
-          hostKey={desktopTarget.kind === "ssh" ? activeTabServerId || activeTabId || undefined : undefined}
-          sessionTitle={desktopTarget.kind === "ssh" ? activeSessionTitle : "This computer"}
-        />
-      ) : sidebarView === "hosts" && activeTabId && markWiselyOpen ? (
-        <MarkWiselyWindow
-          target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId }}
-          sessionId={activeTabId}
-          hostKey={activeTabServerId || activeTabId}
-          sessionTitle={activeSessionTitle}
-        />
+      {fileWiselyOpen && (desktopTarget || (sidebarView === "hosts" && activeTabId)) ? (
+        <FileWiselyWindow target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId! }} />
       ) : null}
-      {editorWiselyOpen && desktopMode && desktopTarget ? <FileWiselyWindow target={desktopTarget} /> : sidebarView === "hosts" && activeTabId && editorWiselyOpen ? <EditorWiselyWindow target={desktopTarget ?? { kind: "ssh", sessionId: activeTabId }} /> : null}
       {desktopMode && desktopTarget && desktopFilesOpen && (
         desktopTarget.kind === "local" || (sidebarView === "hosts" && activeTabId)
       ) ? (

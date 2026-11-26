@@ -12,7 +12,7 @@ import { MarkWiselyOutlinePanel } from "./MarkWiselyOutlinePanel";
 import { MarkdownWysiwygEditor } from "../preview/MarkdownWysiwygEditor";
 import { flushPreviewEditor } from "../../lib/previewEditorFlush";
 import { useMarkWiselyStore } from "../../stores/markWiselyStore";
-import { MarkWiselyIcon } from "../WorkspaceToolIcons";
+import { FileWiselyIcon, MarkWiselyIcon } from "../WorkspaceToolIcons";
 import { desktopTargetKey, type DesktopTarget } from "../../lib/desktopTarget";
 import { createLocalPath, listLocalDirectory, listLocalRoots, parentLocalPath, writeLocalBytes, writeLocalText } from "../../lib/localFsApi";
 import { normalizeMarkWiselyExportPath } from "../../lib/markWiselyExportPath";
@@ -23,12 +23,12 @@ import { countMarkdown } from "../../lib/markdownStatistics";
 import { scopeEditorCss } from "../../lib/markdownEditor/preferences";
 import { useMarkWiselyPreferencesStore } from "../../stores/markWiselyPreferencesStore";
 
-type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null; embedded?: boolean };
+type Props = { target?: DesktopTarget; sessionId?: string; hostKey?: string; sessionTitle?: string | null; embedded?: boolean; showTabs?: boolean; onOpenText?: () => void };
 type View = "start" | "create" | "create-folder" | "open-folder" | "open" | "workspace-folder" | "save-as-folder" | "save-as" | "edit";
 const EMPTY_RECENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getRecentFiles"]> = [];
 const EMPTY_DOCUMENTS: ReturnType<ReturnType<typeof useMarkWiselyStore.getState>["getDocuments"]> = [];
 
-export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, embedded = false }: Props) {
+export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, embedded = false, showTabs = true, onOpenText }: Props) {
   const activeTarget = target ?? { kind: "ssh" as const, sessionId: sessionId ?? "" };
   const targetKey = desktopTargetKey(activeTarget);
   const activeHostKey = activeTarget.kind === "local" ? "local" : hostKey ?? sessionId ?? "";
@@ -71,6 +71,9 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, emb
   const restoreDraft = useMarkWiselyStore((state) => state.restoreDraft);
   const discardDraft = useMarkWiselyStore((state) => state.discardDraft);
   const dirty = !!document && document.text !== document.savedText;
+  useEffect(() => {
+    if (embedded && document && view === "start") setView("edit");
+  }, [document?.documentId, embedded, view]);
   const deferredDocumentText = useDeferredValue(document?.text ?? "");
   const statistics = useMemo(() => countMarkdown(deferredDocumentText), [deferredDocumentText]);
   const editorPreferences = useMarkWiselyPreferencesStore((state) => state.preferences);
@@ -486,7 +489,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, emb
       data-testid="markwisely-outline-toggle"
     ><PanelRight aria-hidden="true" size={16} /></button>
   ) : undefined;
-  const editorHeaderTabs = view === "edit" && document && openDocuments.length > 1 ? (
+  const editorHeaderTabs = showTabs && view === "edit" && document && openDocuments.length > 1 ? (
     <MarkWiselyDocumentTabs
       documents={openDocuments}
       activeDocumentId={activeDocumentId}
@@ -501,8 +504,9 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, emb
   return (
     <DesktopAppWindow
       embedded={embedded}
-      appId="markwisely"
-      title={t("desktop.appMarkWisely")}
+      embeddedTestId={embedded ? "markwisely-panel" : undefined}
+      appId="filewisely"
+      title={t(embedded ? "desktop.appFileWisely" : "desktop.appMarkWisely")}
       headerTabs={editorHeaderTabs}
       headerLeadingActions={editorHeaderActions}
       headerActions={editorTrailingActions}
@@ -623,10 +627,10 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, emb
           inert={view !== "start" ? true : undefined}
         >
           <header className="markwisely-home-heading">
-            <span className="markwisely-brand-icon" data-testid="markwisely-brand-icon" aria-hidden="true"><MarkWiselyIcon /></span>
+            <span className="markwisely-brand-icon" data-testid="markwisely-brand-icon" aria-hidden="true">{embedded ? <FileWiselyIcon /> : <MarkWiselyIcon />}</span>
             <div>
-              <h2>MarkWisely</h2>
-              <p>{t("markwisely.subtitle")}</p>
+              <h2>{embedded ? t("desktop.appFileWisely") : "MarkWisely"}</h2>
+              <p>{t(embedded ? "fileWisely.welcomeSubtitle" : "markwisely.subtitle")}</p>
             </div>
           </header>
           <div className="markwisely-home-actions">
@@ -638,6 +642,7 @@ export function MarkWiselyWindow({ target, sessionId, hostKey, sessionTitle, emb
               <FolderOpen aria-hidden="true" />
               <span>{t("markwisely.openDocument")}</span>
             </button>
+            {embedded && onOpenText ? <button type="button" className="markwisely-secondary" data-testid="filewisely-open-text" onClick={onOpenText}>{t("fileWisely.openText")}</button> : null}
           </div>
           {error ? <div className="markwisely-error" role="alert">{error}</div> : null}
           <section className="markwisely-recents" aria-labelledby="markwisely-recents-title">

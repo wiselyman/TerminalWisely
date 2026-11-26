@@ -23,12 +23,12 @@
 
 | Area | Highlights |
 |------|------------|
-| **Home** | An icon launcher for the grouped host directory; Local Desktop is the first pinned workspace tab and contains Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
+| **Home** | An icon launcher for the grouped host directory; Local Desktop is the first pinned workspace tab and contains Terminal, AI Local, and FileWisely. Files, browser, and process management remain native tools on your computer. Windows uses PowerShell |
 | **Agent runtimes** | Cursor Agent, Codex, Claude Code on the current local or SSH host; dual-plane UX (local CLI stream + remote exec cards) |
 | **Terminal** | Local and remote Terminal apps inside Desktop workspaces, saved SSH hosts, reconnect, English / 中文 UI |
 | **Host Desktop** | The workspace becomes the connected host’s desktop. Dock: Files, Processes, Browser (host network), Terminal, AI Linux. Windows stay when you leave and come back |
 | **Host Browser** | Open remote HTTP (including `127.0.0.1`) via the existing SSH session; multi-tab, history, bookmarks |
-| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; MarkWisely local/remote Markdown workspace with document tabs, file navigation, and outline; EditorWisely source and text editor; download, compress, cross-server send |
+| **Files** | Drag-and-drop upload, click `ls` paths to `cd` or preview; FileWisely edits Markdown and syntax-highlighted text, previews PDFs and images, and keeps a collapsible tree focused on the active file; download, compress, cross-server send |
 | **AI Engineer** | Local chat in Home; follows the active SSH host elsewhere. Long runs keep the SSH lease; the same chat stays continuous when you switch models or agents |
 | **Models** | OpenAI-compatible APIs, Ollama, Anthropic-compatible gateways, Gemini |
 | **Safety** | Policy-graded commands (read / mutate / deny); approval cards; stop anytime |
@@ -38,26 +38,24 @@
 
 ## Home Desktop
 
-The Home icon at the left of the titlebar opens the saved host directory. The directory shows saved SSH hosts in their existing groups and has no Local entry. Local Desktop is a single fixed workspace tab immediately after the Home icon and before SSH tabs; selecting it does not create an SSH session. All workspace tabs represent Desktop workspaces; the left Hosts list and standalone Terminal tabs are removed. The Local Desktop Dock contains Terminal, AI Local, MarkWisely, and EditorWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing local chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal uses the existing local PTY without creating a standalone tab. Local Desktop windows and recent Markdown files have their own state, separate from each SSH host.
+The Home icon at the left of the titlebar opens the saved host directory. The directory shows saved SSH hosts in their existing groups and has no Local entry. Local Desktop is a single fixed workspace tab immediately after the Home icon and before SSH tabs; selecting it does not create an SSH session. All workspace tabs represent Desktop workspaces; the left Hosts list and standalone Terminal tabs are removed. The Local Desktop Dock contains Terminal, AI Local, and FileWisely. Files, browser, and process management are already available as native tools on this computer, so they are not duplicated in the Home Dock. AI Local opens the existing local chat in a Desktop window and keeps its transcript and draft; it does not create an SSH session. AI Linux remains available only in SSH Host Desktop. The Desktop Terminal uses the existing local PTY without creating a standalone tab. Local Desktop windows and recent files have their own state, separate from each SSH host.
 
 The Local Desktop Terminal on Windows uses Windows PowerShell 5.1. Windows packages include Microsoft Coreutils for Windows v2026.9.3 for x64 or ARM64, a preview release. Coreutils commands are available by command name in the app terminal; PowerShell 5.1 does not receive the full PowerShell 7 globbing and pipeline integration. The app adds its bundled command directory and clears conflicting aliases only in that terminal process. It does not change the system PATH, PowerShell profiles, or registry.
 
 ---
 
-## EditorWisely
+## FileWisely
 
-EditorWisely is the text and source editor included in both the Home and SSH Host Desktops. Browse local or remote files in its directory tree and keep multiple documents open in tabs. Double-click a text file in Local Desktop Files or SSH Files, or open it with TerminalWisely from the operating system, to show it in a normal EditorWisely window. Its file tree starts hidden; use the titlebar sidebar button to show it, and the tree expands to the active file's directory. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
+FileWisely is the single file workspace included in both Home and SSH Host Desktops. Open Markdown, text, source, PDF, and image files from its collapsible tree or the Files tool. Multiple documents share one tab row; the tree follows the active document. Double-click a text or Markdown file in Files, or open a file with TerminalWisely from the operating system, to show it in FileWisely. Local documents use Home’s filesystem; remote documents use the already connected SSH session.
 
 - **Syntax highlighting** — JavaScript/TypeScript, Python, Go, Rust, Shell, C/C++, Java, PHP, JSON, YAML, TOML, XML, HTML, CSS/Sass, SQL, Markdown, Kotlin, Swift, Ruby, properties, Dockerfiles, and Makefiles.
 - **Editing tools** — multiple document tabs, line numbers, find and replace, undo and redo, indentation, and a status bar with language, cursor position, encoding, and line endings.
 - **Save with confidence** — writable files save automatically after typing pauses, and you can also save explicitly. Unsaved changes are marked; closing a modified document asks before discarding it. Failed reads or writes keep the edited text available.
 - **Preserve text format** — UTF-8 files, UTF-8 BOM, and LF/CRLF line endings are retained when saving. Binary files and unsupported encodings are reported instead of silently rewritten.
 
-EditorWisely and MarkWisely are separate Desktop apps: EditorWisely handles plain text and source files, while MarkWisely remains the Markdown writing workspace.
+For plain text and source files, FileWisely provides CodeMirror syntax highlighting, multiple tabs, line numbers, find and replace, undo and redo, indentation, and a status bar with language, cursor position, encoding, and line endings. Writable files save automatically after typing pauses and can also be saved explicitly. Unsaved changes are marked; closing a modified document asks before discarding it. Failed reads or writes keep edited text available. UTF-8, UTF-8 BOM, and LF/CRLF line endings are retained.
 
-## MarkWisely
-
-MarkWisely opens Markdown documents from local or SSH-host Files in a workspace that fills its TerminalWisely window. Opening a local Markdown file with TerminalWisely now opens that document directly in MarkWisely instead of showing only its home screen. Keep several documents open in titlebar tabs, browse Markdown files from the left tree, and open the document outline on the right to jump between headings. Closing a document tab leaves the workspace open; the window close button closes the MarkWisely workspace.
+For Markdown, FileWisely keeps the WYSIWYG editor, source mode, multi-document editing, file navigation, document outline, recovery drafts, import/export, themes, and writing preferences. PDF and image files open in their existing previewers. The left tree can be hidden and expands to the active file's directory.
 
 ---
 

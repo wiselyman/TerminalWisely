@@ -481,7 +481,7 @@ function readStyles() {
     app.includes("tw://local-file-open") &&
     app.includes("openLocalFileInDesktop") &&
     !app.includes('setAppMaximized("editorwisely", true)') &&
-    app.includes('setAppMaximized("markwisely", true)') &&
+    app.includes('setAppMaximized("filewisely", true)') &&
     app.includes("openDocument({")
   ) {
     pass("editorwisely.os-file-open", "plain text/Markdown associations + generic file queue + windowed local editor routing");
@@ -1970,8 +1970,8 @@ pass(
     const end = markdown.indexOf("\n---", start);
     const homeSection = start >= 0 ? markdown.slice(start, end >= 0 ? end : undefined) : "";
     const dockApps = file === "README.md"
-      ? homeSection.includes("Terminal, AI Local, MarkWisely, and EditorWisely") && !/Desktop[^\n]*(Files, Processes, Browser)/.test(homeSection)
-      : homeSection.includes("Terminal、AI Local、MarkWisely 和 EditorWisely") && !/桌面[^\n]*(文件、进程、浏览器)/.test(homeSection);
+      ? homeSection.includes("Terminal, AI Local, and FileWisely") && !/Desktop[^\n]*(Files, Processes, Browser)/.test(homeSection)
+      : homeSection.includes("Terminal、AI Local 和全能文件台") && !/桌面[^\n]*(文件、进程、浏览器)/.test(homeSection);
     if (dockApps) pass(`docs.${file}.home-desktop-apps`, "Home Desktop app list matches the shipped UI");
     else fail(`docs.${file}.home-desktop-apps`, "Home Desktop app list must match shipped products");
   }

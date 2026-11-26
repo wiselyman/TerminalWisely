@@ -23,12 +23,12 @@
 
 | 模块 | 能力 |
 |------|------|
-| **Home** | 标题栏 Home 图标打开分组主机目录；Local Desktop 固定为第一个工作区标签，包含 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理使用电脑自带的应用；Windows 使用 PowerShell |
+| **Home** | 标题栏 Home 图标打开分组主机目录；Local Desktop 固定为第一个工作区标签，包含 Terminal、AI Local 和全能文件台。文件、浏览器与进程管理使用电脑自带的应用；Windows 使用 PowerShell |
 | **Agent 运行时** | Cursor Agent / Codex / Claude Code 跟随当前本机或 SSH 主机；双平面 UX（本机 CLI 流 + 远端执行卡片） |
 | **终端** | Terminal 在本机或远程 Desktop 内运行；保存 SSH 主机、断线重连、中英文界面 |
 | **主机 Desktop** | 工作区变成已连接主机的桌面。Dock：文件、进程、浏览器（主机网络）、终端、AI Linux。离开再回来，窗口还在 |
 | **主机 Browser** | 经现有 SSH 访问远端 HTTP（含 `127.0.0.1`）；多标签、历史、书签 |
-| **文件** | 拖拽上传、`ls` 点击进目录或预览；MarkWisely 本机/SSH Markdown 工作台，支持文档标签、文件导航和大纲；EditorWisely 文本源码编辑器；下载、压缩、跨服务器发送 |
+| **文件** | 拖拽上传、`ls` 点击进目录或预览；全能文件台编辑 Markdown 与带语法高亮的文本，预览 PDF/图片，目录树可收起并聚焦当前文件；下载、压缩、跨服务器发送 |
 | **AI 工程师** | Home 使用本机聊天；Hosts 跟随当前 SSH 主机。长任务续租 SSH；同一条对话切换模型或 Agent 后工作连续 |
 | **模型** | OpenAI 兼容、Ollama、Anthropic 兼容网关、Gemini |
 | **安全** | 命令能力分级（只读 / 变更 / 拒绝）；批准卡片；随时停止 |
@@ -38,26 +38,24 @@
 
 ## Home 本机 Desktop
 
-标题栏最左侧的 Home 图标打开已保存主机目录。目录按现有分组显示 SSH 主机，不再显示 Local 项。Local Desktop 是紧跟 Home 图标、位于 SSH 标签之前的唯一固定工作区标签；点击它不会创建 SSH 会话。所有工作区标签都代表 Desktop，左侧 Hosts 列表和独立 Terminal 标签已移除。本机 Desktop Dock 提供 Terminal、AI Local、MarkWisely 和 EditorWisely。文件、浏览器与进程管理本机已有对应应用，因此不在 Home Dock 中重复提供。AI Local 会在桌面窗口中打开现有本机聊天，并保留对话和草稿；不会创建 SSH 会话。AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 使用现有本机 PTY，不创建独立标签。本机桌面的窗口和 Markdown 最近文件都与各 SSH 主机分别保存。
+标题栏最左侧的 Home 图标打开已保存主机目录。目录按现有分组显示 SSH 主机，不再显示 Local 项。Local Desktop 是紧跟 Home 图标、位于 SSH 标签之前的唯一固定工作区标签；点击它不会创建 SSH 会话。所有工作区标签都代表 Desktop，左侧 Hosts 列表和独立 Terminal 标签已移除。本机 Desktop Dock 提供 Terminal、AI Local 和全能文件台。文件、浏览器与进程管理本机已有对应应用，因此不在 Home Dock 中重复提供。AI Local 会在桌面窗口中打开现有本机聊天，并保留对话和草稿；不会创建 SSH 会话。AI Linux 仍只在 SSH 主机 Desktop 中提供。Desktop Terminal 使用现有本机 PTY，不创建独立标签。本机桌面的窗口和最近文件都与各 SSH 主机分别保存。
 
 Windows Local Desktop Terminal 继续使用 Windows PowerShell 5.1。Windows 安装包按 x64 或 ARM64 内置微软维护的 Coreutils for Windows v2026.9.3（Preview）。在应用终端里可直接按命令名调用 Coreutils；PowerShell 5.1 不包含完整的 PowerShell 7 通配符和管道集成。应用只在该终端子进程中调整 PATH 并移除冲突别名，不修改系统 PATH、PowerShell Profile 或注册表。
 
 ---
 
-## EditorWisely
+## 全能文件台（FileWisely）
 
-EditorWisely 是 Home 与 SSH 主机 Desktop 内置的文本和源码编辑器。可在目录树中浏览本机或远程文件，并通过多个标签同时打开文档。在本机 Files 或 SSH Files 中双击文本文件，或通过操作系统选择 TerminalWisely 打开本机文件，都会在普通窗口中显示文件。文件树默认隐藏，可通过标题栏侧栏图标显示；打开后会展开到当前文件所在目录。本机文件使用 Home 文件系统；远程文件沿用当前 SSH 会话。
+全能文件台是 Home 与 SSH 主机 Desktop 内唯一的文件工作台，可从可收起的目录树或 Files 工具打开 Markdown、文本、源码、PDF 和图片。多个文档共用一个标签栏，目录树会跟随当前文件。本机或 SSH Files 中双击文本/Markdown 文件，或通过操作系统选择 TerminalWisely 打开本机文件，都会在全能文件台显示。本机文件使用 Home 文件系统；远程文件沿用当前 SSH 会话。
 
 - **语法高亮** — JavaScript/TypeScript、Python、Go、Rust、Shell、C/C++、Java、PHP、JSON、YAML、TOML、XML、HTML、CSS/Sass、SQL、Markdown、Kotlin、Swift、Ruby、properties、Dockerfile 和 Makefile。
 - **编辑工具** — 多文档标签、行号、查找替换、撤销重做、缩进；状态栏显示语言、光标位置、编码和换行格式。
 - **可靠保存** — 输入暂停后自动保存，也可手动保存。未保存文档会有标记；关闭修改过的文档前会询问。读写失败时保留编辑内容。
 - **保留文本格式** — 保存时保留 UTF-8、UTF-8 BOM 以及 LF/CRLF 换行。二进制文件和不支持的编码会显示错误，不会被静默改写。
 
-EditorWisely 与 MarkWisely 是两个独立的 Desktop 应用：EditorWisely 用于纯文本和源码，MarkWisely 继续作为 Markdown 写作工作台。
+纯文本与源码使用 CodeMirror 语法高亮，支持多文档标签、行号、查找替换、撤销重做、缩进；状态栏显示语言、光标位置、编码和换行格式。可写文件会在输入暂停后自动保存，也可手动保存。未保存修改会有标记；关闭修改过的文档前会询问。读写失败时保留编辑内容。保存时保留 UTF-8、UTF-8 BOM 以及 LF/CRLF 换行。
 
-## MarkWisely
-
-在本机或 SSH 主机的 Files 中打开 Markdown，即可在铺满 TerminalWisely 窗口的工作区编辑。通过操作系统打开本机 Markdown 文件时，也会直接显示对应文档，不再只显示 MarkWisely 主界面。标题栏标签可同时打开多份文档；左侧文件树浏览 Markdown，右侧大纲可跳转到各级标题。关闭文档标签只关闭该文档；窗口右上角的关闭按钮关闭整个 MarkWisely 工作区。
+Markdown 保留所见即所得编辑器、源码模式、多文档、文件导航、大纲、恢复草稿、导入导出、主题与写作偏好。PDF 和图片使用现有预览器。左侧目录树可以收起，并会展开到当前文件所在目录。
 
 ---
 

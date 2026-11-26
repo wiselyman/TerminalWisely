@@ -463,8 +463,8 @@ async function simulateLocalFileOpen(path: string) {
       useDesktopStore.getState().openDesktopTarget({ kind: "local" });
     },
     showMarkWisely: () => {
-      useDesktopStore.getState().launchApp("markwisely");
-      useDesktopStore.getState().setAppMaximized("markwisely", true);
+      useDesktopStore.getState().launchApp("filewisely");
+      useDesktopStore.getState().setAppMaximized("filewisely", true);
     },
     openMarkdown: async (filePath) => {
       try {
@@ -474,7 +474,7 @@ async function simulateLocalFileOpen(path: string) {
       }
     },
     showEditorWisely: () => {
-      useDesktopStore.getState().launchApp("editorwisely");
+      useDesktopStore.getState().launchApp("filewisely");
     },
     openText: async (filePath) => {
       await useEditorWiselyStore.getState().open({ kind: "local" }, filePath);
@@ -543,7 +543,7 @@ export function runE2eBootstrap(): void {
     setPandocFormats: __e2eSetPandocFormats,
     getLastPandocImport: __e2eLastPandocImport,
     getMarkWiselyDocument: (path) => useMarkWiselyStore.getState().getDocuments("local").find((document) => document.path === path) ?? null,
-    openEditorWiselyDocument: async (path, target) => { const activeTarget = target ?? useDesktopStore.getState().target ?? { kind: "local" as const }; useDesktopStore.getState().launchApp("editorwisely"); await useEditorWiselyStore.getState().open(activeTarget, path); },
+    openEditorWiselyDocument: async (path, target) => { const activeTarget = target ?? useDesktopStore.getState().target ?? { kind: "local" as const }; useDesktopStore.getState().launchApp("filewisely"); await useEditorWiselyStore.getState().open(activeTarget, path); },
     failNextLocalWrite: __e2eFailNextLocalWrite,
     failNextLocalRead: __e2eFailNextLocalRead,
     getLocalText: __e2eLocalText,

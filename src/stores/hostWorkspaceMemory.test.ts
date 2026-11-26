@@ -248,7 +248,7 @@ describe("hostWorkspaceMemory", () => {
     expect(ui.apps.processes.open).toBe(true);
   });
 
-  it("restores MarkWisely when returning to its host desktop", async () => {
+  it("restores FileWisely when returning to its host desktop", async () => {
     const {
       closeDesktopRemembering,
       openDesktopRemembered,
@@ -256,18 +256,18 @@ describe("hostWorkspaceMemory", () => {
     } = await import("./hostWorkspaceMemory");
     panel.deskOpen = true;
     panel.deskSession = "host-markdown";
-    panel.apps.markwisely = { open: true, minimized: false, maximized: true };
-    panel.focusOrder = ["markwisely"];
+    panel.apps.filewisely = { open: true, minimized: false, maximized: true };
+    panel.focusOrder = ["filewisely"];
 
     closeDesktopRemembering();
     expect(
-      peekHostWorkspace("host-markdown")?.desktop?.apps.markwisely.open,
+      peekHostWorkspace("host-markdown")?.desktop?.apps.filewisely.open,
     ).toBe(true);
 
     panel.deskOpen = false;
     openDesktopRemembered("host-markdown");
     const ui = applySessionUi.mock.calls.at(-1)?.[0];
-    expect(ui?.apps.markwisely).toEqual({
+    expect(ui?.apps.filewisely).toEqual({
       open: true,
       minimized: false,
       maximized: true,

@@ -61,7 +61,7 @@ export function LocalDesktopFileManager() {
 
   const openInEditorWisely = (filePath: string) => {
     void openEditor({ kind: "local" }, filePath);
-    launchApp("editorwisely");
+    launchApp("filewisely");
   };
 
   useEffect(() => {

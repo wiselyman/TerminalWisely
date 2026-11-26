@@ -153,30 +153,29 @@ describe("desktopStore", () => {
     expect(useDesktopStore.getState().apps.aiLinux.open).toBe(true);
   });
 
-  it("launches MarkWisely instead of falling through to Browser", async () => {
+  it("launches FileWisely instead of falling through to Browser", async () => {
     const { useDesktopStore } = await import("./desktopStore");
     useDesktopStore.getState().openDesktop("sess-markdown");
-    useDesktopStore.getState().toggleDockApp("markwisely");
+    useDesktopStore.getState().toggleDockApp("filewisely");
 
-    expect(useDesktopStore.getState().apps.markwisely.open).toBe(true);
+    expect(useDesktopStore.getState().apps.filewisely.open).toBe(true);
     expect(useDesktopStore.getState().apps.browser.open).toBe(false);
     expect(browserOpenPanel).not.toHaveBeenCalled();
   });
 
-  it("launches EditorWisely as an independent desktop app", async () => {
+  it("launches the unified FileWisely app", async () => {
     const { useDesktopStore } = await import("./desktopStore");
     useDesktopStore.getState().openDesktopTarget({ kind: "local" });
-    useDesktopStore.getState().toggleDockApp("editorwisely");
-    expect(useDesktopStore.getState().apps.editorwisely).toMatchObject({ open: true, minimized: false });
-    expect(useDesktopStore.getState().apps.markwisely.open).toBe(false);
+    useDesktopStore.getState().toggleDockApp("filewisely");
+    expect(useDesktopStore.getState().apps.filewisely).toMatchObject({ open: true, minimized: false });
   });
 
-  it("restores independent desktop windows for Local and each SSH target", async () => {
+  it("restores the FileWisely window for Local and each SSH target", async () => {
     const { useDesktopStore } = await import("./desktopStore");
     useDesktopStore.getState().openDesktopTarget({ kind: "local" });
     expect(activateLocalFs).not.toHaveBeenCalled();
-    useDesktopStore.getState().toggleDockApp("markwisely");
-    useDesktopStore.getState().setAppMaximized("markwisely", true);
+    useDesktopStore.getState().toggleDockApp("filewisely");
+    useDesktopStore.getState().setAppMaximized("filewisely", true);
 
     useDesktopStore.getState().openDesktopTarget({ kind: "ssh", sessionId: "host-a" });
     expect(useDesktopStore.getState().apps.files.open).toBe(false);
@@ -187,7 +186,7 @@ describe("desktopStore", () => {
     useDesktopStore.getState().toggleDockApp("browser");
 
     useDesktopStore.getState().openDesktopTarget({ kind: "local" });
-    expect(useDesktopStore.getState().apps.markwisely).toEqual({
+    expect(useDesktopStore.getState().apps.filewisely).toEqual({
       open: true,
       minimized: false,
       maximized: true,

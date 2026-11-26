@@ -25,13 +25,36 @@ async function expectMaximizedDesktopAppToFillWindow(page: Page, app: Locator) {
 }
 
 test.describe("Host desktop mode", () => {
+  test("FileWisely is the only file app in the dock and opens its unified welcome page", async ({ page }) => {
+    await gotoApp(page);
+    const api = await twE2e(page);
+    await api.openSshTab();
+    await page.getByTestId("local-fs-tool").click();
+
+    const dock = page.getByTestId("host-desktop-dock");
+    await expect(dock.getByTestId("dock-app-filewisely")).toBeVisible();
+    await expect(dock.getByTestId("dock-app-markwisely")).toHaveCount(0);
+    await expect(dock.getByTestId("dock-app-editorwisely")).toHaveCount(0);
+    await dock.getByTestId("dock-app-filewisely").click();
+    await expect(page.getByTestId("filewisely-welcome")).toBeVisible();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
+    await expect(page.getByTestId("filewisely-open-text")).toBeVisible();
+    await expect(page.getByTestId("markwisely-new-document")).toBeVisible();
+    await page.getByTestId("markwisely-new-document").click();
+    await page.getByTestId("markwisely-use-folder").click();
+    await page.getByTestId("markwisely-file-name").fill("unified-note.md");
+    await page.getByTestId("markwisely-create-submit").click();
+    await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
+    await expect(page.getByTestId("desktop-app-window-title")).toHaveText("FileWisely");
+  });
+
   test("FileWisely opens one unified workspace from the desktop file editor icon", async ({ page }) => {
     await gotoApp(page);
     const api = await twE2e(page);
     await api.openSshTab();
     await api.seedRemotePath("/home/e2e/guide.txt");
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("desktop-icon-editorwisely").click();
+    await page.getByTestId("desktop-icon-filewisely").click();
 
     await expect(page.locator(".filewisely-window")).toBeVisible();
     await expect(page.getByTestId("desktop-app-window-title")).toHaveText("FileWisely");
@@ -40,6 +63,8 @@ test.describe("Host desktop mode", () => {
 
     await api.openEditorWiselyDocument("/home/e2e/guide.txt");
     await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
+    const fileTabs = page.getByTestId("filewisely-document-tabs");
+    await expect(fileTabs.getByRole("tab")).toContainText("guide.txt");
     const activeFile = page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.txt" });
     await expect(activeFile).toHaveClass(/is-active/);
     await page.getByTestId("editorwisely-tree-toggle").click();
@@ -48,6 +73,16 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("editorwisely-tree-toggle").click();
     await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
     await expect(page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.txt" })).toHaveClass(/is-active/);
+    await page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" }).click();
+    await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
+    await expect(fileTabs.getByRole("tab")).toHaveCount(2);
+    await fileTabs.getByRole("tab").filter({ hasText: "guide.txt" }).click();
+    await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
+    await fileTabs.getByRole("tab").filter({ hasText: "guide.md" }).click();
+    await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
+    await fileTabs.locator(".editorwisely-tab").filter({ hasText: "guide.md" }).getByRole("button").last().click();
+    await expect(fileTabs.getByRole("tab")).toHaveCount(1);
+    await expect(page.getByTestId("editorwisely-editor")).toBeVisible();
   });
 
   test("FileWisely opens Markdown in the MarkWisely editor inside its workspace", async ({ page }) => {
@@ -55,11 +90,12 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("desktop-icon-editorwisely").click();
+    await page.getByTestId("desktop-icon-filewisely").click();
 
     await page.getByTestId("editorwisely-tree-file").filter({ hasText: "guide.md" }).click();
     await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
-    await expect(page.getByTestId("markwisely-panel")).toHaveCount(0);
+    await expect(page.getByTestId("editorwisely-window")).toHaveCount(1);
+    await expect(page.getByTestId("markwisely-panel")).toBeVisible();
   });
 
   test("FileWisely previews PDF and image files without hiding the directory tree", async ({ page }) => {
@@ -70,7 +106,7 @@ test.describe("Host desktop mode", () => {
     await api.seedRemotePath("/home/e2e/photo.png");
     await api.seedRemotePath("/home/e2e/broken.pdf");
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("desktop-icon-editorwisely").click();
+    await page.getByTestId("desktop-icon-filewisely").click();
 
     await page.getByTestId("editorwisely-tree-file").filter({ hasText: "manual.pdf" }).click();
     await expect(page.getByTestId("filewisely-native-pdf")).toBeVisible();
@@ -83,25 +119,24 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("editorwisely-tree")).toBeVisible();
   });
 
-  test("EditorWisely desktop icon stays fully visible above the dock in a short window", async ({ page }) => {
+  test("FileWisely desktop icon stays fully visible above the dock in a short window", async ({ page }) => {
     await gotoApp(page);
     await page.setViewportSize({ width: 1280, height: 680 });
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
 
-    const icon = page.getByTestId("desktop-icon-editorwisely").locator(".host-desktop-glyph");
+    const icon = page.getByTestId("desktop-icon-filewisely").locator(".host-desktop-glyph");
     const dock = page.getByTestId("host-desktop-dock");
     await expect(icon).toBeVisible();
     const bounds = await page.evaluate(() => {
-      const iconRect = document.querySelector<HTMLElement>('[data-testid="desktop-icon-editorwisely"] .host-desktop-glyph')!.getBoundingClientRect();
+      const iconRect = document.querySelector<HTMLElement>('[data-testid="desktop-icon-filewisely"] .host-desktop-glyph')!.getBoundingClientRect();
       const dockRect = document.querySelector<HTMLElement>('[data-testid="host-desktop-dock"]')!.getBoundingClientRect();
       const stageRect = document.querySelector<HTMLElement>(".host-desktop-stage")!.getBoundingClientRect();
-      const markRect = document.querySelector<HTMLElement>('[data-testid="desktop-icon-markwisely"] .host-desktop-glyph')!.getBoundingClientRect();
-      return { iconLeft: iconRect.left, markLeft: markRect.left, iconBottom: iconRect.bottom, dockTop: dockRect.top, stageBottom: stageRect.bottom };
+      return { iconLeft: iconRect.left, iconBottom: iconRect.bottom, dockTop: dockRect.top, stageBottom: stageRect.bottom };
     });
     expect(bounds.iconBottom).toBeLessThanOrEqual(bounds.dockTop);
-    expect(bounds.iconLeft).toBeGreaterThan(bounds.markLeft + 76);
+    expect(bounds.iconLeft).toBeGreaterThanOrEqual(0);
     await icon.click();
     await expect(page.getByTestId("editorwisely-window")).toBeVisible();
   });
@@ -118,7 +153,7 @@ test.describe("Host desktop mode", () => {
     await page.keyboard.type("updated remote text");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(async () => (await api.getLastRemoteBytesWrite())?.path).toBe("/home/e2e/guide.txt");
-    await expect(page.getByTestId("dock-app-markwisely")).toBeVisible();
+    await expect(page.getByTestId("dock-app-filewisely")).toBeVisible();
   });
 
   test("MarkWisely opens from the Desktop Dock", async ({ page }) => {
@@ -127,7 +162,7 @@ test.describe("Host desktop mode", () => {
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
 
-    const launchButton = page.getByTestId("dock-app-markwisely");
+    const launchButton = page.getByTestId("dock-app-filewisely");
     await expect(launchButton).toBeVisible();
     await launchButton.click();
     await expect(launchButton).toHaveAttribute("data-state", "open");
@@ -206,7 +241,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     const panel = page.getByTestId("markwisely-panel");
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
@@ -229,19 +264,20 @@ test.describe("Host desktop mode", () => {
     await expect(headerMenu.getByTestId("markwisely-preferences-toggle")).toHaveCount(0);
     await headerMenuTrigger.click();
     await page.setViewportSize({ width: 720, height: 680 });
-    const narrowHeader = await panel.locator(".desktop-app-window-head").evaluate((header) => {
-      const title = header.querySelector<HTMLElement>("[data-testid='markwisely-current-file']")?.getBoundingClientRect();
+    const fileWindow = page.getByTestId("editorwisely-window");
+    const narrowHeader = await fileWindow.locator(".desktop-app-window-head").evaluate((header) => {
+      const title = header.querySelector<HTMLElement>(".desktop-app-window-title")?.getBoundingClientRect();
       const leading = header.querySelector<HTMLElement>(".desktop-app-window-leading")?.getBoundingClientRect();
       const actions = header.querySelector<HTMLElement>(".desktop-app-window-actions")?.getBoundingClientRect();
-      const controls = [...header.querySelectorAll<HTMLElement>(".desktop-app-window-actions button, .markwisely-window-header-tools button")].map((button) => button.getBoundingClientRect());
+      const controls = [...header.querySelectorAll<HTMLElement>(".desktop-app-window-actions button")].map((button) => button.getBoundingClientRect());
       return {
         titleOverlapsLeading: !!title && !!leading && title.left < leading.right && title.right > leading.left,
         titleOverlapsActions: !!title && !!actions && title.left < actions.right && title.right > actions.left,
         controlRowSpread: controls.length ? Math.max(...controls.map((box) => box.top + box.height / 2)) - Math.min(...controls.map((box) => box.top + box.height / 2)) : 0,
       };
     });
-    expect(narrowHeader.titleOverlapsLeading, "filename should not cover the app icon at narrow widths").toBe(false);
-    expect(narrowHeader.titleOverlapsActions, "filename should not cover dropdown or window controls at narrow widths").toBe(false);
+    expect(narrowHeader.titleOverlapsLeading, "FileWisely title should not cover the app icon at narrow widths").toBe(false);
+    expect(narrowHeader.titleOverlapsActions, "FileWisely title should not cover window controls at narrow widths").toBe(false);
     expect(narrowHeader.controlRowSpread).toBeLessThan(4);
     await page.setViewportSize({ width: 1280, height: 800 });
     const canvasColors = await panel.locator(".markwisely-editor .vditor-ir").evaluate((surface) => ({
@@ -254,11 +290,12 @@ test.describe("Host desktop mode", () => {
     await expect(panel.locator(".markwisely-sidebar")).toBeVisible();
     await clickMarkWiselyMenuControl(page, "markwisely-sidebar-toggle");
     await expect(panel.locator(".markwisely-sidebar")).toHaveCount(0);
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("draft.md");
+    const activeUnifiedTab = fileWindow.getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true });
+    await expect(activeUnifiedTab).toContainText("draft.md");
     expect(await panel.getByTestId("markwisely-save").count()).toBe(0);
-    const floatingFilenameBox = await panel.getByTestId("markwisely-current-file").boundingBox();
-    const floatingChromeBox = await panel.locator(".desktop-app-window-head").boundingBox();
-    expect(floatingFilenameBox && floatingChromeBox ? Math.abs((floatingFilenameBox.x + floatingFilenameBox.width / 2) - (floatingChromeBox.x + floatingChromeBox.width / 2)) : Infinity).toBeLessThan(8);
+    const floatingFilenameBox = await activeUnifiedTab.boundingBox();
+    const floatingChromeBox = await fileWindow.locator(".desktop-app-window-head").boundingBox();
+    expect(floatingFilenameBox && floatingChromeBox ? Math.abs((floatingFilenameBox.y + floatingFilenameBox.height / 2) - (floatingChromeBox.y + floatingChromeBox.height / 2)) : Infinity).toBeLessThan(4);
 
     const editor = panel.locator('.vditor-ir [contenteditable="true"]').first();
     await editor.click();
@@ -325,30 +362,24 @@ test.describe("Host desktop mode", () => {
     await shortcutOpenDialog.getByRole("button", { name: "Cancel" }).click();
     await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("Saved from MarkWisely");
 
-    await page.getByTestId("markwisely-maximize").click();
+    await page.getByTestId("editorwisely-maximize").click();
     const appChrome = page.getByTestId("desktop-maximized-app-controls");
     await expect(appChrome).toBeVisible();
     await expect(appChrome.locator(".desktop-app-window-head")).toHaveAttribute("data-tauri-drag-region", "");
-    const maximizedFilename = appChrome.getByTestId("markwisely-current-file");
-    await expect(maximizedFilename).toHaveText("draft.md");
-    const maximizedTitleBox = await maximizedFilename.boundingBox();
-    const appChromeBox = await appChrome.boundingBox();
-    expect(maximizedTitleBox && appChromeBox ? Math.abs((maximizedTitleBox.x + maximizedTitleBox.width / 2) - (appChromeBox.x + appChromeBox.width / 2)) : Infinity).toBeLessThan(8);
-    await appChrome.getByTestId("markwisely-maximize").click();
-    await expect(panel).toHaveAttribute("data-maximized", "false");
+    const maximizedTab = appChrome.getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true });
+    await expect(maximizedTab).toContainText("draft.md");
+    await appChrome.getByTestId("editorwisely-maximize").click();
+    await expect(page.getByTestId("editorwisely-window")).toHaveAttribute("data-maximized", "false");
     await expect.poll(async () => {
       return (await paragraph.boundingBox())?.width ?? 0;
     }).toBeGreaterThan(240);
 
     await expect(panel.getByRole("button", { name: /All files|全部文件/i })).toHaveCount(0);
-    await panel.getByTestId("markwisely-close").click();
-    const dockApp = page.getByTestId("dock-app-markwisely");
-    await expect(panel).toHaveCount(0);
+    await page.getByTestId("editorwisely-close").click();
+    const dockApp = page.getByTestId("dock-app-filewisely");
+    await expect(page.getByTestId("editorwisely-window")).toHaveCount(0);
     await dockApp.click();
-    await expect(page.getByTestId("markwisely-home")).toBeVisible();
-    const recent = panel.getByRole("button", { name: /draft\.md/ });
-    await expect(recent).toBeVisible();
-    await recent.click();
+    await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
     await expect(panel.locator(".vditor-ir")).toContainText("Saved from MarkWisely", { timeout: 30_000 });
   });
 
@@ -358,7 +389,7 @@ test.describe("Host desktop mode", () => {
     await api.setPandocFormats(["docx"], ["html"]);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-name").fill("source.md");
@@ -374,7 +405,7 @@ test.describe("Host desktop mode", () => {
     await expect(panel.getByRole("textbox", { name: /Folder|文件夹/i })).toHaveValue("/home/e2e");
     await expect(page.getByTestId("markwisely-file-name")).toHaveValue("remote-import.md");
     await page.getByTestId("markwisely-create-submit").click();
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("remote-import.md");
+    await expect(page.getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true })).toContainText("remote-import.md");
     await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("Imported from Word");
   });
 
@@ -383,7 +414,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-name").fill("clipboard-remote.md");
@@ -404,7 +435,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     const panel = page.getByTestId("markwisely-panel");
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
@@ -436,7 +467,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     const panel = page.getByTestId("markwisely-panel");
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
@@ -450,11 +481,12 @@ test.describe("Host desktop mode", () => {
     await expect(openDialog).toBeVisible();
     await openDialog.getByTestId("markwisely-file-entry").filter({ hasText: "guide.md" }).click();
 
-    const tabs = panel.getByTestId("markwisely-document-tab");
+    const fileWindow = page.getByTestId("editorwisely-window");
+    const tabs = page.getByTestId("filewisely-document-tabs").getByRole("tab");
     await expect(tabs).toHaveCount(2);
-    const tabStrip = panel.getByTestId("markwisely-document-tabs");
+    const tabStrip = page.getByTestId("filewisely-document-tabs");
     await expect(tabStrip).toBeVisible();
-    await expect(panel.locator(".desktop-app-window-centered-title")).toBeHidden();
+    await expect(fileWindow.locator(".desktop-app-window-centered-title")).toBeHidden();
     await expect.poll(() => tabStrip.evaluate((element) => {
       const header = element.closest<HTMLElement>(".desktop-app-window-head");
       if (!header) return false;
@@ -472,14 +504,14 @@ test.describe("Host desktop mode", () => {
       };
     });
     expect(wideHeaderLayout).toEqual({ tabsBeforeActions: true });
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("guide.md");
+    await expect(tabs.filter({ hasText: "guide.md" })).toHaveAttribute("aria-selected", "true");
     await tabs.filter({ hasText: "first.md" }).click();
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("first.md");
-    await page.getByTestId("markwisely-maximize").click();
-    await expectMaximizedDesktopAppToFillWindow(page, panel);
-    await expect(page.getByTestId("markwisely-document-tabs")).toBeVisible();
-    await page.getByTestId("desktop-maximized-app-controls").getByTestId("markwisely-maximize").click();
-    await expect(panel).toHaveAttribute("data-maximized", "false");
+    await expect(tabs.filter({ hasText: "first.md" })).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("editorwisely-maximize").click();
+    await expectMaximizedDesktopAppToFillWindow(page, fileWindow);
+    await expect(tabStrip).toBeVisible();
+    await page.getByTestId("desktop-maximized-app-controls").getByTestId("editorwisely-maximize").click();
+    await expect(fileWindow).toHaveAttribute("data-maximized", "false");
     const eastResize = page.getByTestId("desktop-window-resize-e");
     const eastBox = await eastResize.boundingBox();
     expect(eastBox).toBeTruthy();
@@ -488,7 +520,7 @@ test.describe("Host desktop mode", () => {
     await page.mouse.move(eastBox!.x + eastBox!.width / 2 - 300, eastBox!.y + eastBox!.height / 2);
     await page.mouse.up();
     await expect.poll(async () => (await panel.boundingBox())?.width ?? Infinity).toBeLessThan(900);
-    await expect(panel.getByTestId("markwisely-current-file")).toBeHidden();
+    await expect(tabs.filter({ hasText: "first.md" })).toHaveAttribute("aria-selected", "true");
     const narrowHeaderLayout = await tabStrip.evaluate((element) => {
       const header = element.closest<HTMLElement>(".desktop-app-window-head");
       const actions = header?.querySelector<HTMLElement>(".desktop-app-window-actions");
@@ -504,11 +536,11 @@ test.describe("Host desktop mode", () => {
     await expect(tabs.filter({ hasText: "first.md" })).toBeVisible();
     await tabStrip.getByRole("button", { name: "Close guide.md" }).click();
     await expect(panel).toBeVisible();
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("first.md");
-    await panel.getByTestId("markwisely-maximize").click();
-    await expect(panel).toHaveAttribute("data-maximized", "true");
-    await page.getByTestId("desktop-maximized-app-controls").getByTestId("markwisely-close").click();
-    await expect(panel).toHaveCount(0);
+    await expect(tabs.filter({ hasText: "first.md" })).toHaveAttribute("aria-selected", "true");
+    await page.getByTestId("editorwisely-maximize").click();
+    await expect(fileWindow).toHaveAttribute("data-maximized", "true");
+    await page.getByTestId("desktop-maximized-app-controls").getByTestId("editorwisely-close").click();
+    await expect(fileWindow).toHaveCount(0);
   });
 
   test("MarkWisely browses, quick-opens, and searches Markdown within the selected host root", async ({ page }) => {
@@ -516,7 +548,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-open-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-entry").filter({ hasText: "guide.md" }).click();
@@ -532,7 +564,7 @@ test.describe("Host desktop mode", () => {
     await expect(sidebar.getByTestId("markwisely-search-result").filter({ hasText: "guide.md" })).toBeVisible({ timeout: 30_000 });
     await expect(sidebar.getByTestId("markwisely-search-result").filter({ hasText: "UNIQUE_WYSIWYG_MARKER_42" })).toBeVisible();
     await sidebar.getByTestId("markwisely-search-result").filter({ hasText: "guide.md" }).click();
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("guide.md");
+    await expect(page.getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true })).toContainText("guide.md");
 
     await sidebar.getByRole("button", { name: "Choose workspace folder" }).click();
     const folderDialog = page.getByRole("dialog", { name: "Choose folder" });
@@ -547,7 +579,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-open-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-entry").filter({ hasText: "guide.md" }).click();
@@ -561,7 +593,7 @@ test.describe("Host desktop mode", () => {
     await api.openSecondSshTab();
     await expect(page.getByTestId("markwisely-sidebar")).toHaveCount(0);
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-open-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-entry").filter({ hasText: "guide.md" }).click();
@@ -580,7 +612,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-name").fill("toolbar-actions.md");
@@ -623,7 +655,7 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("markwisely-create-view")).toBeVisible();
     await page.getByTestId("markwisely-file-name").fill("toolbar-copy.md");
     await page.getByTestId("markwisely-save-as-submit").click();
-    await expect(panel.getByTestId("markwisely-current-file")).toHaveText("toolbar-copy.md");
+    await expect(page.getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true })).toContainText("toolbar-copy.md");
     await expect.poll(async () => (await api.getLastPreviewSave())?.content ?? "").toContain("TOOLBAR_SAVE_AS_CONTENT");
 
     await editor.click();
@@ -701,8 +733,9 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     const panel = page.getByTestId("markwisely-panel");
+    const fileWindow = page.getByTestId("editorwisely-window");
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
     await page.getByTestId("markwisely-file-name").fill("resize-check.md");
@@ -720,7 +753,7 @@ test.describe("Host desktop mode", () => {
     await page.mouse.down();
     await page.mouse.move(resizeBox!.x + resizeBox!.width / 2 - 480, resizeBox!.y + resizeBox!.height / 2);
     await page.mouse.up();
-    await expect.poll(async () => (await panel.boundingBox())?.width ?? 0).toBeLessThan(700);
+    await expect.poll(async () => (await fileWindow.boundingBox())?.width ?? 0).toBeLessThan(700);
     const editorHost = panel.locator(".markwisely-editor");
     await expect.poll(async () => {
       const editorBox = await panel.locator('.vditor-ir [contenteditable="true"]').first().boundingBox();
@@ -733,7 +766,7 @@ test.describe("Host desktop mode", () => {
     await page.mouse.down();
     await page.mouse.move(narrowBox!.x + narrowBox!.width / 2 + 700, narrowBox!.y + narrowBox!.height / 2);
     await page.mouse.up();
-    await expect.poll(async () => (await panel.boundingBox())?.width ?? 0).toBeGreaterThan(900);
+    await expect.poll(async () => (await fileWindow.boundingBox())?.width ?? 0).toBeGreaterThan(900);
     await expect.poll(async () => {
       const sizes = await page.evaluate(() => {
         const root = document.querySelector('[data-testid="markwisely-panel"]');
@@ -745,11 +778,11 @@ test.describe("Host desktop mode", () => {
     }).toBeGreaterThan(0.98);
 
     for (let toggle = 0; toggle < 3; toggle += 1) {
-      const maximize = await panel.getAttribute("data-maximized") === "true"
-        ? page.getByTestId("desktop-maximized-app-controls").getByTestId("markwisely-maximize")
-        : page.getByTestId("markwisely-maximize");
+      const maximize = await fileWindow.getAttribute("data-maximized") === "true"
+        ? page.getByTestId("desktop-maximized-app-controls").getByTestId("editorwisely-maximize")
+        : page.getByTestId("editorwisely-maximize");
       await maximize.click();
-      await expect(panel).toHaveAttribute("data-maximized", toggle % 2 === 0 ? "true" : "false");
+      await expect(fileWindow).toHaveAttribute("data-maximized", toggle % 2 === 0 ? "true" : "false");
       await expect.poll(async () => {
         const layout = await contentEditable.evaluate((node) => {
           const range = document.createRange();
@@ -763,7 +796,7 @@ test.describe("Host desktop mode", () => {
         return layout.textLines <= 2 && Boolean(editRect && editRect.width > 240);
       }).toBe(true);
     }
-    await expect(panel).toHaveAttribute("data-maximized", "true");
+    await expect(fileWindow).toHaveAttribute("data-maximized", "true");
     await expect(page.locator(".app-shell")).toHaveClass(/desktop-app-chrome-mode/);
     await expect(page.getByTestId("home-directory-button")).toBeHidden();
     await expect(page.locator(".tab-bar")).toBeHidden();
@@ -774,10 +807,10 @@ test.describe("Host desktop mode", () => {
     await expect(page.getByTestId("locale-switcher-trigger")).toBeHidden();
     const appChrome = page.getByTestId("desktop-maximized-app-controls");
     await expect(appChrome).toBeVisible();
-    await expect(appChrome.getByTestId("desktop-app-window-title")).toHaveText("MarkWisely");
-    await expect(panel.locator(".desktop-app-window-head")).toHaveCount(0);
-    await appChrome.getByTestId("markwisely-maximize").click();
-    await expect(panel).toHaveAttribute("data-maximized", "false");
+    await expect(appChrome.getByTestId("desktop-app-window-title")).toHaveText("FileWisely");
+    await expect(fileWindow.locator(".desktop-app-window-head")).toHaveCount(0);
+    await appChrome.getByTestId("editorwisely-maximize").click();
+    await expect(fileWindow).toHaveAttribute("data-maximized", "false");
     await expect(page.locator(".app-shell")).not.toHaveClass(/desktop-app-chrome-mode/);
     await expect(page.getByTestId("home-directory-button")).toBeVisible();
     await expect(page.locator(".tab-bar")).toBeVisible();
@@ -819,7 +852,7 @@ test.describe("Host desktop mode", () => {
     const api = await twE2e(page);
     await api.openSshTab();
     await page.getByTestId("local-fs-tool").click();
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByTestId("dock-app-filewisely").click();
     const panel = page.getByTestId("markwisely-panel");
     await page.getByTestId("markwisely-new-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
@@ -827,21 +860,18 @@ test.describe("Host desktop mode", () => {
     await page.getByTestId("markwisely-create-submit").click();
     await expect(panel.locator(".vditor-ir")).toBeVisible({ timeout: 30_000 });
     await expect(panel.getByRole("button", { name: /All files|全部文件/i })).toHaveCount(0);
-    await panel.getByTestId("markwisely-close").click();
-    await expect(panel).toHaveCount(0);
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByRole("button", { name: "Close note.md" }).click();
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await page.getByTestId("markwisely-open-document").click();
     await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
-    const markdownEntry = page.getByRole("button", { name: "note.md" });
+    const markdownEntry = page.getByTestId("markwisely-picker").getByRole("button", { name: "note.md" });
     await expect(markdownEntry).toBeVisible();
     await expect(panel.getByText("app.log")).toHaveCount(0);
     await markdownEntry.click();
     await expect(panel.locator(".vditor-ir")).toContainText("UNIQUE_WYSIWYG_MARKER_42", { timeout: 30_000 });
 
-    await panel.getByTestId("markwisely-close").click();
-    await expect(panel).toHaveCount(0);
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByRole("button", { name: "Close note.md" }).click();
+    await expect(page.getByTestId("markwisely-home")).toBeVisible();
     await page.getByTestId("markwisely-new-document").click();
     const chooseNextFolder = page.getByRole("dialog", { name: "Choose folder" });
     await expect(chooseNextFolder.getByTestId("local-fs-crumb-e2e")).toHaveAttribute("title", "/home/e2e");
@@ -853,9 +883,7 @@ test.describe("Host desktop mode", () => {
     await editor.click();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("unsaved draft");
-    await panel.getByTestId("markwisely-close").click();
-    await expect(panel).toHaveCount(0);
-    await page.getByTestId("dock-app-markwisely").click();
+    await page.getByRole("button", { name: "Close note.md" }).click();
     await expect(page.getByTestId("markwisely-home")).toBeVisible();
     expect((await api.getLastPreviewSave())?.content).toContain("unsaved draft");
     await panel.getByRole("button", { name: /note\.md/ }).click();

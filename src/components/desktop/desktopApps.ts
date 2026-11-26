@@ -2,8 +2,7 @@ import {
   AiEngineerIcon,
   HostBrowserIcon,
   LocalFilesIcon,
-  MarkWiselyIcon,
-  EditorWiselyIcon,
+  FileWiselyIcon,
   TaskManagerIcon,
   TerminalAppIcon,
 } from "../WorkspaceToolIcons";
@@ -52,13 +51,7 @@ export const DESKTOP_APPS: {
     labelKey: "desktop.appAiLinux",
     testId: "dock-app-ai-linux",
   },
-  {
-    id: "markwisely",
-    icon: MarkWiselyIcon,
-    labelKey: "desktop.appMarkWisely",
-    testId: "dock-app-markwisely",
-  },
-  { id: "editorwisely", icon: EditorWiselyIcon, labelKey: "desktop.appFileWisely", testId: "dock-app-editorwisely" },
+  { id: "filewisely", icon: FileWiselyIcon, labelKey: "desktop.appFileWisely", testId: "dock-app-filewisely" },
 ];
 
 export function getDesktopAppsForTarget(target: DesktopTarget | null) {

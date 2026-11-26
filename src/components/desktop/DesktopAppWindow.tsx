@@ -62,6 +62,7 @@ type Props = {
   onCloseRequest?: () => boolean | Promise<boolean>;
   /** Render this app's existing body inside another desktop window. */
   embedded?: boolean;
+  embeddedTestId?: string;
   children: ReactNode;
 };
 
@@ -93,6 +94,7 @@ export function DesktopAppWindow({
   bodyClassName,
   onCloseRequest,
   embedded = false,
+  embeddedTestId,
   children,
 }: Props) {
   const { t } = useTranslation(["tools", "common"]);
@@ -133,7 +135,7 @@ export function DesktopAppWindow({
   ]);
 
   if (embedded) return (
-    <div className={`desktop-app-embedded-body${bodyClassName ? ` ${bodyClassName}` : ""}`}>
+    <div className={`desktop-app-embedded-body${bodyClassName ? ` ${bodyClassName}` : ""}`} data-testid={embeddedTestId}>
       {headerLeadingActions || headerTabs ? <div className="desktop-app-embedded-tabs">{headerLeadingActions}{headerTabs}</div> : null}
       {headerActions ? <div className="desktop-app-embedded-actions">{headerActions}</div> : null}
       {children}

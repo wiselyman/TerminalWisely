@@ -470,7 +470,7 @@
   "markwisely.saved": "Saved",
   "markwisely.statistics": "{{words}} words · {{characters}} chars · {{lines}} lines · {{readingMinutes}} min",
   "markwisely.unsaved": "Unsaved changes",
-  "markwisely.closeDocument": "Close",
+  "markwisely.closeDocument": "Close {{name}}",
   "markwisely.documentTabs": "Open Markdown documents",
   "markwisely.recoveryAvailable": "An unsaved draft is available for {{path}}.",
   "markwisely.restoreDraft": "Restore draft",
@@ -627,5 +627,11 @@
   "sshLease.disconnectBanner": "SSH disconnected while AI holds this session. Stop AI first — reconnect is disabled.",
   "longJob.inProgress": "Host job in progress",
   "aiEngineer.notice.resume_miss": "Could not resume prior SessionLog (tool evidence missing). Send again to continue from chat text only.",
-  "aiEngineer.notice.run_stalled": "Model side stalled with no progress (no host tool waiting) — run failed. You can retry."
+  "aiEngineer.notice.run_stalled": "Model side stalled with no progress (no host tool waiting) — run failed. You can retry.",
+  "fileWisely.welcomeSubtitle": "Edit text and Markdown, or preview PDFs and images.",
+  "fileWisely.newMarkdown": "New Markdown document",
+  "fileWisely.openText": "Open a text or source file",
+  "fileWisely.loadingPreview": "Loading preview…",
+  "fileWisely.waitingPreview": "Waiting for preview data…",
+  "fileWisely.unsupportedPreview": "This file type cannot be previewed."
 }

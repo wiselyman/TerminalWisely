@@ -470,7 +470,7 @@
   "markwisely.saved": "已保存",
   "markwisely.statistics": "{{words}} 词 · {{characters}} 字符 · {{lines}} 行 · 阅读 {{readingMinutes}} 分钟",
   "markwisely.unsaved": "有未保存的更改",
-  "markwisely.closeDocument": "关闭",
+  "markwisely.closeDocument": "关闭 {{name}}",
   "markwisely.documentTabs": "已打开的 Markdown 文档",
   "markwisely.recoveryAvailable": "{{path}} 有可恢复的未保存草稿。",
   "markwisely.restoreDraft": "恢复草稿",
@@ -627,5 +627,11 @@
   "sshLease.disconnectBanner": "AI 占用会话期间 SSH 已断开。请先 STOP AI — 重连已禁用。",
   "longJob.inProgress": "主机任务进行中",
   "aiEngineer.notice.resume_miss": "无法恢复先前 SessionLog（缺少工具证据）。再发送一次将仅用当前聊天文字继续。",
-  "aiEngineer.notice.run_stalled": "模型侧长时间无进度（且无主机工具等待）— 运行已失败。可重试。"
+  "aiEngineer.notice.run_stalled": "模型侧长时间无进度（且无主机工具等待）— 运行已失败。可重试。",
+  "fileWisely.welcomeSubtitle": "编辑文本与 Markdown，或预览 PDF 和图片。",
+  "fileWisely.newMarkdown": "新建 Markdown 文档",
+  "fileWisely.openText": "打开文本或源码文件",
+  "fileWisely.loadingPreview": "正在加载预览…",
+  "fileWisely.waitingPreview": "正在等待预览数据…",
+  "fileWisely.unsupportedPreview": "暂不支持预览此文件类型。"
 }

@@ -30,7 +30,7 @@ test("Home local Desktop target isolation", async ({ page }) => {
     await expect(page.getByTestId(`dock-app-${app}`)).toHaveCount(0);
     await expect(page.getByTestId(`desktop-icon-${app}`)).toHaveCount(0);
   }
-  for (const app of ["terminal", "ai-local", "markwisely"]) {
+  for (const app of ["terminal", "ai-local", "filewisely"]) {
     await expect(page.getByTestId(`dock-app-${app}`)).toBeVisible();
   }
   await expect(page.getByTestId("home-local-terminal")).toBeVisible();
@@ -46,7 +46,7 @@ test("Home MarkWisely stores pasted Markdown images beside the local document", 
   const api = await twE2e(page);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-name").fill("local-note.md");
@@ -91,7 +91,7 @@ test("Home MarkWisely stores clipboard images in a sibling images folder and kee
   const api = await twE2e(page);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-name").fill("clipboard-note.md");
@@ -113,13 +113,13 @@ test("Home MarkWisely stores clipboard images in a sibling images folder and kee
   await expect.poll(() => api.getLocalText("/tmp/clipboard-note.md")).toContain("plain clipboard text");
 });
 
-test("Home MarkWisely keeps three icon-only controls left of the centered filename", async ({ page }) => {
+test("FileWisely keeps Markdown controls available with the active filename tab", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);
   await api.setPandocFormats(["docx", "html"], ["epub"]);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-name").fill("header-controls.md");
@@ -146,8 +146,13 @@ test("Home MarkWisely keeps three icon-only controls left of the centered filena
   await expect(menu.getByTestId("markwisely-statistics-toggle")).toHaveCount(0);
   await expect(menu.getByTestId("markwisely-import-document")).toHaveText("Import document");
   const controlsBox = await controls.boundingBox();
-  const filenameBox = await panel.getByTestId("markwisely-current-file").boundingBox();
-  expect(controlsBox && filenameBox ? controlsBox.x + controlsBox.width : Infinity).toBeLessThan(filenameBox?.x ?? 0);
+  const fileWindow = page.getByTestId("editorwisely-window");
+  const activeFileTab = fileWindow.getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true });
+  await expect(activeFileTab).toContainText("header-controls.md");
+  await expect(fileWindow.getByTestId("desktop-app-window-title")).toHaveText("FileWisely");
+  const filenameBox = await activeFileTab.boundingBox();
+  const chromeBox = await fileWindow.locator(".desktop-app-window-head").boundingBox();
+  expect(filenameBox && chromeBox ? Math.abs((filenameBox.y + filenameBox.height / 2) - (chromeBox.y + chromeBox.height / 2)) : Infinity).toBeLessThan(4);
   await expect(panel.getByTestId("markwisely-statistics")).toContainText("words");
 
   await expect(menu).toBeVisible();
@@ -176,7 +181,7 @@ test("Home MarkWisely keeps mixed Markdown in WYSIWYG and preserves local compat
   await api.seedLocalText("/tmp/compatibility.md", source);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "compatibility.md" }).click();
@@ -225,7 +230,7 @@ test("Home MarkWisely offers a local recovery draft without overwriting the file
   const api = await twE2e(page);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-name").fill("recovered-note.md");
@@ -250,10 +255,10 @@ test("Home MarkWisely can discard a recovery draft without changing the saved do
   await api.seedLocalText("/tmp/discard-note.md", "# Original disk text");
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
-  const entry = page.getByRole("button", { name: "discard-note.md" });
+  const entry = page.getByTestId("markwisely-file-entry").filter({ hasText: "discard-note.md" });
   await expect(entry).toBeVisible();
   await entry.click();
 
@@ -271,7 +276,7 @@ test("Home MarkWisely retains dirty text and blocks close when saving fails", as
   const api = await twE2e(page);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByTestId("markwisely-use-folder").click();
   await page.getByTestId("markwisely-file-name").fill("save-failure.md");
@@ -283,15 +288,15 @@ test("Home MarkWisely retains dirty text and blocks close when saving fails", as
   await editor.fill("# Preserve this dirty document");
   await expect(panel.getByTestId("markwisely-save-status")).toContainText(/Unsaved|未保存/);
   api.failNextLocalWrite();
-  await panel.getByTestId("markwisely-close").click();
+  await page.getByTestId("editorwisely-close").click();
 
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("alert")).toContainText("Mock local write failed");
+  await expect(page.getByRole("alert")).toContainText("Mock local write failed");
   await expect(editor).toContainText("Preserve this dirty document");
-  await panel.getByTestId("markwisely-close").click();
-  await expect(panel).toHaveCount(0);
-  await page.getByTestId("dock-app-markwisely").click();
-  await page.getByTestId("markwisely-recent").filter({ hasText: "save-failure.md" }).click();
+  await page.getByTestId("editorwisely-close").click();
+  await expect(page.getByTestId("editorwisely-window")).toHaveCount(0);
+  await page.getByTestId("dock-app-filewisely").click();
+  await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
   await expect(page.getByTestId("markwisely-panel").locator(".vditor-ir")).toContainText("Preserve this dirty document");
 });
 
@@ -301,7 +306,7 @@ test("Home MarkWisely browses and searches Markdown only in the local workspace"
   await api.seedLocalText("/tmp/local-search.md", "Home workspace phrase LOCAL_SEARCH_PHRASE");
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "local-search.md" }).click();
@@ -323,7 +328,7 @@ test("Home MarkWisely cancels an in-flight workspace search without showing part
   await api.setLocalReadDelay(500);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "cancel-search-a.md" }).click();
@@ -344,7 +349,7 @@ test("Home MarkWisely opens the outline on the right without duplicating it in t
   await api.seedLocalText("/tmp/right-outline.md", ["# First Heading", ...Array.from({ length: 12 }, (_, index) => `Paragraph ${index + 1}.`), "## Nested Heading"].join("\n\n"));
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "right-outline.md" }).click();
@@ -373,7 +378,7 @@ test("Home MarkWisely outline tracks headings from the active document", async (
   await api.seedLocalText("/tmp/outline.md", outlineSource);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "outline.md" }).click();
@@ -385,7 +390,7 @@ test("Home MarkWisely outline tracks headings from the active document", async (
   await expect(outline).toContainText("First Heading");
   await expect(outline).toContainText("Nested Heading");
   const nestedEntry = outline.getByTestId("markwisely-outline-heading").filter({ hasText: "Nested Heading" });
-  await panel.locator(".vditor-ir .vditor-reset[contenteditable='true']").evaluate((content) => { content.scrollTop = content.scrollHeight; });
+  await panel.locator(".vditor-ir .vditor-reset[contenteditable='true']").evaluate((content) => { content.scrollTop = content.scrollHeight; content.dispatchEvent(new Event("scroll", { bubbles: true })); });
   await expect(nestedEntry).toHaveAttribute("aria-current", "location");
 });
 
@@ -395,7 +400,7 @@ test("Home MarkWisely filters outline headings and navigates to the selected hea
   await api.seedLocalText("/tmp/outline-filter.md", "# First Heading\n\n## Nested Heading\n\nMore text.\n");
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "outline-filter.md" }).click();
@@ -417,7 +422,7 @@ test("Home MarkWisely action menu omits Editor preferences without changing the 
   await api.seedLocalText("/tmp/preferences.md", "# Preferences test\n\nEditor content.");
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "preferences.md" }).click();
@@ -447,10 +452,10 @@ test("Home MarkWisely renders math and Mermaid using only local assets", async (
   );
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
-  await page.getByRole("button", { name: "offline-render.md" }).click();
+  await page.getByTestId("markwisely-file-entry").filter({ hasText: "offline-render.md" }).click();
 
   const editor = page.locator(".markwisely-editor .vditor-ir");
   await expect(editor.locator(".katex").first()).toBeVisible();
@@ -464,7 +469,7 @@ test("Home MarkWisely imports a Pandoc source into a new Markdown document", asy
   await api.seedLocalText("/tmp/import-target.md", "# Existing content\n");
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-open-document").click();
   await page.getByRole("dialog", { name: "Choose folder" }).getByRole("button", { name: "Use this folder" }).click();
   await page.getByTestId("markwisely-file-entry").filter({ hasText: "import-target.md" }).click();
@@ -481,7 +486,7 @@ test("Home MarkWisely imports a Pandoc source into a new Markdown document", asy
   await page.getByTestId("markwisely-create-submit").click();
   await expect.poll(() => api.getMarkWiselyDocument("/tmp/meeting-notes.md"), { timeout: 5_000 }).toMatchObject({ text: expect.stringContaining("Imported from Word") });
   await expect.poll(() => api.getMarkWiselyDocument("/tmp/import-target.md"), { timeout: 5_000 }).toMatchObject({ text: "# Existing content\n" });
-  await expect(page.getByTestId("markwisely-current-file")).toHaveText("meeting-notes.md");
+  await expect(page.getByTestId("editorwisely-window").getByTestId("filewisely-document-tabs").getByRole("tab", { selected: true })).toContainText("meeting-notes.md");
   const editor = page.locator(".markwisely-editor .vditor-ir .vditor-reset[contenteditable='true']");
   await expect(editor).toContainText("Imported from Word");
   await expect.poll(() => api.getLastPandocImport()).toMatchObject({ from: "docx", path: "/tmp/meeting-notes.docx" });
@@ -521,38 +526,39 @@ test("Local Desktop Terminal stays inside the Desktop workspace", async ({ page 
   await expect(page.getByTestId("home-local-terminal")).toBeVisible();
 });
 
-test("Home Desktop shows the complete MarkWisely icon label", async ({ page }) => {
+test("Home Desktop shows the FileWisely icon label", async ({ page }) => {
   await gotoApp(page);
   await (await twE2e(page)).openHome();
   await page.getByTestId("local-fs-tool").click();
 
-  const label = page.getByTestId("desktop-icon-markwisely").locator(".host-desktop-icon-label");
-  await expect(label).toHaveText("MarkWisely");
+  const label = page.getByTestId("desktop-icon-filewisely").locator(".host-desktop-icon-label");
+  await expect(label).toHaveText("FileWisely");
   await expect.poll(() => label.evaluate((element) => {
     const style = getComputedStyle(element);
     return style.whiteSpace === "normal" && element.scrollWidth <= element.clientWidth;
   })).toBe(true);
 });
 
-test("Home Desktop opens a local text file in EditorWisely and keeps MarkWisely available", async ({ page }) => {
+test("Home Desktop opens FileWisely with both Markdown and text entry paths", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await expect(page.getByTestId("desktop-icon-editorwisely")).toBeVisible();
-  await expect(page.getByTestId("desktop-icon-markwisely")).toBeVisible();
-  await page.getByTestId("dock-app-editorwisely").click();
+  await expect(page.getByTestId("desktop-icon-filewisely")).toBeVisible();
+  await page.getByTestId("dock-app-filewisely").click();
   await expect(page.getByTestId("editorwisely-window")).toBeVisible();
-  await expect(page.getByTestId("editorwisely-home")).toBeVisible();
-  await expect(page.getByTestId("dock-app-markwisely")).toBeVisible();
+  await expect(page.getByTestId("markwisely-home")).toBeVisible();
+  await expect(page.getByTestId("filewisely-open-text")).toBeVisible();
+  await expect(page.getByTestId("dock-app-filewisely")).toBeVisible();
 });
 
-test("EditorWisely opens files through its own MarkWisely-style picker", async ({ page }) => {
+test("FileWisely opens text files through its unified workspace picker", async ({ page }) => {
   await gotoApp(page);
   const api = await twE2e(page);
   await api.openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-editorwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
+  await page.getByTestId("filewisely-open-text").click();
   await page.getByTestId("editorwisely-open-document").click();
   await expect(page.getByTestId("editorwisely-file-picker")).toBeVisible();
 });
@@ -564,7 +570,7 @@ test("EditorWisely tree opens multiple files as tabs without losing the active d
   await api.seedLocalText("/tmp/e2e-dir/tree-first.txt", "first tree document");
   await api.seedLocalText("/tmp/e2e-dir/tree-second.txt", "second tree document");
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-editorwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
 
   const tree = page.getByTestId("editorwisely-tree");
   await expect(tree).toBeVisible();
@@ -582,6 +588,27 @@ test("EditorWisely tree opens multiple files as tabs without losing the active d
   await page.getByRole("button", { name: "Close tree-second.txt" }).click();
   await expect(page.getByRole("tab", { name: "tree-second.txt" })).toHaveCount(0);
   await expect(page.getByTestId("editorwisely-editor").locator(".cm-content")).toHaveText("first tree document");
+});
+
+test("FileWisely keeps the active Markdown family when closing one of several Markdown tabs", async ({ page }) => {
+  await gotoApp(page);
+  const api = await twE2e(page);
+  await api.openHome();
+  await api.seedLocalText("/tmp/unified/first.md", "# First Markdown");
+  await api.seedLocalText("/tmp/unified/second.md", "# Second Markdown");
+  await api.seedLocalText("/tmp/unified/script.ts", "const value = 1;");
+  await page.getByTestId("local-fs-tool").click();
+  await api.simulateLocalFileOpen("/tmp/unified/first.md");
+  await api.simulateLocalFileOpen("/tmp/unified/second.md");
+  await api.openEditorWiselyDocument("/tmp/unified/script.ts");
+
+  const tabs = page.getByTestId("filewisely-document-tabs");
+  await tabs.getByRole("tab", { name: "second.md" }).click();
+  await tabs.getByRole("button", { name: "Close second.md" }).click();
+
+  await expect(tabs.getByRole("tab", { name: "first.md" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
+  await expect(page.getByTestId("editorwisely-editor")).toBeHidden();
 });
 
 test("opening a local text file through the OS path shows its document in a normal EditorWisely window", async ({ page }) => {
@@ -605,13 +632,15 @@ test("opening a local Markdown file through the OS path enters MarkWisely with t
 
   await api.simulateLocalFileOpen("/tmp/native-open.md");
 
-  const markWindow = page.getByTestId("markwisely-panel");
-  await expect(markWindow).toHaveAttribute("data-maximized", "true");
-  await expect(markWindow.getByTestId("markwisely-editor-view")).toBeVisible();
-  await expect(markWindow.getByTestId("markwisely-home")).toBeHidden();
-  await expect(markWindow.locator(".markwisely-editor .vditor-ir .vditor-reset[contenteditable='true']"))
+  const fileWindow = page.getByTestId("editorwisely-window");
+  const markWorkspace = page.getByTestId("markwisely-panel");
+  await expect(fileWindow).toHaveAttribute("data-maximized", "true");
+  await expect(markWorkspace).toBeVisible();
+  await expect(markWorkspace.getByTestId("markwisely-editor-view")).toBeVisible();
+  await expect(markWorkspace.getByTestId("markwisely-home")).toBeHidden();
+  await expect(markWorkspace.locator(".markwisely-editor .vditor-ir .vditor-reset[contenteditable='true']"))
     .toContainText("Native Markdown marker");
-  await expect(page.getByTestId("editorwisely-window")).toHaveCount(0);
+  await expect(page.getByTestId("editorwisely-window")).toHaveCount(1);
 });
 
 test("a failed local text read remains visible in EditorWisely", async ({ page }) => {
@@ -655,7 +684,8 @@ test("EditorWisely keeps saved contents when the document is closed and reopened
     .toBe("after save");
 
   await page.getByRole("button", { name: "Close editor-persist.txt" }).click();
-  await expect(page.getByTestId("editorwisely-home")).toBeVisible();
+  await expect(page.getByTestId("markwisely-home")).toBeVisible();
+  await page.getByTestId("filewisely-open-text").click();
   await api.openEditorWiselyDocument("/tmp/editor-persist.txt");
   await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
     .toHaveText("after save", { timeout: 3000 });
@@ -671,6 +701,7 @@ test("EditorWisely picker reopens in the directory of the last opened file", asy
   await expect(page.getByTestId("editorwisely-editor").locator(".cm-content"))
     .toHaveText("echo ok", { timeout: 3000 });
   await page.getByRole("button", { name: "Close main.sh" }).click();
+  await page.getByTestId("filewisely-open-text").click();
   await page.getByTestId("editorwisely-open-document").click();
   await expect(page.getByTestId("local-fs-crumb-src")).toHaveAttribute("title", "/tmp/project/src");
 });
@@ -838,7 +869,7 @@ test("Home MarkWisely creates, saves, and reopens local Markdown", async ({ page
   await gotoApp(page);
   await (await twE2e(page)).openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByTestId("markwisely-use-folder").click();
   await page.getByTestId("markwisely-file-name").fill("local-note.md");
@@ -853,12 +884,10 @@ test("Home MarkWisely creates, saves, and reopens local Markdown", async ({ page
   await expect(page.getByTestId("markwisely-save")).toHaveCount(0);
   await expect(page.getByTestId("markwisely-save-status")).toBeHidden();
   await expect(page.getByRole("button", { name: /All files|全部文件/i })).toHaveCount(0);
-  await page.getByTestId("markwisely-close").click();
-  await expect(page.getByTestId("markwisely-panel")).toHaveCount(0);
-  await page.getByTestId("dock-app-markwisely").click();
-  await expect(page.getByTestId("markwisely-home")).toBeVisible();
-  await expect(page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" })).toBeVisible();
-  await page.getByTestId("markwisely-recent").filter({ hasText: "local-note.md" }).click();
+  await page.getByTestId("editorwisely-close").click();
+  await expect(page.getByTestId("editorwisely-window")).toHaveCount(0);
+  await page.getByTestId("dock-app-filewisely").click();
+  await expect(page.getByTestId("markwisely-editor-view")).toBeVisible();
   await expect(editor).toContainText("Local note");
 });
 
@@ -866,7 +895,7 @@ test("Home MarkWisely keeps Markdown readable after repeated maximize and restor
   await gotoApp(page);
   await (await twE2e(page)).openHome();
   await page.getByTestId("local-fs-tool").click();
-  await page.getByTestId("dock-app-markwisely").click();
+  await page.getByTestId("dock-app-filewisely").click();
   await page.getByTestId("markwisely-new-document").click();
   await page.getByTestId("markwisely-use-folder").click();
   await page.getByTestId("markwisely-file-name").fill("zoom-layout.md");
@@ -879,10 +908,11 @@ test("Home MarkWisely keeps Markdown readable after repeated maximize and restor
   await page.keyboard.type("# Markdown stays readable\n\nA paragraph after repeated window resizing.");
   await expect(editor).toContainText("Markdown stays readable");
 
-  const maximize = page.getByTestId("markwisely-maximize");
+  const fileWindow = page.getByTestId("editorwisely-window");
+  const maximize = page.getByTestId("editorwisely-maximize");
   for (let cycle = 0; cycle < 3; cycle += 1) {
     await maximize.click();
-    await expect(panel).toHaveAttribute("data-maximized", "true");
+    await expect(fileWindow).toHaveAttribute("data-maximized", "true");
     if (cycle === 1) {
       const constrainedWidth = await editor.evaluate((element) => {
         (element as HTMLElement).style.width = "18px";
@@ -893,7 +923,7 @@ test("Home MarkWisely keeps Markdown readable after repeated maximize and restor
     await expect.poll(() => editor.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(400);
     await expect(editor.locator("h1")).toContainText("Markdown stays readable");
     await maximize.click();
-    await expect(panel).toHaveAttribute("data-maximized", "false");
+    await expect(fileWindow).toHaveAttribute("data-maximized", "false");
     await expect.poll(() => editor.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThan(400);
     await expect(editor.locator("h1")).toContainText("Markdown stays readable");
   }
